@@ -506,6 +506,14 @@ fn app() -> Element {
 
     let lifecycle_state = lifecycle.clone();
     use_lifecycle(move |event| {
+        if matches!(
+            event,
+            LifecycleEvent::KeyboardEvent(_)
+                | LifecycleEvent::Input(_)
+                | LifecycleEvent::UserEvent
+        ) {
+            return;
+        }
         lifecycle_state.set(format!("lifecycle: {}", event.as_str()));
     });
 

@@ -245,7 +245,13 @@ pub fn checkbox(label: impl Into<String>, checked: Signal<bool>) -> Element {
                 .height(16.0)
                 .on_click(move || click.update(|v| *v = !*v))
                 .into(),
-            margin_top(muted_text(label), 0.0).into(),
+            arkit::row_component()
+                .style(
+                    ArkUINodeAttributeType::Margin,
+                    vec![0.0, 0.0, 0.0, spacing::SM],
+                )
+                .children(vec![muted_text(label).into()])
+                .into(),
         ])
         .into()
 }

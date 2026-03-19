@@ -41,6 +41,10 @@ impl ComponentElement<TextInput> {
     pub fn bind(self, state: Signal<String>) -> Self {
         let value_state = state.clone();
         self.value(value_state.get())
-            .on_change(move |value| state.set(value))
+            .on_change(move |value| {
+                if state.get() != value {
+                    state.set(value);
+                }
+            })
     }
 }

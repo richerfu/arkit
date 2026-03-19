@@ -141,11 +141,7 @@ pub fn chip_surface<T>(element: ComponentElement<T>) -> ComponentElement<T>
 where
     T: ArkUICommonAttribute + 'static,
 {
-    rounded(
-        border(padding_xy(element, spacing::SM, 2.0))
-            .style(ArkUINodeAttributeType::BorderColor, vec![color::BORDER]),
-        radius::FULL,
-    )
+    rounded(padding_xy(element, spacing::SM, 2.0), radius::FULL)
 }
 
 pub fn title_text(content: impl Into<String>) -> arkit::TextElement {

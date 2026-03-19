@@ -1,4 +1,5 @@
 use super::*;
+use arkit::{component, use_signal};
 
 pub fn table(headers: Vec<String>, rows: Vec<Vec<String>>) -> Element {
     let header_row = arkit::row_component()
@@ -121,11 +122,35 @@ pub fn radio_group(options: Vec<String>, selected: Signal<String>) -> Element {
         })
         .collect::<Vec<Element>>();
 
-    card(children)
+    arkit::column_component()
+        .percent_width(1.0)
+        .children(
+            children
+                .into_iter()
+                .enumerate()
+                .map(|(idx, child)| {
+                    if idx == 0 {
+                        child
+                    } else {
+                        arkit::row_component()
+                            .style(
+                                ArkUINodeAttributeType::Margin,
+                                vec![spacing::SM, 0.0, 0.0, 0.0],
+                            )
+                            .children(vec![child])
+                            .into()
+                    }
+                })
+                .collect::<Vec<_>>(),
+        )
+        .into()
 }
 
+#[component]
 pub fn select(options: Vec<String>, selected: Signal<String>) -> Element {
+    let open = use_signal(|| false);
     let current = selected.get();
+    let toggle_open = open.clone();
     let trigger = input_surface(
         arkit::row_component()
             .percent_width(1.0)
@@ -136,41 +161,50 @@ pub fn select(options: Vec<String>, selected: Signal<String>) -> Element {
             )
             .children(vec![
                 body_text_regular(current.clone()).into(),
-                muted_text("⌄").into(),
+                muted_text(if open.get() { "⌃" } else { "⌄" }).into(),
             ]),
     )
+    .on_click(move || toggle_open.update(|v| *v = !*v))
     .into();
 
-    let items = options
-        .into_iter()
-        .map(|option| {
-            let value = selected.clone();
-            let variant = if current == option {
-                ButtonVariant::Secondary
-            } else {
-                ButtonVariant::Ghost
-            };
-            button(option.clone(), variant)
-                .height(32.0)
-                .style(
-                    ArkUINodeAttributeType::Padding,
-                    vec![spacing::XXS, spacing::SM, spacing::XXS, spacing::SM],
-                )
-                .on_click(move || value.set(option.clone()))
-                .into()
-        })
-        .collect::<Vec<_>>();
-
-    arkit::column_component()
-        .percent_width(1.0)
-        .children(vec![
-            trigger,
+    let mut children = vec![trigger];
+    if open.get() {
+        let close = open.clone();
+        let items = options
+            .into_iter()
+            .map(|option| {
+                let value = selected.clone();
+                let close_dropdown = close.clone();
+                let variant = if current == option {
+                    ButtonVariant::Secondary
+                } else {
+                    ButtonVariant::Ghost
+                };
+                button(option.clone(), variant)
+                    .height(32.0)
+                    .style(
+                        ArkUINodeAttributeType::Padding,
+                        vec![spacing::XXS, spacing::SM, spacing::XXS, spacing::SM],
+                    )
+                    .on_click(move || {
+                        value.set(option.clone());
+                        close_dropdown.set(false);
+                    })
+                    .into()
+            })
+            .collect::<Vec<_>>();
+        children.push(
             margin_top(
                 panel_surface(arkit::column_component().percent_width(1.0).children(items)),
                 spacing::XXS,
             )
             .into(),
-        ])
+        );
+    }
+
+    arkit::column_component()
+        .percent_width(1.0)
+        .children(children)
         .into()
 }
 
