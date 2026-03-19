@@ -4,7 +4,7 @@ pub fn card(children: Vec<Element>) -> Element {
     card_surface(
         arkit::column_component()
             .percent_width(1.0)
-            .children(vec![stack(children, spacing::LG)]),
+            .children(vec![stack(children, spacing::XXL)]),
     )
     .into()
 }
@@ -21,7 +21,7 @@ pub fn card_header(title: impl Into<String>, description: impl Into<String>) -> 
             arkit::row_component()
                 .style(
                     ArkUINodeAttributeType::Margin,
-                    vec![spacing::XXS, 0.0, 0.0, 0.0],
+                    vec![spacing::XS, 0.0, 0.0, 0.0],
                 )
                 .children(vec![card_description(description)])
                 .into(),
@@ -31,9 +31,9 @@ pub fn card_header(title: impl Into<String>, description: impl Into<String>) -> 
 
 pub fn card_title(content: impl Into<String>) -> Element {
     title_text(content)
-        .style(ArkUINodeAttributeType::FontSize, typography::LG)
+        .style(ArkUINodeAttributeType::FontSize, typography::MD)
         .style(ArkUINodeAttributeType::FontWeight, 5_i32)
-        .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
+        .style(ArkUINodeAttributeType::TextLineHeight, 16.0)
         .into()
 }
 
@@ -69,11 +69,11 @@ pub fn alert(title: impl Into<String>, description: impl Into<String>) -> Elemen
         .percent_width(1.0)
         .style(
             ArkUINodeAttributeType::Padding,
-            vec![spacing::SM, spacing::MD, spacing::SM, spacing::MD],
+            vec![14.0, spacing::LG, spacing::SM, spacing::LG],
         )
         .style(
             ArkUINodeAttributeType::BorderRadius,
-            vec![radius::MD, radius::MD, radius::MD, radius::MD],
+            vec![radius::LG, radius::LG, radius::LG, radius::LG],
         )
         .style(
             ArkUINodeAttributeType::BorderWidth,
@@ -81,12 +81,28 @@ pub fn alert(title: impl Into<String>, description: impl Into<String>) -> Elemen
         )
         .style(ArkUINodeAttributeType::BorderColor, vec![color::BORDER])
         .background_color(color::CARD)
-        .children(vec![
-            body_text(title)
-                .style(ArkUINodeAttributeType::FontColor, color::CARD_FOREGROUND)
-                .into(),
-            margin_top(muted_text(description), spacing::XXS).into(),
-        ])
+        .children(vec![arkit::row_component()
+            .percent_width(1.0)
+            .children(vec![
+                arkit::row_component()
+                    .width(14.0)
+                    .children(vec![muted_text("i").into()])
+                    .into(),
+                arkit::column_component()
+                    .style(
+                        ArkUINodeAttributeType::Margin,
+                        vec![0.0, 0.0, 0.0, spacing::SM],
+                    )
+                    .children(vec![
+                        body_text(title)
+                            .style(ArkUINodeAttributeType::FontColor, color::CARD_FOREGROUND)
+                            .style(ArkUINodeAttributeType::TextLineHeight, 16.0)
+                            .into(),
+                        margin_top(muted_text(description), spacing::XS).into(),
+                    ])
+                    .into(),
+            ])
+            .into()])
         .into()
 }
 
@@ -95,27 +111,48 @@ pub fn alert_destructive(title: impl Into<String>, description: impl Into<String
         .percent_width(1.0)
         .style(
             ArkUINodeAttributeType::Padding,
-            vec![spacing::SM, spacing::MD, spacing::SM, spacing::MD],
+            vec![14.0, spacing::LG, spacing::SM, spacing::LG],
         )
         .style(
             ArkUINodeAttributeType::BorderRadius,
-            vec![radius::MD, radius::MD, radius::MD, radius::MD],
+            vec![radius::LG, radius::LG, radius::LG, radius::LG],
         )
         .style(
             ArkUINodeAttributeType::BorderWidth,
             vec![1.0, 1.0, 1.0, 1.0],
         )
-        .style(
-            ArkUINodeAttributeType::BorderColor,
-            vec![color::DESTRUCTIVE],
-        )
+        .style(ArkUINodeAttributeType::BorderColor, vec![color::BORDER])
         .background_color(color::CARD)
-        .children(vec![
-            body_text(title)
-                .style(ArkUINodeAttributeType::FontColor, color::CARD_FOREGROUND)
-                .into(),
-            margin_top(muted_text(description), spacing::XXS).into(),
-        ])
+        .children(vec![arkit::row_component()
+            .percent_width(1.0)
+            .children(vec![
+                arkit::row_component()
+                    .width(14.0)
+                    .children(vec![arkit::text("!")
+                        .font_size(typography::SM)
+                        .style(ArkUINodeAttributeType::FontColor, color::DESTRUCTIVE)
+                        .into()])
+                    .into(),
+                arkit::column_component()
+                    .style(
+                        ArkUINodeAttributeType::Margin,
+                        vec![0.0, 0.0, 0.0, spacing::SM],
+                    )
+                    .children(vec![
+                        body_text(title)
+                            .style(ArkUINodeAttributeType::FontColor, color::DESTRUCTIVE)
+                            .style(ArkUINodeAttributeType::TextLineHeight, 16.0)
+                            .into(),
+                        margin_top(
+                            muted_text(description)
+                                .style(ArkUINodeAttributeType::FontColor, 0xE6EF4444_u32),
+                            spacing::XS,
+                        )
+                        .into(),
+                    ])
+                    .into(),
+            ])
+            .into()])
         .into()
 }
 
@@ -123,6 +160,10 @@ pub fn toast(message: impl Into<String>) -> Element {
     panel_surface(
         arkit::row_component()
             .percent_width(1.0)
+            .style(
+                ArkUINodeAttributeType::Padding,
+                vec![spacing::SM, spacing::LG, spacing::SM, spacing::LG],
+            )
             .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
             .children(vec![body_text_regular(message)
                 .style(ArkUINodeAttributeType::FontColor, color::FOREGROUND)
@@ -137,7 +178,11 @@ pub fn toast_destructive(message: impl Into<String>) -> Element {
             body_text_regular(message)
                 .style(ArkUINodeAttributeType::FontColor, color::DESTRUCTIVE)
                 .into(),
-        ])),
+        ]))
+        .style(
+            ArkUINodeAttributeType::Padding,
+            vec![spacing::SM, spacing::LG, spacing::SM, spacing::LG],
+        ),
         color::DESTRUCTIVE,
     )
     .into()

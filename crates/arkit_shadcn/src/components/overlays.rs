@@ -3,15 +3,6 @@ use super::*;
 pub fn accordion(children: Vec<Element>) -> Element {
     arkit::column_component()
         .percent_width(1.0)
-        .style(
-            ArkUINodeAttributeType::BorderWidth,
-            vec![1.0, 1.0, 1.0, 1.0],
-        )
-        .style(ArkUINodeAttributeType::BorderColor, vec![color::BORDER])
-        .style(
-            ArkUINodeAttributeType::BorderRadius,
-            vec![radius::MD, radius::MD, radius::MD, radius::MD],
-        )
         .children(children)
         .into()
 }
@@ -31,7 +22,7 @@ pub fn accordion_item(
         )
         .style(
             ArkUINodeAttributeType::Padding,
-            vec![spacing::MD, spacing::MD, spacing::MD, spacing::MD],
+            vec![spacing::LG, 0.0, spacing::LG, 0.0],
         )
         .on_click(move || click.update(|v| *v = !*v))
         .children(vec![
@@ -48,7 +39,7 @@ pub fn accordion_item(
                 .percent_width(1.0)
                 .style(
                     ArkUINodeAttributeType::Padding,
-                    vec![0.0, spacing::MD, spacing::MD, spacing::MD],
+                    vec![0.0, 0.0, spacing::LG, 0.0],
                 )
                 .children(content)
                 .into(),
@@ -74,6 +65,7 @@ pub fn dialog(title: impl Into<String>, open: Signal<bool>, content: Vec<Element
     if !open.get() {
         return arkit::row_component().into();
     }
+    let close = open.clone();
 
     arkit::column_component()
         .percent_width(1.0)
@@ -86,20 +78,43 @@ pub fn dialog(title: impl Into<String>, open: Signal<bool>, content: Vec<Element
         .style(ArkUINodeAttributeType::ColumnAlignItems, FLEX_ALIGN_CENTER)
         .style(
             ArkUINodeAttributeType::Padding,
-            vec![spacing::XXL, spacing::XXL, spacing::XXL, spacing::XXL],
+            vec![spacing::SM, spacing::SM, spacing::SM, spacing::SM],
         )
-        .children(vec![panel_surface(
+        .children(vec![shadow_sm(
             arkit::column_component()
                 .percent_width(1.0)
                 .style(
                     ArkUINodeAttributeType::Padding,
-                    vec![spacing::LG, spacing::LG, spacing::LG, spacing::LG],
+                    vec![spacing::XXL, spacing::XXL, spacing::XXL, spacing::XXL],
                 )
-                .children(
-                    std::iter::once(dialog_header(title, ""))
-                        .chain(content)
-                        .collect::<Vec<_>>(),
-                ),
+                .style(
+                    ArkUINodeAttributeType::BorderRadius,
+                    vec![radius::LG, radius::LG, radius::LG, radius::LG],
+                )
+                .style(
+                    ArkUINodeAttributeType::BorderWidth,
+                    vec![1.0, 1.0, 1.0, 1.0],
+                )
+                .style(ArkUINodeAttributeType::BorderColor, vec![color::BORDER])
+                .background_color(color::BACKGROUND)
+                .children(vec![
+                    arkit::row_component()
+                        .percent_width(1.0)
+                        .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_END)
+                        .children(vec![button("×", ButtonVariant::Ghost)
+                            .width(28.0)
+                            .height(28.0)
+                            .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
+                            .on_click(move || close.set(false))
+                            .into()])
+                        .into(),
+                    stack(
+                        std::iter::once(dialog_header(title, ""))
+                            .chain(content)
+                            .collect::<Vec<_>>(),
+                        spacing::LG,
+                    ),
+                ]),
         )
         .into()])
         .into()
@@ -135,7 +150,7 @@ pub fn popover(trigger: Element, content: Vec<Element>, open: Signal<bool>) -> E
                         .width(288.0)
                         .style(
                             ArkUINodeAttributeType::Padding,
-                            vec![spacing::MD, spacing::MD, spacing::MD, spacing::MD],
+                            vec![spacing::LG, spacing::LG, spacing::LG, spacing::LG],
                         )
                         .children(vec![stack(content, spacing::SM)]),
                 ),
@@ -157,7 +172,16 @@ pub fn hover_card(trigger: Element, content: Vec<Element>, show: bool) -> Elemen
                         ArkUINodeAttributeType::Margin,
                         vec![spacing::SM, 0.0, 0.0, 0.0],
                     )
-                    .children(vec![card(content)])
+                    .children(vec![panel_surface(
+                        arkit::column_component()
+                            .width(256.0)
+                            .style(
+                                ArkUINodeAttributeType::Padding,
+                                vec![spacing::LG, spacing::LG, spacing::LG, spacing::LG],
+                            )
+                            .children(vec![stack(content, spacing::SM)]),
+                    )
+                    .into()])
                     .into(),
             ])
             .into()
@@ -166,12 +190,64 @@ pub fn hover_card(trigger: Element, content: Vec<Element>, show: bool) -> Elemen
     }
 }
 
+fn menu_content(items: Vec<Element>) -> Element {
+    shadow_sm(
+        arkit::column_component()
+            .width(128.0)
+            .style(
+                ArkUINodeAttributeType::Padding,
+                vec![spacing::XXS, spacing::XXS, spacing::XXS, spacing::XXS],
+            )
+            .style(
+                ArkUINodeAttributeType::BorderRadius,
+                vec![radius::MD, radius::MD, radius::MD, radius::MD],
+            )
+            .style(
+                ArkUINodeAttributeType::BorderWidth,
+                vec![1.0, 1.0, 1.0, 1.0],
+            )
+            .style(ArkUINodeAttributeType::BorderColor, vec![color::BORDER])
+            .style(ArkUINodeAttributeType::Clip, true)
+            .background_color(color::POPOVER)
+            .children(items),
+    )
+    .into()
+}
+
 pub fn dropdown_menu(trigger: Element, items: Vec<Element>, open: Signal<bool>) -> Element {
-    popover(trigger, items, open)
+    if !open.get() {
+        return trigger;
+    }
+
+    arkit::column_component()
+        .percent_width(1.0)
+        .children(vec![
+            trigger,
+            margin_top(
+                arkit::row_component().children(vec![menu_content(items)]),
+                spacing::XXS,
+            )
+            .into(),
+        ])
+        .into()
 }
 
 pub fn context_menu(trigger: Element, items: Vec<Element>, open: Signal<bool>) -> Element {
-    popover(trigger, items, open)
+    if !open.get() {
+        return trigger;
+    }
+
+    arkit::column_component()
+        .percent_width(1.0)
+        .children(vec![
+            trigger,
+            margin_top(
+                arkit::row_component().children(vec![menu_content(items)]),
+                spacing::XXS,
+            )
+            .into(),
+        ])
+        .into()
 }
 
 pub fn sheet(title: impl Into<String>, open: Signal<bool>, content: Vec<Element>) -> Element {
@@ -187,7 +263,7 @@ pub fn dialog_footer(actions: Vec<Element>) -> Element {
         .percent_width(1.0)
         .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
         .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_END)
-        .children(inline(actions, spacing::XS))
+        .children(inline(actions, spacing::SM))
         .into()
 }
 
@@ -196,7 +272,7 @@ pub fn dialog_header(title: impl Into<String>, description: impl Into<String>) -
     let description = description.into();
     let mut children = vec![title_text(title).into()];
     if !description.is_empty() {
-        children.push(margin_top(muted_text(description), spacing::XXS).into());
+        children.push(margin_top(muted_text(description), spacing::SM).into());
     }
     arkit::column_component()
         .percent_width(1.0)

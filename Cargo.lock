@@ -19,7 +19,7 @@ dependencies = [
  "arkit_router",
  "napi-derive-ohos",
  "napi-ohos",
- "ohos-arkui-binding 0.1.0",
+ "ohos-arkui-binding 0.1.0 (git+https://github.com/ohos-rs/ohos-native-bindings.git?branch=feat-component)",
  "openharmony-ability",
 ]
 
@@ -285,19 +285,7 @@ checksum = "2bf50223579dc7cdcfb3bfcacf7069ff68243f8c363f62ffa99cf000a6b9c451"
 [[package]]
 name = "ohos-accessibility-sys"
 version = "0.0.1"
-
-[[package]]
-name = "ohos-arkui-binding"
-version = "0.1.0"
-dependencies = [
- "bitflags",
- "napi-ohos",
- "napi-sys-ohos",
- "ohos-arkui-input-binding",
- "ohos-arkui-sys 0.0.1",
- "ohos-xcomponent-binding 0.2.0",
- "ohos_enum_macro 0.1.0",
-]
+source = "git+https://github.com/ohos-rs/ohos-native-bindings.git?branch=feat-component#3cccae2dc4f8f68771743197698ae27949b9f9ff"
 
 [[package]]
 name = "ohos-arkui-binding"
@@ -315,24 +303,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "ohos-arkui-binding"
+version = "0.1.0"
+source = "git+https://github.com/ohos-rs/ohos-native-bindings.git?branch=feat-component#3cccae2dc4f8f68771743197698ae27949b9f9ff"
+dependencies = [
+ "bitflags",
+ "napi-ohos",
+ "napi-sys-ohos",
+ "ohos-arkui-input-binding",
+ "ohos-arkui-sys 0.0.1 (git+https://github.com/ohos-rs/ohos-native-bindings.git?branch=feat-component)",
+ "ohos-xcomponent-binding 0.2.0 (git+https://github.com/ohos-rs/ohos-native-bindings.git?branch=feat-component)",
+ "ohos-xcomponent-sys 0.0.2 (git+https://github.com/ohos-rs/ohos-native-bindings.git?branch=feat-component)",
+ "ohos_enum_macro 0.1.0 (git+https://github.com/ohos-rs/ohos-native-bindings.git?branch=feat-component)",
+]
+
+[[package]]
 name = "ohos-arkui-input-binding"
 version = "0.1.0"
+source = "git+https://github.com/ohos-rs/ohos-native-bindings.git?branch=feat-component#3cccae2dc4f8f68771743197698ae27949b9f9ff"
 dependencies = [
  "ohos-arkui-input-sys",
- "ohos_enum_macro 0.1.0",
+ "ohos_enum_macro 0.1.0 (git+https://github.com/ohos-rs/ohos-native-bindings.git?branch=feat-component)",
 ]
 
 [[package]]
 name = "ohos-arkui-input-sys"
 version = "0.1.0"
-
-[[package]]
-name = "ohos-arkui-sys"
-version = "0.0.1"
-dependencies = [
- "napi-sys-ohos",
- "ohos-arkui-input-sys",
-]
+source = "git+https://github.com/ohos-rs/ohos-native-bindings.git?branch=feat-component#3cccae2dc4f8f68771743197698ae27949b9f9ff"
 
 [[package]]
 name = "ohos-arkui-sys"
@@ -341,6 +338,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1a19176486bbe46d33830aca4213b07bb46c745200118e57106639db4962e1c3"
 dependencies = [
  "napi-sys-ohos",
+]
+
+[[package]]
+name = "ohos-arkui-sys"
+version = "0.0.1"
+source = "git+https://github.com/ohos-rs/ohos-native-bindings.git?branch=feat-component#3cccae2dc4f8f68771743197698ae27949b9f9ff"
+dependencies = [
+ "napi-sys-ohos",
+ "ohos-arkui-input-sys",
 ]
 
 [[package]]
@@ -397,19 +403,6 @@ dependencies = [
 [[package]]
 name = "ohos-xcomponent-binding"
 version = "0.2.0"
-dependencies = [
- "napi-derive-ohos",
- "napi-ohos",
- "napi-sys-ohos",
- "ohos-arkui-input-binding",
- "ohos-xcomponent-sys 0.0.2",
- "ohos_enum_macro 0.1.0",
- "raw-window-handle",
-]
-
-[[package]]
-name = "ohos-xcomponent-binding"
-version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c5a9bb0fd157dc702863fe6b5e15b91a4ffdc08b4c47d57d080adcc73c36fa8"
 dependencies = [
@@ -422,12 +415,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "ohos-xcomponent-sys"
-version = "0.0.2"
+name = "ohos-xcomponent-binding"
+version = "0.2.0"
+source = "git+https://github.com/ohos-rs/ohos-native-bindings.git?branch=feat-component#3cccae2dc4f8f68771743197698ae27949b9f9ff"
 dependencies = [
- "ohos-accessibility-sys",
- "ohos-arkui-input-sys",
- "ohos-arkui-sys 0.0.1",
+ "napi-derive-ohos",
+ "napi-ohos",
+ "napi-sys-ohos",
+ "ohos-arkui-input-binding",
+ "ohos-xcomponent-sys 0.0.2 (git+https://github.com/ohos-rs/ohos-native-bindings.git?branch=feat-component)",
+ "ohos_enum_macro 0.1.0 (git+https://github.com/ohos-rs/ohos-native-bindings.git?branch=feat-component)",
+ "raw-window-handle",
 ]
 
 [[package]]
@@ -437,6 +435,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5613209329ff61bc8695871ef985d57fc59ea4d55263e2c2395d8810d063575e"
 dependencies = [
  "ohos-arkui-sys 0.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "ohos-xcomponent-sys"
+version = "0.0.2"
+source = "git+https://github.com/ohos-rs/ohos-native-bindings.git?branch=feat-component#3cccae2dc4f8f68771743197698ae27949b9f9ff"
+dependencies = [
+ "ohos-accessibility-sys",
+ "ohos-arkui-input-sys",
+ "ohos-arkui-sys 0.0.1 (git+https://github.com/ohos-rs/ohos-native-bindings.git?branch=feat-component)",
 ]
 
 [[package]]
@@ -468,17 +476,6 @@ dependencies = [
 [[package]]
 name = "ohos_enum_macro"
 version = "0.1.0"
-dependencies = [
- "convert_case 0.6.0",
- "proc-macro2",
- "quote",
- "regex",
- "syn",
-]
-
-[[package]]
-name = "ohos_enum_macro"
-version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2fc1544b50988de3d636f971135e66c40479ef68e30ef09b15fb911763aab077"
 dependencies = [
@@ -490,8 +487,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ohos_enum_macro"
+version = "0.1.0"
+source = "git+https://github.com/ohos-rs/ohos-native-bindings.git?branch=feat-component#3cccae2dc4f8f68771743197698ae27949b9f9ff"
+dependencies = [
+ "convert_case 0.6.0",
+ "proc-macro2",
+ "quote",
+ "regex",
+ "syn",
+]
+
+[[package]]
 name = "openharmony-ability"
 version = "0.3.0"
+source = "git+https://github.com/harmony-contrib/openharmony-ability.git#595f63b33faa6e68149670ef200cde9b79b80f91"
 dependencies = [
  "futures-channel",
  "napi-derive-ohos",

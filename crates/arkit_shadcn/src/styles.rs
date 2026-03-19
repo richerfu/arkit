@@ -30,13 +30,6 @@ where
     element.style(ArkUINodeAttributeType::Margin, edge(value, 0.0, 0.0, 0.0))
 }
 
-pub fn padded<T>(element: ComponentElement<T>, value: f32) -> ComponentElement<T>
-where
-    T: ArkUICommonAttribute + 'static,
-{
-    element.style(ArkUINodeAttributeType::Padding, edge_all(value))
-}
-
 pub fn rounded<T>(element: ComponentElement<T>, value: f32) -> ComponentElement<T>
 where
     T: ArkUICommonAttribute + 'static,
@@ -118,7 +111,7 @@ where
             )
             .style(ArkUINodeAttributeType::ForegroundColor, color::FOREGROUND),
         ),
-        radius::SM,
+        radius::MD,
     ))
 }
 
@@ -127,12 +120,10 @@ where
     T: ArkUICommonAttribute + 'static,
 {
     shadow_sm(rounded(
-        border(
-            padded(element.background_color(color::POPOVER), spacing::MD).style(
-                ArkUINodeAttributeType::ForegroundColor,
-                color::POPOVER_FOREGROUND,
-            ),
-        ),
+        border(element.background_color(color::POPOVER).style(
+            ArkUINodeAttributeType::ForegroundColor,
+            color::POPOVER_FOREGROUND,
+        )),
         radius::MD,
     ))
 }

@@ -15,22 +15,33 @@ pub fn table(headers: Vec<String>, rows: Vec<Vec<String>>) -> Element {
                 .map(|h| {
                     arkit::row_component()
                         .style(ArkUINodeAttributeType::LayoutWeight, 1.0_f32)
-                        .style(ArkUINodeAttributeType::Padding, vec![0.0, 8.0, 8.0, 8.0])
-                        .children(vec![body_text(h).into()])
+                        .height(40.0)
+                        .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+                        .style(ArkUINodeAttributeType::Padding, vec![0.0, 8.0, 0.0, 8.0])
+                        .children(vec![body_text(h)
+                            .style(ArkUINodeAttributeType::FontColor, color::MUTED_FOREGROUND)
+                            .into()])
                         .into()
                 })
                 .collect(),
         )
         .into();
 
+    let total_rows = rows.len();
     let body_rows = rows
         .into_iter()
-        .map(|row| {
+        .enumerate()
+        .map(|(index, row)| {
             arkit::row_component()
                 .percent_width(1.0)
+                .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
                 .style(
                     ArkUINodeAttributeType::BorderWidth,
-                    vec![0.0, 0.0, 1.0, 0.0],
+                    if index + 1 == total_rows {
+                        vec![0.0, 0.0, 0.0, 0.0]
+                    } else {
+                        vec![0.0, 0.0, 1.0, 0.0]
+                    },
                 )
                 .style(ArkUINodeAttributeType::BorderColor, vec![color::BORDER])
                 .children(
@@ -38,8 +49,13 @@ pub fn table(headers: Vec<String>, rows: Vec<Vec<String>>) -> Element {
                         .map(|cell| {
                             arkit::row_component()
                                 .style(ArkUINodeAttributeType::LayoutWeight, 1.0_f32)
+                                .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
                                 .style(ArkUINodeAttributeType::Padding, vec![8.0, 8.0, 8.0, 8.0])
-                                .children(vec![body_text_regular(cell).into()])
+                                .children(vec![arkit::text(cell)
+                                    .font_size(typography::SM)
+                                    .style(ArkUINodeAttributeType::FontColor, color::FOREGROUND)
+                                    .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
+                                    .into()])
                                 .into()
                         })
                         .collect::<Vec<_>>(),
@@ -95,27 +111,29 @@ pub fn radio_group(options: Vec<String>, selected: Signal<String>) -> Element {
                 .percent_width(1.0)
                 .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
                 .children(vec![
-                    arkit::radio_component()
-                        .style(
-                            ArkUINodeAttributeType::RadioChecked,
-                            selected.get() == option,
-                        )
-                        .style(ArkUINodeAttributeType::BorderColor, vec![color::INPUT])
-                        .style(
-                            ArkUINodeAttributeType::BorderWidth,
-                            vec![1.0, 1.0, 1.0, 1.0],
-                        )
-                        .style(ArkUINodeAttributeType::RadioStyle, vec![color::PRIMARY])
-                        .width(16.0)
-                        .height(16.0)
-                        .on_click(move || selected_value.set(value.clone()))
-                        .into(),
+                    shadow_sm(
+                        arkit::radio_component()
+                            .style(
+                                ArkUINodeAttributeType::RadioChecked,
+                                selected.get() == option,
+                            )
+                            .style(ArkUINodeAttributeType::BorderColor, vec![color::INPUT])
+                            .style(
+                                ArkUINodeAttributeType::BorderWidth,
+                                vec![1.0, 1.0, 1.0, 1.0],
+                            )
+                            .style(ArkUINodeAttributeType::RadioStyle, vec![color::PRIMARY])
+                            .width(16.0)
+                            .height(16.0)
+                            .on_click(move || selected_value.set(value.clone())),
+                    )
+                    .into(),
                     arkit::row_component()
                         .style(
                             ArkUINodeAttributeType::Margin,
                             vec![0.0, 0.0, 0.0, spacing::SM],
                         )
-                        .children(vec![body_text_regular(option).into()])
+                        .children(vec![body_text(option).into()])
                         .into(),
                 ])
                 .into()
@@ -135,7 +153,7 @@ pub fn radio_group(options: Vec<String>, selected: Signal<String>) -> Element {
                         arkit::row_component()
                             .style(
                                 ArkUINodeAttributeType::Margin,
-                                vec![spacing::SM, 0.0, 0.0, 0.0],
+                                vec![spacing::MD, 0.0, 0.0, 0.0],
                             )
                             .children(vec![child])
                             .into()
@@ -160,7 +178,11 @@ pub fn select(options: Vec<String>, selected: Signal<String>) -> Element {
                 FLEX_ALIGN_SPACE_BETWEEN,
             )
             .children(vec![
-                body_text_regular(current.clone()).into(),
+                arkit::text(current.clone())
+                    .font_size(typography::SM)
+                    .style(ArkUINodeAttributeType::FontColor, color::FOREGROUND)
+                    .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
+                    .into(),
                 muted_text(if open.get() { "⌃" } else { "⌄" }).into(),
             ]),
     )
@@ -175,27 +197,51 @@ pub fn select(options: Vec<String>, selected: Signal<String>) -> Element {
             .map(|option| {
                 let value = selected.clone();
                 let close_dropdown = close.clone();
-                let variant = if current == option {
-                    ButtonVariant::Secondary
-                } else {
-                    ButtonVariant::Ghost
-                };
-                button(option.clone(), variant)
+                let active = current == option;
+                let option_label = option.clone();
+                arkit::row_component()
+                    .percent_width(1.0)
                     .height(32.0)
+                    .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
                     .style(
                         ArkUINodeAttributeType::Padding,
-                        vec![spacing::XXS, spacing::SM, spacing::XXS, spacing::SM],
+                        vec![6.0, spacing::SM, 6.0, spacing::SM],
                     )
+                    .style(
+                        ArkUINodeAttributeType::BorderRadius,
+                        vec![radius::SM, radius::SM, radius::SM, radius::SM],
+                    )
+                    .background_color(if active { color::ACCENT } else { 0x00000000 })
                     .on_click(move || {
                         value.set(option.clone());
                         close_dropdown.set(false);
                     })
+                    .children(vec![arkit::text(option_label)
+                        .font_size(typography::SM)
+                        .style(
+                            ArkUINodeAttributeType::FontColor,
+                            if active {
+                                color::ACCENT_FOREGROUND
+                            } else {
+                                color::FOREGROUND
+                            },
+                        )
+                        .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
+                        .into()])
                     .into()
             })
             .collect::<Vec<_>>();
         children.push(
             margin_top(
-                panel_surface(arkit::column_component().percent_width(1.0).children(items)),
+                panel_surface(
+                    arkit::column_component()
+                        .percent_width(1.0)
+                        .style(
+                            ArkUINodeAttributeType::Padding,
+                            vec![spacing::XXS, spacing::XXS, spacing::XXS, spacing::XXS],
+                        )
+                        .children(items),
+                ),
                 spacing::XXS,
             )
             .into(),
@@ -228,19 +274,35 @@ pub fn command(query: Signal<String>, options: Vec<String>) -> Element {
             .filter(|option| keyword.is_empty() || option.to_lowercase().contains(&keyword))
             .map(|option| {
                 let value = query.clone();
-                button(option.clone(), ButtonVariant::Ghost)
+                let option_label = option.clone();
+                arkit::row_component()
+                    .percent_width(1.0)
                     .height(32.0)
+                    .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
                     .style(
                         ArkUINodeAttributeType::Padding,
-                        vec![spacing::XXS, spacing::SM, spacing::XXS, spacing::SM],
+                        vec![6.0, spacing::SM, 6.0, spacing::SM],
+                    )
+                    .style(
+                        ArkUINodeAttributeType::BorderRadius,
+                        vec![radius::SM, radius::SM, radius::SM, radius::SM],
                     )
                     .on_click(move || value.set(option.clone()))
+                    .children(vec![arkit::text(option_label)
+                        .font_size(typography::SM)
+                        .style(ArkUINodeAttributeType::FontColor, color::FOREGROUND)
+                        .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
+                        .into()])
                     .into()
             }),
     );
     panel_surface(
         arkit::column_component()
             .percent_width(1.0)
+            .style(
+                ArkUINodeAttributeType::Padding,
+                vec![spacing::XXS, spacing::XXS, spacing::XXS, spacing::XXS],
+            )
             .children(children),
     )
     .into()
@@ -293,10 +355,54 @@ pub fn carousel(slides: Vec<Element>) -> SwiperElement {
 }
 
 pub fn chart(values: Vec<f32>) -> Element {
+    let palette = [
+        color::CHART_1,
+        color::CHART_2,
+        color::CHART_3,
+        color::CHART_4,
+        color::CHART_5,
+    ];
+
     card(
         values
             .into_iter()
-            .map(|value| progress(value, 100.0).into())
+            .enumerate()
+            .map(|(index, value)| {
+                let percent = value.clamp(0.0, 100.0);
+                let tone = palette[index % palette.len()];
+
+                arkit::column_component()
+                    .percent_width(1.0)
+                    .children(vec![
+                        arkit::row_component()
+                            .percent_width(1.0)
+                            .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+                            .style(
+                                ArkUINodeAttributeType::RowJustifyContent,
+                                FLEX_ALIGN_SPACE_BETWEEN,
+                            )
+                            .children(vec![
+                                muted_text(format!("Series {}", index + 1)).into(),
+                                body_text_regular(format!("{percent:.0}%")).into(),
+                            ])
+                            .into(),
+                        arkit::row_component()
+                            .style(
+                                ArkUINodeAttributeType::Margin,
+                                vec![spacing::XXS, 0.0, 0.0, 0.0],
+                            )
+                            .children(vec![rounded_progress(
+                                arkit::progress_component()
+                                    .style(ArkUINodeAttributeType::ProgressValue, percent)
+                                    .style(ArkUINodeAttributeType::ProgressTotal, 100.0)
+                                    .style(ArkUINodeAttributeType::ProgressColor, tone)
+                                    .height(8.0),
+                            )
+                            .into()])
+                            .into(),
+                    ])
+                    .into()
+            })
             .collect(),
     )
 }
@@ -337,16 +443,16 @@ pub fn tooltip(trigger_label: impl Into<String>, content: impl Into<String>) -> 
                 )
                 .style(
                     ArkUINodeAttributeType::Padding,
-                    vec![spacing::XXS, spacing::SM, spacing::XXS, spacing::SM],
+                    vec![spacing::SM, spacing::MD, spacing::SM, spacing::MD],
                 )
                 .style(
                     ArkUINodeAttributeType::BorderRadius,
-                    vec![radius::SM, radius::SM, radius::SM, radius::SM],
+                    vec![radius::MD, radius::MD, radius::MD, radius::MD],
                 )
-                .background_color(color::FOREGROUND)
+                .background_color(color::PRIMARY)
                 .children(vec![arkit::text(content)
                     .font_size(typography::XS)
-                    .style(ArkUINodeAttributeType::FontColor, color::BACKGROUND)
+                    .style(ArkUINodeAttributeType::FontColor, color::PRIMARY_FOREGROUND)
                     .into()])
                 .into(),
         ])

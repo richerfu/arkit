@@ -7,7 +7,7 @@ use arkit::{
 
 use crate::styles::{
     body_text, body_text_regular, border_color, card_surface, chip_surface, input_surface,
-    margin_top, muted_text, panel_surface, title_text,
+    margin_top, muted_text, panel_surface, shadow_sm, title_text,
 };
 use crate::theme::{color, radius, spacing, typography};
 
@@ -26,6 +26,7 @@ pub use surfaces::*;
 pub(crate) const FLEX_ALIGN_CENTER: i32 = 2;
 pub(crate) const FLEX_ALIGN_END: i32 = 3;
 pub(crate) const FLEX_ALIGN_SPACE_BETWEEN: i32 = 6;
+pub(crate) const FLEX_ALIGN_START: i32 = 1;
 
 pub(crate) fn stack(children: Vec<Element>, gap: f32) -> Element {
     let items = children
@@ -75,7 +76,10 @@ pub(crate) fn inline(children: Vec<Element>, gap: f32) -> Vec<Element> {
 pub(crate) fn rounded_progress(element: ProgressElement) -> ProgressElement {
     element
         .style(ArkUINodeAttributeType::BorderRadius, vec![radius::FULL])
-        .style(ArkUINodeAttributeType::BackgroundColor, color::MUTED)
+        .style(
+            ArkUINodeAttributeType::BackgroundColor,
+            color::PRIMARY_TRACK,
+        )
 }
 
 pub(crate) fn rounded_table_surface<T>(element: ComponentElement<T>) -> ComponentElement<T>
@@ -95,7 +99,9 @@ where
     T: arkit::ohos_arkui_binding::component::attribute::ArkUICommonAttribute + 'static,
 {
     element
-        .style(ArkUINodeAttributeType::Padding, vec![3.0, 3.0, 3.0, 3.0])
+        .style(ArkUINodeAttributeType::Padding, vec![4.0, 4.0, 4.0, 4.0])
+        .height(40.0)
+        .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
         .style(
             ArkUINodeAttributeType::BorderRadius,
             vec![radius::SM, radius::SM, radius::SM, radius::SM],
@@ -114,6 +120,8 @@ where
 {
     element
         .style(ArkUINodeAttributeType::Padding, vec![3.0, 3.0, 3.0, 3.0])
+        .height(36.0)
+        .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
         .style(
             ArkUINodeAttributeType::BorderRadius,
             vec![radius::MD, radius::MD, radius::MD, radius::MD],
@@ -127,7 +135,10 @@ pub(crate) fn rounded_button_surface(element: ButtonElement) -> ButtonElement {
             ArkUINodeAttributeType::Padding,
             vec![8.0, spacing::LG, 8.0, spacing::LG],
         )
-        .style(ArkUINodeAttributeType::BorderRadius, vec![radius::SM; 4])
+        .style(
+            ArkUINodeAttributeType::BorderRadius,
+            vec![4.0, 4.0, 4.0, 4.0],
+        )
         .style(
             ArkUINodeAttributeType::BorderWidth,
             vec![0.0, 0.0, 0.0, 0.0],
