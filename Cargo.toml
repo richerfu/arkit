@@ -1,0 +1,24 @@
+[workspace]
+members = [
+    "crates/arkit",
+    "crates/arkit_derive",
+    "crates/arkit_router",
+    "crates/arkit_shadcn",
+    "examples/*",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+arkit = { path = "crates/arkit" }
+arkit_derive = { path = "crates/arkit_derive" }
+arkit_router = { path = "crates/arkit_router" }
+arkit_shadcn = { path = "crates/arkit_shadcn" }
+
+syn = { version = "2.0", features = ["full"] }
+quote = "1.0"
+proc-macro2 = "1.0"
