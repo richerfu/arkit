@@ -104,7 +104,7 @@ where
         .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
         .style(
             ArkUINodeAttributeType::BorderRadius,
-            vec![radius::SM, radius::SM, radius::SM, radius::SM],
+            vec![radius::MD, radius::MD, radius::MD, radius::MD],
         )
         .style(
             ArkUINodeAttributeType::BorderWidth,
@@ -124,7 +124,7 @@ where
         .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
         .style(
             ArkUINodeAttributeType::BorderRadius,
-            vec![radius::MD, radius::MD, radius::MD, radius::MD],
+            vec![radius::LG, radius::LG, radius::LG, radius::LG],
         )
         .background_color(color::MUTED)
 }
@@ -135,10 +135,7 @@ pub(crate) fn rounded_button_surface(element: ButtonElement) -> ButtonElement {
             ArkUINodeAttributeType::Padding,
             vec![8.0, spacing::LG, 8.0, spacing::LG],
         )
-        .style(
-            ArkUINodeAttributeType::BorderRadius,
-            vec![4.0, 4.0, 4.0, 4.0],
-        )
+        .style(ArkUINodeAttributeType::BorderRadius, vec![radius::MD; 4])
         .style(
             ArkUINodeAttributeType::BorderWidth,
             vec![0.0, 0.0, 0.0, 0.0],

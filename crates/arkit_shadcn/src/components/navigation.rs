@@ -232,7 +232,7 @@ pub fn tabs_list(tab_labels: Vec<String>, active: Signal<usize>) -> Element {
                 )
                 .style(
                     ArkUINodeAttributeType::BorderRadius,
-                    vec![radius::SM, radius::SM, radius::SM, radius::SM],
+                    vec![radius::MD, radius::MD, radius::MD, radius::MD],
                 )
                 .style(
                     ArkUINodeAttributeType::BorderWidth,

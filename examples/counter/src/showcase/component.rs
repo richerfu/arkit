@@ -25,41 +25,8 @@ fn top_start_canvas(content: Element, padding: f32) -> Element {
     )
 }
 
-fn button_preview(variant: &str) -> Element {
-    match variant {
-        "Destructive" => shadcn::button("Destructive", shadcn::ButtonVariant::Destructive).into(),
-        "Ghost" => shadcn::button("Ghost", shadcn::ButtonVariant::Ghost).into(),
-        "Link" => shadcn::button("Link", shadcn::ButtonVariant::Link).into(),
-        "Loading" => shadcn::button("Please wait", shadcn::ButtonVariant::Default).into(),
-        "Outline" => shadcn::button("Outline", shadcn::ButtonVariant::Outline).into(),
-        "Secondary" => shadcn::button("Secondary", shadcn::ButtonVariant::Secondary).into(),
-        "With Icon" => shadcn::button("Login with Email", shadcn::ButtonVariant::Default).into(),
-        "Icon" => shadcn::button("›", shadcn::ButtonVariant::Outline)
-            .width(40.0)
-            .height(40.0)
-            .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
-            .into(),
-        _ => shadcn::button("Button", shadcn::ButtonVariant::Default).into(),
-    }
-}
-
-fn button_carousel(page: Signal<i32>) -> Element {
-    let variants = [
-        "Default",
-        "Destructive",
-        "Ghost",
-        "Link",
-        "Loading",
-        "Outline",
-        "Secondary",
-        "With Icon",
-        "Icon",
-    ];
-
-    let count = variants.len() as i32;
+fn carousel_frame(page: Signal<i32>, count: i32, preview: Element) -> Element {
     let current = page.get().clamp(1, count);
-    let label = variants[(current - 1) as usize];
-
     let prev = page.clone();
     let next = page.clone();
 
@@ -121,7 +88,7 @@ fn button_carousel(page: Signal<i32>) -> Element {
                 .style(ArkUINodeAttributeType::LayoutWeight, 1.0_f32)
                 .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
                 .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
-                .children(vec![button_preview(label)])
+                .children(vec![preview])
                 .into(),
             arkit::row_component()
                 .percent_width(1.0)
@@ -135,6 +102,115 @@ fn button_carousel(page: Signal<i32>) -> Element {
                 .into(),
         ])
         .into()
+}
+
+fn button_preview(variant: &str) -> Element {
+    match variant {
+        "Destructive" => shadcn::button("Destructive", shadcn::ButtonVariant::Destructive).into(),
+        "Ghost" => shadcn::button("Ghost", shadcn::ButtonVariant::Ghost).into(),
+        "Link" => shadcn::button("Link", shadcn::ButtonVariant::Link).into(),
+        "Loading" => shadcn::button("Please wait", shadcn::ButtonVariant::Default).into(),
+        "Outline" => shadcn::button("Outline", shadcn::ButtonVariant::Outline).into(),
+        "Secondary" => shadcn::button("Secondary", shadcn::ButtonVariant::Secondary).into(),
+        "With Icon" => shadcn::button("Login with Email", shadcn::ButtonVariant::Default).into(),
+        "Icon" => shadcn::icon_button("›").into(),
+        _ => shadcn::button("Button", shadcn::ButtonVariant::Default).into(),
+    }
+}
+
+fn button_carousel(page: Signal<i32>) -> Element {
+    let variants = [
+        "Default",
+        "Destructive",
+        "Ghost",
+        "Link",
+        "Loading",
+        "Outline",
+        "Secondary",
+        "With Icon",
+        "Icon",
+    ];
+    let count = variants.len() as i32;
+    let label = variants[(page.get().clamp(1, count) - 1) as usize];
+    carousel_frame(page, count, button_preview(label))
+}
+
+fn select_carousel(page: Signal<i32>, choice: Signal<String>) -> Element {
+    let count = 2_i32;
+    let preview = if page.get().clamp(1, count) == 2 {
+        fixed_width(
+            shadcn::select(
+                vec![
+                    String::from("Apple"),
+                    String::from("Banana"),
+                    String::from("Blueberry"),
+                    String::from("Grapes"),
+                    String::from("Pineapple"),
+                    String::from("Cherry"),
+                    String::from("Strawberry"),
+                    String::from("Orange"),
+                    String::from("Lemon"),
+                    String::from("Kiwi"),
+                    String::from("Mango"),
+                    String::from("Pomegranate"),
+                    String::from("Watermelon"),
+                    String::from("Peach"),
+                ],
+                choice,
+            ),
+            180.0,
+        )
+    } else {
+        fixed_width(
+            shadcn::select(
+                vec![
+                    String::from("Apple"),
+                    String::from("Banana"),
+                    String::from("Blueberry"),
+                    String::from("Grapes"),
+                    String::from("Pineapple"),
+                ],
+                choice,
+            ),
+            180.0,
+        )
+    };
+    carousel_frame(page, count, preview)
+}
+
+fn text_carousel(page: Signal<i32>) -> Element {
+    let count = 3_i32;
+    let preview = match page.get().clamp(1, count) {
+        2 => fixed_width(
+            v_stack(
+                vec![
+                    shadcn::text_variant("The Rainbow Forest Adventure", false),
+                    shadcn::text_variant(
+                        "Once upon a time, in a magical forest, there lived a curious rabbit named Whiskers.",
+                        true,
+                    ),
+                    shadcn::text_variant("Whiskers' Discovery", false),
+                    shadcn::text_variant(
+                        "One day, Whiskers found a rainbow-colored flower that transformed the whole forest.",
+                        true,
+                    ),
+                ],
+                shadcn::theme::spacing::SM,
+            ),
+            360.0,
+        ),
+        3 => v_stack(
+            vec![
+                shadcn::text_variant("Default: text-foreground", false),
+                shadcn::text_variant("Inherited from Parent: text-emerald-500", true),
+                shadcn::text_variant("Inherited from NestedParent: text-sky-500", true),
+            ],
+            shadcn::theme::spacing::SM,
+        ),
+        _ => shadcn::text_variant("Hello, world!", false),
+    };
+
+    carousel_frame(page, count, preview)
 }
 
 fn component_body(
@@ -224,15 +300,49 @@ fn component_body(
             true,
             24.0,
         ),
-        "badge" => no_padding_center_canvas(h_stack(
-            vec![
-                shadcn::badge("Badge"),
-                shadcn::badge_with_variant("Secondary", shadcn::BadgeVariant::Secondary),
-                shadcn::badge_with_variant("Outline", shadcn::BadgeVariant::Outline),
-            ],
-            shadcn::theme::spacing::SM,
-        )),
-        "button" => no_padding_center_canvas(fixed_width(button_carousel(page), 360.0)),
+        "badge" => component_canvas(
+            fixed_width(
+                v_stack(
+                    vec![
+                        h_stack(
+                            vec![
+                                shadcn::badge("Badge"),
+                                shadcn::badge_with_variant(
+                                    "Secondary",
+                                    shadcn::BadgeVariant::Secondary,
+                                ),
+                                shadcn::badge_with_variant(
+                                    "Destructive",
+                                    shadcn::BadgeVariant::Destructive,
+                                ),
+                                shadcn::badge_with_variant(
+                                    "Outline",
+                                    shadcn::BadgeVariant::Outline,
+                                ),
+                            ],
+                            shadcn::theme::spacing::SM,
+                        ),
+                        h_stack(
+                            vec![
+                                shadcn::badge_with_variant(
+                                    "Verified",
+                                    shadcn::BadgeVariant::Secondary,
+                                ),
+                                shadcn::badge("8"),
+                                shadcn::badge_with_variant("99", shadcn::BadgeVariant::Destructive),
+                                shadcn::badge_with_variant("20+", shadcn::BadgeVariant::Outline),
+                            ],
+                            shadcn::theme::spacing::SM,
+                        ),
+                    ],
+                    shadcn::theme::spacing::SM,
+                ),
+                360.0,
+            ),
+            true,
+            24.0,
+        ),
+        "button" => no_padding_center_canvas(button_carousel(page)),
         "card" => component_canvas(
             fixed_width(
                 shadcn::card(vec![
@@ -468,7 +578,7 @@ fn component_body(
         "progress" => component_canvas(
             fixed_width(
                 shadcn::progress((page.get().max(1) as f32 * 10.0).min(100.0), 100.0).into(),
-                360.0,
+                280.0,
             ),
             true,
             24.0,
@@ -488,21 +598,7 @@ fn component_body(
             true,
             24.0,
         ),
-        "select" => component_canvas(
-            fixed_width(
-                shadcn::select(
-                    vec![
-                        String::from("Apple"),
-                        String::from("Banana"),
-                        String::from("Blueberry"),
-                    ],
-                    choice,
-                ),
-                360.0,
-            ),
-            true,
-            24.0,
-        ),
+        "select" => no_padding_center_canvas(select_carousel(page, choice)),
         "separator" => component_canvas(
             fixed_width(
                 v_stack(
@@ -532,7 +628,7 @@ fn component_body(
                         shadcn::label("Airplane Mode").into(),
                         shadcn::switch(toggle_state).into(),
                     ],
-                    shadcn::theme::spacing::MD,
+                    shadcn::theme::spacing::SM,
                 ),
                 360.0,
             ),
@@ -540,88 +636,62 @@ fn component_body(
             24.0,
         ),
         "tabs" => top_start_canvas(
-            fixed_width(
-                shadcn::tabs(
-                    vec![String::from("Feedback"), String::from("Survey")],
-                    active_tab,
-                    vec![
-                        shadcn::card(vec![
-                            shadcn::card_header(
-                                "Feedback",
-                                "Share your thoughts with us. Click submit when you are ready.",
-                            ),
-                            shadcn::card_content(vec![
-                                shadcn::form_item(
-                                    "Name",
-                                    shadcn::input("Michael Scott")
-                                        .bind(query.clone())
-                                        .percent_width(1.0)
-                                        .into(),
-                                ),
-                                shadcn::form_item(
-                                    "Message",
-                                    shadcn::input("Where are the turtles?!")
-                                        .percent_width(1.0)
-                                        .into(),
-                                ),
-                            ]),
-                            shadcn::card_footer(vec![shadcn::button(
-                                "Submit feedback",
-                                shadcn::ButtonVariant::Default,
-                            )
-                            .into()]),
-                        ]),
-                        shadcn::card(vec![
-                            shadcn::card_header(
-                                "Quick Survey",
-                                "Answer a few quick questions to help improve the demo.",
-                            ),
-                            shadcn::card_content(vec![
-                                shadcn::form_item(
-                                    "Job Title",
-                                    shadcn::input("Regional Manager").percent_width(1.0).into(),
-                                ),
-                                shadcn::form_item(
-                                    "Favorite feature",
-                                    shadcn::input("CLI").percent_width(1.0).into(),
-                                ),
-                            ]),
-                            shadcn::card_footer(vec![shadcn::button(
-                                "Submit survey",
-                                shadcn::ButtonVariant::Default,
-                            )
-                            .into()]),
-                        ]),
-                    ],
-                ),
-                360.0,
-            ),
-            24.0,
-        ),
-        "text" => component_canvas(
-            fixed_width(
-                v_stack(
-                    vec![
-                        shadcn::text_variant("The quick brown fox jumps over the lazy dog.", false),
-                        shadcn::text_variant(
-                            "Muted text appears with lower contrast for supporting information.",
-                            true,
+            shadcn::tabs(
+                vec![String::from("Feedback"), String::from("Survey")],
+                active_tab,
+                vec![
+                    shadcn::card(vec![
+                        shadcn::card_header(
+                            "Feedback",
+                            "Share your thoughts with us. Click submit when you are ready.",
                         ),
-                        shadcn::card(vec![
-                            shadcn::card_title("Typography"),
-                            shadcn::text_variant(
-                                "Large title, body copy and caption rhythm.",
-                                true,
+                        shadcn::card_content(vec![
+                            shadcn::form_item(
+                                "Name",
+                                shadcn::input("Michael Scott")
+                                    .bind(query.clone())
+                                    .percent_width(1.0)
+                                    .into(),
+                            ),
+                            shadcn::form_item(
+                                "Message",
+                                shadcn::input("Where are the turtles?!")
+                                    .percent_width(1.0)
+                                    .into(),
                             ),
                         ]),
-                    ],
-                    shadcn::theme::spacing::MD,
-                ),
-                360.0,
+                        shadcn::card_footer(vec![shadcn::button(
+                            "Submit feedback",
+                            shadcn::ButtonVariant::Default,
+                        )
+                        .into()]),
+                    ]),
+                    shadcn::card(vec![
+                        shadcn::card_header(
+                            "Quick Survey",
+                            "Answer a few quick questions to help improve the demo.",
+                        ),
+                        shadcn::card_content(vec![
+                            shadcn::form_item(
+                                "Job Title",
+                                shadcn::input("Regional Manager").percent_width(1.0).into(),
+                            ),
+                            shadcn::form_item(
+                                "Favorite feature",
+                                shadcn::input("CLI").percent_width(1.0).into(),
+                            ),
+                        ]),
+                        shadcn::card_footer(vec![shadcn::button(
+                            "Submit survey",
+                            shadcn::ButtonVariant::Default,
+                        )
+                        .into()]),
+                    ]),
+                ],
             ),
-            true,
             24.0,
         ),
+        "text" => no_padding_center_canvas(text_carousel(page)),
         "textarea" => component_canvas(
             fixed_width(
                 shadcn::textarea("Type your message here...")
