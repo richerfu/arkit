@@ -1,4 +1,4 @@
-pub(crate) const SHOWCASE_COMPONENTS: [(&str, &str); 31] = [
+pub(crate) const SHOWCASE_COMPONENTS: [(&str, &str); 32] = [
     ("accordion", "Accordion"),
     ("alert", "Alert"),
     ("alert-dialog", "Alert Dialog"),
@@ -13,6 +13,7 @@ pub(crate) const SHOWCASE_COMPONENTS: [(&str, &str); 31] = [
     ("dialog", "Dialog"),
     ("dropdown-menu", "Dropdown Menu"),
     ("hover-card", "Hover Card"),
+    ("icon", "Icon"),
     ("input", "Input"),
     ("label", "Label"),
     ("menubar", "Menubar"),

@@ -21,6 +21,7 @@ fn app() -> Element {
     let query = use_signal(String::new);
     let toggle_state = use_signal(|| false);
     let catalog_search = use_signal(String::new);
+    let route_key = format!("route:{}", route.path());
 
     let screen = if route.path() == "/" {
         showcase::catalog_home(catalog_search)
@@ -48,5 +49,10 @@ fn app() -> Element {
         ])
     };
 
-    arkit::column(vec![screen])
+    arkit::column(vec![arkit::column_component()
+        .key(route_key)
+        .percent_width(1.0)
+        .percent_height(1.0)
+        .children(vec![screen])
+        .into()])
 }

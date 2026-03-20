@@ -1,4 +1,5 @@
 use arkit::prelude::*;
+use arkit_icon as lucide;
 use arkit_shadcn as shadcn;
 
 pub(crate) const FLEX_ALIGN_CENTER: i32 = 2;
@@ -65,7 +66,7 @@ pub(crate) fn h_stack(children: Vec<Element>, gap: f32) -> Element {
 pub(crate) fn page_scroll(children: Vec<Element>) -> Element {
     arkit::scroll_component()
         .percent_width(1.0)
-        .percent_height(1.0)
+        .style(ArkUINodeAttributeType::LayoutWeight, 1.0_f32)
         .background_color(shadcn::theme::color::SURFACE)
         .children(vec![arkit::column_component()
             .percent_width(1.0)
@@ -74,7 +75,7 @@ pub(crate) fn page_scroll(children: Vec<Element>) -> Element {
                 vec![
                     0.0,
                     shadcn::theme::spacing::LG,
-                    shadcn::theme::spacing::SM,
+                    shadcn::theme::spacing::XXL,
                     shadcn::theme::spacing::LG,
                 ],
             )
@@ -110,12 +111,17 @@ pub(crate) fn component_canvas_with(
 
     arkit::scroll_component()
         .percent_width(1.0)
-        .percent_height(1.0)
+        .style(ArkUINodeAttributeType::LayoutWeight, 1.0_f32)
         .background_color(shadcn::theme::color::SURFACE)
         .children(vec![container
             .style(
                 ArkUINodeAttributeType::Padding,
-                vec![padding[0], padding[1], padding[2], padding[3]],
+                vec![
+                    padding[0],
+                    padding[1],
+                    padding[2] + shadcn::theme::spacing::XXL,
+                    padding[3],
+                ],
             )
             .style(
                 ArkUINodeAttributeType::ColumnAlignItems,
@@ -144,7 +150,7 @@ pub(crate) fn nav_bar(title: impl Into<String>, back: bool) -> Element {
         .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
         .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_START)
         .children(vec![if back {
-            shadcn::button("‹", shadcn::ButtonVariant::Ghost)
+            shadcn::icon_button_with_variant("chevron-left", shadcn::ButtonVariant::Ghost)
                 .width(36.0)
                 .height(36.0)
                 .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
@@ -252,14 +258,10 @@ pub(crate) fn component_list_cell(slug: &str, title: &str, first: bool, last: bo
                 .style(ArkUINodeAttributeType::FontWeight, 3_i32)
                 .style(ArkUINodeAttributeType::TextLineHeight, 22.0)
                 .into(),
-            arkit::text("›")
-                .font_size(shadcn::theme::typography::MD)
-                .style(
-                    ArkUINodeAttributeType::FontColor,
-                    shadcn::theme::color::MUTED_FOREGROUND,
-                )
-                .style(ArkUINodeAttributeType::TextLineHeight, 22.0)
-                .into(),
+            lucide::icon("chevron-right")
+                .size(16.0)
+                .color(shadcn::theme::color::MUTED_FOREGROUND)
+                .render(),
         ])
         .into()
 }

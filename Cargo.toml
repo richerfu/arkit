@@ -2,6 +2,7 @@
 members = [
     "crates/arkit",
     "crates/arkit_derive",
+    "crates/arkit_icon",
     "crates/arkit_router",
     "crates/arkit_shadcn",
     "examples/*",
@@ -16,8 +17,10 @@ license = "MIT OR Apache-2.0"
 [workspace.dependencies]
 arkit = { path = "crates/arkit" }
 arkit_derive = { path = "crates/arkit_derive" }
+arkit_icon = { path = "crates/arkit_icon" }
 arkit_router = { path = "crates/arkit_router" }
 arkit_shadcn = { path = "crates/arkit_shadcn" }
+rust-embed = { version = "8.11.0", features = ["debug-embed"] }
 
 syn = { version = "2.0", features = ["full"] }
 quote = "1.0"
@@ -27,4 +30,5 @@ proc-macro2 = "1.0"
 openharmony-ability = { git = "https://github.com/harmony-contrib/openharmony-ability.git" }
 openharmony-ability-derive = { git = "https://github.com/harmony-contrib/openharmony-ability.git" }
 
-ohos-arkui-binding = { git = "https://github.com/ohos-rs/ohos-native-bindings.git", branch = "feat-component" }
+ohos-arkui-binding = { path = "/Users/ranger/Desktop/project/ohos-rs/ohos-native-bindings/crates/arkui" }
+ohos-display-binding = { path = "/Users/ranger/Desktop/project/ohos-rs/ohos-native-bindings/crates/display" }

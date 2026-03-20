@@ -1,4 +1,5 @@
 use arkit::prelude::*;
+use arkit_icon as lucide;
 use arkit_shadcn as shadcn;
 
 use super::constants::component_title;
@@ -31,16 +32,14 @@ fn carousel_frame(page: Signal<i32>, count: i32, preview: Element) -> Element {
     let next = page.clone();
 
     let prev_button = if current == 1 {
-        shadcn::button("‹", shadcn::ButtonVariant::Outline)
+        shadcn::icon_button_with_variant("chevron-left", shadcn::ButtonVariant::Outline)
             .width(40.0)
             .height(40.0)
             .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
-            .style(
-                ArkUINodeAttributeType::FontColor,
-                shadcn::theme::color::MUTED_FOREGROUND,
-            )
+            .style(ArkUINodeAttributeType::Opacity, 0.5_f32)
+            .style(ArkUINodeAttributeType::Enabled, false)
     } else {
-        shadcn::button("‹", shadcn::ButtonVariant::Outline)
+        shadcn::icon_button_with_variant("chevron-left", shadcn::ButtonVariant::Outline)
             .width(40.0)
             .height(40.0)
             .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
@@ -54,16 +53,14 @@ fn carousel_frame(page: Signal<i32>, count: i32, preview: Element) -> Element {
     };
 
     let next_button = if current == count {
-        shadcn::button("›", shadcn::ButtonVariant::Outline)
+        shadcn::icon_button_with_variant("chevron-right", shadcn::ButtonVariant::Outline)
             .width(40.0)
             .height(40.0)
             .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
-            .style(
-                ArkUINodeAttributeType::FontColor,
-                shadcn::theme::color::MUTED_FOREGROUND,
-            )
+            .style(ArkUINodeAttributeType::Opacity, 0.5_f32)
+            .style(ArkUINodeAttributeType::Enabled, false)
     } else {
-        shadcn::button("›", shadcn::ButtonVariant::Outline)
+        shadcn::icon_button_with_variant("chevron-right", shadcn::ButtonVariant::Outline)
             .width(40.0)
             .height(40.0)
             .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
@@ -112,8 +109,11 @@ fn button_preview(variant: &str) -> Element {
         "Loading" => shadcn::button("Please wait", shadcn::ButtonVariant::Default).into(),
         "Outline" => shadcn::button("Outline", shadcn::ButtonVariant::Outline).into(),
         "Secondary" => shadcn::button("Secondary", shadcn::ButtonVariant::Secondary).into(),
-        "With Icon" => shadcn::button("Login with Email", shadcn::ButtonVariant::Default).into(),
-        "Icon" => shadcn::icon_button("›").into(),
+        "With Icon" => {
+            shadcn::button_with_icon("Login with Email", "mail", shadcn::ButtonVariant::Default)
+                .into()
+        }
+        "Icon" => shadcn::icon_button("chevron-right").into(),
         _ => shadcn::button("Button", shadcn::ButtonVariant::Default).into(),
     }
 }
@@ -132,7 +132,122 @@ fn button_carousel(page: Signal<i32>) -> Element {
     ];
     let count = variants.len() as i32;
     let label = variants[(page.get().clamp(1, count) - 1) as usize];
-    carousel_frame(page, count, button_preview(label))
+    carousel_frame(
+        page,
+        count,
+        arkit::row_component()
+            .key(format!("button-preview:{label}"))
+            .children(vec![button_preview(label)])
+            .into(),
+    )
+}
+
+fn icon_tile(name: &str, icon: Element) -> Element {
+    arkit::column_component()
+        .width(104.0)
+        .style(ArkUINodeAttributeType::ColumnAlignItems, FLEX_ALIGN_CENTER)
+        .children(vec![
+            arkit::row_component()
+                .width(56.0)
+                .height(56.0)
+                .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+                .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
+                .style(
+                    ArkUINodeAttributeType::BorderRadius,
+                    vec![
+                        shadcn::theme::radius::MD,
+                        shadcn::theme::radius::MD,
+                        shadcn::theme::radius::MD,
+                        shadcn::theme::radius::MD,
+                    ],
+                )
+                .style(
+                    ArkUINodeAttributeType::BorderWidth,
+                    vec![1.0, 1.0, 1.0, 1.0],
+                )
+                .style(
+                    ArkUINodeAttributeType::BorderColor,
+                    vec![shadcn::theme::color::BORDER],
+                )
+                .background_color(shadcn::theme::color::BACKGROUND)
+                .children(vec![icon])
+                .into(),
+            arkit::row_component()
+                .style(ArkUINodeAttributeType::Margin, vec![8.0, 0.0, 0.0, 0.0])
+                .children(vec![shadcn::text_variant(name, true)])
+                .into(),
+        ])
+        .into()
+}
+
+fn icon_showcase() -> Element {
+    fixed_width(
+        v_stack(
+            vec![
+                h_stack(
+                    vec![
+                        icon_tile(
+                            "mail",
+                            lucide::icon("mail")
+                                .size(20.0)
+                                .color(shadcn::theme::color::FOREGROUND)
+                                .render(),
+                        ),
+                        icon_tile(
+                            "chevron-right",
+                            lucide::icon("chevron-right")
+                                .size(20.0)
+                                .color(shadcn::theme::color::FOREGROUND)
+                                .render(),
+                        ),
+                        icon_tile(
+                            "search",
+                            lucide::icon("search")
+                                .size(20.0)
+                                .color(shadcn::theme::color::FOREGROUND)
+                                .render(),
+                        ),
+                    ],
+                    shadcn::theme::spacing::MD,
+                ),
+                h_stack(
+                    vec![
+                        icon_tile(
+                            "bell-off",
+                            lucide::icon("bell-off")
+                                .size(20.0)
+                                .color(0xFFEF4444)
+                                .render(),
+                        ),
+                        icon_tile(
+                            "star",
+                            lucide::icon("star")
+                                .size(24.0)
+                                .color(0xFFF59E0B)
+                                .stroke_width(1.75)
+                                .render(),
+                        ),
+                        icon_tile(
+                            "circle-help",
+                            lucide::icon("circle-help")
+                                .size(20.0)
+                                .color(shadcn::theme::color::MUTED_FOREGROUND)
+                                .render(),
+                        ),
+                    ],
+                    shadcn::theme::spacing::MD,
+                ),
+                shadcn::card(vec![
+                    shadcn::card_title("Lucide Icons"),
+                    shadcn::card_description(
+                        "SVGs are embedded with rust-embed and materialized on demand for ArkUI Image rendering.",
+                    ),
+                ]),
+            ],
+            shadcn::theme::spacing::LG,
+        ),
+        360.0,
+    )
 }
 
 fn select_carousel(page: Signal<i32>, choice: Signal<String>) -> Element {
@@ -517,6 +632,7 @@ fn component_body(
                 24.0,
             )
         }
+        "icon" => component_canvas(icon_showcase(), true, 24.0),
         "input" => component_canvas(
             fixed_width(
                 shadcn::input("Email").bind(query).percent_width(1.0).into(),

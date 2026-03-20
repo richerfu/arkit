@@ -12,12 +12,14 @@ use crate::styles::{
 use crate::theme::{color, radius, spacing, typography};
 
 mod basic;
+mod button;
 mod data;
 mod navigation;
 mod overlays;
 mod surfaces;
 
 pub use basic::*;
+pub use button::*;
 pub use data::*;
 pub use navigation::*;
 pub use overlays::*;
@@ -127,17 +129,4 @@ where
             vec![radius::LG, radius::LG, radius::LG, radius::LG],
         )
         .background_color(color::MUTED)
-}
-
-pub(crate) fn rounded_button_surface(element: ButtonElement) -> ButtonElement {
-    element
-        .style(
-            ArkUINodeAttributeType::Padding,
-            vec![8.0, spacing::LG, 8.0, spacing::LG],
-        )
-        .style(ArkUINodeAttributeType::BorderRadius, vec![radius::MD; 4])
-        .style(
-            ArkUINodeAttributeType::BorderWidth,
-            vec![0.0, 0.0, 0.0, 0.0],
-        )
 }
