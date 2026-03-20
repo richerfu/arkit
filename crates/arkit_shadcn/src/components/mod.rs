@@ -11,6 +11,7 @@ use crate::styles::{
 };
 use crate::theme::{color, radius, spacing, typography};
 
+mod alert;
 mod basic;
 mod button;
 mod data;
@@ -18,6 +19,7 @@ mod navigation;
 mod overlays;
 mod surfaces;
 
+pub use alert::*;
 pub use basic::*;
 pub use button::*;
 pub use data::*;

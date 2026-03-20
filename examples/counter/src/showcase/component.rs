@@ -4,7 +4,7 @@ use arkit_shadcn as shadcn;
 
 use super::constants::component_title;
 use super::layout::{
-    component_canvas, component_canvas_with, fixed_width, h_stack, nav_bar, v_stack,
+    component_canvas, component_canvas_with, fixed_width, h_stack, max_width, nav_bar, v_stack,
     FLEX_ALIGN_CENTER, FLEX_ALIGN_SPACE_BETWEEN,
 };
 
@@ -352,25 +352,65 @@ fn component_body(
             [0.0, 24.0, 0.0, 24.0],
             false,
         ),
-        "alert" => top_center_canvas(
-            fixed_width(
+        "alert" => top_start_canvas(
+            max_width(
                 v_stack(
                     vec![
-                        shadcn::alert(
-                            "Heads up!",
-                            "You can add components using the command line.",
+                        shadcn::alert_root(
+                            "circle-check",
+                            shadcn::AlertVariant::Default,
+                            vec![
+                                shadcn::alert_title(
+                                    "Success! Your changes have been saved",
+                                    shadcn::AlertVariant::Default,
+                                )
+                                .into(),
+                                shadcn::alert_description(
+                                    "This is an alert with icon, title and description.",
+                                    shadcn::AlertVariant::Default,
+                                )
+                                .into(),
+                            ],
                         ),
-                        shadcn::alert_destructive(
-                            "Error",
-                            "Your session has expired. Please sign in again.",
+                        shadcn::alert_root(
+                            "terminal",
+                            shadcn::AlertVariant::Default,
+                            vec![shadcn::alert_title(
+                                "This Alert has no description.",
+                                shadcn::AlertVariant::Default,
+                            )
+                            .into()],
+                        ),
+                        shadcn::alert_root(
+                            "circle-alert",
+                            shadcn::AlertVariant::Destructive,
+                            vec![
+                                shadcn::alert_title(
+                                    "Unable to process your payment.",
+                                    shadcn::AlertVariant::Destructive,
+                                )
+                                .into(),
+                                shadcn::alert_description(
+                                    "Please verify your billing information and try again.",
+                                    shadcn::AlertVariant::Destructive,
+                                )
+                                .into(),
+                                shadcn::alert_list(
+                                    vec![
+                                        "Check your card details",
+                                        "Ensure sufficient funds",
+                                        "Verify billing address",
+                                    ],
+                                    shadcn::AlertVariant::Destructive,
+                                ),
+                            ],
                         ),
                     ],
                     shadcn::theme::spacing::MD,
                 ),
-                360.0,
+                576.0,
             ),
-            [24.0, 24.0, 24.0, 24.0],
-            false,
+            24.0,
         ),
         "alert-dialog" => no_padding_center_canvas(fixed_width(
             shadcn::alert_dialog(

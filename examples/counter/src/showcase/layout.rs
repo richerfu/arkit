@@ -1,3 +1,5 @@
+use arkit::ohos_arkui_binding::api::attribute_option::LayoutConstraint;
+use arkit::ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
 use arkit::prelude::*;
 use arkit_icon as lucide;
 use arkit_shadcn as shadcn;
@@ -15,6 +17,26 @@ pub(crate) fn fixed_width(child: Element, width: f32) -> Element {
     arkit::row_component()
         .width(width)
         .children(vec![child])
+        .into()
+}
+
+pub(crate) fn max_width(child: Element, width: f32) -> Element {
+    arkit::column_component()
+        .percent_width(1.0)
+        .style(ArkUINodeAttributeType::ColumnAlignItems, FLEX_ALIGN_CENTER)
+        .children(vec![arkit::column_component()
+            .percent_width(1.0)
+            .native_with_cleanup(move |node| {
+                let mut constraint = LayoutConstraint::new().expect("layout constraint");
+                constraint.set_max_width(width.ceil() as i32);
+                node.set_attribute(
+                    ArkUINodeAttributeType::ConstraintSize,
+                    (&constraint).into(),
+                )?;
+                Ok(move || drop(constraint))
+            })
+            .children(vec![child])
+            .into()])
         .into()
 }
 
