@@ -7,7 +7,7 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
     let toggle = ctx.toggle_state.clone();
     component_canvas(
         fixed_width(
-            shadcn::hover_card(
+            shadcn::hover_card_with_width(
                 shadcn::button("@expo", shadcn::ButtonVariant::Link)
                     .on_click(move || toggle.update(|show| *show = !*show))
                     .into(),
@@ -64,6 +64,7 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                     ])
                     .into()],
                 ctx.toggle_state.get(),
+                320.0,
             ),
             320.0,
         ),

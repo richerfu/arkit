@@ -4,6 +4,7 @@ use arkit::prelude::*;
 use arkit_shadcn as shadcn;
 
 pub(crate) fn render(ctx: DemoContext) -> Element {
+    let _ = ctx;
     component_canvas(
         fixed_width(
             shadcn::card(vec![
@@ -17,7 +18,6 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                             vec![
                                 shadcn::label("Email").into(),
                                 shadcn::input("m@example.com")
-                                    .bind(ctx.query.clone())
                                     .percent_width(1.0)
                                     .into(),
                             ],

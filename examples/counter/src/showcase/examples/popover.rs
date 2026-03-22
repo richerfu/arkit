@@ -28,7 +28,7 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
     let toggle = ctx.toggle_state.clone();
     component_canvas(
         fixed_width(
-            shadcn::popover(
+            shadcn::popover_with_width(
                 shadcn::button("Open popover", shadcn::ButtonVariant::Outline)
                     .on_click(move || toggle.update(|open| *open = !*open))
                     .into(),
@@ -57,7 +57,7 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                                 "Width",
                                 shadcn::input("100%")
                                     .height(32.0)
-                                    .bind(ctx.query.clone())
+                                    .value("100%")
                                     .percent_width(1.0)
                                     .into(),
                             ),
@@ -65,6 +65,7 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                                 "Max. width",
                                 shadcn::input("300px")
                                     .height(32.0)
+                                    .value("300px")
                                     .percent_width(1.0)
                                     .into(),
                             ),
@@ -72,6 +73,7 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                                 "Height",
                                 shadcn::input("25px")
                                     .height(32.0)
+                                    .value("25px")
                                     .percent_width(1.0)
                                     .into(),
                             ),
@@ -79,6 +81,7 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                                 "Max. height",
                                 shadcn::input("none")
                                     .height(32.0)
+                                    .value("none")
                                     .percent_width(1.0)
                                     .into(),
                             ),
@@ -87,6 +90,7 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                     ),
                 ],
                 ctx.toggle_state,
+                320.0,
             ),
             384.0,
         ),

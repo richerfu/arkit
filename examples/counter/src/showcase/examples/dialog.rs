@@ -32,7 +32,7 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                                 vec![
                                     shadcn::label("Name").into(),
                                     shadcn::input("Pedro Duarte")
-                                        .bind(ctx.query.clone())
+                                        .value("Pedro Duarte")
                                         .percent_width(1.0)
                                         .into(),
                                 ],
@@ -42,6 +42,7 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                                 vec![
                                     shadcn::label("Username").into(),
                                     shadcn::input("@peduarte")
+                                        .value("@peduarte")
                                         .percent_width(1.0)
                                         .into(),
                                 ],

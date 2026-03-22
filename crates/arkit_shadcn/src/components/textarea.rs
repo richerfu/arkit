@@ -1,5 +1,7 @@
 use super::*;
 
+const TEXTAREA_PLACEHOLDER_COLOR: u32 = 0x80737373;
+
 pub fn textarea(placeholder: impl Into<String>) -> TextAreaElement {
     input_surface(arkit::text_area_component())
         .background_color(0x00000000)
@@ -13,8 +15,9 @@ pub fn textarea(placeholder: impl Into<String>) -> TextAreaElement {
         )
         .style(
             ArkUINodeAttributeType::TextAreaPlaceholderColor,
-            color::MUTED_FOREGROUND,
+            TEXTAREA_PLACEHOLDER_COLOR,
         )
         .font_size(typography::MD)
+        .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
         .height(64.0)
 }

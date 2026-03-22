@@ -10,6 +10,7 @@ pub fn input(placeholder: impl Into<String>) -> TextInputElement {
                 INPUT_PLACEHOLDER_COLOR,
             )
             .font_size(typography::MD)
+            .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
             .height(40.0),
     )
     .placeholder(placeholder)

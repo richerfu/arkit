@@ -21,7 +21,7 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                                     vec![
                                         shadcn::label("Name").into(),
                                         shadcn::input("Michael Scott")
-                                            .bind(ctx.query.clone())
+                                            .value("Michael Scott")
                                             .percent_width(1.0)
                                             .into(),
                                     ],
@@ -31,6 +31,7 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                                     vec![
                                         shadcn::label("Message").into(),
                                         shadcn::input("Where are the turtles?!")
+                                            .value("Where are the turtles?!")
                                             .percent_width(1.0)
                                             .into(),
                                     ],
@@ -56,6 +57,7 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                                     vec![
                                         shadcn::label("Job Title").into(),
                                         shadcn::input("Regional Manager")
+                                            .value("Regional Manager")
                                             .percent_width(1.0)
                                             .into(),
                                     ],
@@ -64,7 +66,10 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                                 super::super::layout::v_stack(
                                     vec![
                                         shadcn::label("Favorite feature").into(),
-                                        shadcn::input("CLI").percent_width(1.0).into(),
+                                        shadcn::input("CLI")
+                                            .value("CLI")
+                                            .percent_width(1.0)
+                                            .into(),
                                     ],
                                     12.0,
                                 ),

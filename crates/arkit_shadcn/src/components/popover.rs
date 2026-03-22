@@ -1,6 +1,17 @@
 use super::*;
 
+const POPOVER_DEFAULT_WIDTH: f32 = 288.0; // Tailwind `w-72`
+
 pub fn popover(trigger: Element, content: Vec<Element>, open: Signal<bool>) -> Element {
+    popover_with_width(trigger, content, open, POPOVER_DEFAULT_WIDTH)
+}
+
+pub fn popover_with_width(
+    trigger: Element,
+    content: Vec<Element>,
+    open: Signal<bool>,
+    width: f32,
+) -> Element {
     if !open.get() {
         return trigger;
     }
@@ -11,7 +22,7 @@ pub fn popover(trigger: Element, content: Vec<Element>, open: Signal<bool>) -> E
         .children(vec![
             panel_surface(
                 arkit::column_component()
-                    .width(320.0)
+                    .width(width)
                     .style(
                         ArkUINodeAttributeType::Padding,
                         vec![spacing::LG, spacing::LG, spacing::LG, spacing::LG],
