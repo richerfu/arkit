@@ -30,5 +30,5 @@ proc-macro2 = "1.0"
 openharmony-ability = { git = "https://github.com/harmony-contrib/openharmony-ability.git" }
 openharmony-ability-derive = { git = "https://github.com/harmony-contrib/openharmony-ability.git" }
 
-ohos-arkui-binding = { path = "/Users/ranger/Desktop/project/ohos-rs/ohos-native-bindings/crates/arkui" }
-ohos-display-binding = { path = "/Users/ranger/Desktop/project/ohos-rs/ohos-native-bindings/crates/display" }
+ohos-arkui-binding = { path = "/Volumes/PSSD/code/ohos-rs/ohos-native-bindings/crates/arkui" }
+ohos-display-binding = { path = "/Volumes/PSSD/code/ohos-rs/ohos-native-bindings/crates/display" }

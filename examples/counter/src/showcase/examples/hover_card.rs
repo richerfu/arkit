@@ -1,0 +1,73 @@
+use super::super::layout::{component_canvas, fixed_width, v_stack, FLEX_ALIGN_START};
+use super::shared::DemoContext;
+use arkit::prelude::*;
+use arkit_shadcn as shadcn;
+
+pub(crate) fn render(ctx: DemoContext) -> Element {
+    let toggle = ctx.toggle_state.clone();
+    component_canvas(
+        fixed_width(
+            shadcn::hover_card(
+                shadcn::button("@expo", shadcn::ButtonVariant::Link)
+                    .on_click(move || toggle.update(|show| *show = !*show))
+                    .into(),
+                vec![arkit::row_component()
+                    .percent_width(1.0)
+                    .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_START)
+                    .children(vec![
+                        shadcn::avatar(Some(String::from("https://github.com/expo.png")), "E"),
+                        arkit::row_component()
+                            .style(ArkUINodeAttributeType::LayoutWeight, 1.0_f32)
+                            .style(ArkUINodeAttributeType::Margin, vec![0.0, 0.0, 0.0, 16.0])
+                            .children(vec![v_stack(
+                                vec![
+                                    arkit::text("@expo")
+                                        .font_size(shadcn::theme::typography::SM)
+                                        .style(
+                                            ArkUINodeAttributeType::FontWeight,
+                                            5_i32,
+                                        )
+                                        .style(
+                                            ArkUINodeAttributeType::FontColor,
+                                            shadcn::theme::color::FOREGROUND,
+                                        )
+                                        .style(
+                                            ArkUINodeAttributeType::TextLineHeight,
+                                            20.0,
+                                        )
+                                        .into(),
+                                    arkit::text(
+                                        "Framework and tools for creating native apps with React.",
+                                    )
+                                    .font_size(shadcn::theme::typography::SM)
+                                    .style(
+                                        ArkUINodeAttributeType::FontColor,
+                                        shadcn::theme::color::FOREGROUND,
+                                    )
+                                    .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
+                                    .into(),
+                                    arkit::text("Joined December 2021")
+                                        .font_size(shadcn::theme::typography::XS)
+                                        .style(
+                                            ArkUINodeAttributeType::FontColor,
+                                            shadcn::theme::color::MUTED_FOREGROUND,
+                                        )
+                                        .style(
+                                            ArkUINodeAttributeType::TextLineHeight,
+                                            16.0,
+                                        )
+                                        .into(),
+                                ],
+                                4.0,
+                            )])
+                            .into(),
+                    ])
+                    .into()],
+                ctx.toggle_state.get(),
+            ),
+            320.0,
+        ),
+        true,
+        24.0,
+    )
+}

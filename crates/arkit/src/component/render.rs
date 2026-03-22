@@ -1,4 +1,4 @@
-use std::any::TypeId;
+use std::any::{Any, TypeId};
 
 use crate::ohos_arkui_binding::common::error::ArkUIResult;
 use crate::ohos_arkui_binding::common::node::ArkUINode;
@@ -12,6 +12,7 @@ pub(crate) struct MountedElement {
     pub(crate) key: Option<String>,
     pub(crate) cleanups: Vec<Cleanup>,
     pub(crate) children: Vec<MountedElement>,
+    pub(crate) state: Option<Box<dyn Any>>,
 }
 
 impl MountedElement {
@@ -28,7 +29,17 @@ impl MountedElement {
             key,
             cleanups,
             children,
+            state: None,
         }
+    }
+
+
+    pub(crate) fn set_state(&mut self, state: Box<dyn Any>) {
+        self.state = Some(state);
+    }
+
+    pub(crate) fn state_mut<T: 'static>(&mut self) -> Option<&mut T> {
+        self.state.as_mut()?.downcast_mut::<T>()
     }
 
     pub(crate) fn replace_cleanups(&mut self, cleanups: Vec<Cleanup>) {

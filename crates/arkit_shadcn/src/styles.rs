@@ -128,13 +128,6 @@ where
     ))
 }
 
-pub fn chip_surface<T>(element: ComponentElement<T>) -> ComponentElement<T>
-where
-    T: ArkUICommonAttribute + 'static,
-{
-    rounded(padding_xy(element, spacing::SM, 2.0), radius::FULL)
-}
-
 pub fn title_text(content: impl Into<String>) -> arkit::TextElement {
     font_weight_semibold(
         arkit::text(content)

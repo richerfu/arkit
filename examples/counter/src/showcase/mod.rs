@@ -1,5 +1,6 @@
 mod component;
 mod constants;
+mod examples;
 mod home;
 mod layout;
 

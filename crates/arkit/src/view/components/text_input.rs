@@ -1,3 +1,4 @@
+use crate::ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
 use crate::ohos_arkui_binding::component::built_in_component::TextInput;
 use crate::Signal;
 
@@ -40,7 +41,10 @@ impl ComponentElement<TextInput> {
 
     pub fn bind(self, state: Signal<String>) -> Self {
         let value_state = state.clone();
-        self.value(value_state.get()).on_change(move |value| {
+        self.watch_signal(value_state.clone(), move |node, value| {
+            node.set_attribute(crate::ohos_arkui_binding::types::attribute::ArkUINodeAttributeType::TextInputText, value.into())
+        })
+        .on_change(move |value| {
             if state.get() != value {
                 state.set(value);
             }

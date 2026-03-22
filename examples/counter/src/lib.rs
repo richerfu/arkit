@@ -15,25 +15,12 @@ fn app() -> Element {
     );
 
     let route = use_route();
-    let active_tab = use_signal(|| 0usize);
-    let page = use_signal(|| 1_i32);
-    let choice = use_signal(|| String::from("Apple"));
-    let query = use_signal(String::new);
-    let toggle_state = use_signal(|| false);
-    let catalog_search = use_signal(String::new);
     let route_key = format!("route:{}", route.path());
 
     let screen = if route.path() == "/" {
-        showcase::catalog_home(catalog_search)
+        showcase::catalog_home()
     } else if let Some(name) = route.param("name") {
-        showcase::component_page(
-            name.to_string(),
-            active_tab,
-            page,
-            choice,
-            query,
-            toggle_state,
-        )
+        showcase::component_page(name.to_string())
     } else {
         arkit::column(vec![
             showcase::nav_bar("Not Found", true),

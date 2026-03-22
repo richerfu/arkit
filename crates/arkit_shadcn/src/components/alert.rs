@@ -15,8 +15,10 @@ const ALERT_TITLE_BOTTOM: f32 = 4.0;
 const ALERT_DESCRIPTION_BOTTOM: f32 = 6.0;
 const ALERT_LIST_BOTTOM: f32 = 8.0;
 const ALERT_TRACKING_TIGHT: f32 = -0.2;
-const ALERT_TITLE_LINE_HEIGHT: f32 = 16.0;
-const ALERT_DESCRIPTION_LINE_HEIGHT: f32 = 20.0;
+const ALERT_TITLE_LINE_HEIGHT: f32 = 14.0;
+// Tailwind `leading-relaxed` for `text-sm`: 14 * 1.625 = 22.75
+const ALERT_DESCRIPTION_LINE_HEIGHT: f32 = 22.75;
+const ALERT_LIST_LINE_HEIGHT: f32 = 20.0;
 const FONT_WEIGHT_MEDIUM: i32 = 4;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,7 +45,7 @@ pub fn alert_root(
         .percent_width(1.0)
         .style(
             ArkUINodeAttributeType::BorderRadius,
-            vec![radius::MD, radius::MD, radius::MD, radius::MD],
+            vec![radius::LG, radius::LG, radius::LG, radius::LG],
         )
         .style(
             ArkUINodeAttributeType::BorderWidth,
@@ -143,7 +145,7 @@ pub fn alert_list(items: Vec<impl Into<String>>, variant: AlertVariant) -> Eleme
                 .style(ArkUINodeAttributeType::FontColor, tone.title_color)
                 .style(
                     ArkUINodeAttributeType::TextLineHeight,
-                    ALERT_DESCRIPTION_LINE_HEIGHT,
+                    ALERT_LIST_LINE_HEIGHT,
                 );
 
             if index == 0 {

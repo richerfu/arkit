@@ -1,5 +1,6 @@
 use std::any::Any;
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::lifecycle::LifecycleEvent;
@@ -28,14 +29,20 @@ fn notify_scheduler() {
 pub(crate) struct HookState {
     cursor: usize,
     slots: Vec<HookSlot>,
+    signal_subscriber: Option<Rc<dyn Fn()>>,
 }
 
 struct ComponentLifecycleHook {
     on_unmount: Rc<dyn Fn()>,
 }
 
+struct SignalHook {
+    signal: Box<dyn Any>,
+    cleanup: Option<Box<dyn FnOnce()>>,
+}
+
 enum HookSlot {
-    Signal(Box<dyn Any>),
+    Signal(SignalHook),
     ComponentLifecycle(ComponentLifecycleHook),
     LifecycleObserver(usize),
 }
@@ -43,7 +50,12 @@ enum HookSlot {
 impl HookSlot {
     fn cleanup(self) {
         match self {
-            HookSlot::Signal(_) => {}
+            HookSlot::Signal(mut slot) => {
+                if let Some(cleanup) = slot.cleanup.take() {
+                    cleanup();
+                }
+                let _ = slot.signal;
+            }
             HookSlot::ComponentLifecycle(slot) => {
                 (slot.on_unmount.as_ref())();
             }
@@ -59,6 +71,15 @@ impl HookState {
         Self {
             cursor: 0,
             slots: Vec::new(),
+            signal_subscriber: None,
+        }
+    }
+
+    pub(crate) fn with_signal_subscriber(signal_subscriber: Rc<dyn Fn()>) -> Self {
+        Self {
+            cursor: 0,
+            slots: Vec::new(),
+            signal_subscriber: Some(signal_subscriber),
         }
     }
 
@@ -105,15 +126,23 @@ impl<T> Clone for Signal<T> {
 
 struct SignalState<T> {
     value: T,
-    subscribers: Vec<Rc<dyn Fn()>>,
+    subscribers: HashMap<usize, Rc<dyn Fn()>>,
+    next_subscriber_id: usize,
+    notify_scheduler: bool,
 }
 
 impl<T> Signal<T> {
     pub fn new(value: T) -> Self {
+        Self::new_with_scheduler(value, true)
+    }
+
+    pub(crate) fn new_with_scheduler(value: T, notify_scheduler: bool) -> Self {
         Self {
             inner: Rc::new(RefCell::new(SignalState {
                 value,
-                subscribers: Vec::new(),
+                subscribers: HashMap::new(),
+                next_subscriber_id: 1,
+                notify_scheduler,
             })),
         }
     }
@@ -139,19 +168,32 @@ impl<T> Signal<T> {
         self.notify();
     }
 
-    pub fn subscribe(&self, callback: impl Fn() + 'static) {
-        self.inner
-            .borrow_mut()
-            .subscribers
-            .push(Rc::new(callback) as Rc<dyn Fn()>);
+    pub fn subscribe(&self, callback: impl Fn() + 'static) -> usize {
+        let mut state = self.inner.borrow_mut();
+        let id = state.next_subscriber_id;
+        state.next_subscriber_id += 1;
+        state.subscribers.insert(id, Rc::new(callback) as Rc<dyn Fn()>);
+        id
+    }
+
+    pub fn unsubscribe(&self, id: usize) -> bool {
+        self.inner.borrow_mut().subscribers.remove(&id).is_some()
     }
 
     fn notify(&self) {
-        let subscribers = self.inner.borrow().subscribers.clone();
+        let (subscribers, notify_global_scheduler) = {
+            let state = self.inner.borrow();
+            (
+                state.subscribers.values().cloned().collect::<Vec<_>>(),
+                state.notify_scheduler,
+            )
+        };
         for callback in subscribers {
             callback();
         }
-        notify_scheduler();
+        if notify_global_scheduler {
+            notify_scheduler();
+        }
     }
 }
 
@@ -178,8 +220,8 @@ pub fn use_signal<T: 'static>(init: impl FnOnce() -> T) -> Signal<T> {
         hooks.cursor += 1;
 
         if let Some(slot) = hooks.slots.get(current) {
-            if let HookSlot::Signal(signal_any) = slot {
-                if let Some(signal) = signal_any.downcast_ref::<Signal<T>>() {
+            if let HookSlot::Signal(signal_hook) = slot {
+                if let Some(signal) = signal_hook.signal.downcast_ref::<Signal<T>>() {
                     return signal.clone();
                 }
             }
@@ -187,8 +229,19 @@ pub fn use_signal<T: 'static>(init: impl FnOnce() -> T) -> Signal<T> {
             panic!("use_signal hook type mismatch at slot {current}");
         }
 
-        let signal = Signal::new(init());
-        hooks.slots.push(HookSlot::Signal(Box::new(signal.clone())));
+        let signal = Signal::new_with_scheduler(init(), hooks.signal_subscriber.is_none());
+        let cleanup = hooks.signal_subscriber.as_ref().map(|subscriber| {
+            let signal_for_cleanup = signal.clone();
+            let subscriber = subscriber.clone();
+            let subscription_id = signal.subscribe(move || subscriber());
+            Box::new(move || {
+                signal_for_cleanup.unsubscribe(subscription_id);
+            }) as Box<dyn FnOnce()>
+        });
+        hooks.slots.push(HookSlot::Signal(SignalHook {
+            signal: Box::new(signal.clone()),
+            cleanup,
+        }));
         signal
     })
 }

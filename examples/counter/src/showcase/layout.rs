@@ -1,5 +1,3 @@
-use arkit::ohos_arkui_binding::api::attribute_option::LayoutConstraint;
-use arkit::ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
 use arkit::prelude::*;
 use arkit_icon as lucide;
 use arkit_shadcn as shadcn;
@@ -13,31 +11,44 @@ fn empty_box(width: f32, height: f32) -> Element {
     arkit::row_component().width(width).height(height).into()
 }
 
-pub(crate) fn fixed_width(child: Element, width: f32) -> Element {
-    arkit::row_component()
-        .width(width)
-        .children(vec![child])
-        .into()
-}
-
-pub(crate) fn max_width(child: Element, width: f32) -> Element {
+fn constrained_width(child: Element, width: f32) -> Element {
     arkit::column_component()
         .percent_width(1.0)
         .style(ArkUINodeAttributeType::ColumnAlignItems, FLEX_ALIGN_CENTER)
-        .children(vec![arkit::column_component()
+        .children(vec![arkit::row_component()
             .percent_width(1.0)
-            .native_with_cleanup(move |node| {
-                let mut constraint = LayoutConstraint::new().expect("layout constraint");
-                constraint.set_max_width(width.ceil() as i32);
-                node.set_attribute(
-                    ArkUINodeAttributeType::ConstraintSize,
-                    (&constraint).into(),
-                )?;
-                Ok(move || drop(constraint))
-            })
+            .max_width_constraint(width)
+            .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
             .children(vec![child])
             .into()])
         .into()
+}
+
+fn showcase_horizontal_padding(value: f32) -> f32 {
+    value
+}
+
+fn canvas_row(content: Element, center_x: bool) -> Element {
+    arkit::row_component()
+        .percent_width(1.0)
+        .style(
+            ArkUINodeAttributeType::RowJustifyContent,
+            if center_x {
+                FLEX_ALIGN_CENTER
+            } else {
+                FLEX_ALIGN_START
+            },
+        )
+        .children(vec![content])
+        .into()
+}
+
+pub(crate) fn fixed_width(child: Element, width: f32) -> Element {
+    constrained_width(child, width)
+}
+
+pub(crate) fn max_width(child: Element, width: f32) -> Element {
+    constrained_width(child, width)
 }
 
 pub(crate) fn v_stack(children: Vec<Element>, gap: f32) -> Element {
@@ -112,7 +123,12 @@ pub(crate) fn component_canvas(content: Element, centered: bool, padding: f32) -
         centered,
         centered,
         true,
-        [padding, padding, padding, padding],
+        [
+            padding,
+            showcase_horizontal_padding(padding),
+            padding,
+            showcase_horizontal_padding(padding),
+        ],
     )
 }
 
@@ -145,14 +161,7 @@ pub(crate) fn component_canvas_with(
                     padding[3],
                 ],
             )
-            .style(
-                ArkUINodeAttributeType::ColumnAlignItems,
-                if center_x {
-                    FLEX_ALIGN_CENTER
-                } else {
-                    FLEX_ALIGN_START
-                },
-            )
+            .style(ArkUINodeAttributeType::ColumnAlignItems, FLEX_ALIGN_START)
             .style(
                 ArkUINodeAttributeType::ColumnJustifyContent,
                 if center_y {
@@ -161,7 +170,7 @@ pub(crate) fn component_canvas_with(
                     FLEX_ALIGN_START
                 },
             )
-            .children(vec![content])
+            .children(vec![canvas_row(content, center_x)])
             .into()])
         .into()
 }
@@ -215,9 +224,9 @@ pub(crate) fn nav_bar(title: impl Into<String>, back: bool) -> Element {
             ArkUINodeAttributeType::Padding,
             vec![
                 6.0,
-                shadcn::theme::spacing::MD,
+                shadcn::theme::spacing::LG,
                 6.0,
-                shadcn::theme::spacing::MD,
+                shadcn::theme::spacing::LG,
             ],
         )
         .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)

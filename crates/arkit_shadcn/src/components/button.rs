@@ -368,17 +368,24 @@ fn finalize_button(
     let mount_node = runtime_node.clone();
     arkit::queue_after_mount(move || {
         apply_interaction_style_if_ready(&mount_node, normal_style);
-        queue_interaction_style(mount_node.clone(), normal_style);
+        queue_interaction_style_passes(mount_node.clone(), normal_style, 4);
     });
+
+
+    button = apply_border_style(
+        button,
+        variant_style.border_width,
+        variant_style.border_color,
+    );
 
     let attach_node = runtime_node.clone();
     button = button.on_event_no_param(arkit::prelude::NodeEventType::EventOnAttach, move || {
-        queue_interaction_style(attach_node.clone(), normal_style);
+        queue_interaction_style_passes(attach_node.clone(), normal_style, 2);
     });
 
     let appear_node = runtime_node.clone();
     button = button.on_event_no_param(arkit::prelude::NodeEventType::EventOnAppear, move || {
-        queue_interaction_style(appear_node.clone(), normal_style);
+        queue_interaction_style_passes(appear_node.clone(), normal_style, 2);
     });
 
     let detach_node = runtime_node.clone();
@@ -388,21 +395,15 @@ fn finalize_button(
 
     let size_change_node = runtime_node.clone();
     button = button.on_event(arkit::prelude::NodeEventType::OnSizeChange, move |_| {
-        queue_interaction_style(size_change_node.clone(), normal_style);
+        queue_interaction_style_passes(size_change_node.clone(), normal_style, 2);
     });
 
     let area_change_node = runtime_node.clone();
     button = button.on_event(
         arkit::prelude::NodeEventType::EventOnAreaChange,
         move |_| {
-            queue_interaction_style(area_change_node.clone(), normal_style);
+            queue_interaction_style_passes(area_change_node.clone(), normal_style, 2);
         },
-    );
-
-    button = apply_border_style(
-        button,
-        variant_style.border_width,
-        variant_style.border_color,
     );
 
     if !disabled {
@@ -511,12 +512,18 @@ fn apply_interaction_style_if_ready(
     apply_interaction_style(node, style);
 }
 
-fn queue_interaction_style(
+fn queue_interaction_style_passes(
     runtime_node: Rc<RefCell<Option<RuntimeButtonNode>>>,
     style: ButtonInteractionStyle,
+    remaining: usize,
 ) {
+    if remaining == 0 {
+        return;
+    }
+
     arkit::queue_ui_loop(move || {
         apply_interaction_style_if_ready(&runtime_node, style);
+        queue_interaction_style_passes(runtime_node.clone(), style, remaining - 1);
     });
 }
 

@@ -2,6 +2,7 @@ use std::any::{type_name, TypeId};
 use std::mem::{align_of, size_of, ManuallyDrop};
 
 use crate::component::{run_cleanups, Cleanup, MountedElement};
+use crate::signal::Signal;
 use crate::ohos_arkui_binding::api::node_custom_event::NodeCustomEvent;
 use crate::ohos_arkui_binding::common::attribute::ArkUINodeAttributeItem;
 use crate::ohos_arkui_binding::common::error::ArkUIResult;
@@ -192,6 +193,35 @@ impl<T> ComponentElement<T>
 where
     T: ArkUICommonAttribute + 'static,
 {
+    pub fn watch_signal<S>(
+        self,
+        signal: Signal<S>,
+        apply: impl Fn(&mut ArkUINode, S) -> ArkUIResult<()> + 'static,
+    ) -> Self
+    where
+        S: Clone + 'static,
+    {
+        let apply = std::rc::Rc::new(apply);
+        self.native_with_cleanup(move |node| {
+            let mut runtime_node = node.borrow_mut().clone();
+            apply(&mut runtime_node, signal.get())?;
+
+            let subscription_node = std::rc::Rc::new(std::cell::RefCell::new(runtime_node));
+            let subscription_signal = signal.clone();
+            let subscription_apply = apply.clone();
+            let subscription_node_clone = subscription_node.clone();
+            let subscription_id = signal.subscribe(move || {
+                let value = subscription_signal.get();
+                let mut node = subscription_node_clone.borrow_mut();
+                let _ = subscription_apply(&mut node, value);
+            });
+
+            Ok(move || {
+                signal.unsubscribe(subscription_id);
+            })
+        })
+    }
+
     pub fn child(mut self, child: impl Into<Element>) -> Self {
         self.children.push(child.into());
         self
@@ -220,6 +250,26 @@ where
         value: impl Into<ArkUINodeAttributeItem>,
     ) -> Self {
         self.attr(attr, value)
+    }
+
+    pub fn constraint_size(
+        mut self,
+        min_width: f32,
+        max_width: f32,
+        min_height: f32,
+        max_height: f32,
+    ) -> Self {
+        self.mutators.push(wrap_mutator::<T>(move |node| {
+            node.set_attribute(
+                ArkUINodeAttributeType::ConstraintSize,
+                vec![min_width, max_width, min_height, max_height].into(),
+            )
+        }));
+        self
+    }
+
+    pub fn max_width_constraint(self, value: f32) -> Self {
+        self.constraint_size(0.0, value, 0.0, 100000.0)
     }
 
     pub fn width(mut self, value: f32) -> Self {
@@ -364,7 +414,7 @@ where
     }
 }
 
-fn rebuild_children_tail<T, I>(
+pub(crate) fn rebuild_children_tail<T, I>(
     parent: &mut T,
     mounted_children: &mut Vec<MountedElement>,
     start: usize,
@@ -396,7 +446,7 @@ where
     Ok(())
 }
 
-fn reconcile_children<T>(
+pub(crate) fn reconcile_children<T>(
     parent: &mut T,
     mounted_children: &mut Vec<MountedElement>,
     next_children: Vec<Element>,
@@ -524,6 +574,7 @@ where
         } = *self;
 
         let mut typed = T::from_existing(node.clone());
+        typed.borrow_mut().reset_events()?;
         let new_cleanups = apply_mutators(&mut typed, mutators)?;
         if let Err(error) = reconcile_children(&mut typed, &mut mounted.children, children) {
             run_cleanups(new_cleanups);
