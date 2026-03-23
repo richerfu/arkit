@@ -1,11 +1,11 @@
-use super::super::layout::fixed_width;
-use super::shared::{top_center_canvas, DemoContext};
+use super::super::layout::max_width;
+use super::shared::{top_start_canvas, DemoContext};
 use arkit::prelude::*;
 use arkit_shadcn as shadcn;
 
 pub(crate) fn render(ctx: DemoContext) -> Element {
-    top_center_canvas(
-        fixed_width(
+    top_start_canvas(
+        max_width(
             shadcn::tabs(
                 vec![String::from("Feedback"), String::from("Survey")],
                 ctx.active_tab,
@@ -66,10 +66,7 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                                 super::super::layout::v_stack(
                                     vec![
                                         shadcn::label("Favorite feature").into(),
-                                        shadcn::input("CLI")
-                                            .value("CLI")
-                                            .percent_width(1.0)
-                                            .into(),
+                                        shadcn::input("CLI").value("CLI").percent_width(1.0).into(),
                                     ],
                                     12.0,
                                 ),
@@ -86,7 +83,6 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
             ),
             384.0,
         ),
-        [24.0, 24.0, 24.0, 24.0],
-        true,
+        24.0,
     )
 }

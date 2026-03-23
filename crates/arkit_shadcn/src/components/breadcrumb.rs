@@ -24,7 +24,7 @@ pub fn breadcrumb(items: Vec<String>) -> Element {
     }
     arkit::row_component()
         .percent_width(1.0)
-        .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+        .align_items_center()
         .children(children)
         .into()
 }

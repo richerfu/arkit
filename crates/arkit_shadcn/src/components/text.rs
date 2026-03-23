@@ -23,6 +23,10 @@ fn base_text(content: impl Into<String>) -> TextElement {
         .font_size(typography::MD)
         .style(ArkUINodeAttributeType::FontColor, color::FOREGROUND)
         .style(ArkUINodeAttributeType::TextLineHeight, 24.0)
+        .style(
+            ArkUINodeAttributeType::TextAlign,
+            i32::from(TextAlignment::Start),
+        )
 }
 
 pub fn text(content: impl Into<String>) -> Element {
@@ -35,6 +39,10 @@ pub fn text_sm(content: impl Into<String>) -> Element {
         .font_size(typography::SM)
         .style(ArkUINodeAttributeType::FontColor, color::FOREGROUND)
         .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
+        .style(
+            ArkUINodeAttributeType::TextAlign,
+            i32::from(TextAlignment::Start),
+        )
         .into()
 }
 
@@ -45,6 +53,10 @@ pub fn text_sm_medium(content: impl Into<String>) -> Element {
         .style(ArkUINodeAttributeType::FontWeight, 4_i32)
         .style(ArkUINodeAttributeType::FontColor, color::FOREGROUND)
         .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
+        .style(
+            ArkUINodeAttributeType::TextAlign,
+            i32::from(TextAlignment::Start),
+        )
         .into()
 }
 
@@ -119,6 +131,10 @@ pub fn text_with_variant(content: impl Into<String>, variant: TextVariant) -> El
             .font_size(typography::XL)
             .style(ArkUINodeAttributeType::FontColor, color::MUTED_FOREGROUND)
             .style(ArkUINodeAttributeType::TextLineHeight, 28.0)
+            .style(
+                ArkUINodeAttributeType::TextAlign,
+                i32::from(TextAlignment::Start),
+            )
             .into(),
         TextVariant::Large => arkit::text(content)
             .font_size(typography::LG)
@@ -126,17 +142,29 @@ pub fn text_with_variant(content: impl Into<String>, variant: TextVariant) -> El
             .style(ArkUINodeAttributeType::FontColor, color::FOREGROUND)
             .style(ArkUINodeAttributeType::TextLineHeight, 28.0)
             .style(ArkUINodeAttributeType::TextLetterSpacing, TRACKING_TIGHT)
+            .style(
+                ArkUINodeAttributeType::TextAlign,
+                i32::from(TextAlignment::Start),
+            )
             .into(),
         TextVariant::Small => arkit::text(content)
             .font_size(typography::SM)
             .style(ArkUINodeAttributeType::FontWeight, 4_i32)
             .style(ArkUINodeAttributeType::FontColor, color::FOREGROUND)
             .style(ArkUINodeAttributeType::TextLineHeight, 14.0)
+            .style(
+                ArkUINodeAttributeType::TextAlign,
+                i32::from(TextAlignment::Start),
+            )
             .into(),
         TextVariant::Muted => arkit::text(content)
             .font_size(typography::SM)
             .style(ArkUINodeAttributeType::FontColor, color::MUTED_FOREGROUND)
             .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
+            .style(
+                ArkUINodeAttributeType::TextAlign,
+                i32::from(TextAlignment::Start),
+            )
             .into(),
     }
 }

@@ -18,5 +18,5 @@ napi-derive-ohos = "1.1"
 ohos-arkui-binding = { workspace = true, default-features = false, features = [
     "napi",
 ] }
+ohos-hilog-binding.workspace = true
 openharmony-ability = { workspace = true }
-

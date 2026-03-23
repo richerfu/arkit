@@ -3,10 +3,12 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use crate::component::MountedElement;
+use crate::logging;
 use crate::ohos_arkui_binding::common::error::ArkUIResult;
 use crate::ohos_arkui_binding::common::node::ArkUINode;
-use crate::ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
+use crate::ohos_arkui_binding::component::attribute::{ArkUIAttributeBasic, ArkUICommonAttribute};
 use crate::ohos_arkui_binding::component::built_in_component::Column;
+use crate::queue_ui_loop;
 use crate::signal::{with_hook_state, HookState};
 
 use super::super::element::{Element, ViewNode};
@@ -14,10 +16,11 @@ use super::super::element::{Element, ViewNode};
 struct ScopedState {
     render: RefCell<Rc<dyn Fn() -> Element>>,
     hooks: Rc<RefCell<HookState>>,
-    container: RefCell<ArkUINode>,
+    container: RefCell<Option<Column>>,
     mounted_child: RefCell<Option<MountedElement>>,
     is_rendering: Cell<bool>,
     pending: Cell<bool>,
+    render_scheduled: Cell<bool>,
 }
 
 impl ScopedState {
@@ -26,19 +29,39 @@ impl ScopedState {
             let weak = weak.clone();
             let subscriber: Rc<dyn Fn()> = Rc::new(move || {
                 if let Some(state) = weak.upgrade() {
-                    let _ = state.request_render();
+                    state.schedule_render();
                 }
             });
 
             Self {
                 render: RefCell::new(render),
                 hooks: Rc::new(RefCell::new(HookState::with_signal_subscriber(subscriber))),
-                container: RefCell::new(ArkUINode::default()),
+                container: RefCell::new(None),
                 mounted_child: RefCell::new(None),
                 is_rendering: Cell::new(false),
                 pending: Cell::new(false),
+                render_scheduled: Cell::new(false),
             }
         })
+    }
+
+    fn schedule_render(self: &Rc<Self>) {
+        if self.render_scheduled.replace(true) {
+            return;
+        }
+
+        let weak = Rc::downgrade(self);
+        queue_ui_loop(move || {
+            let Some(state) = weak.upgrade() else {
+                return;
+            };
+            state.render_scheduled.set(false);
+            if let Err(error) = state.request_render() {
+                logging::error(format!(
+                    "scope error: deferred scoped render failed: {error}"
+                ));
+            }
+        });
     }
 
     fn render_element(&self) -> Element {
@@ -68,18 +91,27 @@ impl ScopedState {
     fn render_once(&self) -> ArkUIResult<()> {
         let next = self.render_element();
         let mut container = self.container.borrow_mut();
+        let container = container
+            .as_mut()
+            .expect("scoped container should be initialized before rerender");
         let mut mounted_child = self.mounted_child.borrow_mut();
 
         match mounted_child.as_mut() {
             Some(existing) => {
                 if next.kind() == existing.kind && next.key() == existing.key.as_deref() {
                     let child_handle = container
+                        .borrow_mut()
                         .children()
                         .first()
                         .cloned()
                         .expect("scoped container child should exist");
                     let mut child_node = child_handle.borrow_mut();
-                    next.patch(&mut child_node, existing)?;
+                    if let Err(error) = next.patch(&mut child_node, existing) {
+                        logging::error(format!(
+                            "scope error: failed to patch scoped child: {error}"
+                        ));
+                        return Err(error);
+                    }
                 } else {
                     if let Some(old_child) = container.remove_child(0)? {
                         old_child.borrow_mut().dispose()?;
@@ -87,9 +119,18 @@ impl ScopedState {
                     let old_meta = mounted_child.take().expect("scoped meta should exist");
                     old_meta.cleanup_recursive();
 
-                    let (child_node, child_meta) = next.mount()?;
+                    let (child_node, child_meta) = next.mount().map_err(|error| {
+                        logging::error(format!(
+                            "scope error: failed to mount replacement scoped child: {error}"
+                        ));
+                        error
+                    })?;
                     let mut child_cleanup_node = child_node.clone();
                     if let Err(error) = container.add_child(child_node) {
+                        logging::error(format!(
+                            "scope error: failed to attach replacement scoped child {}: {error}",
+                            child_meta.name
+                        ));
                         let _ = child_cleanup_node.dispose();
                         child_meta.cleanup_recursive();
                         return Err(error);
@@ -98,9 +139,18 @@ impl ScopedState {
                 }
             }
             None => {
-                let (child_node, child_meta) = next.mount()?;
+                let (child_node, child_meta) = next.mount().map_err(|error| {
+                    logging::error(format!(
+                        "scope error: failed to mount initial scoped child: {error}"
+                    ));
+                    error
+                })?;
                 let mut child_cleanup_node = child_node.clone();
                 if let Err(error) = container.add_child(child_node) {
+                    logging::error(format!(
+                        "scope error: failed to attach initial scoped child {}: {error}",
+                        child_meta.name
+                    ));
                     let _ = child_cleanup_node.dispose();
                     child_meta.cleanup_recursive();
                     return Err(error);
@@ -154,12 +204,23 @@ impl ViewNode for ScopeElement {
         let Self { render, key } = *self;
         let state = ScopedState::new(render);
         let child_element = state.render_element();
-        let (child_node, child_meta) = child_element.mount()?;
+        let (child_node, child_meta) = child_element.mount().map_err(|error| {
+            logging::error(format!(
+                "scope error: failed to mount scoped root child: {error}"
+            ));
+            error
+        })?;
 
         let mut container = Column::new()?;
-        container.add_child(child_node)?;
-        let container_node: ArkUINode = container.into();
-        state.container.replace(container_node.clone());
+        container.add_child(child_node).map_err(|error| {
+            logging::error(format!(
+                "scope error: failed to attach scoped root child {}: {error}",
+                child_meta.name
+            ));
+            error
+        })?;
+        let container_node = container.borrow_mut().clone();
+        state.container.replace(Some(container));
         state.mounted_child.replace(Some(child_meta));
         state.hooks.borrow_mut().finalize_render();
 

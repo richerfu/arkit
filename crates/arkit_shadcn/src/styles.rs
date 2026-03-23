@@ -1,4 +1,5 @@
 use arkit::ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
+use arkit::ohos_arkui_binding::types::text_alignment::TextAlignment;
 use arkit::prelude::ArkUINodeAttributeType;
 use arkit::ComponentElement;
 
@@ -133,7 +134,11 @@ pub fn title_text(content: impl Into<String>) -> arkit::TextElement {
         arkit::text(content)
             .font_size(typography::LG)
             .style(ArkUINodeAttributeType::FontColor, color::FOREGROUND)
-            .style(ArkUINodeAttributeType::TextLineHeight, 20.0),
+            .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
+            .style(
+                ArkUINodeAttributeType::TextAlign,
+                i32::from(TextAlignment::Start),
+            ),
     )
 }
 
@@ -142,7 +147,11 @@ pub fn body_text(content: impl Into<String>) -> arkit::TextElement {
         arkit::text(content)
             .font_size(typography::SM)
             .style(ArkUINodeAttributeType::FontColor, color::FOREGROUND)
-            .style(ArkUINodeAttributeType::TextLineHeight, 20.0),
+            .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
+            .style(
+                ArkUINodeAttributeType::TextAlign,
+                i32::from(TextAlignment::Start),
+            ),
     )
 }
 
@@ -151,6 +160,10 @@ pub fn body_text_regular(content: impl Into<String>) -> arkit::TextElement {
         .font_size(typography::MD)
         .style(ArkUINodeAttributeType::FontColor, color::FOREGROUND)
         .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
+        .style(
+            ArkUINodeAttributeType::TextAlign,
+            i32::from(TextAlignment::Start),
+        )
 }
 
 pub fn muted_text(content: impl Into<String>) -> arkit::TextElement {
@@ -158,4 +171,8 @@ pub fn muted_text(content: impl Into<String>) -> arkit::TextElement {
         .font_size(typography::SM)
         .style(ArkUINodeAttributeType::FontColor, color::MUTED_FOREGROUND)
         .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
+        .style(
+            ArkUINodeAttributeType::TextAlign,
+            i32::from(TextAlignment::Start),
+        )
 }

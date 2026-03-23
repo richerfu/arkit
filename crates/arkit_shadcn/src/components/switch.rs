@@ -1,12 +1,11 @@
 use super::*;
-use arkit::ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
 
 pub fn switch(state: Signal<bool>) -> ToggleElement {
     let next = state.clone();
     shadow_sm(
         arkit::toggle_component()
             .watch_signal(state.clone(), move |node, value| {
-                node.set_attribute(ArkUINodeAttributeType::ToggleValue, value.into())
+                node.set_toggle_value(value)
             })
             .style(ArkUINodeAttributeType::ToggleValue, state.get())
             .style(ArkUINodeAttributeType::ToggleSelectedColor, color::PRIMARY)
@@ -15,10 +14,7 @@ pub fn switch(state: Signal<bool>) -> ToggleElement {
                 ArkUINodeAttributeType::ToggleSwitchPointColor,
                 color::BACKGROUND,
             )
-            .style(
-                ArkUINodeAttributeType::BorderStyle,
-                0_i32,
-            )
+            .style(ArkUINodeAttributeType::BorderStyle, 0_i32)
             // RN: `border border-transparent shadow-sm`.
             .style(
                 ArkUINodeAttributeType::BorderWidth,

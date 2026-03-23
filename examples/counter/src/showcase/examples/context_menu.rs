@@ -11,7 +11,7 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                 arkit::column_component()
                     .width(300.0)
                     .height(150.0)
-                    .style(ArkUINodeAttributeType::ColumnAlignItems, 2_i32)
+                    .align_items_center()
                     .style(ArkUINodeAttributeType::ColumnJustifyContent, 2_i32)
                     .style(
                         ArkUINodeAttributeType::BorderWidth,
@@ -73,10 +73,7 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                     shadcn::dropdown_item("Show Full URLs"),
                     shadcn::separator(),
                     arkit::row_component()
-                        .style(
-                            ArkUINodeAttributeType::Padding,
-                            vec![8.0, 8.0, 8.0, 32.0],
-                        )
+                        .style(ArkUINodeAttributeType::Padding, vec![8.0, 8.0, 8.0, 32.0])
                         .children(vec![shadcn::text_sm_medium("People")])
                         .into(),
                     shadcn::dropdown_item("Pedro Duarte"),

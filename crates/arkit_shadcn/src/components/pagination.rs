@@ -51,7 +51,7 @@ pub fn pagination(page: Signal<i32>, total_pages: i32) -> Element {
 
     arkit::row_component()
         .percent_width(1.0)
-        .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+        .align_items_center()
         .children(inline(items, spacing::XXS))
         .into()
 }
@@ -75,7 +75,7 @@ fn pagination_ellipsis() -> Element {
     arkit::row_component()
         .width(36.0)
         .height(36.0)
-        .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+        .align_items_center()
         .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
         .children(vec![arkit::text("...")
             .font_size(typography::SM)

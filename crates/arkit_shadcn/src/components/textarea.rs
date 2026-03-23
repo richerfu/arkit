@@ -9,15 +9,9 @@ pub fn textarea(placeholder: impl Into<String>) -> TextAreaElement {
             ArkUINodeAttributeType::Padding,
             vec![spacing::SM, spacing::MD, spacing::SM, spacing::MD],
         )
-        .style(
-            ArkUINodeAttributeType::TextAreaPlaceholder,
-            placeholder.into(),
-        )
-        .style(
-            ArkUINodeAttributeType::TextAreaPlaceholderColor,
-            TEXTAREA_PLACEHOLDER_COLOR,
-        )
+        .placeholder(placeholder)
+        .placeholder_color(TEXTAREA_PLACEHOLDER_COLOR)
         .font_size(typography::MD)
-        .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
+        .line_height(20.0)
         .height(64.0)
 }

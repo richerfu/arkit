@@ -8,7 +8,7 @@ pub fn radio_group(options: Vec<String>, selected: Signal<String>) -> Element {
             let selected_value = selected.clone();
             arkit::row_component()
                 .percent_width(1.0)
-                .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+                .align_items_center()
                 .children(vec![
                     shadow_sm(
                         arkit::radio_component()

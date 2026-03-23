@@ -7,7 +7,10 @@ fn repo_row(name: &str) -> Element {
     arkit::row_component()
         .percent_width(1.0)
         .style(ArkUINodeAttributeType::Padding, vec![8.0, 16.0, 8.0, 16.0])
-        .style(ArkUINodeAttributeType::BorderWidth, vec![1.0, 1.0, 1.0, 1.0])
+        .style(
+            ArkUINodeAttributeType::BorderWidth,
+            vec![1.0, 1.0, 1.0, 1.0],
+        )
         .style(
             ArkUINodeAttributeType::BorderColor,
             vec![shadcn::theme::color::BORDER],
@@ -40,6 +43,6 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
             350.0,
         ),
         true,
-        24.0,
+        32.0,
     )
 }

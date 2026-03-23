@@ -18,7 +18,7 @@ pub fn popover_with_width(
 
     arkit::column_component()
         .percent_width(1.0)
-        .style(ArkUINodeAttributeType::ColumnAlignItems, FLEX_ALIGN_CENTER)
+        .align_items_center()
         .children(vec![
             panel_surface(
                 arkit::column_component()

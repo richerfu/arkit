@@ -26,7 +26,7 @@ fn tabs_list(tab_labels: Vec<String>, active: Signal<usize>) -> Element {
             let trigger = arkit::row_component()
                 // Match RN `TabsList h-9 p-[3px]` with `TabsTrigger h-[calc(100%-1px)]`.
                 .height(35.0)
-                .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+                .align_items_center()
                 .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
                 .style(
                     ArkUINodeAttributeType::Padding,
@@ -57,7 +57,7 @@ fn tabs_list(tab_labels: Vec<String>, active: Signal<usize>) -> Element {
 
     rounded_tabs_list_surface(
         arkit::row_component()
-            .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+            .align_items_center()
             .children(children),
     )
     .into()

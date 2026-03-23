@@ -56,10 +56,12 @@ fn badge_shell(
 ) -> Element {
     crate::styles::rounded(
         arkit::row_component()
+            .constraint_size(0.0, 100000.0, 20.0, 100000.0)
             .style(ArkUINodeAttributeType::BackgroundColor, background)
             .style(ArkUINodeAttributeType::BorderWidth, border_width)
             .style(ArkUINodeAttributeType::BorderColor, border_color)
-            .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+            .style(ArkUINodeAttributeType::Clip, true)
+            .align_items_center()
             .style(
                 ArkUINodeAttributeType::Padding,
                 vec![2.0, horizontal_padding, 2.0, horizontal_padding],
@@ -137,11 +139,12 @@ pub fn pill_badge_with_variant(label: impl Into<String>, variant: BadgeVariant) 
     let (background, foreground, border_width, border_color) = badge_style(variant);
     crate::styles::rounded(
         arkit::row_component()
-            .constraint_size(20.0, 100000.0, 0.0, 100000.0)
+            .constraint_size(20.0, 100000.0, 20.0, 100000.0)
             .style(ArkUINodeAttributeType::BackgroundColor, background)
             .style(ArkUINodeAttributeType::BorderWidth, border_width)
             .style(ArkUINodeAttributeType::BorderColor, border_color)
-            .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+            .style(ArkUINodeAttributeType::Clip, true)
+            .align_items_center()
             .style(
                 ArkUINodeAttributeType::Padding,
                 vec![2.0, spacing::XXS, 2.0, spacing::XXS],

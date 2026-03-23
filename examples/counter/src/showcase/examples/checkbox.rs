@@ -1,4 +1,4 @@
-use super::super::layout::{component_canvas, fixed_width, h_stack, v_stack, FLEX_ALIGN_START};
+use super::super::layout::{component_canvas, fixed_width, h_stack, v_stack};
 use super::shared::DemoContext;
 use arkit::prelude::*;
 use arkit_shadcn as shadcn;
@@ -23,7 +23,7 @@ pub(crate) fn render(_ctx: DemoContext) -> Element {
                         12.0,
                     ),
                     arkit::row_component()
-                        .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_START)
+                        .align_items_top()
                         .children(vec![
                             shadcn::checkbox("", second.clone()),
                             arkit::row_component()
@@ -46,7 +46,7 @@ pub(crate) fn render(_ctx: DemoContext) -> Element {
                         ])
                         .into(),
                     arkit::row_component()
-                        .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_START)
+                        .align_items_top()
                         .children(vec![
                             shadcn::disabled_checkbox("", disabled_toggle.clone()),
                             arkit::row_component()
@@ -88,7 +88,7 @@ pub(crate) fn render(_ctx: DemoContext) -> Element {
                         })
                         .on_click(move || card_toggle_click.update(|checked| *checked = !*checked))
                         .children(vec![arkit::row_component()
-                            .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_START)
+                            .align_items_top()
                             .children(vec![
                                 shadcn::checkbox_with_checked_color(
                                     "",
@@ -101,8 +101,9 @@ pub(crate) fn render(_ctx: DemoContext) -> Element {
                                         vec![0.0, 0.0, 0.0, 12.0],
                                     )
                                     .style(ArkUINodeAttributeType::LayoutWeight, 1.0_f32)
-                                    .children(vec![arkit::column_component()
+                                .children(vec![arkit::column_component()
                                         .percent_width(1.0)
+                                        .align_items_start()
                                         .children(vec![
                                             arkit::text("Enable notifications")
                                                 .font_size(shadcn::theme::typography::SM)
@@ -135,6 +136,6 @@ pub(crate) fn render(_ctx: DemoContext) -> Element {
             384.0,
         ),
         true,
-        24.0,
+        32.0,
     )
 }

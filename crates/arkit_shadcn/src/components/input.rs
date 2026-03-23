@@ -5,12 +5,9 @@ const INPUT_PLACEHOLDER_COLOR: u32 = 0x80737373;
 pub fn input(placeholder: impl Into<String>) -> TextInputElement {
     input_surface(
         arkit::text_input_component()
-            .style(
-                ArkUINodeAttributeType::TextInputPlaceholderColor,
-                INPUT_PLACEHOLDER_COLOR,
-            )
+            .placeholder_color(INPUT_PLACEHOLDER_COLOR)
             .font_size(typography::MD)
-            .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
+            .line_height(20.0)
             .height(40.0),
     )
     .placeholder(placeholder)

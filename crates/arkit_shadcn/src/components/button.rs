@@ -371,7 +371,6 @@ fn finalize_button(
         queue_interaction_style_passes(mount_node.clone(), normal_style, 4);
     });
 
-
     button = apply_border_style(
         button,
         variant_style.border_width,
@@ -486,7 +485,7 @@ fn button_content_row(
     }
 
     arkit::row_component()
-        .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+        .align_items_center()
         .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
         .children(children)
         .into()

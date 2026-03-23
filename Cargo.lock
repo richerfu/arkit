@@ -20,6 +20,7 @@ dependencies = [
  "napi-derive-ohos",
  "napi-ohos",
  "ohos-arkui-binding 0.1.0",
+ "ohos-hilog-binding",
  "openharmony-ability",
 ]
 
@@ -443,6 +444,17 @@ name = "ohos-display-sys"
 version = "0.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fe9e1bba4d94159d0a65f1b4e748c148d4bce7930912c424522693f1837dad77"
+
+[[package]]
+name = "ohos-hilog-binding"
+version = "0.1.2"
+dependencies = [
+ "ohos-hilogs-sys",
+]
+
+[[package]]
+name = "ohos-hilogs-sys"
+version = "0.0.2"
 
 [[package]]
 name = "ohos-image-binding"

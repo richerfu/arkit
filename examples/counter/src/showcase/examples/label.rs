@@ -1,4 +1,4 @@
-use super::super::layout::{component_canvas, FLEX_ALIGN_CENTER};
+use super::super::layout::component_canvas;
 use super::shared::DemoContext;
 use arkit::prelude::*;
 use arkit_shadcn as shadcn;
@@ -7,7 +7,7 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
     let toggle = ctx.toggle_state.clone();
     component_canvas(
         arkit::row_component()
-            .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+            .align_items_center()
             .on_click(move || toggle.update(|checked| *checked = !*checked))
             .children(vec![
                 shadcn::checkbox("", ctx.toggle_state.clone()),

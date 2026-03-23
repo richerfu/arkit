@@ -13,7 +13,12 @@ pub fn skeleton(width: f32, height: f32) -> Element {
         .background_color(color::ACCENT)
         .style(
             ArkUINodeAttributeType::BorderRadius,
-            vec![skeleton_radius, skeleton_radius, skeleton_radius, skeleton_radius],
+            vec![
+                skeleton_radius,
+                skeleton_radius,
+                skeleton_radius,
+                skeleton_radius,
+            ],
         )
         .into()
 }

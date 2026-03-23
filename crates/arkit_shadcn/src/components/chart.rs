@@ -22,7 +22,7 @@ pub fn chart(values: Vec<f32>) -> Element {
                     .children(vec![
                         arkit::row_component()
                             .percent_width(1.0)
-                            .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+                            .align_items_center()
                             .style(
                                 ArkUINodeAttributeType::RowJustifyContent,
                                 FLEX_ALIGN_SPACE_BETWEEN,

@@ -1,4 +1,5 @@
 use super::*;
+use arkit::ohos_arkui_binding::types::alignment::Alignment;
 use arkit::ohos_arkui_binding::types::text_alignment::TextAlignment;
 use arkit_icon as lucide;
 
@@ -24,12 +25,11 @@ fn toggle_surface(
         .style(ArkUINodeAttributeType::BorderStyle, 0_i32)
         .style(ArkUINodeAttributeType::BorderRadius, border_radius.to_vec())
         .style(ArkUINodeAttributeType::BorderWidth, border_width.to_vec())
+        .style(ArkUINodeAttributeType::BorderColor, color_all(border_color))
         .style(
-            ArkUINodeAttributeType::BorderColor,
-            color_all(border_color),
+            ArkUINodeAttributeType::Alignment,
+            i32::from(Alignment::Center),
         )
-        .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
-        .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
         .background_color(if active {
             color::ACCENT
         } else {
@@ -84,11 +84,11 @@ pub fn toggle_icon(icon_name: impl Into<String>, state: Signal<bool>) -> ButtonE
             .width(40.0)
             .height(40.0)
             .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
-                .children(vec![lucide::icon(icon_name.into())
-                    .size(16.0)
-                    .color(if active {
-                        color::ACCENT_FOREGROUND
-                    } else {
+            .children(vec![lucide::icon(icon_name.into())
+                .size(16.0)
+                .color(if active {
+                    color::ACCENT_FOREGROUND
+                } else {
                     color::FOREGROUND
                 })
                 .render()]),

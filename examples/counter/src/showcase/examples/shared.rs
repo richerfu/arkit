@@ -3,8 +3,7 @@ use arkit_icon as lucide;
 use arkit_shadcn as shadcn;
 
 use super::super::layout::{
-    component_canvas_with, fixed_width, h_stack, v_stack, FLEX_ALIGN_CENTER,
-    FLEX_ALIGN_SPACE_BETWEEN,
+    component_canvas_with, fixed_width, h_stack, v_stack, FLEX_ALIGN_CENTER, FLEX_ALIGN_END,
 };
 
 const EMERALD_500: u32 = 0xFF10B981;
@@ -79,7 +78,7 @@ fn carousel_nav_surface(child: Element, disabled: bool) -> Element {
         .children(vec![arkit::row_component()
             .width(40.0)
             .height(40.0)
-            .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+            .align_items_center()
             .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
             .background_color(shadcn::theme::color::BACKGROUND)
             .style(ArkUINodeAttributeType::BorderStyle, 0_i32)
@@ -156,14 +155,8 @@ pub(crate) fn carousel_frame(
     let mut preview_area = arkit::row_component()
         .percent_width(1.0)
         .percent_height(1.0)
-        .style(
-            ArkUINodeAttributeType::RowAlignItems,
-            FLEX_ALIGN_CENTER,
-        )
-        .style(
-            ArkUINodeAttributeType::RowJustifyContent,
-            FLEX_ALIGN_CENTER,
-        )
+        .align_items_center()
+        .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
         .children(vec![preview]);
 
     if !remove_bottom_safe_area {
@@ -178,11 +171,8 @@ pub(crate) fn carousel_frame(
     let nav_bar = arkit::column_component()
         .percent_width(1.0)
         .percent_height(1.0)
-        .style(
-            ArkUINodeAttributeType::ColumnJustifyContent,
-            FLEX_ALIGN_END,
-        )
-        .style(ArkUINodeAttributeType::ColumnAlignItems, FLEX_ALIGN_CENTER)
+        .style(ArkUINodeAttributeType::ColumnJustifyContent, FLEX_ALIGN_END)
+        .align_items_center()
         .children(vec![arkit::row_component()
             .percent_width(1.0)
             .height(48.0)
@@ -192,7 +182,7 @@ pub(crate) fn carousel_frame(
                 vec![0.0, 0.0, shadcn::theme::spacing::LG, 0.0],
             )
             .style(ArkUINodeAttributeType::Padding, vec![0.0, 16.0, 0.0, 16.0])
-            .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+            .align_items_center()
             .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
             .children(vec![h_stack(
                 vec![
@@ -261,12 +251,12 @@ pub(crate) fn button_carousel(page: Signal<i32>) -> Element {
 fn icon_tile(name: &str, icon: Element) -> Element {
     arkit::column_component()
         .width(96.0)
-        .style(ArkUINodeAttributeType::ColumnAlignItems, FLEX_ALIGN_CENTER)
+        .align_items_center()
         .children(vec![
             arkit::row_component()
                 .width(48.0)
                 .height(48.0)
-                .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+                .align_items_center()
                 .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
                 .style(
                     ArkUINodeAttributeType::BorderRadius,
@@ -532,7 +522,7 @@ pub(crate) fn text_carousel(page: Signal<i32>) -> Element {
 
             fn v_stack_center(children: Vec<Element>, gap: f32) -> Element {
                 arkit::column_component()
-                    .style(ArkUINodeAttributeType::ColumnAlignItems, FLEX_ALIGN_CENTER)
+                    .align_items_center()
                     .children(
                         children
                             .into_iter()

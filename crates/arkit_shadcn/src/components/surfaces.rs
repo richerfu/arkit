@@ -8,7 +8,7 @@ pub fn toast(message: impl Into<String>) -> Element {
                 ArkUINodeAttributeType::Padding,
                 vec![spacing::SM, spacing::LG, spacing::SM, spacing::LG],
             )
-            .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+            .align_items_center()
             .children(vec![body_text_regular(message)
                 .style(ArkUINodeAttributeType::FontColor, color::FOREGROUND)
                 .into()]),

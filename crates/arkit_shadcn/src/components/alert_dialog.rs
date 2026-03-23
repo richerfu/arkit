@@ -8,7 +8,7 @@ pub fn alert_dialog(
     shadow_sm(
         arkit::column_component()
             .percent_width(1.0)
-            .max_width_constraint(425.0)
+            .max_width_constraint(super::dialog::DIALOG_MAX_WIDTH)
             .style(
                 ArkUINodeAttributeType::Padding,
                 vec![spacing::XXL, spacing::XXL, spacing::XXL, spacing::XXL],

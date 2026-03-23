@@ -25,7 +25,7 @@ pub fn select(options: Vec<String>, selected: Signal<String>) -> Element {
                     ArkUINodeAttributeType::Padding,
                     vec![8.0, spacing::MD, 8.0, spacing::MD],
                 )
-                .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+                .align_items_center()
                 .style(
                     ArkUINodeAttributeType::RowJustifyContent,
                     FLEX_ALIGN_SPACE_BETWEEN,
@@ -68,7 +68,7 @@ pub fn select(options: Vec<String>, selected: Signal<String>) -> Element {
                 arkit::row_component()
                     .percent_width(1.0)
                     .height(36.0)
-                    .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+                    .align_items_center()
                     .style(
                         ArkUINodeAttributeType::RowJustifyContent,
                         FLEX_ALIGN_SPACE_BETWEEN,
@@ -115,7 +115,10 @@ pub fn select(options: Vec<String>, selected: Signal<String>) -> Element {
         let list = if count > 8 {
             arkit::scroll_component()
                 .height(208.0)
-                .children(vec![arkit::column_component().percent_width(1.0).children(items).into()])
+                .children(vec![arkit::column_component()
+                    .percent_width(1.0)
+                    .children(items)
+                    .into()])
                 .into()
         } else {
             arkit::column_component()
@@ -141,7 +144,10 @@ pub fn select(options: Vec<String>, selected: Signal<String>) -> Element {
                                 )
                                 .children(vec![arkit::text("Fruits")
                                     .font_size(typography::XS)
-                                    .style(ArkUINodeAttributeType::FontColor, color::MUTED_FOREGROUND)
+                                    .style(
+                                        ArkUINodeAttributeType::FontColor,
+                                        color::MUTED_FOREGROUND,
+                                    )
                                     .style(ArkUINodeAttributeType::TextLineHeight, 16.0)
                                     .into()])
                                 .into(),

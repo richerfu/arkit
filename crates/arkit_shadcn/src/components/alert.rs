@@ -1,4 +1,5 @@
 use super::*;
+use arkit::ohos_arkui_binding::types::text_alignment::TextAlignment;
 use arkit_icon as lucide;
 
 const ALERT_BORDER_WIDTH: f32 = 1.0;
@@ -73,6 +74,7 @@ pub fn alert_root(
                 .into(),
             arkit::column_component()
                 .percent_width(1.0)
+                .align_items_start()
                 .style(
                     ArkUINodeAttributeType::Padding,
                     vec![
@@ -104,6 +106,10 @@ pub fn alert_title(content: impl Into<String>, variant: AlertVariant) -> TextEle
             ALERT_TRACKING_TIGHT,
         )
         .style(
+            ArkUINodeAttributeType::TextAlign,
+            i32::from(TextAlignment::Start),
+        )
+        .style(
             ArkUINodeAttributeType::Margin,
             vec![0.0, 0.0, ALERT_TITLE_BOTTOM, ALERT_CONTENT_OFFSET],
         )
@@ -122,6 +128,10 @@ pub fn alert_description(content: impl Into<String>, variant: AlertVariant) -> T
         .style(
             ArkUINodeAttributeType::TextLineHeight,
             ALERT_DESCRIPTION_LINE_HEIGHT,
+        )
+        .style(
+            ArkUINodeAttributeType::TextAlign,
+            i32::from(TextAlignment::Start),
         )
         .style(
             ArkUINodeAttributeType::Margin,
@@ -158,6 +168,7 @@ pub fn alert_list(items: Vec<impl Into<String>>, variant: AlertVariant) -> Eleme
 
     arkit::column_component()
         .percent_width(1.0)
+        .align_items_start()
         .style(
             ArkUINodeAttributeType::Margin,
             vec![0.0, 0.0, 0.0, ALERT_CONTENT_OFFSET],

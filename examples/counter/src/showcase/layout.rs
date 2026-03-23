@@ -16,7 +16,7 @@ fn empty_box(width: f32, height: f32) -> Element {
 fn constrained_width(child: Element, width: f32) -> Element {
     arkit::column_component()
         .percent_width(1.0)
-        .style(ArkUINodeAttributeType::ColumnAlignItems, FLEX_ALIGN_CENTER)
+        .align_items_center()
         .children(vec![arkit::row_component()
             .percent_width(1.0)
             .max_width_constraint(width)
@@ -56,6 +56,7 @@ pub(crate) fn max_width(child: Element, width: f32) -> Element {
 pub(crate) fn v_stack(children: Vec<Element>, gap: f32) -> Element {
     arkit::column_component()
         .percent_width(1.0)
+        .align_items_start()
         .children(
             children
                 .into_iter()
@@ -78,7 +79,7 @@ pub(crate) fn v_stack(children: Vec<Element>, gap: f32) -> Element {
 
 pub(crate) fn h_stack(children: Vec<Element>, gap: f32) -> Element {
     arkit::row_component()
-        .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+        .align_items_center()
         .children(
             children
                 .into_iter()
@@ -163,7 +164,7 @@ pub(crate) fn component_canvas_with(
                     padding[3],
                 ],
             )
-            .style(ArkUINodeAttributeType::ColumnAlignItems, FLEX_ALIGN_START)
+            .align_items_start()
             .style(
                 ArkUINodeAttributeType::ColumnJustifyContent,
                 if center_y {
@@ -194,7 +195,7 @@ pub(crate) fn nav_bar(title: impl Into<String>, back: bool) -> Element {
                     shadcn::theme::spacing::LG,
                 ],
             )
-            .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_END)
+            .align_items_bottom()
             .children(vec![arkit::text(title)
                 .font_size(30.0)
                 .style(
@@ -209,7 +210,7 @@ pub(crate) fn nav_bar(title: impl Into<String>, back: bool) -> Element {
 
     let left = arkit::row_component()
         .style(ArkUINodeAttributeType::LayoutWeight, 1.0_f32)
-        .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+        .align_items_center()
         .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_START)
         .children(vec![if back {
             shadcn::icon_button_with_variant("chevron-left", shadcn::ButtonVariant::Ghost)
@@ -227,14 +228,14 @@ pub(crate) fn nav_bar(title: impl Into<String>, back: bool) -> Element {
 
     let right = arkit::row_component()
         .style(ArkUINodeAttributeType::LayoutWeight, 1.0_f32)
-        .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+        .align_items_center()
         .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_END)
         .children(vec![empty_box(36.0, 36.0)])
         .into();
 
     let center = arkit::row_component()
         .style(ArkUINodeAttributeType::LayoutWeight, 1.0_f32)
-        .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+        .align_items_center()
         .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
         .children(vec![arkit::text(title)
             .font_size(shadcn::theme::typography::XL)
@@ -260,7 +261,7 @@ pub(crate) fn nav_bar(title: impl Into<String>, back: bool) -> Element {
                 shadcn::theme::spacing::LG,
             ],
         )
-        .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+        .align_items_center()
         .style(
             ArkUINodeAttributeType::BorderWidth,
             vec![0.0, 0.0, 1.0, 0.0],
@@ -291,7 +292,7 @@ pub(crate) fn component_list_cell(slug: &str, title: &str, first: bool, last: bo
     arkit::row_component()
         .percent_width(1.0)
         .height(44.0)
-        .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+        .align_items_center()
         .style(
             ArkUINodeAttributeType::RowJustifyContent,
             FLEX_ALIGN_SPACE_BETWEEN,

@@ -1,4 +1,4 @@
-use super::super::layout::{component_canvas, fixed_width, v_stack, FLEX_ALIGN_CENTER};
+use super::super::layout::{component_canvas, fixed_width, v_stack};
 use super::shared::DemoContext;
 use arkit::prelude::*;
 use arkit_shadcn as shadcn;
@@ -6,7 +6,7 @@ use arkit_shadcn as shadcn;
 fn form_row(label_text: &str, value: Element) -> Element {
     arkit::row_component()
         .percent_width(1.0)
-        .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+        .align_items_center()
         .children(vec![
             arkit::row_component()
                 .width(96.0)

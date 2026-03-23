@@ -13,6 +13,7 @@ use openharmony_ability::{Event as AbilityEvent, OpenHarmonyApp, OpenHarmonyWake
 
 use crate::component::{mount_element, patch_element, MountedElement};
 use crate::lifecycle::from_ability_event;
+use crate::logging;
 use crate::signal::{emit_lifecycle_event, set_scheduler, with_hook_state, HookState};
 use crate::view::Element;
 use crate::{column, text};
@@ -62,6 +63,8 @@ impl Runtime {
             }),
         };
 
+        logging::init_hilog();
+        logging::info("runtime created");
         set_current_app(Some(runtime.inner.app.clone()));
         runtime.install_renderer();
         runtime.install_scheduler();
@@ -168,6 +171,7 @@ impl RuntimeInner {
         };
         self.hooks.borrow_mut().finalize_render();
         if let Err(error) = self.commit_tree(next_tree) {
+            logging::error(format!("commit tree failed: {error}"));
             clear_after_mount_effects();
             self.remount_tree(build_fallback_element(format!("commit failed: {error}")))?;
         }
@@ -248,7 +252,11 @@ fn build_host_root(app_root: ArkUINode) -> ArkUIResult<ArkUINode> {
 }
 
 fn map_arkui_result<T, E: ToString>(result: std::result::Result<T, E>) -> Result<T> {
-    result.map_err(|error| Error::from_reason(error.to_string()))
+    result.map_err(|error| {
+        let reason = error.to_string();
+        logging::error(format!("arkui runtime error: {reason}"));
+        Error::from_reason(reason)
+    })
 }
 
 fn set_renderer(renderer: Option<Rc<dyn Fn()>>) {

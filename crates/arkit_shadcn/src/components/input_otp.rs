@@ -24,7 +24,9 @@ pub fn input_otp(value: Signal<String>, digits: usize) -> Element {
                                     .into_iter()
                                     .filter(|ch| *ch != '\0')
                                     .collect::<String>();
-                                otp.set(next_value);
+                                if otp.get() != next_value {
+                                    otp.set(next_value);
+                                }
                             }),
                     )
                     .into()

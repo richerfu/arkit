@@ -13,13 +13,8 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                     .into(),
                 vec![
                     arkit::column_component()
-                        .style(
-                            ArkUINodeAttributeType::Padding,
-                            vec![8.0, 8.0, 8.0, 8.0],
-                        )
-                        .children(vec![
-                            shadcn::text_sm_medium("My Account"),
-                        ])
+                        .style(ArkUINodeAttributeType::Padding, vec![8.0, 8.0, 8.0, 8.0])
+                        .children(vec![shadcn::text_sm_medium("My Account")])
                         .into(),
                     shadcn::separator(),
                     shadcn::dropdown_item("Profile"),

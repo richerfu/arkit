@@ -3,6 +3,7 @@ compile_error!("arkit requires feature `api-22` as the baseline");
 
 mod component;
 mod lifecycle;
+mod logging;
 mod route;
 mod runtime;
 mod signal;

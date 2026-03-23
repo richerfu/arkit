@@ -33,7 +33,6 @@ impl MountedElement {
         }
     }
 
-
     pub(crate) fn set_state(&mut self, state: Box<dyn Any>) {
         self.state = Some(state);
     }

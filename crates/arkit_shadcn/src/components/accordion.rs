@@ -16,7 +16,7 @@ pub fn accordion_item(
     let click = open.clone();
     let mut children = vec![arkit::row_component()
         .percent_width(1.0)
-        .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_START)
+        .align_items_top()
         .style(
             ArkUINodeAttributeType::RowJustifyContent,
             FLEX_ALIGN_SPACE_BETWEEN,
@@ -30,10 +30,14 @@ pub fn accordion_item(
             body_text(title)
                 .style(ArkUINodeAttributeType::FontColor, color::FOREGROUND)
                 .into(),
-            lucide::icon(if open.get() { "chevron-up" } else { "chevron-down" })
-                .size(16.0)
-                .color(color::MUTED_FOREGROUND)
-                .render(),
+            lucide::icon(if open.get() {
+                "chevron-up"
+            } else {
+                "chevron-down"
+            })
+            .size(16.0)
+            .color(color::MUTED_FOREGROUND)
+            .render(),
         ])
         .into()];
 

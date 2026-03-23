@@ -36,10 +36,7 @@ pub(crate) fn render(_ctx: DemoContext) -> Element {
                                 "99",
                                 shadcn::BadgeVariant::Destructive,
                             ),
-                            shadcn::pill_badge_with_variant(
-                                "20+",
-                                shadcn::BadgeVariant::Outline,
-                            ),
+                            shadcn::pill_badge_with_variant("20+", shadcn::BadgeVariant::Outline),
                         ],
                         shadcn::theme::spacing::SM,
                     ),

@@ -1,5 +1,8 @@
 use super::*;
 
+pub(crate) const DIALOG_MAX_WIDTH: f32 = 512.0;
+const DIALOG_VIEWPORT_INSET: f32 = spacing::LG;
+
 pub fn dialog(_title: impl Into<String>, open: Signal<bool>, content: Vec<Element>) -> Element {
     if !open.get() {
         return arkit::row_component().into();
@@ -24,15 +27,20 @@ pub fn dialog(_title: impl Into<String>, open: Signal<bool>, content: Vec<Elemen
                     ArkUINodeAttributeType::ColumnJustifyContent,
                     FLEX_ALIGN_CENTER,
                 )
-                .style(ArkUINodeAttributeType::ColumnAlignItems, FLEX_ALIGN_CENTER)
+                .align_items_center()
                 .style(
                     ArkUINodeAttributeType::Padding,
-                    vec![spacing::SM, spacing::SM, spacing::SM, spacing::SM],
+                    vec![
+                        DIALOG_VIEWPORT_INSET,
+                        DIALOG_VIEWPORT_INSET,
+                        DIALOG_VIEWPORT_INSET,
+                        DIALOG_VIEWPORT_INSET,
+                    ],
                 )
                 .children(vec![shadow_sm(
                     arkit::stack_component()
                         .percent_width(1.0)
-                        .max_width_constraint(425.0)
+                        .max_width_constraint(DIALOG_MAX_WIDTH)
                         .style(
                             ArkUINodeAttributeType::Padding,
                             vec![spacing::XXL, spacing::XXL, spacing::XXL, spacing::XXL],

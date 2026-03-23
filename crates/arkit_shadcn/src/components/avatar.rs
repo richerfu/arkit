@@ -30,7 +30,7 @@ pub fn avatar_with_radius(
                 ArkUINodeAttributeType::BorderRadius,
                 vec![radius_value, radius_value, radius_value, radius_value],
             )
-            .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+            .align_items_center()
             .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
             .children(vec![muted_text(fallback).into()])
             .into()
@@ -57,7 +57,10 @@ pub fn avatar_ring_with_radius(
                 vec![radius_value, radius_value, radius_value, radius_value],
             )
             .style(ArkUINodeAttributeType::Clip, true)
-            .style(ArkUINodeAttributeType::BorderWidth, vec![2.0, 2.0, 2.0, 2.0])
+            .style(
+                ArkUINodeAttributeType::BorderWidth,
+                vec![2.0, 2.0, 2.0, 2.0],
+            )
             .style(ArkUINodeAttributeType::BorderColor, vec![color::BACKGROUND])
             .into()
     } else {
@@ -70,9 +73,12 @@ pub fn avatar_ring_with_radius(
                 vec![radius_value, radius_value, radius_value, radius_value],
             )
             .style(ArkUINodeAttributeType::Clip, true)
-            .style(ArkUINodeAttributeType::BorderWidth, vec![2.0, 2.0, 2.0, 2.0])
+            .style(
+                ArkUINodeAttributeType::BorderWidth,
+                vec![2.0, 2.0, 2.0, 2.0],
+            )
             .style(ArkUINodeAttributeType::BorderColor, vec![color::BACKGROUND])
-            .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+            .align_items_center()
             .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
             .children(vec![muted_text(fallback).into()])
             .into()

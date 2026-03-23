@@ -20,7 +20,7 @@ pub fn command(query: Signal<String>, options: Vec<String>) -> Element {
                 arkit::row_component()
                     .percent_width(1.0)
                     .height(32.0)
-                    .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+                    .align_items_center()
                     .style(
                         ArkUINodeAttributeType::Padding,
                         vec![6.0, spacing::SM, 6.0, spacing::SM],

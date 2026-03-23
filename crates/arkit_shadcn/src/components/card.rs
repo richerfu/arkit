@@ -64,7 +64,7 @@ pub fn card_footer(children: Vec<Element>) -> Element {
             ArkUINodeAttributeType::Padding,
             vec![0.0, spacing::XXL, 0.0, spacing::XXL],
         )
-        .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+        .align_items_center()
         .children(children)
         .into()
 }

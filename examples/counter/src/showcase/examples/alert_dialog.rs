@@ -34,7 +34,7 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                         arkit::column_component()
                             .percent_width(1.0)
                             .percent_height(1.0)
-                            .style(ArkUINodeAttributeType::ColumnAlignItems, 2_i32)
+                            .align_items_center()
                             .style(ArkUINodeAttributeType::ColumnJustifyContent, 2_i32)
                             .style(
                                 ArkUINodeAttributeType::Padding,

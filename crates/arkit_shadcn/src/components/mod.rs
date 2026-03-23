@@ -1,13 +1,13 @@
 use arkit::prelude::ArkUINodeAttributeType;
 use arkit::{
     ButtonElement, CalendarPickerElement, ComponentElement, DatePickerElement, Element,
-    ProgressElement, ScrollElement, Signal, SliderElement, SwiperElement, TextAreaElement,
-    TextElement, TextInputElement, ToggleElement,
+    ProgressElement, RowElement, ScrollElement, Signal, SliderElement, SwiperElement,
+    TextAreaElement, TextElement, TextInputElement, ToggleElement,
 };
 
 use crate::styles::{
-    body_text, body_text_regular, border_color, card_surface, input_surface,
-    margin_top, muted_text, panel_surface, shadow_sm, title_text,
+    body_text, body_text_regular, border_color, card_surface, input_surface, margin_top,
+    muted_text, panel_surface, shadow_sm, title_text,
 };
 use crate::theme::{color, radius, spacing, typography};
 
@@ -182,14 +182,11 @@ where
         .style(ArkUINodeAttributeType::Clip, true)
 }
 
-pub(crate) fn rounded_menubar_surface<T>(element: ComponentElement<T>) -> ComponentElement<T>
-where
-    T: arkit::ohos_arkui_binding::component::attribute::ArkUICommonAttribute + 'static,
-{
+pub(crate) fn rounded_menubar_surface(element: RowElement) -> RowElement {
     element
         .style(ArkUINodeAttributeType::Padding, vec![4.0, 4.0, 4.0, 4.0])
         .height(40.0)
-        .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+        .align_items_center()
         .style(
             ArkUINodeAttributeType::BorderRadius,
             vec![radius::MD, radius::MD, radius::MD, radius::MD],
@@ -202,14 +199,11 @@ where
         .background_color(color::BACKGROUND)
 }
 
-pub(crate) fn rounded_tabs_list_surface<T>(element: ComponentElement<T>) -> ComponentElement<T>
-where
-    T: arkit::ohos_arkui_binding::component::attribute::ArkUICommonAttribute + 'static,
-{
+pub(crate) fn rounded_tabs_list_surface(element: RowElement) -> RowElement {
     element
         .style(ArkUINodeAttributeType::Padding, vec![3.0, 3.0, 3.0, 3.0])
         .height(36.0)
-        .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+        .align_items_center()
         .style(
             ArkUINodeAttributeType::BorderRadius,
             vec![radius::LG, radius::LG, radius::LG, radius::LG],

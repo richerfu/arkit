@@ -1,4 +1,5 @@
 use super::*;
+use arkit::ohos_arkui_binding::types::alignment::Alignment;
 use arkit::ohos_arkui_binding::types::text_alignment::TextAlignment;
 use arkit_icon as lucide;
 
@@ -15,7 +16,7 @@ fn toggle_group_radius(index: usize, total: usize) -> [f32; 4] {
 fn toggle_group_shell(children: Vec<Element>) -> Element {
     shadow_sm(
         arkit::row_component()
-            .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+            .align_items_center()
             .style(ArkUINodeAttributeType::Clip, true)
             .style(
                 ArkUINodeAttributeType::BorderRadius,
@@ -40,8 +41,10 @@ fn toggle_group_item_surface(
         .style(ArkUINodeAttributeType::BorderRadius, border_radius.to_vec())
         .style(ArkUINodeAttributeType::BorderWidth, border_width.to_vec())
         .style(ArkUINodeAttributeType::BorderColor, vec![color::INPUT])
-        .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
-        .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
+        .style(
+            ArkUINodeAttributeType::Alignment,
+            i32::from(Alignment::Center),
+        )
         .background_color(if active {
             color::ACCENT
         } else {
@@ -62,10 +65,7 @@ pub fn toggle_group(options: Vec<String>, selected: Signal<String>) -> Element {
             toggle_group_item_surface(
                 arkit::button(item)
                     .height(40.0)
-                    .style(
-                        ArkUINodeAttributeType::Padding,
-                        vec![8.0, 10.0, 8.0, 10.0],
-                    )
+                    .style(ArkUINodeAttributeType::Padding, vec![8.0, 10.0, 8.0, 10.0])
                     .font_size(typography::SM)
                     .style(ArkUINodeAttributeType::FontWeight, 4_i32)
                     .style(
@@ -140,10 +140,7 @@ pub fn toggle_group_multi(options: Vec<String>, selected: Signal<Vec<String>>) -
             toggle_group_item_surface(
                 arkit::button(item)
                     .height(40.0)
-                    .style(
-                        ArkUINodeAttributeType::Padding,
-                        vec![8.0, 10.0, 8.0, 10.0],
-                    )
+                    .style(ArkUINodeAttributeType::Padding, vec![8.0, 10.0, 8.0, 10.0])
                     .font_size(typography::SM)
                     .style(ArkUINodeAttributeType::FontWeight, 4_i32)
                     .style(

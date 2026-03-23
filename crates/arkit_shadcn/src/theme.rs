@@ -28,9 +28,11 @@ pub mod color {
 }
 
 pub mod radius {
-    pub const SM: f32 = 6.0;
-    pub const MD: f32 = 8.0;
-    pub const LG: f32 = 10.0;
+    // Keep these close to the Tailwind radii used by react-native-reusables:
+    // `rounded`/small surfaces ~= 4, `rounded-md` = 6, `rounded-lg` = 8.
+    pub const SM: f32 = 4.0;
+    pub const MD: f32 = 6.0;
+    pub const LG: f32 = 8.0;
     pub const XL: f32 = 12.0;
     pub const XXL: f32 = 16.0;
     pub const FULL: f32 = 999.0;

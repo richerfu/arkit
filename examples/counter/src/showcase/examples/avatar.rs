@@ -1,25 +1,20 @@
-use super::super::layout::{component_canvas, h_stack, v_stack};
+use super::super::layout::{component_canvas, h_stack};
 use super::shared::DemoContext;
 use arkit::prelude::*;
 use arkit_shadcn as shadcn;
 
 pub(crate) fn render(_ctx: DemoContext) -> Element {
     component_canvas(
-        v_stack(
+        h_stack(
             vec![
-                h_stack(
-                    vec![
-                        shadcn::avatar_ring(
-                            Some(String::from("https://github.com/mrzachnugent.png")),
-                            "ZN",
-                        ),
-                        shadcn::avatar_ring_with_radius(
-                            Some(String::from("https://github.com/shadcn.png")),
-                            "CN",
-                            shadcn::theme::radius::LG,
-                        ),
-                    ],
-                    48.0,
+                shadcn::avatar_ring(
+                    Some(String::from("https://github.com/mrzachnugent.png")),
+                    "ZN",
+                ),
+                shadcn::avatar_ring_with_radius(
+                    Some(String::from("https://github.com/shadcn.png")),
+                    "CN",
+                    shadcn::theme::radius::LG,
                 ),
                 h_stack(
                     vec![
@@ -39,7 +34,7 @@ pub(crate) fn render(_ctx: DemoContext) -> Element {
                     -8.0,
                 ),
             ],
-            24.0,
+            48.0,
         ),
         true,
         24.0,

@@ -2,7 +2,7 @@ use std::any::{type_name, TypeId};
 use std::mem::{align_of, size_of, ManuallyDrop};
 
 use crate::component::{run_cleanups, Cleanup, MountedElement};
-use crate::signal::Signal;
+use crate::logging;
 use crate::ohos_arkui_binding::api::node_custom_event::NodeCustomEvent;
 use crate::ohos_arkui_binding::common::attribute::ArkUINodeAttributeItem;
 use crate::ohos_arkui_binding::common::error::ArkUIResult;
@@ -26,6 +26,7 @@ use crate::ohos_arkui_binding::event::inner_event::Event as ArkEvent;
 use crate::ohos_arkui_binding::types::advanced::NodeCustomEventType;
 use crate::ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
 use crate::ohos_arkui_binding::types::event::NodeEventType;
+use crate::signal::Signal;
 
 use super::element::{Element, ViewNode};
 
@@ -66,11 +67,15 @@ fn wrap_mutator<T>(mutator: impl FnOnce(&mut T) -> ArkUIResult<()> + 'static) ->
 
 fn apply_mutators<T>(node: &mut T, mutators: Vec<Mutator<T>>) -> ArkUIResult<Vec<Cleanup>> {
     let mut cleanups = Vec::new();
-    for mutator in mutators {
+    for (index, mutator) in mutators.into_iter().enumerate() {
         match mutator(node) {
             Ok(Some(cleanup)) => cleanups.push(cleanup),
             Ok(None) => {}
             Err(error) => {
+                logging::error(format!(
+                    "component error: failed to apply mutator #{index} on {}: {error}",
+                    type_name::<T>()
+                ));
                 run_cleanups(cleanups);
                 return Err(error);
             }
@@ -193,27 +198,46 @@ impl<T> ComponentElement<T>
 where
     T: ArkUICommonAttribute + 'static,
 {
+    #[allow(private_bounds)]
     pub fn watch_signal<S>(
         self,
         signal: Signal<S>,
-        apply: impl Fn(&mut ArkUINode, S) -> ArkUIResult<()> + 'static,
+        apply: impl Fn(&mut T, S) -> ArkUIResult<()> + 'static,
     ) -> Self
     where
         S: Clone + 'static,
+        T: HostComponent,
     {
         let apply = std::rc::Rc::new(apply);
         self.native_with_cleanup(move |node| {
-            let mut runtime_node = node.borrow_mut().clone();
-            apply(&mut runtime_node, signal.get())?;
+            if let Err(error) = apply(node, signal.get()) {
+                logging::error(format!(
+                    "signal error: initial watch apply failed on {}: {error}",
+                    T::name()
+                ));
+                return Err(error);
+            }
 
-            let subscription_node = std::rc::Rc::new(std::cell::RefCell::new(runtime_node));
+            let subscription_node =
+                std::rc::Rc::new(std::cell::RefCell::new(node.borrow_mut().clone()));
             let subscription_signal = signal.clone();
             let subscription_apply = apply.clone();
             let subscription_node_clone = subscription_node.clone();
             let subscription_id = signal.subscribe(move || {
                 let value = subscription_signal.get();
-                let mut node = subscription_node_clone.borrow_mut();
-                let _ = subscription_apply(&mut node, value);
+                let raw_node = { subscription_node_clone.borrow().clone() };
+                let mut typed = T::from_existing(raw_node);
+                match subscription_apply(&mut typed, value) {
+                    Ok(()) => {
+                        *subscription_node_clone.borrow_mut() = typed.into();
+                    }
+                    Err(error) => {
+                        logging::error(format!(
+                            "signal error: subscription apply failed on {}: {error}",
+                            T::name()
+                        ));
+                    }
+                }
             });
 
             Ok(move || {
@@ -239,7 +263,13 @@ where
     ) -> Self {
         let value = value.into();
         self.mutators.push(wrap_mutator::<T>(move |node| {
-            node.set_attribute(attr, value)
+            node.set_attribute(attr, value).map_err(|error| {
+                logging::error(format!(
+                    "style error: failed to set attribute {attr:?} on {}: {error}",
+                    type_name::<T>()
+                ));
+                error
+            })
         }));
         self
     }
@@ -264,6 +294,13 @@ where
                 ArkUINodeAttributeType::ConstraintSize,
                 vec![min_width, max_width, min_height, max_height].into(),
             )
+            .map_err(|error| {
+                logging::error(format!(
+                    "style error: failed to set constraint size on {}: {error}",
+                    type_name::<T>()
+                ));
+                error
+            })
         }));
         self
     }
@@ -273,32 +310,67 @@ where
     }
 
     pub fn width(mut self, value: f32) -> Self {
-        self.mutators
-            .push(wrap_mutator::<T>(move |node| node.width(value)));
+        self.mutators.push(wrap_mutator::<T>(move |node| {
+            node.width(value).map_err(|error| {
+                logging::error(format!(
+                    "style error: failed to set width on {}: {error}",
+                    type_name::<T>()
+                ));
+                error
+            })
+        }));
         self
     }
 
     pub fn height(mut self, value: f32) -> Self {
-        self.mutators
-            .push(wrap_mutator::<T>(move |node| node.height(value)));
+        self.mutators.push(wrap_mutator::<T>(move |node| {
+            node.height(value).map_err(|error| {
+                logging::error(format!(
+                    "style error: failed to set height on {}: {error}",
+                    type_name::<T>()
+                ));
+                error
+            })
+        }));
         self
     }
 
     pub fn percent_width(mut self, value: f32) -> Self {
-        self.mutators
-            .push(wrap_mutator::<T>(move |node| node.percent_width(value)));
+        self.mutators.push(wrap_mutator::<T>(move |node| {
+            node.percent_width(value).map_err(|error| {
+                logging::error(format!(
+                    "style error: failed to set percent width on {}: {error}",
+                    type_name::<T>()
+                ));
+                error
+            })
+        }));
         self
     }
 
     pub fn percent_height(mut self, value: f32) -> Self {
-        self.mutators
-            .push(wrap_mutator::<T>(move |node| node.percent_height(value)));
+        self.mutators.push(wrap_mutator::<T>(move |node| {
+            node.percent_height(value).map_err(|error| {
+                logging::error(format!(
+                    "style error: failed to set percent height on {}: {error}",
+                    type_name::<T>()
+                ));
+                error
+            })
+        }));
         self
     }
 
     pub fn background_color(mut self, value: u32) -> Self {
-        self.mutators
-            .push(wrap_mutator::<T>(move |node| node.background_color(value)));
+        self.mutators.push(wrap_mutator::<T>(move |node| {
+            node.background_color(value).map_err(|error| {
+                logging::error(format!(
+                    "style error: failed to set background color on {}: {error}",
+                    type_name::<T>()
+                ));
+                error
+            })
+        }));
         self
     }
 
@@ -316,8 +388,15 @@ where
     T: ArkUICommonFontAttribute + 'static,
 {
     pub fn font_size(mut self, value: f32) -> Self {
-        self.mutators
-            .push(wrap_mutator::<T>(move |node| node.font_size(value)));
+        self.mutators.push(wrap_mutator::<T>(move |node| {
+            node.font_size(value).map_err(|error| {
+                logging::error(format!(
+                    "style error: failed to set font size on {}: {error}",
+                    type_name::<T>()
+                ));
+                error
+            })
+        }));
         self
     }
 }
@@ -436,6 +515,11 @@ where
         let (child_node, child_meta) = child.mount()?;
         let mut child_cleanup_node = child_node.clone();
         if let Err(error) = parent.add_child(child_node) {
+            logging::error(format!(
+                "tree error: failed to append rebuilt child {} to {}: {error}",
+                child_meta.name,
+                type_name::<T>()
+            ));
             let _ = child_cleanup_node.dispose();
             child_meta.cleanup_recursive();
             return Err(error);
@@ -477,7 +561,15 @@ where
 
         let child_handle = parent.borrow_mut().children()[index].clone();
         let mut child_node = child_handle.borrow_mut();
-        next_child.patch(&mut child_node, &mut mounted_children[index])?;
+        if let Err(error) = next_child.patch(&mut child_node, &mut mounted_children[index]) {
+            logging::error(format!(
+                "tree error: failed to patch child {} at index {} under {}: {error}",
+                mounted_children[index].name,
+                index,
+                type_name::<T>()
+            ));
+            return Err(error);
+        }
         index += 1;
     }
 
@@ -485,6 +577,11 @@ where
         let (child_node, child_meta) = child.mount()?;
         let mut child_cleanup_node = child_node.clone();
         if let Err(error) = parent.add_child(child_node) {
+            logging::error(format!(
+                "tree error: failed to append child {} to {}: {error}",
+                child_meta.name,
+                type_name::<T>()
+            ));
             let _ = child_cleanup_node.dispose();
             child_meta.cleanup_recursive();
             return Err(error);
@@ -515,7 +612,13 @@ where
             children,
         } = *self;
 
-        let mut node = constructor()?;
+        let mut node = constructor().map_err(|error| {
+            logging::error(format!(
+                "mount error: failed to construct {}: {error}",
+                T::name()
+            ));
+            error
+        })?;
         let self_cleanups = match apply_mutators(&mut node, mutators) {
             Ok(cleanups) => cleanups,
             Err(error) => {
@@ -530,6 +633,10 @@ where
             let (child_node, child_meta) = match child.mount() {
                 Ok(result) => result,
                 Err(error) => {
+                    logging::error(format!(
+                        "mount error: failed to mount child under {}: {error}",
+                        T::name()
+                    ));
                     let mut raw: ArkUINode = node.into();
                     let _ = raw.dispose();
                     for mounted_child in mounted_children {
@@ -542,6 +649,11 @@ where
 
             let mut child_cleanup_node = child_node.clone();
             if let Err(error) = node.add_child(child_node) {
+                logging::error(format!(
+                    "tree error: failed to add child {} to {} during mount: {error}",
+                    child_meta.name,
+                    T::name()
+                ));
                 let _ = child_cleanup_node.dispose();
                 child_meta.cleanup_recursive();
                 let mut raw: ArkUINode = node.into();
@@ -574,9 +686,18 @@ where
         } = *self;
 
         let mut typed = T::from_existing(node.clone());
-        typed.borrow_mut().reset_events()?;
-        let new_cleanups = apply_mutators(&mut typed, mutators)?;
+        let new_cleanups = apply_mutators(&mut typed, mutators).map_err(|error| {
+            logging::error(format!(
+                "patch error: failed to apply mutators on {}: {error}",
+                T::name()
+            ));
+            error
+        })?;
         if let Err(error) = reconcile_children(&mut typed, &mut mounted.children, children) {
+            logging::error(format!(
+                "patch error: failed to reconcile children for {}: {error}",
+                T::name()
+            ));
             run_cleanups(new_cleanups);
             return Err(error);
         }

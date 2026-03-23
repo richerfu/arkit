@@ -15,7 +15,7 @@ pub fn table(headers: Vec<String>, rows: Vec<Vec<String>>) -> Element {
                     arkit::row_component()
                         .style(ArkUINodeAttributeType::LayoutWeight, 1.0_f32)
                         .height(40.0)
-                        .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+                        .align_items_center()
                         .style(ArkUINodeAttributeType::Padding, vec![0.0, 8.0, 0.0, 8.0])
                         .children(vec![body_text(header)
                             .style(ArkUINodeAttributeType::FontColor, color::MUTED_FOREGROUND)
@@ -33,7 +33,7 @@ pub fn table(headers: Vec<String>, rows: Vec<Vec<String>>) -> Element {
         .map(|(index, row)| {
             arkit::row_component()
                 .percent_width(1.0)
-                .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+                .align_items_center()
                 .style(
                     ArkUINodeAttributeType::BorderWidth,
                     if index + 1 == total_rows {
@@ -48,7 +48,7 @@ pub fn table(headers: Vec<String>, rows: Vec<Vec<String>>) -> Element {
                         .map(|cell| {
                             arkit::row_component()
                                 .style(ArkUINodeAttributeType::LayoutWeight, 1.0_f32)
-                                .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+                                .align_items_center()
                                 .style(ArkUINodeAttributeType::Padding, vec![8.0, 8.0, 8.0, 8.0])
                                 .children(vec![arkit::text(cell)
                                     .font_size(typography::SM)

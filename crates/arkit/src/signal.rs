@@ -172,7 +172,9 @@ impl<T> Signal<T> {
         let mut state = self.inner.borrow_mut();
         let id = state.next_subscriber_id;
         state.next_subscriber_id += 1;
-        state.subscribers.insert(id, Rc::new(callback) as Rc<dyn Fn()>);
+        state
+            .subscribers
+            .insert(id, Rc::new(callback) as Rc<dyn Fn()>);
         id
     }
 

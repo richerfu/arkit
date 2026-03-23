@@ -9,7 +9,7 @@ pub fn tooltip(trigger_label: impl Into<String>, content: impl Into<String>) -> 
     let toggle = open.clone();
 
     arkit::column_component()
-        .style(ArkUINodeAttributeType::ColumnAlignItems, FLEX_ALIGN_CENTER)
+        .align_items_center()
         .children(vec![
             if open.get() {
                 arkit::row_component()

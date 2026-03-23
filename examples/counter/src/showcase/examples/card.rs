@@ -17,9 +17,7 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                         v_stack(
                             vec![
                                 shadcn::label("Email").into(),
-                                shadcn::input("m@example.com")
-                                    .percent_width(1.0)
-                                    .into(),
+                                shadcn::input("m@example.com").percent_width(1.0).into(),
                             ],
                             8.0,
                         ),
