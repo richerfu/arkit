@@ -10,22 +10,25 @@ pub fn card(children: Vec<Element>) -> Element {
 }
 
 pub fn card_header(title: impl Into<String>, description: impl Into<String>) -> Element {
-    arkit::column_component()
+    arkit::row_component()
         .percent_width(1.0)
-        .style(
-            ArkUINodeAttributeType::Padding,
-            vec![0.0, spacing::XXL, 0.0, spacing::XXL],
-        )
-        .children(vec![
-            card_title(title),
-            arkit::row_component()
-                .style(
-                    ArkUINodeAttributeType::Margin,
-                    vec![spacing::XS, 0.0, 0.0, 0.0],
-                )
-                .children(vec![card_description(description)])
-                .into(),
-        ])
+        .children(vec![arkit::column_component()
+            .percent_width(1.0)
+            .style(
+                ArkUINodeAttributeType::Padding,
+                vec![0.0, spacing::XXL, 0.0, spacing::XXL],
+            )
+            .children(vec![
+                card_title(title),
+                arkit::row_component()
+                    .style(
+                        ArkUINodeAttributeType::Margin,
+                        vec![spacing::XS, 0.0, 0.0, 0.0],
+                    )
+                    .children(vec![card_description(description)])
+                    .into(),
+            ])
+            .into()])
         .into()
 }
 
@@ -35,6 +38,7 @@ pub fn card_title(content: impl Into<String>) -> Element {
         .style(ArkUINodeAttributeType::FontWeight, 5_i32)
         .style(ArkUINodeAttributeType::FontColor, color::FOREGROUND)
         .style(ArkUINodeAttributeType::TextLineHeight, 16.0)
+        .style(ArkUINodeAttributeType::TextLetterSpacing, -0.2_f32)
         .into()
 }
 

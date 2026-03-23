@@ -1,6 +1,8 @@
 use super::*;
 use arkit::ohos_arkui_binding::types::text_alignment::TextAlignment;
 
+const TRACKING_TIGHT: f32 = -0.35;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TextVariant {
     Default,
@@ -54,6 +56,7 @@ pub fn text_with_variant(content: impl Into<String>, variant: TextVariant) -> El
             .font_size(36.0)
             .style(ArkUINodeAttributeType::FontWeight, 6_i32)
             .style(ArkUINodeAttributeType::TextLineHeight, 40.0)
+            .style(ArkUINodeAttributeType::TextLetterSpacing, TRACKING_TIGHT)
             .style(
                 ArkUINodeAttributeType::TextAlign,
                 i32::from(TextAlignment::Center),
@@ -66,6 +69,7 @@ pub fn text_with_variant(content: impl Into<String>, variant: TextVariant) -> El
                     .font_size(30.0)
                     .style(ArkUINodeAttributeType::FontWeight, 5_i32)
                     .style(ArkUINodeAttributeType::TextLineHeight, 36.0)
+                    .style(ArkUINodeAttributeType::TextLetterSpacing, TRACKING_TIGHT)
                     .into(),
                 arkit::row_component()
                     .percent_width(1.0)
@@ -79,13 +83,17 @@ pub fn text_with_variant(content: impl Into<String>, variant: TextVariant) -> El
             .font_size(24.0)
             .style(ArkUINodeAttributeType::FontWeight, 5_i32)
             .style(ArkUINodeAttributeType::TextLineHeight, 32.0)
+            .style(ArkUINodeAttributeType::TextLetterSpacing, TRACKING_TIGHT)
             .into(),
         TextVariant::P => base_text(content)
             .style(ArkUINodeAttributeType::TextLineHeight, 28.0)
             .into(),
         TextVariant::Blockquote => arkit::row_component()
             .percent_width(1.0)
-            .style(ArkUINodeAttributeType::BorderWidth, vec![0.0, 0.0, 0.0, 2.0])
+            .style(
+                ArkUINodeAttributeType::BorderWidth,
+                vec![0.0, 0.0, 0.0, 2.0],
+            )
             .style(ArkUINodeAttributeType::BorderColor, vec![color::BORDER])
             .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 12.0])
             .children(vec![base_text(content)
@@ -117,6 +125,7 @@ pub fn text_with_variant(content: impl Into<String>, variant: TextVariant) -> El
             .style(ArkUINodeAttributeType::FontWeight, 5_i32)
             .style(ArkUINodeAttributeType::FontColor, color::FOREGROUND)
             .style(ArkUINodeAttributeType::TextLineHeight, 28.0)
+            .style(ArkUINodeAttributeType::TextLetterSpacing, TRACKING_TIGHT)
             .into(),
         TextVariant::Small => arkit::text(content)
             .font_size(typography::SM)

@@ -6,6 +6,8 @@ pub(crate) const FLEX_ALIGN_CENTER: i32 = 2;
 pub(crate) const FLEX_ALIGN_END: i32 = 3;
 pub(crate) const FLEX_ALIGN_SPACE_BETWEEN: i32 = 6;
 pub(crate) const FLEX_ALIGN_START: i32 = 1;
+const HOME_HEADER_HEIGHT: f32 = 68.0;
+const DETAIL_HEADER_HEIGHT: f32 = 52.0;
 
 fn empty_box(width: f32, height: f32) -> Element {
     arkit::row_component().width(width).height(height).into()
@@ -176,6 +178,35 @@ pub(crate) fn component_canvas_with(
 }
 
 pub(crate) fn nav_bar(title: impl Into<String>, back: bool) -> Element {
+    let title = title.into();
+
+    if !back {
+        return arkit::row_component()
+            .percent_width(1.0)
+            .height(HOME_HEADER_HEIGHT)
+            .background_color(shadcn::theme::color::BACKGROUND)
+            .style(
+                ArkUINodeAttributeType::Padding,
+                vec![
+                    12.0,
+                    shadcn::theme::spacing::LG,
+                    8.0,
+                    shadcn::theme::spacing::LG,
+                ],
+            )
+            .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_END)
+            .children(vec![arkit::text(title)
+                .font_size(30.0)
+                .style(
+                    ArkUINodeAttributeType::FontColor,
+                    shadcn::theme::color::FOREGROUND,
+                )
+                .style(ArkUINodeAttributeType::FontWeight, 5_i32)
+                .style(ArkUINodeAttributeType::TextLineHeight, 36.0)
+                .into()])
+            .into();
+    }
+
     let left = arkit::row_component()
         .style(ArkUINodeAttributeType::LayoutWeight, 1.0_f32)
         .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
@@ -218,7 +249,7 @@ pub(crate) fn nav_bar(title: impl Into<String>, back: bool) -> Element {
 
     arkit::row_component()
         .percent_width(1.0)
-        .height(52.0)
+        .height(DETAIL_HEADER_HEIGHT)
         .background_color(shadcn::theme::color::BACKGROUND)
         .style(
             ArkUINodeAttributeType::Padding,
@@ -287,10 +318,11 @@ pub(crate) fn component_list_cell(slug: &str, title: &str, first: bool, last: bo
                     shadcn::theme::color::FOREGROUND,
                 )
                 .style(ArkUINodeAttributeType::FontWeight, 3_i32)
-                .style(ArkUINodeAttributeType::TextLineHeight, 22.0)
+                .style(ArkUINodeAttributeType::TextLineHeight, 24.0)
                 .into(),
             lucide::icon("chevron-right")
                 .size(16.0)
+                .stroke_width(1.5)
                 .color(shadcn::theme::color::MUTED_FOREGROUND)
                 .render(),
         ])

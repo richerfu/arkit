@@ -42,7 +42,7 @@ pub(crate) fn catalog_home() -> Element {
                         .style(
                             ArkUINodeAttributeType::Padding,
                             vec![
-                                0.0,
+                                4.0,
                                 shadcn::theme::spacing::LG,
                                 8.0,
                                 shadcn::theme::spacing::LG,

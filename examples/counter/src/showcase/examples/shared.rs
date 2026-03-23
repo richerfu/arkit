@@ -7,6 +7,10 @@ use super::super::layout::{
     FLEX_ALIGN_SPACE_BETWEEN,
 };
 
+const EMERALD_500: u32 = 0xFF10B981;
+const PURPLE_500: u32 = 0xFFA855F7;
+const SKY_500: u32 = 0xFF0EA5E9;
+
 #[derive(Clone)]
 pub(crate) struct DemoContext {
     pub active_tab: Signal<usize>,
@@ -68,7 +72,10 @@ fn carousel_nav_surface(child: Element, disabled: bool) -> Element {
             vec![radius, radius, radius, radius],
         )
         .style(ArkUINodeAttributeType::Shadow, vec![1_i32])
-        .style(ArkUINodeAttributeType::Opacity, if disabled { 0.5_f32 } else { 1.0_f32 })
+        .style(
+            ArkUINodeAttributeType::Opacity,
+            if disabled { 0.5_f32 } else { 1.0_f32 },
+        )
         .children(vec![arkit::row_component()
             .width(40.0)
             .height(40.0)
@@ -94,7 +101,12 @@ fn carousel_nav_surface(child: Element, disabled: bool) -> Element {
         .into()
 }
 
-pub(crate) fn carousel_frame(page: Signal<i32>, count: i32, preview: Element) -> Element {
+pub(crate) fn carousel_frame(
+    page: Signal<i32>,
+    count: i32,
+    preview: Element,
+    remove_bottom_safe_area: bool,
+) -> Element {
     let current = page.get().clamp(1, count);
     let prev = page.clone();
     let next = page.clone();
@@ -141,40 +153,61 @@ pub(crate) fn carousel_frame(page: Signal<i32>, count: i32, preview: Element) ->
             })
     };
 
-    arkit::column_component()
+    let mut preview_area = arkit::row_component()
+        .percent_width(1.0)
+        .percent_height(1.0)
+        .style(
+            ArkUINodeAttributeType::RowAlignItems,
+            FLEX_ALIGN_CENTER,
+        )
+        .style(
+            ArkUINodeAttributeType::RowJustifyContent,
+            FLEX_ALIGN_CENTER,
+        )
+        .children(vec![preview]);
+
+    if !remove_bottom_safe_area {
+        // Align with RN `PreviewCarousel`: FlatList adds `pb-12 mb-safe` so the centered preview
+        // doesn't visually fight with the absolute bottom nav.
+        preview_area = preview_area.style(
+            ArkUINodeAttributeType::Padding,
+            vec![0.0, 0.0, 48.0 + shadcn::theme::spacing::LG, 0.0],
+        );
+    }
+
+    let nav_bar = arkit::column_component()
         .percent_width(1.0)
         .percent_height(1.0)
         .style(
             ArkUINodeAttributeType::ColumnJustifyContent,
-            FLEX_ALIGN_SPACE_BETWEEN,
+            FLEX_ALIGN_END,
         )
-        .children(vec![
-            arkit::row_component()
-                .style(ArkUINodeAttributeType::LayoutWeight, 1.0_f32)
-                .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
-                .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
-                .children(vec![preview])
-                .into(),
-            arkit::row_component()
-                .percent_width(1.0)
-                .height(48.0)
-                // Match the RN demo: the nav bar sits above the bottom safe area.
-                .style(
-                    ArkUINodeAttributeType::Margin,
-                    vec![0.0, 0.0, shadcn::theme::spacing::LG, 0.0],
-                )
-                .style(ArkUINodeAttributeType::Padding, vec![0.0, 16.0, 0.0, 16.0])
-                .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
-                .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
-                .children(vec![h_stack(
-                    vec![
-                        carousel_nav_surface(prev_button.into(), prev_disabled),
-                        carousel_nav_surface(next_button.into(), next_disabled),
-                    ],
-                    shadcn::theme::spacing::SM,
-                )])
-                .into(),
-        ])
+        .style(ArkUINodeAttributeType::ColumnAlignItems, FLEX_ALIGN_CENTER)
+        .children(vec![arkit::row_component()
+            .percent_width(1.0)
+            .height(48.0)
+            // Match the RN demo: the nav bar sits above the bottom safe area.
+            .style(
+                ArkUINodeAttributeType::Margin,
+                vec![0.0, 0.0, shadcn::theme::spacing::LG, 0.0],
+            )
+            .style(ArkUINodeAttributeType::Padding, vec![0.0, 16.0, 0.0, 16.0])
+            .style(ArkUINodeAttributeType::RowAlignItems, FLEX_ALIGN_CENTER)
+            .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
+            .children(vec![h_stack(
+                vec![
+                    carousel_nav_surface(prev_button.into(), prev_disabled),
+                    carousel_nav_surface(next_button.into(), next_disabled),
+                ],
+                shadcn::theme::spacing::SM,
+            )])
+            .into()])
+        .into();
+
+    arkit::stack_component()
+        .percent_width(1.0)
+        .percent_height(1.0)
+        .children(vec![preview_area.into(), nav_bar])
         .into()
 }
 
@@ -221,6 +254,7 @@ pub(crate) fn button_carousel(page: Signal<i32>) -> Element {
             .key(format!("button-preview:{label}"))
             .children(vec![button_preview(label)])
             .into(),
+        false,
     )
 }
 
@@ -256,7 +290,10 @@ fn icon_tile(name: &str, icon: Element) -> Element {
                 .into(),
             arkit::row_component()
                 .style(ArkUINodeAttributeType::Margin, vec![8.0, 0.0, 0.0, 0.0])
-                .children(vec![shadcn::text_with_variant(name, shadcn::TextVariant::Small)])
+                .children(vec![shadcn::text_with_variant(
+                    name,
+                    shadcn::TextVariant::Small,
+                )])
                 .into(),
         ])
         .into()
@@ -303,10 +340,7 @@ pub(crate) fn icon_showcase() -> Element {
                         ),
                         icon_tile(
                             "star",
-                            lucide::icon("star")
-                                .size(24.0)
-                                .color(0xFFF59E0B)
-                                .render(),
+                            lucide::icon("star").size(24.0).color(0xFFF59E0B).render(),
                         ),
                         icon_tile(
                             "settings-2",
@@ -362,6 +396,7 @@ pub(crate) fn select_carousel(page: Signal<i32>, selected: Signal<String>) -> El
         page,
         count,
         fixed_width(shadcn::select(options, selected), 180.0),
+        false,
     )
 }
 
@@ -370,7 +405,10 @@ pub(crate) fn text_carousel(page: Signal<i32>) -> Element {
     let preview = match page.get().clamp(1, count) {
         2 => {
             fn spacer(height: f32) -> Element {
-                arkit::row_component().percent_width(1.0).height(height).into()
+                arkit::row_component()
+                    .percent_width(1.0)
+                    .height(height)
+                    .into()
             }
 
             let content = arkit::column_component()
@@ -461,51 +499,109 @@ pub(crate) fn text_carousel(page: Signal<i32>) -> Element {
             )
         }
         3 => {
-            let lines = vec![
-                h_stack(
-                    vec![
-                        shadcn::text("Default:"),
-                        shadcn::text_with_variant("text-foreground", shadcn::TextVariant::Code),
-                    ],
-                    4.0,
-                ),
-                h_stack(
-                    vec![
-                        shadcn::text("Inherited from Parent:"),
-                        shadcn::text_with_variant(
-                            "text-emerald-500",
-                            shadcn::TextVariant::Code,
-                        ),
-                    ],
-                    4.0,
-                ),
-                h_stack(
-                    vec![
-                        shadcn::text("Overridden:"),
-                        shadcn::text_with_variant("text-purple-500", shadcn::TextVariant::Code),
-                    ],
-                    4.0,
-                ),
-                h_stack(
-                    vec![
-                        shadcn::text("Inherited from NestedParent:"),
-                        shadcn::text_with_variant("text-sky-500", shadcn::TextVariant::Code),
-                    ],
-                    4.0,
-                ),
-            ];
+            fn colored_body(content: impl Into<String>, color: u32) -> Element {
+                arkit::text(content)
+                    .font_size(shadcn::theme::typography::MD)
+                    .style(ArkUINodeAttributeType::FontColor, color)
+                    .style(ArkUINodeAttributeType::TextLineHeight, 24.0)
+                    .into()
+            }
+
+            fn code_chip(content: impl Into<String>, color: u32) -> Element {
+                arkit::row_component()
+                    .background_color(shadcn::theme::color::MUTED)
+                    .style(
+                        ArkUINodeAttributeType::BorderRadius,
+                        vec![
+                            shadcn::theme::radius::SM,
+                            shadcn::theme::radius::SM,
+                            shadcn::theme::radius::SM,
+                            shadcn::theme::radius::SM,
+                        ],
+                    )
+                    .style(ArkUINodeAttributeType::Padding, vec![3.0, 5.0, 3.0, 5.0])
+                    .children(vec![arkit::text(content)
+                        .font_size(shadcn::theme::typography::SM)
+                        .style(ArkUINodeAttributeType::FontFamily, "monospace")
+                        .style(ArkUINodeAttributeType::FontWeight, 5_i32)
+                        .style(ArkUINodeAttributeType::FontColor, color)
+                        .style(ArkUINodeAttributeType::TextLineHeight, 18.0)
+                        .into()])
+                    .into()
+            }
+
+            fn v_stack_center(children: Vec<Element>, gap: f32) -> Element {
+                arkit::column_component()
+                    .style(ArkUINodeAttributeType::ColumnAlignItems, FLEX_ALIGN_CENTER)
+                    .children(
+                        children
+                            .into_iter()
+                            .enumerate()
+                            .map(|(index, child)| {
+                                if index == 0 {
+                                    child
+                                } else {
+                                    arkit::row_component()
+                                        .style(
+                                            ArkUINodeAttributeType::Margin,
+                                            vec![gap, 0.0, 0.0, 0.0],
+                                        )
+                                        .children(vec![child])
+                                        .into()
+                                }
+                            })
+                            .collect::<Vec<_>>(),
+                    )
+                    .into()
+            }
 
             fixed_width(
-                arkit::column_component()
-                    .percent_width(1.0)
-                    .style(ArkUINodeAttributeType::ColumnAlignItems, FLEX_ALIGN_CENTER)
-                    .children(vec![v_stack(lines, 8.0)])
-                    .into(),
+                v_stack_center(
+                    vec![
+                        h_stack(
+                            vec![
+                                shadcn::text("Default:"),
+                                shadcn::text_with_variant(
+                                    "text-foreground",
+                                    shadcn::TextVariant::Code,
+                                ),
+                            ],
+                            4.0,
+                        ),
+                        v_stack_center(
+                            vec![
+                                h_stack(
+                                    vec![
+                                        colored_body("Inherited from Parent:", EMERALD_500),
+                                        code_chip("text-emerald-500", EMERALD_500),
+                                    ],
+                                    4.0,
+                                ),
+                                h_stack(
+                                    vec![
+                                        colored_body("Overridden:", PURPLE_500),
+                                        code_chip("text-purple-500", PURPLE_500),
+                                    ],
+                                    4.0,
+                                ),
+                                h_stack(
+                                    vec![
+                                        colored_body("Inherited from NestedParent:", SKY_500),
+                                        code_chip("text-sky-500", SKY_500),
+                                    ],
+                                    4.0,
+                                ),
+                            ],
+                            8.0,
+                        ),
+                    ],
+                    8.0,
+                ),
                 352.0,
             )
         }
         _ => shadcn::text("Hello, world!"),
     };
 
-    carousel_frame(page, count, preview)
+    carousel_frame(page, count, preview, true)
 }
