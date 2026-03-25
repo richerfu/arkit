@@ -24,7 +24,7 @@
 | Collapsible | 对齐触发器、内容缩进、demo 折叠态 | R2 已细化 | 待设备审计 |
 | Context Menu | 对齐菜单面板、item 内边距/shortcut/inset、submenu、demo 触发区域 | R2 已细化 | 2026-03-25 已重做内容壳层、菜单项排版与 submenu，待设备审计 |
 | Dialog | 对齐遮罩、面板宽度、标题区与 demo | R2 已细化 | 待设备审计 |
-| Dropdown Menu | 对齐菜单项、图标、demo 对齐 | R2 已细化 | 待设备审计 |
+| Dropdown Menu | 对齐菜单壳层、item 点击区/按压态、shortcut、submenu、demo 对齐 | R2 已细化 | 2026-03-25 已重做菜单项命中区与按压态，待设备审计 |
 | Hover Card | 对齐卡片阴影、内容层级、demo 触发区 | R2 已细化 | 待设备审计 |
 | Icon | 对齐图标尺寸栅格、showcase tile demo | R2 已细化 | 待设备审计 |
 | Input | 对齐高度、placeholder 明度、demo 宽度 | R2 已细化 | 待设备审计 |
@@ -35,6 +35,7 @@
 | Radio Group | 对齐圆点尺寸、文本、demo 组间距 | R2 已细化 | 待设备审计 |
 | Select | 对齐 trigger、content、option demo | R2 已细化 | 待设备审计 |
 | Separator | 对齐横竖分隔线粗细、demo 组合布局 | R2 已细化 | 待设备审计 |
+| Showcase Shell | 对齐首页顶部导航、详情页顶栏和列表文字层级 | R2 已细化 | 2026-03-25 已按 reusable showcase 调整 large title / 返回按钮 / 列表文字，待设备审计 |
 | Skeleton | 对齐占位块圆角、明度、demo 结构 | R2 已细化 | 待设备审计 |
 | Switch | 对齐轨道尺寸、阴影、Airplane Mode demo | R2 已细化 | 待设备审计 |
 | Tabs | 对齐 tabs list、trigger、panel demo | R2 已细化 | 待设备审计 |

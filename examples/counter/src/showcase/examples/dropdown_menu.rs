@@ -3,8 +3,10 @@ use super::shared::{top_center_canvas, DemoContext};
 use arkit::prelude::*;
 use arkit_shadcn as shadcn;
 
+#[component]
 pub(crate) fn render(ctx: DemoContext) -> Element {
     let toggle = ctx.toggle_state.clone();
+
     top_center_canvas(
         fixed_width(
             shadcn::dropdown_menu(
@@ -12,54 +14,30 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                     .on_click(move || toggle.update(|open| *open = !*open))
                     .into(),
                 vec![
-                    arkit::column_component()
-                        .style(ArkUINodeAttributeType::Padding, vec![8.0, 8.0, 8.0, 8.0])
-                        .children(vec![shadcn::text_sm_medium("My Account")])
-                        .into(),
-                    shadcn::separator(),
-                    shadcn::dropdown_item("Profile"),
-                    shadcn::dropdown_item("Billing"),
-                    shadcn::dropdown_item("Settings"),
-                    shadcn::dropdown_item("Keyboard shortcuts"),
-                    shadcn::separator(),
+                    shadcn::dropdown_label("My Account"),
+                    shadcn::dropdown_separator(),
+                    shadcn::dropdown_item_with_shortcut("Profile", "⇧⌘P"),
+                    shadcn::dropdown_item_with_shortcut("Billing", "⌘B"),
+                    shadcn::dropdown_item_with_shortcut("Settings", "⌘S"),
+                    shadcn::dropdown_item_with_shortcut("Keyboard shortcuts", "⌘K"),
+                    shadcn::dropdown_separator(),
                     shadcn::dropdown_item("Team"),
-                    shadcn::dropdown_item("Invite users"),
-                    shadcn::dropdown_item("New Team"),
-                    shadcn::separator(),
+                    shadcn::dropdown_submenu(
+                        "Invite users",
+                        vec![
+                            shadcn::dropdown_item("Email"),
+                            shadcn::dropdown_item("Message"),
+                            shadcn::dropdown_separator(),
+                            shadcn::dropdown_item("More..."),
+                        ],
+                    ),
+                    shadcn::dropdown_item_with_shortcut("New Team", "⌘+T"),
+                    shadcn::dropdown_separator(),
                     shadcn::dropdown_item("GitHub"),
                     shadcn::dropdown_item("Support"),
-                    shadcn::disabled_button("API", shadcn::ButtonVariant::Ghost)
-                        .height(36.0)
-                        .style(
-                            ArkUINodeAttributeType::RowJustifyContent,
-                            super::super::layout::FLEX_ALIGN_START,
-                        )
-                        .style(
-                            ArkUINodeAttributeType::Padding,
-                            vec![
-                                8.0,
-                                shadcn::theme::spacing::SM,
-                                8.0,
-                                shadcn::theme::spacing::SM,
-                            ],
-                        )
-                        .style(
-                            ArkUINodeAttributeType::BorderRadius,
-                            vec![
-                                shadcn::theme::radius::SM,
-                                shadcn::theme::radius::SM,
-                                shadcn::theme::radius::SM,
-                                shadcn::theme::radius::SM,
-                            ],
-                        )
-                        .style(ArkUINodeAttributeType::FontWeight, 3_i32)
-                        .style(
-                            ArkUINodeAttributeType::FontColor,
-                            shadcn::theme::color::POPOVER_FOREGROUND,
-                        )
-                        .into(),
-                    shadcn::separator(),
-                    shadcn::dropdown_item_destructive("Log out"),
+                    shadcn::disabled_dropdown_item("API"),
+                    shadcn::dropdown_separator(),
+                    shadcn::dropdown_item_with_shortcut("Log out", "⇧⌘Q"),
                 ],
                 ctx.toggle_state,
             ),
