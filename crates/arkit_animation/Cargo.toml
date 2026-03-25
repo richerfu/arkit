@@ -1,10 +1,9 @@
 [package]
-name = "arkit_shadcn"
+name = "arkit_animation"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
 arkit.workspace = true
-arkit_animation.workspace = true
-arkit_icon.workspace = true
+ohos-hilog-binding.workspace = true

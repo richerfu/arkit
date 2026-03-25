@@ -143,10 +143,7 @@ fn checkbox_impl(label_text: String, checked: Signal<bool>, style: CheckboxStyle
                     ]
                     .into(),
                 )?;
-                node.set_attribute(
-                    ArkUINodeAttributeType::Opacity,
-                    0.0_f32.into(),
-                )
+                node.set_attribute(ArkUINodeAttributeType::Opacity, 0.0_f32.into())
             })
             .style(ArkUINodeAttributeType::CheckboxSelect, checked.get())
             .style(ArkUINodeAttributeType::CheckboxSelectColor, checked_color)
@@ -180,10 +177,7 @@ fn checkbox_impl(label_text: String, checked: Signal<bool>, style: CheckboxStyle
                 ArkUINodeAttributeType::BorderRadius,
                 vec![radius::SM, radius::SM, radius::SM, radius::SM],
             )
-            .style(
-                ArkUINodeAttributeType::Opacity,
-                0.0_f32,
-            )
+            .style(ArkUINodeAttributeType::Opacity, 0.0_f32)
             .style(ArkUINodeAttributeType::Clip, true)
             .width(CHECKBOX_SIZE)
             .height(CHECKBOX_SIZE),
@@ -236,7 +230,9 @@ fn checkbox_impl(label_text: String, checked: Signal<bool>, style: CheckboxStyle
         );
     }
 
-    let mut root = arkit::row_component().align_items_center().children(children);
+    let mut root = arkit::row_component()
+        .align_items_center()
+        .children(children);
     if !disabled {
         let click = checked.clone();
         root = root.on_click(move || click.update(|value| *value = !*value));

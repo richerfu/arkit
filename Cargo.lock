@@ -25,6 +25,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "arkit_animation"
+version = "0.1.0"
+dependencies = [
+ "arkit",
+ "ohos-hilog-binding",
+]
+
+[[package]]
 name = "arkit_derive"
 version = "0.1.0"
 dependencies = [
@@ -51,6 +59,7 @@ name = "arkit_shadcn"
 version = "0.1.0"
 dependencies = [
  "arkit",
+ "arkit_animation",
  "arkit_icon",
 ]
 
@@ -98,11 +107,13 @@ name = "counter"
 version = "0.1.0"
 dependencies = [
  "arkit",
+ "arkit_animation",
  "arkit_icon",
  "arkit_shadcn",
  "napi-build-ohos",
  "napi-derive-ohos",
  "napi-ohos",
+ "ohos-hilogs-sys",
 ]
 
 [[package]]

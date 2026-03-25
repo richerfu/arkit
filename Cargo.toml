@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/arkit",
+    "crates/arkit_animation",
     "crates/arkit_derive",
     "crates/arkit_icon",
     "crates/arkit_router",
@@ -16,6 +17,7 @@ license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
 arkit = { path = "crates/arkit" }
+arkit_animation = { path = "crates/arkit_animation" }
 arkit_derive = { path = "crates/arkit_derive" }
 arkit_icon = { path = "crates/arkit_icon" }
 arkit_router = { path = "crates/arkit_router" }

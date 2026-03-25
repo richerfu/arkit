@@ -184,6 +184,14 @@ pub fn scope(render: impl Fn() -> Element + 'static) -> Element {
     .into()
 }
 
+pub fn keyed_scope(key: impl Into<String>, render: impl Fn() -> Element + 'static) -> Element {
+    ScopeElement {
+        render: Rc::new(render),
+        key: Some(key.into()),
+    }
+    .into()
+}
+
 impl ScopeElement {
     pub fn key(mut self, value: impl Into<String>) -> Self {
         self.key = Some(value.into());
