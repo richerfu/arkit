@@ -22,7 +22,7 @@
 | Card | 对齐圆角、标题层级、表单与 footer demo | R2 已细化 | 待设备审计 |
 | Checkbox | 对齐勾选框尺寸、文本基线、demo 行布局 | R2 已细化 | 待设备审计 |
 | Collapsible | 对齐触发器、内容缩进、demo 折叠态 | R2 已细化 | 待设备审计 |
-| Context Menu | 对齐菜单面板、分组、demo 触发区域 | R2 已细化 | 待设备审计 |
+| Context Menu | 对齐菜单面板、item 内边距/shortcut/inset、submenu、demo 触发区域 | R2 已细化 | 2026-03-25 已重做内容壳层、菜单项排版与 submenu，待设备审计 |
 | Dialog | 对齐遮罩、面板宽度、标题区与 demo | R2 已细化 | 待设备审计 |
 | Dropdown Menu | 对齐菜单项、图标、demo 对齐 | R2 已细化 | 待设备审计 |
 | Hover Card | 对齐卡片阴影、内容层级、demo 触发区 | R2 已细化 | 待设备审计 |

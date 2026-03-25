@@ -3,8 +3,13 @@ use super::shared::{top_center_canvas, DemoContext};
 use arkit::prelude::*;
 use arkit_shadcn as shadcn;
 
+#[component]
 pub(crate) fn render(ctx: DemoContext) -> Element {
     let toggle = ctx.toggle_state.clone();
+    let bookmarks = use_signal(|| false);
+    let full_urls = use_signal(|| false);
+    let people = use_signal(|| String::from("pedro"));
+
     top_center_canvas(
         fixed_width(
             shadcn::context_menu(
@@ -31,57 +36,37 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                         ],
                     )
                     .style(ArkUINodeAttributeType::BorderStyle, 1_i32)
+                    .style(ArkUINodeAttributeType::Clip, true)
                     .on_click(move || toggle.update(|open| *open = !*open))
                     .children(vec![shadcn::text_sm("Long press here")])
                     .into(),
                 vec![
-                    shadcn::dropdown_item("Back"),
-                    shadcn::disabled_button("Forward", shadcn::ButtonVariant::Ghost)
-                        .height(36.0)
-                        .style(
-                            ArkUINodeAttributeType::RowJustifyContent,
-                            super::super::layout::FLEX_ALIGN_START,
-                        )
-                        .style(
-                            ArkUINodeAttributeType::Padding,
-                            vec![
-                                8.0,
-                                shadcn::theme::spacing::SM,
-                                8.0,
-                                shadcn::theme::spacing::SM,
-                            ],
-                        )
-                        .style(
-                            ArkUINodeAttributeType::BorderRadius,
-                            vec![
-                                shadcn::theme::radius::SM,
-                                shadcn::theme::radius::SM,
-                                shadcn::theme::radius::SM,
-                                shadcn::theme::radius::SM,
-                            ],
-                        )
-                        .style(ArkUINodeAttributeType::FontWeight, 3_i32)
-                        .style(
-                            ArkUINodeAttributeType::FontColor,
-                            shadcn::theme::color::POPOVER_FOREGROUND,
-                        )
-                        .into(),
-                    shadcn::dropdown_item("Reload"),
-                    shadcn::dropdown_item("More Tools"),
-                    shadcn::separator(),
-                    shadcn::dropdown_item("Show Bookmarks"),
-                    shadcn::dropdown_item("Show Full URLs"),
-                    shadcn::separator(),
-                    arkit::row_component()
-                        .style(ArkUINodeAttributeType::Padding, vec![8.0, 8.0, 8.0, 32.0])
-                        .children(vec![shadcn::text_sm_medium("People")])
-                        .into(),
-                    shadcn::dropdown_item("Pedro Duarte"),
-                    shadcn::dropdown_item("Colm Tuite"),
+                    shadcn::context_menu_item_inset_with_shortcut("Back", "CMD+["),
+                    shadcn::disabled_context_menu_item_inset_with_shortcut("Forward", "CMD+]"),
+                    shadcn::context_menu_item_inset_with_shortcut("Reload", "CMD+R"),
+                    shadcn::context_menu_submenu_inset(
+                        "More Tools",
+                        vec![
+                            shadcn::context_menu_item("Save Page..."),
+                            shadcn::context_menu_item("Create Shortcut..."),
+                            shadcn::context_menu_item("Name Window..."),
+                            shadcn::context_menu_separator(),
+                            shadcn::context_menu_item("Developer Tools"),
+                            shadcn::context_menu_separator(),
+                            shadcn::context_menu_item_destructive("Delete"),
+                        ],
+                    ),
+                    shadcn::context_menu_separator(),
+                    shadcn::context_menu_checkbox_item("Show Bookmarks", bookmarks),
+                    shadcn::context_menu_checkbox_item("Show Full URLs", full_urls),
+                    shadcn::context_menu_separator(),
+                    shadcn::context_menu_label_inset("People"),
+                    shadcn::context_menu_radio_item("Pedro Duarte", "pedro", people.clone()),
+                    shadcn::context_menu_radio_item("Colm Tuite", "colm", people),
                 ],
                 ctx.toggle_state,
             ),
-            384.0,
+            300.0,
         ),
         [24.0, 24.0, 24.0, 24.0],
         true,
