@@ -18,5 +18,6 @@ napi-derive-ohos = "1.1"
 ohos-arkui-binding = { workspace = true, default-features = false, features = [
     "napi",
 ] }
+ohos-arkui-sys = { path = "/Users/ranger/Desktop/project/ohos-rs/ohos-native-bindings/sys/ohos-arkui-sys", features = ["api-22"] }
 ohos-hilog-binding.workspace = true
 openharmony-ability = { workspace = true }

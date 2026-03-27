@@ -6,9 +6,9 @@ use arkit_shadcn as shadcn;
 #[component]
 pub(crate) fn render(ctx: DemoContext) -> Element {
     let toggle = ctx.toggle_state.clone();
-    let bookmarks = use_signal(|| false);
-    let full_urls = use_signal(|| false);
-    let people = use_signal(|| String::from("pedro"));
+    let bookmarks = create_signal(false);
+    let full_urls = create_signal(false);
+    let people = create_signal(String::from("pedro"));
 
     top_center_canvas(
         fixed_width(

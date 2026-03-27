@@ -12,7 +12,7 @@ pub fn radio_group(options: Vec<String>, selected: Signal<String>) -> Element {
                 .children(vec![
                     shadow_sm(
                         arkit::radio_component()
-                            .style(
+                            .patch_attr(
                                 ArkUINodeAttributeType::RadioChecked,
                                 selected.get() == option,
                             )

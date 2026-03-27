@@ -34,10 +34,9 @@ fn toggle_group_item_surface(
     border_radius: [f32; 4],
 ) -> ButtonElement {
     element
-        .style(ArkUINodeAttributeType::ButtonType, 0_i32)
         .style(ArkUINodeAttributeType::Clip, true)
-        .style(ArkUINodeAttributeType::AlignSelf, 1_i32)
         .style(ArkUINodeAttributeType::BorderStyle, 0_i32)
+        .style(ArkUINodeAttributeType::AlignSelf, 1_i32)
         .style(ArkUINodeAttributeType::BorderRadius, border_radius.to_vec())
         .style(ArkUINodeAttributeType::BorderWidth, border_width.to_vec())
         .style(ArkUINodeAttributeType::BorderColor, vec![color::INPUT])
@@ -45,7 +44,7 @@ fn toggle_group_item_surface(
             ArkUINodeAttributeType::Alignment,
             i32::from(Alignment::Center),
         )
-        .background_color(if active {
+        .patch_background_color(if active {
             color::ACCENT
         } else {
             color::BACKGROUND
@@ -63,7 +62,7 @@ pub fn toggle_group(options: Vec<String>, selected: Signal<String>) -> Element {
             let text = item.clone();
 
             toggle_group_item_surface(
-                arkit::button(item)
+                normal_button(item)
                     .height(40.0)
                     .style(ArkUINodeAttributeType::Padding, vec![8.0, 10.0, 8.0, 10.0])
                     .font_size(typography::SM)
@@ -72,7 +71,7 @@ pub fn toggle_group(options: Vec<String>, selected: Signal<String>) -> Element {
                         ArkUINodeAttributeType::TextAlign,
                         i32::from(TextAlignment::Center),
                     )
-                    .style(
+                    .patch_attr(
                         ArkUINodeAttributeType::FontColor,
                         if active {
                             color::ACCENT_FOREGROUND
@@ -103,7 +102,7 @@ pub fn toggle_group_icons(options: Vec<String>, selected: Signal<String>) -> Ele
             let icon_name = item.clone();
 
             toggle_group_item_surface(
-                arkit::button_component()
+                normal_button_component()
                     .width(40.0)
                     .height(40.0)
                     .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
@@ -138,7 +137,7 @@ pub fn toggle_group_multi(options: Vec<String>, selected: Signal<Vec<String>>) -
             let text = item.clone();
 
             toggle_group_item_surface(
-                arkit::button(item)
+                normal_button(item)
                     .height(40.0)
                     .style(ArkUINodeAttributeType::Padding, vec![8.0, 10.0, 8.0, 10.0])
                     .font_size(typography::SM)
@@ -147,7 +146,7 @@ pub fn toggle_group_multi(options: Vec<String>, selected: Signal<Vec<String>>) -
                         ArkUINodeAttributeType::TextAlign,
                         i32::from(TextAlignment::Center),
                     )
-                    .style(
+                    .patch_attr(
                         ArkUINodeAttributeType::FontColor,
                         if active {
                             color::ACCENT_FOREGROUND
@@ -186,7 +185,7 @@ pub fn toggle_group_icons_multi(options: Vec<String>, selected: Signal<Vec<Strin
             let icon_name = item.clone();
 
             toggle_group_item_surface(
-                arkit::button_component()
+                normal_button_component()
                     .width(40.0)
                     .height(40.0)
                     .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])

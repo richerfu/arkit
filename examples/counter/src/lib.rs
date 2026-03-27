@@ -310,120 +310,120 @@ fn animated_route_layer(
 fn app() -> Element {
     let active_router = use_router();
     let route = RouteSnapshot::from_route(&active_router.current_route());
-    let animations_ready = use_signal(|| false);
-    let base_route = use_signal(|| route.clone());
-    let overlay_route = use_signal(|| None::<RouteOverlay>);
-    let transition_id = use_signal(|| 0_u64);
+    let animations_ready = create_signal(false);
+    let base_route = create_signal(route.clone());
+    let overlay_route = create_signal(None::<RouteOverlay>);
+    let transition_id = create_signal(0_u64);
     let subscription_id = Rc::new(RefCell::new(None::<usize>));
     let previous_route = Rc::new(RefCell::new(route.clone()));
     let previous_stack_len = Rc::new(Cell::new(active_router.stack_len()));
 
-    use_component_lifecycle(
-        {
-            let router = active_router.clone();
+    // Mount: register routes and subscribe to router changes.
+    {
+        let router = active_router.clone();
+        let animations_ready = animations_ready.clone();
+        let base_route = base_route.clone();
+        let overlay_route = overlay_route.clone();
+        let transition_id = transition_id.clone();
+        let subscription_id = subscription_id.clone();
+        let previous_route = previous_route.clone();
+        let previous_stack_len = previous_stack_len.clone();
+
+        let _ = register_route("/");
+        let _ = register_named_route("components", "/components/:name");
+        let id = router.subscribe({
+            let router = router.clone();
             let animations_ready = animations_ready.clone();
             let base_route = base_route.clone();
             let overlay_route = overlay_route.clone();
             let transition_id = transition_id.clone();
-            let subscription_id = subscription_id.clone();
             let previous_route = previous_route.clone();
             let previous_stack_len = previous_stack_len.clone();
-            move || {
-                let _ = register_route("/");
-                let _ = register_named_route("components", "/components/:name");
-                let id = router.subscribe({
-                    let router = router.clone();
-                    let animations_ready = animations_ready.clone();
-                    let base_route = base_route.clone();
-                    let overlay_route = overlay_route.clone();
-                    let transition_id = transition_id.clone();
-                    let previous_route = previous_route.clone();
-                    let previous_stack_len = previous_stack_len.clone();
-                    move |next_route| {
-                        let next_route = RouteSnapshot::from_route(&next_route);
-                        route_log_info(format!(
-                            "route change raw={} path={} pattern={} name_param={:?} slug={:?} stack_len={}",
-                            next_route.raw,
-                            next_route.path,
-                            next_route.pattern,
-                            next_route.name_param,
-                            next_route.slug,
-                            router.stack_len()
-                        ));
+            move |next_route| {
+                let next_route = RouteSnapshot::from_route(&next_route);
+                route_log_info(format!(
+                    "route change raw={} path={} pattern={} name_param={:?} slug={:?} stack_len={}",
+                    next_route.raw,
+                    next_route.path,
+                    next_route.pattern,
+                    next_route.name_param,
+                    next_route.slug,
+                    router.stack_len()
+                ));
 
-                        let next_stack_len = router.stack_len();
-                        let prev_stack_len = previous_stack_len.get();
-                        let prev_route_snapshot = previous_route.borrow().clone();
-                        let direction = if next_stack_len > prev_stack_len {
-                            RouteTransitionDirection::Forward
-                        } else if next_stack_len < prev_stack_len {
-                            RouteTransitionDirection::Backward
-                        } else if next_route.raw != prev_route_snapshot.raw {
-                            RouteTransitionDirection::Replace
-                        } else {
-                            RouteTransitionDirection::None
-                        };
+                let next_stack_len = router.stack_len();
+                let prev_stack_len = previous_stack_len.get();
+                let prev_route_snapshot = previous_route.borrow().clone();
+                let direction = if next_stack_len > prev_stack_len {
+                    RouteTransitionDirection::Forward
+                } else if next_stack_len < prev_stack_len {
+                    RouteTransitionDirection::Backward
+                } else if next_route.raw != prev_route_snapshot.raw {
+                    RouteTransitionDirection::Replace
+                } else {
+                    RouteTransitionDirection::None
+                };
 
-                        previous_stack_len.set(next_stack_len);
-                        *previous_route.borrow_mut() = next_route.clone();
+                previous_stack_len.set(next_stack_len);
+                *previous_route.borrow_mut() = next_route.clone();
 
-                        if !animations_ready.get()
-                            || matches!(direction, RouteTransitionDirection::None)
-                        {
-                            overlay_route.set(None);
-                            base_route.set(next_route);
-                            return;
-                        }
+                if !animations_ready.get()
+                    || matches!(direction, RouteTransitionDirection::None)
+                {
+                    overlay_route.set(None);
+                    base_route.set(next_route);
+                    return;
+                }
 
-                        let next_transition_id = transition_id.get().wrapping_add(1);
-                        transition_id.set(next_transition_id);
+                let next_transition_id = transition_id.get().wrapping_add(1);
+                transition_id.set(next_transition_id);
 
-                        match direction {
-                            RouteTransitionDirection::Forward
-                            | RouteTransitionDirection::Replace => {
-                                base_route.set(prev_route_snapshot.clone());
-                                overlay_route.set(Some(RouteOverlay {
-                                    id: next_transition_id,
-                                    route: next_route.clone(),
-                                    direction,
-                                    mode: RouteLayerMode::Enter,
-                                    settles_to: next_route,
-                                }));
-                            }
-                            RouteTransitionDirection::Backward => {
-                                base_route.set(next_route.clone());
-                                overlay_route.set(Some(RouteOverlay {
-                                    id: next_transition_id,
-                                    route: prev_route_snapshot,
-                                    direction,
-                                    mode: RouteLayerMode::Exit,
-                                    settles_to: next_route,
-                                }));
-                            }
-                            RouteTransitionDirection::None => {
-                                overlay_route.set(None);
-                                base_route.set(next_route);
-                            }
-                        }
+                match direction {
+                    RouteTransitionDirection::Forward
+                    | RouteTransitionDirection::Replace => {
+                        base_route.set(prev_route_snapshot.clone());
+                        overlay_route.set(Some(RouteOverlay {
+                            id: next_transition_id,
+                            route: next_route.clone(),
+                            direction,
+                            mode: RouteLayerMode::Enter,
+                            settles_to: next_route,
+                        }));
                     }
-                });
-                *subscription_id.borrow_mut() = Some(id);
-                let _ = reset_route("/");
-                queue_after_mount(move || {
-                    animations_ready.set(true);
-                });
-            }
-        },
-        {
-            let router = active_router.clone();
-            let subscription_id = subscription_id.clone();
-            move || {
-                if let Some(id) = subscription_id.borrow_mut().take() {
-                    router.unsubscribe(id);
+                    RouteTransitionDirection::Backward => {
+                        base_route.set(next_route.clone());
+                        overlay_route.set(Some(RouteOverlay {
+                            id: next_transition_id,
+                            route: prev_route_snapshot,
+                            direction,
+                            mode: RouteLayerMode::Exit,
+                            settles_to: next_route,
+                        }));
+                    }
+                    RouteTransitionDirection::None => {
+                        overlay_route.set(None);
+                        base_route.set(next_route);
+                    }
                 }
             }
-        },
-    );
+        });
+        *subscription_id.borrow_mut() = Some(id);
+        let _ = reset_route("/");
+        queue_after_mount(move || {
+            animations_ready.set(true);
+        });
+    }
+
+    // Cleanup: unsubscribe from router on disposal.
+    on_cleanup({
+        let router = active_router.clone();
+        let subscription_id = subscription_id.clone();
+        move || {
+            if let Some(id) = subscription_id.borrow_mut().take() {
+                router.unsubscribe(id);
+            }
+        }
+    });
 
     let base = base_route.get();
     let is_transitioning = overlay_route.get().is_some();

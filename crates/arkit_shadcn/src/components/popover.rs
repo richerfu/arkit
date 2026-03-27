@@ -1,4 +1,6 @@
+use super::floating_layer::{floating_panel, FloatingSide};
 use super::*;
+use std::rc::Rc;
 
 const POPOVER_DEFAULT_WIDTH: f32 = 288.0; // Tailwind `w-72`
 
@@ -12,33 +14,27 @@ pub fn popover_with_width(
     open: Signal<bool>,
     width: f32,
 ) -> Element {
-    if !open.get() {
-        return trigger;
-    }
-
-    arkit::column_component()
-        .percent_width(1.0)
-        .align_items_center()
-        .children(vec![
-            panel_surface(
-                arkit::column_component()
-                    .width(width)
-                    .style(
-                        ArkUINodeAttributeType::Padding,
-                        vec![spacing::LG, spacing::LG, spacing::LG, spacing::LG],
-                    )
-                    .children(vec![stack(content, spacing::LG)]),
-            )
-            .into(),
-            arkit::row_component()
+    let dismiss = {
+        let open = open.clone();
+        Rc::new(move || open.set(false))
+    };
+    floating_panel(
+        trigger,
+        panel_surface(
+            arkit::column_component()
+                .width(width)
+                .align_items_start()
                 .style(
-                    ArkUINodeAttributeType::Margin,
-                    vec![spacing::XXS, 0.0, 0.0, 0.0],
+                    ArkUINodeAttributeType::Padding,
+                    vec![spacing::LG, spacing::LG, spacing::LG, spacing::LG],
                 )
-                .children(vec![trigger])
-                .into(),
-        ])
-        .into()
+                .children(vec![stack(content, spacing::LG)]),
+        )
+        .into(),
+        open.get(),
+        FloatingSide::Top,
+        Some(dismiss),
+    )
 }
 
 pub fn popover_card(title: impl Into<String>, body: impl Into<String>) -> Element {

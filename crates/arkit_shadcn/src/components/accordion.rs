@@ -16,7 +16,7 @@ use arkit::ohos_arkui_binding::component::attribute::{
 use arkit::ohos_arkui_binding::types::animation_finish_type::AnimationFinishCallbackType;
 use arkit::ohos_arkui_binding::types::animation_mode::AnimationMode;
 use arkit::ohos_arkui_binding::types::curve::Curve;
-use arkit::{component, queue_after_mount, queue_ui_loop, use_component_lifecycle, use_signal};
+use arkit::{component, create_signal, queue_after_mount, queue_ui_loop};
 use arkit_icon as lucide;
 
 const ACCORDION_TRIGGER_GAP: f32 = spacing::LG;
@@ -540,27 +540,22 @@ fn accordion_item_view(
     on_toggle: AccordionToggleHandler,
     content: Vec<Element>,
 ) -> Element {
-    let mounted = use_signal(|| false);
-    let previous_open = use_signal(|| Rc::new(Cell::new(is_open)));
-    let measured_height = use_signal(|| 0.0_f32);
-    let has_measured_height = use_signal(|| false);
-    let skip_open_animation_once = use_signal(|| false);
+    let mounted = create_signal(false);
+    let previous_open = create_signal(Rc::new(Cell::new(is_open)));
+    let measured_height = create_signal(0.0_f32);
+    let has_measured_height = create_signal(false);
+    let skip_open_animation_once = create_signal(false);
     let previous_target =
-        use_signal(|| Rc::new(RefCell::new(if is_open { None } else { Some(0.0_f32) })));
+        create_signal(Rc::new(RefCell::new(if is_open { None } else { Some(0.0_f32) })));
 
-    use_component_lifecycle(
-        {
-            let mounted = mounted.clone();
-            move || {
-                queue_after_mount(move || {
-                    queue_ui_loop(move || {
-                        mounted.set(true);
-                    });
-                });
-            }
-        },
-        || {},
-    );
+    {
+        let mounted = mounted.clone();
+        queue_after_mount(move || {
+            queue_ui_loop(move || {
+                mounted.set(true);
+            });
+        });
+    }
 
     let did_mount = mounted.get();
     let previous = previous_open.get().get();
@@ -838,7 +833,7 @@ pub fn accordion_item(
 #[component]
 pub fn accordion_root(items: Vec<AccordionItemSpec>, spec: AccordionRootSpec) -> Element {
     let default_value = spec.default_value.clone();
-    let value = use_signal(|| default_value);
+    let value = create_signal(default_value);
     render_root_items(items, value, spec)
 }
 
@@ -856,7 +851,7 @@ pub fn accordion_single(
     collapsible: bool,
     default_value: Option<String>,
 ) -> Element {
-    let open_item = use_signal(|| default_value);
+    let open_item = create_signal(default_value);
     render_single_items(items, open_item, collapsible, None)
 }
 
@@ -871,7 +866,7 @@ pub fn accordion_single_controlled(
 
 #[component]
 pub fn accordion_multiple(items: Vec<AccordionItemSpec>, default_value: Vec<String>) -> Element {
-    let open_items = use_signal(|| default_value);
+    let open_items = create_signal(default_value);
     render_multiple_items(items, open_items, None)
 }
 

@@ -30,12 +30,17 @@ use crate::signal::Signal;
 
 use super::element::{Element, ViewNode};
 
-type Mutator<T> = Box<dyn FnOnce(&mut T) -> ArkUIResult<Option<Cleanup>>>;
+type Effect<T> = Box<dyn FnOnce(&mut T) -> ArkUIResult<Option<Cleanup>>>;
 
 pub struct ComponentElement<T> {
     constructor: fn() -> ArkUIResult<T>,
     key: Option<String>,
-    mutators: Vec<Mutator<T>>,
+    /// Attributes applied once at mount only (Solid-style static setup).
+    init_attrs: Vec<(ArkUINodeAttributeType, ArkUINodeAttributeItem)>,
+    /// Attributes reapplied on every patch when the parent re-renders with new values.
+    patch_attrs: Vec<(ArkUINodeAttributeType, ArkUINodeAttributeItem)>,
+    /// Side effects: events, subscriptions, `native` blocks — run on mount and on each patch.
+    effects: Vec<Effect<T>>,
     children: Vec<Element>,
 }
 
@@ -58,22 +63,22 @@ fn wrap_component<T>(node: ArkUINode) -> T {
     unsafe { std::ptr::read((&*node as *const ArkUINode).cast::<T>()) }
 }
 
-fn wrap_mutator<T>(mutator: impl FnOnce(&mut T) -> ArkUIResult<()> + 'static) -> Mutator<T> {
+fn wrap_effect<T>(mutator: impl FnOnce(&mut T) -> ArkUIResult<()> + 'static) -> Effect<T> {
     Box::new(move |node| {
         mutator(node)?;
         Ok(None)
     })
 }
 
-fn apply_mutators<T>(node: &mut T, mutators: Vec<Mutator<T>>) -> ArkUIResult<Vec<Cleanup>> {
+fn apply_effects<T>(node: &mut T, effects: Vec<Effect<T>>) -> ArkUIResult<Vec<Cleanup>> {
     let mut cleanups = Vec::new();
-    for (index, mutator) in mutators.into_iter().enumerate() {
-        match mutator(node) {
+    for (index, effect) in effects.into_iter().enumerate() {
+        match effect(node) {
             Ok(Some(cleanup)) => cleanups.push(cleanup),
             Ok(None) => {}
             Err(error) => {
                 logging::error(format!(
-                    "component error: failed to apply mutator #{index} on {}: {error}",
+                    "component error: failed to apply effect #{index} on {}: {error}",
                     type_name::<T>()
                 ));
                 run_cleanups(cleanups);
@@ -82,6 +87,21 @@ fn apply_mutators<T>(node: &mut T, mutators: Vec<Mutator<T>>) -> ArkUIResult<Vec
         }
     }
     Ok(cleanups)
+}
+
+fn apply_attr_list<T: ArkUICommonAttribute>(
+    node: &mut T,
+    attrs: Vec<(ArkUINodeAttributeType, ArkUINodeAttributeItem)>,
+    phase: &'static str,
+    component_name: &'static str,
+) {
+    for (attr, value) in attrs {
+        if let Err(error) = node.set_attribute(attr, value) {
+            logging::error(format!(
+                "{phase} error: failed to set attribute {attr:?} on {component_name}: {error}"
+            ));
+        }
+    }
 }
 
 macro_rules! impl_host_component {
@@ -151,7 +171,9 @@ impl<T> ComponentElement<T> {
         Self {
             constructor,
             key: None,
-            mutators: Vec::new(),
+            init_attrs: Vec::new(),
+            patch_attrs: Vec::new(),
+            effects: Vec::new(),
             children: Vec::new(),
         }
     }
@@ -162,7 +184,7 @@ impl<T> ComponentElement<T> {
     }
 
     pub fn with(mut self, mutator: impl FnOnce(&mut T) -> ArkUIResult<()> + 'static) -> Self {
-        self.mutators.push(wrap_mutator(mutator));
+        self.effects.push(wrap_effect(mutator));
         self
     }
 
@@ -173,7 +195,7 @@ impl<T> ComponentElement<T> {
     where
         C: FnOnce() + 'static,
     {
-        self.mutators.push(Box::new(move |node| {
+        self.effects.push(Box::new(move |node| {
             mutator(node).map(|cleanup| Some(Box::new(cleanup) as Cleanup))
         }));
         self
@@ -256,30 +278,33 @@ where
         self
     }
 
+    /// Attribute applied only at mount (not on patch). Use for layout and structure.
     pub fn attr(
         mut self,
         attr: ArkUINodeAttributeType,
         value: impl Into<ArkUINodeAttributeItem>,
     ) -> Self {
-        let value = value.into();
-        self.mutators.push(wrap_mutator::<T>(move |node| {
-            node.set_attribute(attr, value).map_err(|error| {
-                logging::error(format!(
-                    "style error: failed to set attribute {attr:?} on {}: {error}",
-                    type_name::<T>()
-                ));
-                error
-            })
-        }));
+        self.init_attrs.push((attr, value.into()));
         self
     }
 
+    /// Same as [`Self::attr`] — mount-only styling.
     pub fn style(
         self,
         attr: ArkUINodeAttributeType,
         value: impl Into<ArkUINodeAttributeItem>,
     ) -> Self {
         self.attr(attr, value)
+    }
+
+    /// Attribute reapplied on every patch when props may change (parent re-render).
+    pub fn patch_attr(
+        mut self,
+        attr: ArkUINodeAttributeType,
+        value: impl Into<ArkUINodeAttributeItem>,
+    ) -> Self {
+        self.patch_attrs.push((attr, value.into()));
+        self
     }
 
     pub fn constraint_size(
@@ -289,19 +314,10 @@ where
         min_height: f32,
         max_height: f32,
     ) -> Self {
-        self.mutators.push(wrap_mutator::<T>(move |node| {
-            node.set_attribute(
-                ArkUINodeAttributeType::ConstraintSize,
-                vec![min_width, max_width, min_height, max_height].into(),
-            )
-            .map_err(|error| {
-                logging::error(format!(
-                    "style error: failed to set constraint size on {}: {error}",
-                    type_name::<T>()
-                ));
-                error
-            })
-        }));
+        self.init_attrs.push((
+            ArkUINodeAttributeType::ConstraintSize,
+            vec![min_width, max_width, min_height, max_height].into(),
+        ));
         self
     }
 
@@ -310,67 +326,43 @@ where
     }
 
     pub fn width(mut self, value: f32) -> Self {
-        self.mutators.push(wrap_mutator::<T>(move |node| {
-            node.width(value).map_err(|error| {
-                logging::error(format!(
-                    "style error: failed to set width on {}: {error}",
-                    type_name::<T>()
-                ));
-                error
-            })
-        }));
+        self.init_attrs
+            .push((ArkUINodeAttributeType::Width, value.into()));
         self
     }
 
     pub fn height(mut self, value: f32) -> Self {
-        self.mutators.push(wrap_mutator::<T>(move |node| {
-            node.height(value).map_err(|error| {
-                logging::error(format!(
-                    "style error: failed to set height on {}: {error}",
-                    type_name::<T>()
-                ));
-                error
-            })
-        }));
+        self.init_attrs
+            .push((ArkUINodeAttributeType::Height, value.into()));
         self
     }
 
     pub fn percent_width(mut self, value: f32) -> Self {
-        self.mutators.push(wrap_mutator::<T>(move |node| {
-            node.percent_width(value).map_err(|error| {
-                logging::error(format!(
-                    "style error: failed to set percent width on {}: {error}",
-                    type_name::<T>()
-                ));
-                error
-            })
-        }));
+        self.init_attrs
+            .push((ArkUINodeAttributeType::WidthPercent, value.into()));
         self
     }
 
     pub fn percent_height(mut self, value: f32) -> Self {
-        self.mutators.push(wrap_mutator::<T>(move |node| {
-            node.percent_height(value).map_err(|error| {
-                logging::error(format!(
-                    "style error: failed to set percent height on {}: {error}",
-                    type_name::<T>()
-                ));
-                error
-            })
-        }));
+        self.init_attrs
+            .push((ArkUINodeAttributeType::HeightPercent, value.into()));
         self
     }
 
     pub fn background_color(mut self, value: u32) -> Self {
-        self.mutators.push(wrap_mutator::<T>(move |node| {
-            node.background_color(value).map_err(|error| {
-                logging::error(format!(
-                    "style error: failed to set background color on {}: {error}",
-                    type_name::<T>()
-                ));
-                error
-            })
-        }));
+        self.init_attrs.push((
+            ArkUINodeAttributeType::BackgroundColor,
+            value.into(),
+        ));
+        self
+    }
+
+    /// Like [`Self::background_color`] but updates on patch when the value can change.
+    pub fn patch_background_color(mut self, value: u32) -> Self {
+        self.patch_attrs.push((
+            ArkUINodeAttributeType::BackgroundColor,
+            value.into(),
+        ));
         self
     }
 
@@ -378,7 +370,7 @@ where
     where
         T: ArkUIGesture,
     {
-        self.mutators.push(wrap_mutator(mutator));
+        self.effects.push(wrap_effect(mutator));
         self
     }
 }
@@ -388,15 +380,14 @@ where
     T: ArkUICommonFontAttribute + 'static,
 {
     pub fn font_size(mut self, value: f32) -> Self {
-        self.mutators.push(wrap_mutator::<T>(move |node| {
-            node.font_size(value).map_err(|error| {
-                logging::error(format!(
-                    "style error: failed to set font size on {}: {error}",
-                    type_name::<T>()
-                ));
-                error
-            })
-        }));
+        self.init_attrs
+            .push((ArkUINodeAttributeType::FontSize, value.into()));
+        self
+    }
+
+    pub fn patch_font_size(mut self, value: f32) -> Self {
+        self.patch_attrs
+            .push((ArkUINodeAttributeType::FontSize, value.into()));
         self
     }
 }
@@ -406,7 +397,7 @@ where
     T: ArkUIEvent + 'static,
 {
     pub fn on_click(mut self, callback: impl Fn() + 'static) -> Self {
-        self.mutators.push(wrap_mutator::<T>(move |node| {
+        self.effects.push(wrap_effect::<T>(move |node| {
             node.on_click(move || callback());
             Ok(())
         }));
@@ -418,7 +409,7 @@ where
         event_type: NodeEventType,
         callback: impl Fn(&ArkEvent) + 'static,
     ) -> Self {
-        self.mutators.push(wrap_mutator::<T>(move |node| {
+        self.effects.push(wrap_effect::<T>(move |node| {
             node.on_event(event_type, move |event| callback(event));
             Ok(())
         }));
@@ -430,7 +421,7 @@ where
         event_type: NodeEventType,
         callback: impl Fn() + 'static,
     ) -> Self {
-        self.mutators.push(wrap_mutator::<T>(move |node| {
+        self.effects.push(wrap_effect::<T>(move |node| {
             node.on_event_no_param(event_type, move || callback());
             Ok(())
         }));
@@ -442,7 +433,7 @@ where
         event_type: NodeCustomEventType,
         callback: impl Fn(&NodeCustomEvent) + 'static,
     ) -> Self {
-        self.mutators.push(wrap_mutator::<T>(move |node| {
+        self.effects.push(wrap_effect::<T>(move |node| {
             node.on_custom_event(event_type, move |event| callback(event));
             Ok(())
         }));
@@ -450,7 +441,7 @@ where
     }
 
     pub fn on_custom_measure(mut self, callback: impl Fn(&NodeCustomEvent) + 'static) -> Self {
-        self.mutators.push(wrap_mutator::<T>(move |node| {
+        self.effects.push(wrap_effect::<T>(move |node| {
             node.on_custom_measure(move |event| callback(event));
             Ok(())
         }));
@@ -458,7 +449,7 @@ where
     }
 
     pub fn on_custom_layout(mut self, callback: impl Fn(&NodeCustomEvent) + 'static) -> Self {
-        self.mutators.push(wrap_mutator::<T>(move |node| {
+        self.effects.push(wrap_effect::<T>(move |node| {
             node.on_custom_layout(move |event| callback(event));
             Ok(())
         }));
@@ -466,7 +457,7 @@ where
     }
 
     pub fn on_custom_draw(mut self, callback: impl Fn(&NodeCustomEvent) + 'static) -> Self {
-        self.mutators.push(wrap_mutator::<T>(move |node| {
+        self.effects.push(wrap_effect::<T>(move |node| {
             node.on_custom_draw(move |event| callback(event));
             Ok(())
         }));
@@ -477,7 +468,7 @@ where
         mut self,
         callback: impl Fn(&NodeCustomEvent) + 'static,
     ) -> Self {
-        self.mutators.push(wrap_mutator::<T>(move |node| {
+        self.effects.push(wrap_effect::<T>(move |node| {
             node.on_custom_foreground_draw(move |event| callback(event));
             Ok(())
         }));
@@ -485,7 +476,7 @@ where
     }
 
     pub fn on_custom_overlay_draw(mut self, callback: impl Fn(&NodeCustomEvent) + 'static) -> Self {
-        self.mutators.push(wrap_mutator::<T>(move |node| {
+        self.effects.push(wrap_effect::<T>(move |node| {
             node.on_custom_overlay_draw(move |event| callback(event));
             Ok(())
         }));
@@ -530,6 +521,11 @@ where
     Ok(())
 }
 
+/// Key-based child reconciliation aligned with Solid.js / Vue 3 strategy.
+///
+/// Instead of falling back to full rebuild on the first mismatch, this
+/// algorithm uses a (key, kind) map to find reusable old children at any
+/// position, minimizing unnecessary unmount/remount cycles.
 pub(crate) fn reconcile_children<T>(
     parent: &mut T,
     mounted_children: &mut Vec<MountedElement>,
@@ -538,55 +534,196 @@ pub(crate) fn reconcile_children<T>(
 where
     T: ArkUICommonAttribute,
 {
-    let mut next_iter = next_children.into_iter();
-    let mut index = 0;
+    use std::collections::HashMap;
 
-    while index < mounted_children.len() {
-        let Some(next_child) = next_iter.next() else {
-            rebuild_children_tail(parent, mounted_children, index, std::iter::empty())?;
-            return Ok(());
-        };
+    type ChildKey = (TypeId, Option<String>);
 
-        if next_child.kind() != mounted_children[index].kind
-            || next_child.key() != mounted_children[index].key.as_deref()
-        {
-            rebuild_children_tail(
-                parent,
-                mounted_children,
-                index,
-                std::iter::once(next_child).chain(next_iter),
-            )?;
-            return Ok(());
+    fn child_key(m: &MountedElement) -> ChildKey {
+        (m.kind, m.key.clone())
+    }
+
+    fn element_key(e: &Element) -> ChildKey {
+        (e.kind(), e.key().map(str::to_owned))
+    }
+
+    let next_len = next_children.len();
+    let old_len = mounted_children.len();
+
+    if next_len == 0 {
+        rebuild_children_tail(parent, mounted_children, 0, std::iter::empty())?;
+        return Ok(());
+    }
+
+    // Fast path: linear prefix match (identical to previous algorithm for
+    // the common case where children don't reorder).
+    let mut prefix = 0;
+    let next_children: Vec<Element> = next_children.into_iter().collect();
+    while prefix < old_len && prefix < next_len {
+        if element_key(&next_children[prefix]) != child_key(&mounted_children[prefix]) {
+            break;
         }
+        prefix += 1;
+    }
 
-        let child_handle = parent.borrow_mut().children()[index].clone();
+    // Patch the prefix in-place.
+    let mut patched_next: Vec<Option<Element>> = next_children.into_iter().map(Some).collect();
+    for i in 0..prefix {
+        let next_child = patched_next[i].take().unwrap();
+        let child_handle = parent.borrow_mut().children()[i].clone();
         let mut child_node = child_handle.borrow_mut();
-        if let Err(error) = next_child.patch(&mut child_node, &mut mounted_children[index]) {
+        if let Err(error) = next_child.patch(&mut child_node, &mut mounted_children[i]) {
             logging::error(format!(
                 "tree error: failed to patch child {} at index {} under {}: {error}",
-                mounted_children[index].name,
-                index,
+                mounted_children[i].name,
+                i,
                 type_name::<T>()
             ));
             return Err(error);
         }
-        index += 1;
     }
 
-    for child in next_iter {
-        let (child_node, child_meta) = child.mount()?;
-        let mut child_cleanup_node = child_node.clone();
-        if let Err(error) = parent.add_child(child_node) {
+    // Everything matched linearly — handle tail additions/removals.
+    if prefix == old_len && prefix == next_len {
+        return Ok(());
+    }
+
+    if prefix == old_len {
+        for i in prefix..next_len {
+            let next_child = patched_next[i].take().unwrap();
+            let (child_node, child_meta) = next_child.mount()?;
+            let mut child_cleanup_node = child_node.clone();
+            if let Err(error) = parent.add_child(child_node) {
+                logging::error(format!(
+                    "tree error: failed to append child {} to {}: {error}",
+                    child_meta.name,
+                    type_name::<T>()
+                ));
+                let _ = child_cleanup_node.dispose();
+                child_meta.cleanup_recursive();
+                return Err(error);
+            }
+            mounted_children.push(child_meta);
+        }
+        return Ok(());
+    }
+
+    if prefix == next_len {
+        rebuild_children_tail(parent, mounted_children, prefix, std::iter::empty())?;
+        return Ok(());
+    }
+
+    // Build a lookup map for remaining old children by (kind, key).
+    // Tracks available indices so duplicates are handled.
+    let mut old_map: HashMap<ChildKey, Vec<usize>> = HashMap::new();
+    for i in prefix..old_len {
+        old_map
+            .entry(child_key(&mounted_children[i]))
+            .or_default()
+            .push(i);
+    }
+
+    // matched_old[i] = true if old child i was reused.
+    let mut matched_old = vec![false; old_len];
+
+    // Result buffer: new mounted list from `prefix` onward.
+    struct PendingChild {
+        node: ArkUINode,
+        meta: MountedElement,
+    }
+
+    let mut new_children_buf: Vec<PendingChild> = Vec::with_capacity(next_len - prefix);
+
+    for i in prefix..next_len {
+        let next_child = patched_next[i].take().unwrap();
+        let key = element_key(&next_child);
+
+        // Try to find a reusable old child.
+        let reused_idx = old_map
+            .get_mut(&key)
+            .and_then(|indices| indices.pop());
+
+        if let Some(old_idx) = reused_idx {
+            matched_old[old_idx] = true;
+            let child_handle = parent.borrow_mut().children()[old_idx].clone();
+            let mut child_node = child_handle.borrow_mut();
+            if let Err(error) =
+                next_child.patch(&mut child_node, &mut mounted_children[old_idx])
+            {
+                logging::error(format!(
+                    "tree error: failed to patch reused child {} from {} to {} under {}: {error}",
+                    mounted_children[old_idx].name,
+                    old_idx,
+                    i,
+                    type_name::<T>()
+                ));
+                return Err(error);
+            }
+            new_children_buf.push(PendingChild {
+                node: child_node.clone(),
+                meta: MountedElement::new(
+                    mounted_children[old_idx].kind,
+                    mounted_children[old_idx].name,
+                    mounted_children[old_idx].key.clone(),
+                    std::mem::take(&mut mounted_children[old_idx].cleanups),
+                    std::mem::take(&mut mounted_children[old_idx].children),
+                ),
+            });
+            if let Some(state) = mounted_children[old_idx].state.take() {
+                new_children_buf.last_mut().unwrap().meta.set_state(state);
+            }
+        } else {
+            let (child_node, child_meta) = match next_child.mount() {
+                Ok(result) => result,
+                Err(error) => {
+                    logging::error(format!(
+                        "tree error: failed to mount new child at {} under {}: {error}",
+                        i,
+                        type_name::<T>()
+                    ));
+                    return Err(error);
+                }
+            };
+            new_children_buf.push(PendingChild {
+                node: child_node,
+                meta: child_meta,
+            });
+        }
+    }
+
+    // Remove all old children from `prefix` onward (in reverse to keep indices stable).
+    for i in (prefix..old_len).rev() {
+        if let Some(removed) = parent.remove_child(i)? {
+            removed.borrow_mut().dispose()?;
+        }
+        if !matched_old[i] {
+            let old_meta = mounted_children.remove(i);
+            old_meta.cleanup_recursive();
+        } else {
+            mounted_children.remove(i);
+        }
+    }
+
+    // Insert new children starting at `prefix`.
+    for (offset, pending) in new_children_buf.into_iter().enumerate() {
+        let insert_idx = prefix + offset;
+        let mut child_cleanup_node = pending.node.clone();
+        let attach_result = if insert_idx >= parent.borrow_mut().children().len() {
+            parent.add_child(pending.node)
+        } else {
+            parent.insert_child(pending.node, insert_idx)
+        };
+        if let Err(error) = attach_result {
             logging::error(format!(
-                "tree error: failed to append child {} to {}: {error}",
-                child_meta.name,
+                "tree error: failed to insert child {} at {} under {}: {error}",
+                pending.meta.name,
+                insert_idx,
                 type_name::<T>()
             ));
             let _ = child_cleanup_node.dispose();
-            child_meta.cleanup_recursive();
+            pending.meta.cleanup_recursive();
             return Err(error);
         }
-        mounted_children.push(child_meta);
+        mounted_children.insert(insert_idx, pending.meta);
     }
 
     Ok(())
@@ -608,7 +745,9 @@ where
         let Self {
             constructor,
             key,
-            mutators,
+            init_attrs,
+            patch_attrs,
+            effects,
             children,
         } = *self;
 
@@ -619,7 +758,11 @@ where
             ));
             error
         })?;
-        let self_cleanups = match apply_mutators(&mut node, mutators) {
+
+        apply_attr_list(&mut node, init_attrs, "mount", T::name());
+        apply_attr_list(&mut node, patch_attrs, "mount", T::name());
+
+        let self_cleanups = match apply_effects(&mut node, effects) {
             Ok(cleanups) => cleanups,
             Err(error) => {
                 let mut raw: ArkUINode = node.into();
@@ -680,19 +823,23 @@ where
     ) -> ArkUIResult<()> {
         let Self {
             key,
-            mutators,
+            patch_attrs,
+            effects,
             children,
             ..
         } = *self;
 
         let mut typed = T::from_existing(node.clone());
-        let new_cleanups = apply_mutators(&mut typed, mutators).map_err(|error| {
+        apply_attr_list(&mut typed, patch_attrs, "patch", T::name());
+
+        let new_cleanups = apply_effects(&mut typed, effects).map_err(|error| {
             logging::error(format!(
-                "patch error: failed to apply mutators on {}: {error}",
+                "patch error: failed to apply effects on {}: {error}",
                 T::name()
             ));
             error
         })?;
+
         if let Err(error) = reconcile_children(&mut typed, &mut mounted.children, children) {
             logging::error(format!(
                 "patch error: failed to reconcile children for {}: {error}",

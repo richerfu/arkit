@@ -6,7 +6,7 @@ use arkit_shadcn as shadcn;
 
 #[component]
 pub(crate) fn render(_ctx: DemoContext) -> Element {
-    let value = use_signal(|| 13.0_f32);
+    let value = create_signal(13.0_f32);
     let progress = value.clone();
     queue_after_mount(move || progress.set(66.0));
 

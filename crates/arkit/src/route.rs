@@ -4,7 +4,7 @@ use std::rc::Rc;
 use arkit_router::{global_router, replace_global_router};
 pub use arkit_router::{Route, RouteDefinition, RouteError, Router};
 
-use crate::{use_component_lifecycle, use_signal};
+use crate::{create_signal, on_cleanup};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RouteTransitionDirection {
@@ -86,31 +86,29 @@ pub fn use_router() -> Router {
 
 pub fn use_route() -> Route {
     let active_router = router();
-    let route_state = use_signal({
-        let active_router = active_router.clone();
-        move || active_router.current_route()
-    });
+    let route_state = create_signal(active_router.current_route());
 
     let subscription_id = Rc::new(RefCell::new(None::<usize>));
-    let mount_router = active_router.clone();
-    let mount_route_state = route_state.clone();
-    let mount_subscription_id = subscription_id.clone();
-    let unmount_router = active_router.clone();
 
-    use_component_lifecycle(
+    {
+        let router = active_router.clone();
+        let signal = route_state.clone();
+        let sub_id = subscription_id.clone();
+        let id = router.subscribe(move |route| {
+            signal.set(route);
+        });
+        *sub_id.borrow_mut() = Some(id);
+    }
+
+    on_cleanup({
+        let router = active_router.clone();
+        let sub_id = subscription_id.clone();
         move || {
-            let signal = mount_route_state.clone();
-            let id = mount_router.subscribe(move |route| {
-                signal.set(route);
-            });
-            *mount_subscription_id.borrow_mut() = Some(id);
-        },
-        move || {
-            if let Some(id) = subscription_id.borrow_mut().take() {
-                unmount_router.unsubscribe(id);
+            if let Some(id) = sub_id.borrow_mut().take() {
+                router.unsubscribe(id);
             }
-        },
-    );
+        }
+    });
 
     route_state.get()
 }
@@ -119,53 +117,50 @@ pub fn use_route_transition() -> RouteTransition {
     let active_router = router();
     let initial_route = active_router.current_route();
     let initial_stack_len = active_router.stack_len();
-    let transition_state = use_signal({
-        let initial_route = initial_route.clone();
-        move || RouteTransition::new(initial_route, RouteTransitionDirection::None)
-    });
+    let transition_state = create_signal(
+        RouteTransition::new(initial_route.clone(), RouteTransitionDirection::None)
+    );
 
     let subscription_id = Rc::new(RefCell::new(None::<usize>));
     let previous_route = Rc::new(RefCell::new(initial_route));
     let previous_stack_len = Rc::new(RefCell::new(initial_stack_len));
-    let mount_router = active_router.clone();
-    let mount_transition_state = transition_state.clone();
-    let mount_subscription_id = subscription_id.clone();
-    let mount_previous_route = previous_route.clone();
-    let mount_previous_stack_len = previous_stack_len.clone();
-    let unmount_router = active_router.clone();
 
-    use_component_lifecycle(
-        move || {
-            let signal = mount_transition_state.clone();
-            let router = mount_router.clone();
-            let previous_route = mount_previous_route.clone();
-            let previous_stack_len = mount_previous_stack_len.clone();
-            let id = mount_router.subscribe(move |route| {
-                let next_stack_len = router.stack_len();
-                let prev_stack_len = *previous_stack_len.borrow();
-                let prev_route = previous_route.borrow().clone();
-                let direction = if next_stack_len > prev_stack_len {
-                    RouteTransitionDirection::Forward
-                } else if next_stack_len < prev_stack_len {
-                    RouteTransitionDirection::Backward
-                } else if route.raw() != prev_route.raw() {
-                    RouteTransitionDirection::Replace
-                } else {
-                    RouteTransitionDirection::None
-                };
+    {
+        let signal = transition_state.clone();
+        let router = active_router.clone();
+        let sub_id = subscription_id.clone();
+        let previous_route = previous_route.clone();
+        let previous_stack_len = previous_stack_len.clone();
+        let id = active_router.subscribe(move |route| {
+            let next_stack_len = router.stack_len();
+            let prev_stack_len = *previous_stack_len.borrow();
+            let prev_route = previous_route.borrow().clone();
+            let direction = if next_stack_len > prev_stack_len {
+                RouteTransitionDirection::Forward
+            } else if next_stack_len < prev_stack_len {
+                RouteTransitionDirection::Backward
+            } else if route.raw() != prev_route.raw() {
+                RouteTransitionDirection::Replace
+            } else {
+                RouteTransitionDirection::None
+            };
 
-                *previous_stack_len.borrow_mut() = next_stack_len;
-                *previous_route.borrow_mut() = route.clone();
-                signal.set(RouteTransition::new(route, direction));
-            });
-            *mount_subscription_id.borrow_mut() = Some(id);
-        },
+            *previous_stack_len.borrow_mut() = next_stack_len;
+            *previous_route.borrow_mut() = route.clone();
+            signal.set(RouteTransition::new(route, direction));
+        });
+        *sub_id.borrow_mut() = Some(id);
+    }
+
+    on_cleanup({
+        let router = active_router.clone();
+        let sub_id = subscription_id.clone();
         move || {
-            if let Some(id) = subscription_id.borrow_mut().take() {
-                unmount_router.unsubscribe(id);
+            if let Some(id) = sub_id.borrow_mut().take() {
+                router.unsubscribe(id);
             }
-        },
-    );
+        }
+    });
 
     transition_state.get()
 }

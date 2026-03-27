@@ -1,117 +1,18 @@
-use std::any::Any;
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::lifecycle::LifecycleEvent;
+use crate::effect::current_listener;
+use crate::owner::current_owner;
 
-thread_local! {
-    static SCHEDULER: RefCell<Option<Rc<dyn Fn()>>> = RefCell::new(None);
-    static HOOKS: RefCell<Option<Rc<RefCell<HookState>>>> = RefCell::new(None);
-    static LIFECYCLE_OBSERVERS: RefCell<Vec<(usize, Rc<dyn Fn(LifecycleEvent)>)>> = RefCell::new(Vec::new());
-    static LIFECYCLE_NEXT_ID: Cell<usize> = const { Cell::new(1) };
-}
+// ── Signal ──────────────────────────────────────────────────────────────────
 
-pub(crate) fn set_scheduler(scheduler: Option<Rc<dyn Fn()>>) {
-    SCHEDULER.with(|state| {
-        state.replace(scheduler);
-    });
-}
-
-fn notify_scheduler() {
-    SCHEDULER.with(|state| {
-        if let Some(cb) = state.borrow().as_ref() {
-            cb();
-        }
-    });
-}
-
-pub(crate) struct HookState {
-    cursor: usize,
-    slots: Vec<HookSlot>,
-    signal_subscriber: Option<Rc<dyn Fn()>>,
-}
-
-struct ComponentLifecycleHook {
-    on_unmount: Rc<dyn Fn()>,
-}
-
-struct SignalHook {
-    signal: Box<dyn Any>,
-    cleanup: Option<Box<dyn FnOnce()>>,
-}
-
-enum HookSlot {
-    Signal(SignalHook),
-    ComponentLifecycle(ComponentLifecycleHook),
-    LifecycleObserver(usize),
-}
-
-impl HookSlot {
-    fn cleanup(self) {
-        match self {
-            HookSlot::Signal(mut slot) => {
-                if let Some(cleanup) = slot.cleanup.take() {
-                    cleanup();
-                }
-                let _ = slot.signal;
-            }
-            HookSlot::ComponentLifecycle(slot) => {
-                (slot.on_unmount.as_ref())();
-            }
-            HookSlot::LifecycleObserver(id) => {
-                unregister_lifecycle_observer(id);
-            }
-        }
-    }
-}
-
-impl HookState {
-    pub(crate) fn new() -> Self {
-        Self {
-            cursor: 0,
-            slots: Vec::new(),
-            signal_subscriber: None,
-        }
-    }
-
-    pub(crate) fn with_signal_subscriber(signal_subscriber: Rc<dyn Fn()>) -> Self {
-        Self {
-            cursor: 0,
-            slots: Vec::new(),
-            signal_subscriber: Some(signal_subscriber),
-        }
-    }
-
-    pub(crate) fn reset_cursor(&mut self) {
-        self.cursor = 0;
-    }
-
-    pub(crate) fn finalize_render(&mut self) {
-        while self.slots.len() > self.cursor {
-            if let Some(slot) = self.slots.pop() {
-                slot.cleanup();
-            }
-        }
-    }
-
-    pub(crate) fn cleanup_all(&mut self) {
-        self.cursor = 0;
-        while let Some(slot) = self.slots.pop() {
-            slot.cleanup();
-        }
-    }
-}
-
-pub(crate) fn with_hook_state<R>(hooks: Rc<RefCell<HookState>>, f: impl FnOnce() -> R) -> R {
-    HOOKS.with(|state| {
-        let previous = state.replace(Some(hooks));
-        let result = f();
-        state.replace(previous);
-        result
-    })
-}
-
+/// A reactive value. Reading inside a reactive computation (effect/memo)
+/// automatically tracks the dependency. Writing notifies all subscribers.
+///
+/// This is a unified handle (SolidJS provides split read/write; we keep
+/// the unified `Signal<T>` for ergonomic Rust API and add `ReadSignal<T>`
+/// as a read-only view).
 pub struct Signal<T> {
     inner: Rc<RefCell<SignalState<T>>>,
 }
@@ -128,30 +29,33 @@ struct SignalState<T> {
     value: T,
     subscribers: HashMap<usize, Rc<dyn Fn()>>,
     next_subscriber_id: usize,
-    notify_scheduler: bool,
 }
 
-impl<T> Signal<T> {
+impl<T: 'static> Signal<T> {
     pub fn new(value: T) -> Self {
-        Self::new_with_scheduler(value, true)
-    }
-
-    pub(crate) fn new_with_scheduler(value: T, notify_scheduler: bool) -> Self {
         Self {
             inner: Rc::new(RefCell::new(SignalState {
                 value,
                 subscribers: HashMap::new(),
                 next_subscriber_id: 1,
-                notify_scheduler,
             })),
         }
     }
 
+    /// Borrow the value without cloning. **Does** track dependencies.
     pub fn with<R>(&self, f: impl FnOnce(&T) -> R) -> R {
+        self.track();
         let state = self.inner.borrow();
         f(&state.value)
     }
 
+    /// Borrow the value without cloning and **without** tracking.
+    pub fn with_untracked<R>(&self, f: impl FnOnce(&T) -> R) -> R {
+        let state = self.inner.borrow();
+        f(&state.value)
+    }
+
+    /// Set the signal value and notify all subscribers.
     pub fn set(&self, value: T) {
         {
             let mut state = self.inner.borrow_mut();
@@ -160,6 +64,7 @@ impl<T> Signal<T> {
         self.notify();
     }
 
+    /// Mutate the value in-place and notify.
     pub fn update(&self, f: impl FnOnce(&mut T)) {
         {
             let mut state = self.inner.borrow_mut();
@@ -168,6 +73,8 @@ impl<T> Signal<T> {
         self.notify();
     }
 
+    /// Subscribe to changes. Returns a subscription ID for later removal.
+    /// Note: For most cases, `create_effect` with automatic tracking is preferred.
     pub fn subscribe(&self, callback: impl Fn() + 'static) -> usize {
         let mut state = self.inner.borrow_mut();
         let id = state.next_subscriber_id;
@@ -178,160 +85,148 @@ impl<T> Signal<T> {
         id
     }
 
+    /// Remove a subscription.
     pub fn unsubscribe(&self, id: usize) -> bool {
         self.inner.borrow_mut().subscribers.remove(&id).is_some()
     }
 
+    /// Register this signal as a dependency of the current computation.
+    fn track(&self) {
+        if let Some(listener) = current_listener() {
+            let signal = self.clone();
+            let listener_weak = Rc::downgrade(&listener);
+            let sub_id = self.subscribe(move || {
+                if let Some(comp) = listener_weak.upgrade() {
+                    comp.mark_dirty();
+                }
+            });
+            listener.add_source(move || {
+                signal.unsubscribe(sub_id);
+            });
+        }
+    }
+
     fn notify(&self) {
-        let (subscribers, notify_global_scheduler) = {
+        let subscribers = {
             let state = self.inner.borrow();
-            (
-                state.subscribers.values().cloned().collect::<Vec<_>>(),
-                state.notify_scheduler,
-            )
+            state.subscribers.values().cloned().collect::<Vec<_>>()
         };
         for callback in subscribers {
             callback();
         }
-        if notify_global_scheduler {
-            notify_scheduler();
-        }
     }
 }
 
-impl<T: Clone> Signal<T> {
+impl<T: Clone + 'static> Signal<T> {
+    /// Get the signal value by cloning. **Does** track dependencies.
     pub fn get(&self) -> T {
+        self.track();
+        self.inner.borrow().value.clone()
+    }
+
+    /// Get the signal value by cloning **without** tracking.
+    pub fn get_untracked(&self) -> T {
         self.inner.borrow().value.clone()
     }
 }
 
-pub fn signal<T>(value: T) -> Signal<T> {
-    Signal::new(value)
+// ── ReadSignal ──────────────────────────────────────────────────────────────
+
+/// A read-only view of a signal. Cannot be written to directly.
+pub struct ReadSignal<T> {
+    inner: Signal<T>,
 }
 
-pub fn use_signal<T: 'static>(init: impl FnOnce() -> T) -> Signal<T> {
-    HOOKS.with(|hooks_state| {
-        let hooks = hooks_state
-            .borrow()
-            .as_ref()
-            .cloned()
-            .expect("use_signal must be called during arkit render");
-
-        let mut hooks = hooks.borrow_mut();
-        let current = hooks.cursor;
-        hooks.cursor += 1;
-
-        if let Some(slot) = hooks.slots.get(current) {
-            if let HookSlot::Signal(signal_hook) = slot {
-                if let Some(signal) = signal_hook.signal.downcast_ref::<Signal<T>>() {
-                    return signal.clone();
-                }
-            }
-
-            panic!("use_signal hook type mismatch at slot {current}");
+impl<T> Clone for ReadSignal<T> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
         }
-
-        let signal = Signal::new_with_scheduler(init(), hooks.signal_subscriber.is_none());
-        let cleanup = hooks.signal_subscriber.as_ref().map(|subscriber| {
-            let signal_for_cleanup = signal.clone();
-            let subscriber = subscriber.clone();
-            let subscription_id = signal.subscribe(move || subscriber());
-            Box::new(move || {
-                signal_for_cleanup.unsubscribe(subscription_id);
-            }) as Box<dyn FnOnce()>
-        });
-        hooks.slots.push(HookSlot::Signal(SignalHook {
-            signal: Box::new(signal.clone()),
-            cleanup,
-        }));
-        signal
-    })
-}
-
-pub fn use_component_lifecycle(on_mount: impl FnOnce() + 'static, on_unmount: impl Fn() + 'static) {
-    HOOKS.with(|hooks_state| {
-        let hooks = hooks_state
-            .borrow()
-            .as_ref()
-            .cloned()
-            .expect("use_component_lifecycle must be called during arkit render");
-
-        let mut hooks = hooks.borrow_mut();
-        let current = hooks.cursor;
-        hooks.cursor += 1;
-
-        if let Some(slot) = hooks.slots.get(current) {
-            match slot {
-                HookSlot::ComponentLifecycle(_) => return,
-                _ => panic!("use_component_lifecycle hook type mismatch at slot {current}"),
-            }
-        }
-
-        on_mount();
-        hooks
-            .slots
-            .push(HookSlot::ComponentLifecycle(ComponentLifecycleHook {
-                on_unmount: Rc::new(on_unmount),
-            }));
-    });
-}
-
-pub fn use_lifecycle(callback: impl Fn(LifecycleEvent) + 'static) {
-    HOOKS.with(|hooks_state| {
-        let hooks = hooks_state
-            .borrow()
-            .as_ref()
-            .cloned()
-            .expect("use_lifecycle must be called during arkit render");
-
-        let mut hooks = hooks.borrow_mut();
-        let current = hooks.cursor;
-        hooks.cursor += 1;
-
-        if let Some(slot) = hooks.slots.get(current) {
-            match slot {
-                HookSlot::LifecycleObserver(_) => return,
-                _ => panic!("use_lifecycle hook type mismatch at slot {current}"),
-            }
-        }
-
-        let observer: Rc<dyn Fn(LifecycleEvent)> = Rc::new(callback);
-        let observer_id = register_lifecycle_observer(observer);
-        hooks.slots.push(HookSlot::LifecycleObserver(observer_id));
-    });
-}
-
-pub(crate) fn emit_lifecycle_event(event: LifecycleEvent) {
-    let callbacks = LIFECYCLE_OBSERVERS.with(|state| {
-        state
-            .borrow()
-            .iter()
-            .map(|(_, callback)| callback.clone())
-            .collect::<Vec<_>>()
-    });
-
-    for callback in callbacks {
-        callback(event.clone());
     }
 }
 
-fn register_lifecycle_observer(callback: Rc<dyn Fn(LifecycleEvent)>) -> usize {
-    let id = LIFECYCLE_NEXT_ID.with(|next| {
-        let id = next.get();
-        next.set(id + 1);
-        id
-    });
+impl<T: 'static> ReadSignal<T> {
+    pub fn with<R>(&self, f: impl FnOnce(&T) -> R) -> R {
+        self.inner.with(f)
+    }
 
-    LIFECYCLE_OBSERVERS.with(|state| {
-        state.borrow_mut().push((id, callback));
-    });
-
-    id
+    pub fn with_untracked<R>(&self, f: impl FnOnce(&T) -> R) -> R {
+        self.inner.with_untracked(f)
+    }
 }
 
-fn unregister_lifecycle_observer(id: usize) {
-    LIFECYCLE_OBSERVERS.with(|state| {
-        let mut state = state.borrow_mut();
-        state.retain(|(observer_id, _)| *observer_id != id);
-    });
+impl<T: Clone + 'static> ReadSignal<T> {
+    pub fn get(&self) -> T {
+        self.inner.get()
+    }
+
+    pub fn get_untracked(&self) -> T {
+        self.inner.get_untracked()
+    }
 }
+
+impl<T> From<Signal<T>> for ReadSignal<T> {
+    fn from(signal: Signal<T>) -> Self {
+        Self { inner: signal }
+    }
+}
+
+// ── Constructors ────────────────────────────────────────────────────────────
+
+/// Create a new signal. Shorthand for `Signal::new(value)`.
+pub fn signal<T: 'static>(value: T) -> Signal<T> {
+    Signal::new(value)
+}
+
+/// Create a signal and register it on the current owner.
+/// When the owner is disposed, the signal's subscribers are cleared.
+pub fn create_signal<T: 'static>(value: T) -> Signal<T> {
+    let signal = Signal::new(value);
+    if let Some(owner) = current_owner() {
+        let cleanup_signal = signal.clone();
+        owner.on_cleanup(move || {
+            // Clear all subscribers on disposal
+            let mut state = cleanup_signal.inner.borrow_mut();
+            state.subscribers.clear();
+        });
+    }
+    signal
+}
+
+// ── Memo ────────────────────────────────────────────────────────────────────
+
+/// Create a derived reactive computation. Re-computes when dependencies change
+/// and only notifies downstream if the value actually changed.
+///
+/// Aligned with SolidJS `createMemo`.
+pub fn create_memo<T>(compute: impl Fn() -> T + 'static) -> ReadSignal<T>
+where
+    T: Clone + PartialEq + 'static,
+{
+    // Use untrack for initial computation to avoid registering in parent effect
+    let initial = crate::effect::untrack(|| compute());
+    let memo_signal = create_signal(initial);
+
+    let writer = memo_signal.clone();
+    crate::effect::create_effect(move || {
+        let next = compute();
+        let changed = writer.with_untracked(|current| *current != next);
+        if changed {
+            writer.set(next);
+        }
+    });
+
+    memo_signal.into()
+}
+
+/// Backward-compatible overload: create a memo from an explicit source signal.
+pub fn create_memo_on<S, T>(source: &Signal<S>, compute: impl Fn(&S) -> T + 'static) -> ReadSignal<T>
+where
+    S: Clone + 'static,
+    T: Clone + PartialEq + 'static,
+{
+    let source = source.clone();
+    create_memo(move || source.with(|v| compute(v)))
+}
+
+

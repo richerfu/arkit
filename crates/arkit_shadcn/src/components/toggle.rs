@@ -19,10 +19,9 @@ fn toggle_surface(
     shadow: bool,
 ) -> ButtonElement {
     let element = element
-        .style(ArkUINodeAttributeType::ButtonType, 0_i32)
         .style(ArkUINodeAttributeType::Clip, true)
-        .style(ArkUINodeAttributeType::AlignSelf, 1_i32)
         .style(ArkUINodeAttributeType::BorderStyle, 0_i32)
+        .style(ArkUINodeAttributeType::AlignSelf, 1_i32)
         .style(ArkUINodeAttributeType::BorderRadius, border_radius.to_vec())
         .style(ArkUINodeAttributeType::BorderWidth, border_width.to_vec())
         .style(ArkUINodeAttributeType::BorderColor, color_all(border_color))
@@ -30,7 +29,7 @@ fn toggle_surface(
             ArkUINodeAttributeType::Alignment,
             i32::from(Alignment::Center),
         )
-        .background_color(if active {
+        .patch_background_color(if active {
             color::ACCENT
         } else {
             inactive_background
@@ -48,7 +47,7 @@ pub fn toggle(label: impl Into<String>, state: Signal<bool>) -> ButtonElement {
     let next = state.clone();
 
     toggle_surface(
-        arkit::button(label.into())
+        normal_button(label.into())
             .height(40.0)
             .style(ArkUINodeAttributeType::Padding, vec![8.0, 10.0, 8.0, 10.0])
             .font_size(typography::SM)
@@ -57,7 +56,7 @@ pub fn toggle(label: impl Into<String>, state: Signal<bool>) -> ButtonElement {
                 ArkUINodeAttributeType::TextAlign,
                 i32::from(TextAlignment::Center),
             )
-            .style(
+            .patch_attr(
                 ArkUINodeAttributeType::FontColor,
                 if active {
                     color::ACCENT_FOREGROUND
@@ -80,7 +79,7 @@ pub fn toggle_icon(icon_name: impl Into<String>, state: Signal<bool>) -> ButtonE
     let next = state.clone();
 
     toggle_surface(
-        arkit::button_component()
+        normal_button_component()
             .width(40.0)
             .height(40.0)
             .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])

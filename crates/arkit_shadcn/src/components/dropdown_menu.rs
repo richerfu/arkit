@@ -1,9 +1,10 @@
+use super::floating_layer::{floating_panel_aligned, FloatingAlign, FloatingSide};
 use super::*;
 use arkit::ohos_arkui_binding::arkui_input_binding::UIInputAction;
 use arkit::ohos_arkui_binding::common::node::ArkUINode;
 use arkit::ohos_arkui_binding::component::attribute::{ArkUIAttributeBasic, ArkUICommonAttribute};
 use arkit::ohos_arkui_binding::types::text_alignment::TextAlignment;
-use arkit::{component, use_signal};
+use arkit::{component, create_signal};
 use arkit_icon as lucide;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -189,22 +190,18 @@ fn interactive_menu_row(
 }
 
 pub fn dropdown_menu(trigger: Element, items: Vec<Element>, open: Signal<bool>) -> Element {
-    let mut children = vec![trigger];
-
-    if open.get() {
-        children.push(
-            margin_top(
-                arkit::row_component().children(vec![menu_content(items)]),
-                spacing::XXS,
-            )
-            .into(),
-        );
-    }
-
-    arkit::column_component()
-        .align_items_start()
-        .children(children)
-        .into()
+    let dismiss = {
+        let open = open.clone();
+        Rc::new(move || open.set(false))
+    };
+    floating_panel_aligned(
+        trigger,
+        menu_content(items),
+        open.get(),
+        FloatingSide::Bottom,
+        FloatingAlign::Start,
+        Some(dismiss),
+    )
 }
 
 pub fn dropdown_item(title: impl Into<String>) -> Element {
@@ -362,7 +359,7 @@ pub fn dropdown_submenu_with_state(
 
 #[component]
 pub fn dropdown_submenu(title: impl Into<String>, items: Vec<Element>) -> Element {
-    let open = use_signal(|| false);
+    let open = create_signal(false);
     dropdown_submenu_with_state(title, items, open)
 }
 

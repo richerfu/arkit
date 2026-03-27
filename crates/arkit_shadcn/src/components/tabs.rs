@@ -41,7 +41,7 @@ fn tabs_list(tab_labels: Vec<String>, active: Signal<usize>) -> Element {
                     vec![1.0, 1.0, 1.0, 1.0],
                 )
                 .style(ArkUINodeAttributeType::BorderColor, vec![0x00000000])
-                .background_color(if is_active {
+                .patch_background_color(if is_active {
                     color::BACKGROUND
                 } else {
                     0x00000000

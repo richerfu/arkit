@@ -1,5 +1,4 @@
-use std::cell::{Cell, RefCell};
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use napi_ohos::{Error, Result};
@@ -7,23 +6,22 @@ use ohos_arkui_binding::common::error::ArkUIResult;
 use ohos_arkui_binding::common::handle::ArkUIHandle;
 use ohos_arkui_binding::common::node::ArkUINode;
 use ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
-use ohos_arkui_binding::component::built_in_component::Column;
 use ohos_arkui_binding::component::root::RootNode;
 use openharmony_ability::{Event as AbilityEvent, OpenHarmonyApp, OpenHarmonyWaker};
 
-use crate::component::{mount_element, patch_element, MountedElement};
-use crate::lifecycle::from_ability_event;
+use crate::component::{mount_element, MountedElement};
 use crate::logging;
-use crate::signal::{emit_lifecycle_event, set_scheduler, with_hook_state, HookState};
+use crate::owner::{with_owner, Owner};
+use crate::portal::{
+    build_portal_host, set_current_portal_host, with_current_portal_host, PortalHostHandle,
+};
 use crate::view::Element;
 use crate::{column, text};
 
 thread_local! {
-    static RENDERER: RefCell<Option<Rc<dyn Fn()>>> = RefCell::new(None);
     static AFTER_MOUNT_EFFECTS: RefCell<Vec<Box<dyn FnOnce()>>> = RefCell::new(Vec::new());
     static UI_LOOP_EFFECTS: RefCell<Vec<Box<dyn FnOnce()>>> = RefCell::new(Vec::new());
     static UI_WAKER: RefCell<Option<OpenHarmonyWaker>> = RefCell::new(None);
-    static RENDER_REQUESTED: Cell<bool> = const { Cell::new(false) };
     static CURRENT_APP: RefCell<Option<OpenHarmonyApp>> = RefCell::new(None);
 }
 
@@ -34,42 +32,46 @@ pub struct Runtime {
 struct RuntimeInner {
     app: OpenHarmonyApp,
     root: RefCell<RootNode>,
-    render: Box<dyn Fn() -> Element>,
-    hooks: Rc<RefCell<HookState>>,
     mounted: RefCell<Option<MountedApp>>,
-    is_rendering: Cell<bool>,
-    pending_render: Cell<bool>,
+    /// Root owner for the entire application's reactive tree.
+    root_owner: Rc<Owner>,
 }
 
+#[allow(dead_code)]
 struct MountedApp {
     host_root: ArkUINode,
     app_root: MountedElement,
+    portal_host: PortalHostHandle,
 }
 
 impl Runtime {
+    /// Create a new runtime. The render function `render` is called **once** to build
+    /// the initial UI tree. All subsequent updates are driven by reactive signals.
     pub fn new<F>(slot: ArkUIHandle, app: OpenHarmonyApp, render: F) -> Result<Self>
     where
-        F: Fn() -> Element + 'static,
+        F: FnOnce() -> Element + 'static,
     {
+        let root_owner = Owner::new_root();
         let runtime = Self {
             inner: Rc::new(RuntimeInner {
                 app,
                 root: RefCell::new(RootNode::new(slot)),
-                render: Box::new(render),
-                hooks: Rc::new(RefCell::new(HookState::new())),
                 mounted: RefCell::new(None),
-                is_rendering: Cell::new(false),
-                pending_render: Cell::new(false),
+                root_owner: root_owner.clone(),
             }),
         };
 
         logging::init_hilog();
         logging::info("runtime created");
         set_current_app(Some(runtime.inner.app.clone()));
-        runtime.install_renderer();
-        runtime.install_scheduler();
+
+        let waker = runtime.inner.app.create_waker();
+        set_ui_waker(Some(waker));
+
         runtime.install_ability_event_loop();
-        runtime.inner.request_render()?;
+
+        // Render once inside the root owner
+        runtime.inner.mount_root(root_owner, render)?;
 
         Ok(runtime)
     }
@@ -78,159 +80,114 @@ impl Runtime {
         self.inner.app.clone()
     }
 
-    pub fn render(&self) -> Result<()> {
-        self.inner.request_render()
-    }
-
     pub fn unmount(&self) -> Result<()> {
         self.inner.unmount_root()
-    }
-
-    fn install_scheduler(&self) {
-        let waker = self.inner.app.create_waker();
-        set_ui_waker(Some(waker.clone()));
-        set_scheduler(Some(Rc::new(move || {
-            request_render_on_ui_loop(&waker);
-        })));
-    }
-
-    fn install_renderer(&self) {
-        let runtime = Rc::downgrade(&self.inner);
-        set_renderer(Some(Rc::new(move || {
-            if let Some(inner) = runtime.upgrade() {
-                let _ = inner.request_render();
-            }
-        })));
     }
 
     fn install_ability_event_loop(&self) {
         self.inner.app.run_loop(move |event| match event {
             AbilityEvent::UserEvent => {
                 run_ui_loop_effects();
-                if take_render_requested() {
-                    trigger_renderer();
-                }
             }
-            _ => {
-                emit_lifecycle_event(from_ability_event(event));
-            }
+            _ => {}
         });
     }
 }
 
 impl Drop for Runtime {
     fn drop(&mut self) {
-        set_scheduler(None);
-        set_renderer(None);
         set_ui_waker(None);
         set_current_app(None);
         clear_ui_loop_effects();
         clear_after_mount_effects();
-        clear_render_requested();
-        self.inner.hooks.borrow_mut().cleanup_all();
+        // Dispose the root owner — this cleans up all reactive computations,
+        // effects, memos, and context in the entire tree.
+        self.inner.root_owner.dispose();
         let _ = self.unmount();
     }
 }
 
 impl RuntimeInner {
+    /// Mount the application tree. Called once at startup.
+    fn mount_root<F>(&self, root_owner: Rc<Owner>, render: F) -> Result<()>
+    where
+        F: FnOnce() -> Element + 'static,
+    {
+        clear_after_mount_effects();
+
+        // Both building the element tree AND mounting it must happen inside
+        // the root owner scope. Component `mount()` implementations create
+        // reactive computations (effects, signals, child scopes) that require
+        // an active owner.
+        with_owner(root_owner, || {
+            let next_tree = render();
+
+            match self.mount_tree(next_tree) {
+                Ok(()) => {
+                    schedule_after_mount_effects();
+                    Ok(())
+                }
+                Err(error) => {
+                    logging::error(format!("mount failed: {error}"));
+                    clear_after_mount_effects();
+                    self.mount_tree(build_fallback_element(format!("mount failed: {error}")))
+                }
+            }
+        })
+    }
+
     fn unmount_root(&self) -> Result<()> {
         let mounted = self.mounted.borrow_mut().take();
-        let result = map_arkui_result(self.root.borrow_mut().unmount());
         if let Some(mounted) = mounted {
-            mounted.app_root.cleanup_recursive();
-        }
-        result
-    }
-
-    fn request_render(&self) -> Result<()> {
-        if self.is_rendering.get() {
-            self.pending_render.set(true);
-            return Ok(());
-        }
-
-        self.is_rendering.set(true);
-        let result = self.render_once();
-        self.is_rendering.set(false);
-
-        if result.is_ok() && self.pending_render.replace(false) {
-            self.request_render()?;
-        }
-
-        result
-    }
-
-    fn render_once(&self) -> Result<()> {
-        clear_after_mount_effects();
-        let next_tree = match catch_unwind(AssertUnwindSafe(|| {
-            let hooks = self.hooks.clone();
-            hooks.borrow_mut().reset_cursor();
-            with_hook_state(hooks, || (self.render)())
-        })) {
-            Ok(tree) => tree,
-            Err(_) => build_fallback_element("render panic".to_string()),
-        };
-        self.hooks.borrow_mut().finalize_render();
-        if let Err(error) = self.commit_tree(next_tree) {
-            logging::error(format!("commit tree failed: {error}"));
-            clear_after_mount_effects();
-            self.remount_tree(build_fallback_element(format!("commit failed: {error}")))?;
-        }
-        schedule_after_mount_effects();
-        Ok(())
-    }
-
-    fn commit_tree(&self, next_tree: Element) -> Result<()> {
-        let mounted_root = self.mounted.borrow().as_ref().map(|mounted| {
-            (
-                mounted.app_root.kind,
-                mounted.app_root.key.as_deref().map(str::to_owned),
-            )
-        });
-        let next_key = next_tree.key().map(str::to_owned);
-        match mounted_root {
-            None => self.remount_tree(next_tree),
-            Some((kind, key)) if kind == next_tree.kind() && key == next_key => {
-                self.patch_tree(next_tree)
+            if let Err(error) = mounted.portal_host.clear() {
+                logging::error(format!("portal host clear failed during unmount: {error}"));
             }
-            Some(_) => self.remount_tree(next_tree),
+            let result = map_arkui_result(self.root.borrow_mut().unmount());
+            mounted.app_root.cleanup_recursive();
+            set_current_portal_host(None);
+            return result;
         }
+        let result = map_arkui_result(self.root.borrow_mut().unmount());
+        set_current_portal_host(None);
+        result
     }
 
-    fn patch_tree(&self, next_tree: Element) -> Result<()> {
-        let mut mounted = self.mounted.borrow_mut();
-        let mounted = mounted
-            .as_mut()
-            .ok_or_else(|| Error::from_reason("missing mounted app".to_string()))?;
-        let app_handle = mounted
-            .host_root
-            .children()
-            .first()
-            .cloned()
-            .ok_or_else(|| Error::from_reason("host root missing app child".to_string()))?;
-        let mut app_node = app_handle.borrow_mut();
-        map_arkui_result(patch_element(
-            next_tree,
-            &mut app_node,
-            &mut mounted.app_root,
-        ))
-    }
-
-    fn remount_tree(&self, next_tree: Element) -> Result<()> {
-        let (app_node, app_root) = map_arkui_result(mount_element(next_tree))?;
-        let host_root = map_arkui_result(build_host_root(app_node))?;
+    fn mount_tree(&self, tree: Element) -> Result<()> {
+        let (portal_host, portal_root) = map_arkui_result(build_portal_host())?;
+        let (app_node, app_root) =
+            map_arkui_result(with_current_portal_host(portal_host.clone(), || {
+                mount_element(tree)
+            }))?;
+        let host_root = map_arkui_result(build_host_root(app_node, portal_root))?;
 
         let previous = self.mounted.borrow_mut().take();
         let mut root = self.root.borrow_mut();
+        if let Some(previous) = previous.as_ref() {
+            if let Err(error) = previous.portal_host.clear() {
+                logging::error(format!("portal host clear failed during mount: {error}"));
+            }
+        }
         let unmount_result = map_arkui_result(root.unmount());
         if let Some(previous) = previous {
             previous.app_root.cleanup_recursive();
         }
         let _ = unmount_result;
-        map_arkui_result(root.mount(host_root.clone()))?;
+        set_current_portal_host(Some(portal_host.clone()));
+        if let Err(error) = map_arkui_result(root.mount(host_root.clone())) {
+            set_current_portal_host(None);
+            if let Err(clear_error) = portal_host.clear() {
+                logging::error(format!(
+                    "portal host clear failed after mount failure: {clear_error}"
+                ));
+            }
+            app_root.cleanup_recursive();
+            return Err(error);
+        }
 
         self.mounted.borrow_mut().replace(MountedApp {
             host_root,
             app_root,
+            portal_host,
         });
         Ok(())
     }
@@ -243,11 +200,16 @@ fn build_fallback_element(message: String) -> Element {
     ])
 }
 
-fn build_host_root(app_root: ArkUINode) -> ArkUIResult<ArkUINode> {
-    let mut host = Column::new()?;
+fn build_host_root(app_root: ArkUINode, portal_root: ArkUINode) -> ArkUIResult<ArkUINode> {
+    let mut host = crate::ohos_arkui_binding::component::built_in_component::Stack::new()?;
     host.percent_width(1.0)?;
     host.percent_height(1.0)?;
+    host.set_alignment(i32::from(
+        crate::ohos_arkui_binding::types::alignment::Alignment::TopStart,
+    ))?;
+    host.set_clip(false)?;
     host.add_child(app_root)?;
+    host.add_child(portal_root)?;
     Ok(host.into())
 }
 
@@ -257,12 +219,6 @@ fn map_arkui_result<T, E: ToString>(result: std::result::Result<T, E>) -> Result
         logging::error(format!("arkui runtime error: {reason}"));
         Error::from_reason(reason)
     })
-}
-
-fn set_renderer(renderer: Option<Rc<dyn Fn()>>) {
-    RENDERER.with(|state| {
-        state.replace(renderer);
-    });
 }
 
 fn set_current_app(app: Option<OpenHarmonyApp>) {
@@ -276,14 +232,30 @@ pub fn current_app() -> Option<OpenHarmonyApp> {
 }
 
 pub fn queue_after_mount(effect: impl FnOnce() + 'static) {
+    // Capture the current reactive owner so the callback runs in the correct scope.
+    let owner = crate::owner::current_owner();
     AFTER_MOUNT_EFFECTS.with(|state| {
-        state.borrow_mut().push(Box::new(effect));
+        state.borrow_mut().push(Box::new(move || {
+            if let Some(owner) = owner {
+                crate::owner::with_owner(owner, effect);
+            } else {
+                effect();
+            }
+        }));
     });
 }
 
 pub fn queue_ui_loop(effect: impl FnOnce() + 'static) {
+    // Capture the current reactive owner so the callback runs in the correct scope.
+    let owner = crate::owner::current_owner();
     UI_LOOP_EFFECTS.with(|state| {
-        state.borrow_mut().push(Box::new(effect));
+        state.borrow_mut().push(Box::new(move || {
+            if let Some(owner) = owner {
+                crate::owner::with_owner(owner, effect);
+            } else {
+                effect();
+            }
+        }));
     });
     wake_ui_loop();
 }
@@ -294,7 +266,7 @@ fn clear_after_mount_effects() {
     });
 }
 
-fn schedule_after_mount_effects() {
+pub(crate) fn schedule_after_mount_effects() {
     let effects = AFTER_MOUNT_EFFECTS.with(|state| state.replace(Vec::new()));
     if effects.is_empty() {
         return;
@@ -326,35 +298,10 @@ fn set_ui_waker(waker: Option<OpenHarmonyWaker>) {
     });
 }
 
-fn wake_ui_loop() {
+pub(crate) fn wake_ui_loop() {
     UI_WAKER.with(|state| {
         if let Some(waker) = state.borrow().as_ref() {
             waker.wake();
-        }
-    });
-}
-
-fn request_render_on_ui_loop(waker: &OpenHarmonyWaker) {
-    RENDER_REQUESTED.with(|state| {
-        state.set(true);
-    });
-    waker.wake();
-}
-
-fn take_render_requested() -> bool {
-    RENDER_REQUESTED.with(|state| state.replace(false))
-}
-
-fn clear_render_requested() {
-    RENDER_REQUESTED.with(|state| {
-        state.set(false);
-    });
-}
-
-fn trigger_renderer() {
-    RENDERER.with(|state| {
-        if let Some(renderer) = state.borrow().as_ref() {
-            renderer();
         }
     });
 }

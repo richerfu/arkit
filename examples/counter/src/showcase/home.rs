@@ -7,7 +7,7 @@ use super::layout::{component_list_cell, max_width, nav_bar, v_stack};
 #[component]
 pub(crate) fn catalog_home() -> Element {
     arkit::scope(|| {
-        let search = use_signal(String::new);
+        let search = create_signal(String::new());
         let keyword = search.get().to_lowercase();
         let filtered = SHOWCASE_COMPONENTS
             .iter()

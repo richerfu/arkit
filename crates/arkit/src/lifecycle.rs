@@ -57,6 +57,7 @@ impl LifecycleEvent {
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn from_ability_event(event: Event<'_>) -> LifecycleEvent {
     match event {
         Event::WindowCreate => LifecycleEvent::WindowCreate,

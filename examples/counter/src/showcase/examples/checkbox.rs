@@ -5,10 +5,10 @@ use arkit_shadcn as shadcn;
 
 #[component]
 pub(crate) fn render(_ctx: DemoContext) -> Element {
-    let first = use_signal(|| true);
-    let second = use_signal(|| true);
-    let disabled_toggle = use_signal(|| false);
-    let card_toggle = use_signal(|| false);
+    let first = create_signal(true);
+    let second = create_signal(true);
+    let disabled_toggle = create_signal(false);
+    let card_toggle = create_signal(false);
     let card_toggle_click = card_toggle.clone();
 
     component_canvas(

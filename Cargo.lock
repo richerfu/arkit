@@ -20,6 +20,7 @@ dependencies = [
  "napi-derive-ohos",
  "napi-ohos",
  "ohos-arkui-binding 0.1.0",
+ "ohos-arkui-sys 0.0.1",
  "ohos-hilog-binding",
  "openharmony-ability",
 ]
@@ -61,6 +62,8 @@ dependencies = [
  "arkit",
  "arkit_animation",
  "arkit_icon",
+ "ohos-arkui-sys 0.0.1",
+ "ohos-display-binding 0.0.1",
 ]
 
 [[package]]

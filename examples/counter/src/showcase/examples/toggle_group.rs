@@ -5,7 +5,7 @@ use arkit_shadcn as shadcn;
 
 #[component]
 pub(crate) fn render(_ctx: DemoContext) -> Element {
-    let values = use_signal(|| Vec::<String>::new());
+    let values = create_signal(Vec::<String>::new());
 
     component_canvas(
         shadcn::toggle_group_icons_multi(

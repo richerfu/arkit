@@ -2,6 +2,9 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, ItemFn};
 
+/// Mark a function as a component. Currently a no-op marker attribute;
+/// automatic scope wrapping is planned for a future release once a
+/// wrapper-free scope mechanism is available.
 #[proc_macro_attribute]
 pub fn component(_attr: TokenStream, item: TokenStream) -> TokenStream {
     item
@@ -79,8 +82,8 @@ pub fn entry(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
                 RUNTIME.with(|state| -> ::arkit::napi_ohos::Result<()> {
                     let mut runtime_state = state.borrow_mut();
-                    if let Some(runtime) = runtime_state.as_ref() {
-                        runtime.render()?;
+                    if runtime_state.is_some() {
+                        // Already mounted — SolidJS model renders once.
                         Ok(())
                     } else {
                         let runtime = ::arkit::Runtime::new(slot, (*APP).clone(), || #fn_name().into())?;

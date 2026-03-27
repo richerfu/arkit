@@ -5,6 +5,7 @@ mod element;
 pub use components::*;
 pub use core::ComponentElement;
 pub use element::Element;
+pub(crate) use element::ViewNode;
 
 pub mod prelude {
     pub use crate::ohos_arkui_binding::api::node_custom_event::NodeCustomEvent;

@@ -7,7 +7,6 @@ pub fn switch(state: Signal<bool>) -> ToggleElement {
             .watch_signal(state.clone(), move |node, value| {
                 node.set_toggle_value(value)
             })
-            .style(ArkUINodeAttributeType::ToggleValue, state.get())
             .style(ArkUINodeAttributeType::ToggleSelectedColor, color::PRIMARY)
             .style(ArkUINodeAttributeType::ToggleUnselectedColor, color::INPUT)
             .style(

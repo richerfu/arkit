@@ -145,34 +145,7 @@ fn checkbox_impl(label_text: String, checked: Signal<bool>, style: CheckboxStyle
                 )?;
                 node.set_attribute(ArkUINodeAttributeType::Opacity, 0.0_f32.into())
             })
-            .style(ArkUINodeAttributeType::CheckboxSelect, checked.get())
             .style(ArkUINodeAttributeType::CheckboxSelectColor, checked_color)
-            .style(
-                ArkUINodeAttributeType::CheckboxUnselectColor,
-                checkbox_unselect_color(checked.get()),
-            )
-            .style(
-                ArkUINodeAttributeType::CheckboxShape,
-                CHECKBOX_SHAPE_ROUNDED_SQUARE,
-            )
-            .style(ArkUINodeAttributeType::CheckboxMark, checkbox_mark_style())
-            .style(
-                ArkUINodeAttributeType::BackgroundColor,
-                checkbox_background_color(checked.get(), checked_color),
-            )
-            .style(
-                ArkUINodeAttributeType::BorderColor,
-                vec![checkbox_border_color(checked.get(), checked_color)],
-            )
-            .style(
-                ArkUINodeAttributeType::BorderWidth,
-                vec![
-                    checkbox_border_width(checked.get()),
-                    checkbox_border_width(checked.get()),
-                    checkbox_border_width(checked.get()),
-                    checkbox_border_width(checked.get()),
-                ],
-            )
             .style(
                 ArkUINodeAttributeType::BorderRadius,
                 vec![radius::SM, radius::SM, radius::SM, radius::SM],

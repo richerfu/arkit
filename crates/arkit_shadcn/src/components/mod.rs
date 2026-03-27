@@ -32,6 +32,7 @@ mod date_picker;
 mod dialog;
 mod drawer;
 mod dropdown_menu;
+mod floating_layer;
 mod form;
 mod hover_card;
 mod input;
