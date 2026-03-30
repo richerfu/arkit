@@ -2,14 +2,80 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, ItemFn};
 
-/// Mark a function as a component. Currently a no-op marker attribute;
-/// automatic scope wrapping is planned for a future release once a
-/// wrapper-free scope mechanism is available.
+/// Mark a function as a reactive component.
+///
+/// The function body runs **once** inside a child reactive owner scope.
+/// All subsequent updates are driven by reactive signals via effects —
+/// aligned with the SolidJS component model.
+///
+/// ## How it works (for IDE / rust-analyzer)
+///
+/// The macro uses a **rename + wrapper** pattern inspired by Leptos:
+///
+/// 1. The original function is renamed to `__component_{snake_case}`
+///    and marked `#[doc(hidden)]`.
+/// 2. A new wrapper function with the original name is generated;
+///    it enters a reactive scope, calls the renamed body, and returns
+///    a scoped element.
+///
+/// Since the wrapper directly calls the renamed body, rust-analyzer can
+/// trace the full call chain without any `#[allow(dead_code)]` workarounds.
 #[proc_macro_attribute]
 pub fn component(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    item
+    let input = parse_macro_input!(item as ItemFn);
+    let vis = &input.vis;
+    let sig = &input.sig;
+    let attrs = &input.attrs;
+    let body = &input.block;
+    let fn_name = &sig.ident;
+
+    // Rename the original function so we can call it from the wrapper.
+    let body_name = quote::format_ident!("__component_{}", fn_name);
+    let mut body_sig = sig.clone();
+    body_sig.ident = body_name.clone();
+
+    // Collect parameter names so the wrapper can forward them to the renamed body.
+    let param_names: Vec<_> = sig.inputs.iter().map(|arg| {
+        match arg {
+            syn::FnArg::Typed(pat_type) => match &*pat_type.pat {
+                syn::Pat::Ident(ident) => &ident.ident,
+                _ => panic!("unsupported parameter pattern"),
+            },
+            syn::FnArg::Receiver(_) => panic!("#[component] does not support self parameters"),
+        }
+    }).collect();
+
+    let expanded = quote! {
+        #[doc(hidden)]
+        #[allow(non_snake_case)]
+        #(#attrs)*
+        #vis #body_sig {
+            #body
+        }
+
+        #vis #sig {
+            let __arkit_scope_guard = ::arkit::enter_scope();
+            let __arkit_result = #body_name(#(#param_names),*);
+            let __arkit_child_owner = __arkit_scope_guard.exit();
+            ::arkit::scope_owned(__arkit_child_owner, __arkit_result)
+        }
+    };
+
+    expanded.into()
 }
 
+/// Mark a function as the application entry point.
+///
+/// Generates OpenHarmony NAPI bindings (init / render / destroy lifecycle)
+/// that call the entry function. The entry function must take no arguments
+/// and return `Element`.
+///
+/// ## How it works (for IDE / rust-analyzer)
+///
+/// The generated NAPI module is `pub` (with `#[doc(hidden)]`), so its
+/// `render()` function is reachable from the crate root. Since `render()`
+/// calls the user's entry function, rust-analyzer can trace the entire
+/// call chain — no `#[allow(dead_code)]` needed.
 #[proc_macro_attribute]
 pub fn entry(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemFn);
@@ -37,7 +103,8 @@ pub fn entry(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let expanded = quote! {
         #input
 
-        mod __arkit_entry_mod {
+        #[doc(hidden)]
+        pub mod __arkit_entry_mod {
             use super::*;
             use std::cell::RefCell;
             use std::sync::LazyLock;

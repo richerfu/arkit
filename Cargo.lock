@@ -110,7 +110,6 @@ name = "counter"
 version = "0.1.0"
 dependencies = [
  "arkit",
- "arkit_animation",
  "arkit_icon",
  "arkit_shadcn",
  "napi-build-ohos",

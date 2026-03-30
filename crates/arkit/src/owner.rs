@@ -214,3 +214,62 @@ pub(crate) fn with_child_owner<R>(f: impl FnOnce() -> R) -> (R, Rc<Owner>) {
     let result = with_owner(child.clone(), f);
     (result, child)
 }
+
+// ── Scope guard (for component macro) ──────────────────────────────────────────
+
+/// A guard that pushes a new child owner onto the thread-local OWNER stack.
+///
+/// Designed for use by the `#[component]` macro so that the component body
+/// runs **directly** (not inside a closure), giving the LSP full visibility
+/// into parameter references and local bindings.
+///
+/// ```ignore
+/// let guard = enter_scope();
+/// let result = { /* component body — LSP can analyse this */ };
+/// let child_owner = guard.exit();
+/// scope_owned(child_owner, result)
+/// ```
+#[doc(hidden)]
+pub struct ScopeGuard {
+    previous: Option<Rc<Owner>>,
+    child: Rc<Owner>,
+}
+
+/// Push a new child owner onto the OWNER stack, returning a guard.
+/// The guard MUST be paired with `.exit()` — dropping without calling
+/// `.exit()` will restore the previous owner as a safety measure.
+#[doc(hidden)]
+pub fn enter_scope() -> ScopeGuard {
+    let parent =
+        current_owner().expect("enter_scope called outside of reactive scope");
+    let child = Owner::new_child(&parent);
+    let previous = OWNER.with(|o| o.replace(Some(child.clone())));
+    ScopeGuard {
+        previous,
+        child,
+    }
+}
+
+impl ScopeGuard {
+    /// Pop the child owner off the stack, restoring the previous owner.
+    /// Returns the child `Rc<Owner>` for use by downstream APIs (e.g. `scope_owned`).
+    pub fn exit(mut self) -> Rc<Owner> {
+        // Manually destructure to avoid E0509 (cannot move out of Drop type).
+        let previous = std::mem::replace(&mut self.previous, None);
+        let child = self.child.clone();
+        OWNER.with(|o| o.replace(previous));
+        // Prevent Drop from running — we already restored the owner.
+        std::mem::forget(self);
+        child
+    }
+}
+
+impl Drop for ScopeGuard {
+    fn drop(&mut self) {
+        // Safety net: if exit() was never called (e.g. due to panic),
+        // restore the previous owner to avoid leaving a stale child as current.
+        if let Some(previous) = self.previous.take() {
+            OWNER.with(|o| o.replace(Some(previous)));
+        }
+    }
+}

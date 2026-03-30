@@ -255,7 +255,7 @@ impl<T: 'static, K: Eq + std::hash::Hash + Clone + 'static> ViewNode for ForElem
 
             // Build new elements for items that don't exist yet (must happen in
             // the reactive context so with_child_owner has the right parent).
-            let current_keys: Vec<K> = effect_state
+            let current_keys: std::collections::HashSet<K> = effect_state
                 .entries
                 .borrow()
                 .iter()

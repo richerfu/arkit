@@ -39,7 +39,11 @@ pub struct ComponentElement<T> {
     init_attrs: Vec<(ArkUINodeAttributeType, ArkUINodeAttributeItem)>,
     /// Attributes reapplied on every patch when the parent re-renders with new values.
     patch_attrs: Vec<(ArkUINodeAttributeType, ArkUINodeAttributeItem)>,
-    /// Side effects: events, subscriptions, `native` blocks — run on mount and on each patch.
+    /// Side effects that run on mount only: event handlers, gestures, native blocks,
+    /// reactive signal watchers. In the SolidJS model these are set up once and never
+    /// re-run because updates are driven by reactive effects, not re-rendering.
+    mount_effects: Vec<Effect<T>>,
+    /// Side effects that run on both mount AND patch (reserved for future use).
     effects: Vec<Effect<T>>,
     children: Vec<Element>,
 }
@@ -173,6 +177,7 @@ impl<T> ComponentElement<T> {
             key: None,
             init_attrs: Vec::new(),
             patch_attrs: Vec::new(),
+            mount_effects: Vec::new(),
             effects: Vec::new(),
             children: Vec::new(),
         }
@@ -184,7 +189,7 @@ impl<T> ComponentElement<T> {
     }
 
     pub fn with(mut self, mutator: impl FnOnce(&mut T) -> ArkUIResult<()> + 'static) -> Self {
-        self.effects.push(wrap_effect(mutator));
+        self.mount_effects.push(wrap_effect(mutator));
         self
     }
 
@@ -195,7 +200,7 @@ impl<T> ComponentElement<T> {
     where
         C: FnOnce() + 'static,
     {
-        self.effects.push(Box::new(move |node| {
+        self.mount_effects.push(Box::new(move |node| {
             mutator(node).map(|cleanup| Some(Box::new(cleanup) as Cleanup))
         }));
         self
@@ -222,7 +227,7 @@ where
 {
     #[allow(private_bounds)]
     pub fn watch_signal<S>(
-        self,
+        mut self,
         signal: Signal<S>,
         apply: impl Fn(&mut T, S) -> ArkUIResult<()> + 'static,
     ) -> Self
@@ -231,41 +236,36 @@ where
         T: HostComponent,
     {
         let apply = std::rc::Rc::new(apply);
-        self.native_with_cleanup(move |node| {
-            if let Err(error) = apply(node, signal.get()) {
-                logging::error(format!(
-                    "signal error: initial watch apply failed on {}: {error}",
-                    T::name()
-                ));
-                return Err(error);
-            }
-
-            let subscription_node =
+        self.mount_effects.push(Box::new(move |node| {
+            let node_handle =
                 std::rc::Rc::new(std::cell::RefCell::new(node.borrow_mut().clone()));
-            let subscription_signal = signal.clone();
-            let subscription_apply = apply.clone();
-            let subscription_node_clone = subscription_node.clone();
-            let subscription_id = signal.subscribe(move || {
-                let value = subscription_signal.get();
-                let raw_node = { subscription_node_clone.borrow().clone() };
-                let mut typed = T::from_existing(raw_node);
-                match subscription_apply(&mut typed, value) {
+
+            // create_effect runs the closure immediately (initial apply) and
+            // re-runs whenever the tracked signal changes. This unifies
+            // watch_signal with the reactive system: batch() works, Owner
+            // cleanup works, and dependency tracking is automatic.
+            let effect_node = node_handle;
+            let effect_apply = apply;
+            crate::effect::create_effect(move || {
+                let value = signal.get();
+                let raw = effect_node.borrow().clone();
+                let mut typed = T::from_existing(raw);
+                match effect_apply(&mut typed, value) {
                     Ok(()) => {
-                        *subscription_node_clone.borrow_mut() = typed.into();
+                        *effect_node.borrow_mut() = typed.into();
                     }
                     Err(error) => {
                         logging::error(format!(
-                            "signal error: subscription apply failed on {}: {error}",
+                            "signal error: effect apply failed on {}: {error}",
                             T::name()
                         ));
                     }
                 }
             });
 
-            Ok(move || {
-                signal.unsubscribe(subscription_id);
-            })
-        })
+            Ok(None)
+        }));
+        self
     }
 
     pub fn child(mut self, child: impl Into<Element>) -> Self {
@@ -370,7 +370,7 @@ where
     where
         T: ArkUIGesture,
     {
-        self.effects.push(wrap_effect(mutator));
+        self.mount_effects.push(wrap_effect(mutator));
         self
     }
 }
@@ -397,7 +397,7 @@ where
     T: ArkUIEvent + 'static,
 {
     pub fn on_click(mut self, callback: impl Fn() + 'static) -> Self {
-        self.effects.push(wrap_effect::<T>(move |node| {
+        self.mount_effects.push(wrap_effect::<T>(move |node| {
             node.on_click(move || callback());
             Ok(())
         }));
@@ -409,7 +409,7 @@ where
         event_type: NodeEventType,
         callback: impl Fn(&ArkEvent) + 'static,
     ) -> Self {
-        self.effects.push(wrap_effect::<T>(move |node| {
+        self.mount_effects.push(wrap_effect::<T>(move |node| {
             node.on_event(event_type, move |event| callback(event));
             Ok(())
         }));
@@ -421,7 +421,7 @@ where
         event_type: NodeEventType,
         callback: impl Fn() + 'static,
     ) -> Self {
-        self.effects.push(wrap_effect::<T>(move |node| {
+        self.mount_effects.push(wrap_effect::<T>(move |node| {
             node.on_event_no_param(event_type, move || callback());
             Ok(())
         }));
@@ -433,7 +433,7 @@ where
         event_type: NodeCustomEventType,
         callback: impl Fn(&NodeCustomEvent) + 'static,
     ) -> Self {
-        self.effects.push(wrap_effect::<T>(move |node| {
+        self.mount_effects.push(wrap_effect::<T>(move |node| {
             node.on_custom_event(event_type, move |event| callback(event));
             Ok(())
         }));
@@ -441,7 +441,7 @@ where
     }
 
     pub fn on_custom_measure(mut self, callback: impl Fn(&NodeCustomEvent) + 'static) -> Self {
-        self.effects.push(wrap_effect::<T>(move |node| {
+        self.mount_effects.push(wrap_effect::<T>(move |node| {
             node.on_custom_measure(move |event| callback(event));
             Ok(())
         }));
@@ -449,7 +449,7 @@ where
     }
 
     pub fn on_custom_layout(mut self, callback: impl Fn(&NodeCustomEvent) + 'static) -> Self {
-        self.effects.push(wrap_effect::<T>(move |node| {
+        self.mount_effects.push(wrap_effect::<T>(move |node| {
             node.on_custom_layout(move |event| callback(event));
             Ok(())
         }));
@@ -457,7 +457,7 @@ where
     }
 
     pub fn on_custom_draw(mut self, callback: impl Fn(&NodeCustomEvent) + 'static) -> Self {
-        self.effects.push(wrap_effect::<T>(move |node| {
+        self.mount_effects.push(wrap_effect::<T>(move |node| {
             node.on_custom_draw(move |event| callback(event));
             Ok(())
         }));
@@ -468,7 +468,7 @@ where
         mut self,
         callback: impl Fn(&NodeCustomEvent) + 'static,
     ) -> Self {
-        self.effects.push(wrap_effect::<T>(move |node| {
+        self.mount_effects.push(wrap_effect::<T>(move |node| {
             node.on_custom_foreground_draw(move |event| callback(event));
             Ok(())
         }));
@@ -476,7 +476,7 @@ where
     }
 
     pub fn on_custom_overlay_draw(mut self, callback: impl Fn(&NodeCustomEvent) + 'static) -> Self {
-        self.effects.push(wrap_effect::<T>(move |node| {
+        self.mount_effects.push(wrap_effect::<T>(move |node| {
             node.on_custom_overlay_draw(move |event| callback(event));
             Ok(())
         }));
@@ -691,14 +691,21 @@ where
     }
 
     // Remove all old children from `prefix` onward (in reverse to keep indices stable).
+    // Only dispose unmatched children — matched ones will be re-inserted.
     for i in (prefix..old_len).rev() {
-        if let Some(removed) = parent.remove_child(i)? {
-            removed.borrow_mut().dispose()?;
-        }
+        let removed = parent.remove_child(i)?;
         if !matched_old[i] {
+            // Unmatched: dispose the native node and clean up metadata
+            if let Some(removed) = removed {
+                removed.borrow_mut().dispose()?;
+            }
             let old_meta = mounted_children.remove(i);
             old_meta.cleanup_recursive();
         } else {
+            // Matched: keep the node alive (it's referenced by new_children_buf
+            // and will be re-inserted at its new position below).
+            // Drop the removed handle without disposing the underlying node.
+            drop(removed);
             mounted_children.remove(i);
         }
     }
@@ -747,6 +754,7 @@ where
             key,
             init_attrs,
             patch_attrs,
+            mount_effects,
             effects,
             children,
         } = *self;
@@ -762,7 +770,8 @@ where
         apply_attr_list(&mut node, init_attrs, "mount", T::name());
         apply_attr_list(&mut node, patch_attrs, "mount", T::name());
 
-        let self_cleanups = match apply_effects(&mut node, effects) {
+        // Mount-only effects (event handlers, gestures, signal watchers, etc.)
+        let mut self_cleanups = match apply_effects(&mut node, mount_effects) {
             Ok(cleanups) => cleanups,
             Err(error) => {
                 let mut raw: ArkUINode = node.into();
@@ -770,6 +779,17 @@ where
                 return Err(error);
             }
         };
+
+        // Persistent effects (reserved for future use — currently empty in practice)
+        match apply_effects(&mut node, effects) {
+            Ok(cleanups) => self_cleanups.extend(cleanups),
+            Err(error) => {
+                let mut raw: ArkUINode = node.into();
+                let _ = raw.dispose();
+                run_cleanups(self_cleanups);
+                return Err(error);
+            }
+        }
 
         let mut mounted_children: Vec<MountedElement> = Vec::with_capacity(children.len());
         for child in children {
@@ -824,6 +844,7 @@ where
         let Self {
             key,
             patch_attrs,
+            mount_effects: _, // mount-only — skip on patch
             effects,
             children,
             ..

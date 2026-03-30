@@ -4,11 +4,39 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::rc::Rc;
 
+/// Describes the route transition event with from/to routes and direction.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RouteTransitionEvent {
+    from: Route,
+    to: Route,
+    direction: RouteTransitionDirection,
+}
+
+/// Direction of a route transition.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RouteTransitionDirection {
+    None,
+    Forward,
+    Backward,
+    Replace,
+}
+
+impl RouteTransitionEvent {
+    pub fn new(from: Route, to: Route, direction: RouteTransitionDirection) -> Self {
+        Self { from, to, direction }
+    }
+
+    pub fn from(&self) -> &Route { &self.from }
+    pub fn to(&self) -> &Route { &self.to }
+    pub fn direction(&self) -> RouteTransitionDirection { self.direction }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RouteError {
     EmptyPath,
     InvalidPattern(String),
     UnknownRoute(String),
+    GuardBlocked(String),
 }
 
 impl Display for RouteError {
@@ -19,6 +47,7 @@ impl Display for RouteError {
                 write!(f, "invalid route pattern: {pattern}")
             }
             RouteError::UnknownRoute(path) => write!(f, "route is not registered: {path}"),
+            RouteError::GuardBlocked(reason) => write!(f, "navigation blocked: {reason}"),
         }
     }
 }
@@ -107,9 +136,15 @@ pub struct Router {
 
 struct RouterInner {
     definitions: RefCell<Vec<RouteRecord>>,
+    fallback: RefCell<Option<RouteRecord>>,
+    route_trees: RefCell<Vec<RouteTreeNode>>,
     stack: RefCell<Vec<Route>>,
     observers: RefCell<Vec<(usize, Rc<dyn Fn(Route)>)>>,
     next_observer_id: Cell<usize>,
+    transition_observers: RefCell<Vec<(usize, Rc<dyn Fn(RouteTransitionEvent)>)>>,
+    next_transition_observer_id: Cell<usize>,
+    guards: RefCell<Vec<(usize, Rc<dyn Fn(&str) -> Option<String>>)>>,
+    next_guard_id: Cell<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -140,9 +175,15 @@ impl Router {
         Ok(Self {
             inner: Rc::new(RouterInner {
                 definitions: RefCell::new(Vec::new()),
+                fallback: RefCell::new(None),
+                route_trees: RefCell::new(Vec::new()),
                 stack: RefCell::new(vec![route]),
                 observers: RefCell::new(Vec::new()),
                 next_observer_id: Cell::new(1),
+                transition_observers: RefCell::new(Vec::new()),
+                next_transition_observer_id: Cell::new(1),
+                guards: RefCell::new(Vec::new()),
+                next_guard_id: Cell::new(1),
             }),
         })
     }
@@ -181,6 +222,53 @@ impl Router {
             .collect()
     }
 
+    /// Register a fallback route that matches when no registered pattern matches.
+    /// The pattern must contain a wildcard segment (e.g., `"*404"` or `"/*rest"`).
+    pub fn register_fallback(&self, pattern: impl Into<String>) -> Result<(), RouteError> {
+        let pattern = normalize_path(pattern.into())?;
+        let segments = parse_pattern_segments(&pattern)?;
+        *self.inner.fallback.borrow_mut() = Some(RouteRecord {
+            pattern,
+            name: Some("__fallback__".to_string()),
+            segments,
+        });
+        Ok(())
+    }
+
+    /// Register a nested route tree. Returns an error if any pattern is invalid.
+    pub fn register_tree(&self, root: RouteNode) -> Result<(), RouteError> {
+        let tree = RouteTreeNode::from_route_node(root)?;
+        self.inner.route_trees.borrow_mut().push(tree);
+        Ok(())
+    }
+
+    /// Resolve a path against registered nested route trees.
+    /// Returns `Ok(ResolvedRoute)` with segments from root to leaf if a tree matches,
+    /// or `Err(RouteError::UnknownRoute)` if no tree matches.
+    pub fn resolve_nested(&self, raw_path: impl Into<String>) -> Result<ResolvedRoute, RouteError> {
+        let raw_path = raw_path.into();
+        let (path, query) = split_raw_path(&raw_path)?;
+        let path_segs = path_segments(&path);
+        let trees = self.inner.route_trees.borrow();
+
+        if trees.is_empty() {
+            return Err(RouteError::UnknownRoute(raw_path));
+        }
+
+        for tree in trees.iter() {
+            if let Some(segments) = resolve_tree(tree, &path_segs) {
+                return Ok(ResolvedRoute {
+                    raw: join_raw_path(&path, &query),
+                    path,
+                    query,
+                    segments,
+                });
+            }
+        }
+
+        Err(RouteError::UnknownRoute(raw_path))
+    }
+
     pub fn is_registered(&self, pattern: &str) -> bool {
         let Ok(pattern) = normalize_path(pattern.to_string()) else {
             return false;
@@ -209,20 +297,53 @@ impl Router {
         }
 
         let path_segments = path_segments(&path);
+        let mut best_match: Option<(Vec<u8>, Route)> = None;
+
         for record in records.iter() {
             if let Some(params) = match_segments(&record.segments, &path_segments) {
-                return Ok(Route {
-                    raw: join_raw_path(&path, &query),
-                    path: path.clone(),
-                    pattern: record.pattern.clone(),
-                    name: record.name.clone(),
-                    params,
-                    query,
-                });
+                let spec = route_specificity(&record.segments);
+                let is_better = match &best_match {
+                    None => true,
+                    Some((existing_spec, _)) => spec > *existing_spec,
+                };
+                if is_better {
+                    best_match = Some((
+                        spec,
+                        Route {
+                            raw: join_raw_path(&path, &query),
+                            path: path.clone(),
+                            pattern: record.pattern.clone(),
+                            name: record.name.clone(),
+                            params,
+                            query: query.clone(),
+                        },
+                    ));
+                }
             }
         }
 
-        Err(RouteError::UnknownRoute(raw_path))
+        // If no registered pattern matched, try the fallback.
+        if best_match.is_none() {
+            if let Some(fallback) = self.inner.fallback.borrow().as_ref() {
+                if let Some(params) = match_segments(&fallback.segments, &path_segments) {
+                    best_match = Some((
+                        route_specificity(&fallback.segments),
+                        Route {
+                            raw: join_raw_path(&path, &query),
+                            path: path.clone(),
+                            pattern: fallback.pattern.clone(),
+                            name: fallback.name.clone(),
+                            params,
+                            query: query.clone(),
+                        },
+                    ));
+                }
+            }
+        }
+
+        best_match
+            .map(|(_, route)| route)
+            .ok_or(RouteError::UnknownRoute(raw_path))
     }
 
     pub fn current_route(&self) -> Route {
@@ -251,14 +372,26 @@ impl Router {
     }
 
     pub fn push(&self, raw_path: impl Into<String>) -> Result<Route, RouteError> {
-        let route = self.resolve(raw_path)?;
+        let raw_path = raw_path.into();
+        self.run_guards(&raw_path)?;
+        let route = self.resolve(&raw_path)?;
+        let prev = self.current_route();
+        let prev_len = self.stack_len();
         self.inner.stack.borrow_mut().push(route.clone());
         self.notify(route.clone());
+        self.notify_transition(RouteTransitionEvent::new(
+            prev,
+            route.clone(),
+            RouteTransitionDirection::Forward,
+        ));
         Ok(route)
     }
 
     pub fn replace(&self, raw_path: impl Into<String>) -> Result<Route, RouteError> {
-        let route = self.resolve(raw_path)?;
+        let raw_path = raw_path.into();
+        self.run_guards(&raw_path)?;
+        let route = self.resolve(&raw_path)?;
+        let prev = self.current_route();
         let mut stack = self.inner.stack.borrow_mut();
         if let Some(last) = stack.last_mut() {
             *last = route.clone();
@@ -267,20 +400,34 @@ impl Router {
         }
         drop(stack);
         self.notify(route.clone());
+        self.notify_transition(RouteTransitionEvent::new(
+            prev,
+            route.clone(),
+            RouteTransitionDirection::Replace,
+        ));
         Ok(route)
     }
 
     pub fn reset(&self, raw_path: impl Into<String>) -> Result<Route, RouteError> {
-        let route = self.resolve(raw_path)?;
+        let raw_path = raw_path.into();
+        self.run_guards(&raw_path)?;
+        let route = self.resolve(&raw_path)?;
+        let prev = self.current_route();
         let mut stack = self.inner.stack.borrow_mut();
         stack.clear();
         stack.push(route.clone());
         drop(stack);
         self.notify(route.clone());
+        self.notify_transition(RouteTransitionEvent::new(
+            prev,
+            route.clone(),
+            RouteTransitionDirection::Replace,
+        ));
         Ok(route)
     }
 
     pub fn back(&self) -> bool {
+        let prev = self.current_route();
         let mut stack = self.inner.stack.borrow_mut();
         if stack.len() <= 1 {
             return false;
@@ -291,7 +438,12 @@ impl Router {
             .cloned()
             .expect("router stack always has at least one route after pop");
         drop(stack);
-        self.notify(current);
+        self.notify(current.clone());
+        self.notify_transition(RouteTransitionEvent::new(
+            prev,
+            current,
+            RouteTransitionDirection::Backward,
+        ));
         true
     }
 
@@ -340,6 +492,235 @@ impl Router {
         for callback in callbacks {
             callback(route.clone());
         }
+    }
+
+    /// Register a navigation guard. Guards are called before navigation.
+    /// If any guard returns `Some(reason)`, the navigation is blocked.
+    /// Returns a guard ID for removal.
+    pub fn add_guard(&self, guard: impl Fn(&str) -> Option<String> + 'static) -> usize {
+        let id = self.inner.next_guard_id.get();
+        self.inner.next_guard_id.set(id + 1);
+        self.inner
+            .guards
+            .borrow_mut()
+            .push((id, Rc::new(guard) as Rc<dyn Fn(&str) -> Option<String>>));
+        id
+    }
+
+    /// Remove a previously registered guard.
+    pub fn remove_guard(&self, id: usize) -> bool {
+        let mut guards = self.inner.guards.borrow_mut();
+        let before = guards.len();
+        guards.retain(|(guard_id, _)| *guard_id != id);
+        before != guards.len()
+    }
+
+    /// Run all guards against a target path. Returns `Err` if any guard blocks.
+    fn run_guards(&self, raw_path: &str) -> Result<(), RouteError> {
+        let guards = self.inner.guards.borrow();
+        for (_, guard) in guards.iter() {
+            if let Some(reason) = guard(raw_path) {
+                return Err(RouteError::GuardBlocked(reason));
+            }
+        }
+        Ok(())
+    }
+
+    /// Subscribe to route transition events (receives from, to, direction).
+    /// Returns a subscription ID for removal.
+    pub fn subscribe_transition(
+        &self,
+        callback: impl Fn(RouteTransitionEvent) + 'static,
+    ) -> usize {
+        let id = self.inner.next_transition_observer_id.get();
+        self.inner.next_transition_observer_id.set(id + 1);
+        self.inner.transition_observers.borrow_mut().push((
+            id,
+            Rc::new(callback) as Rc<dyn Fn(RouteTransitionEvent)>,
+        ));
+        id
+    }
+
+    /// Remove a previously registered transition observer.
+    pub fn unsubscribe_transition(&self, id: usize) -> bool {
+        let mut observers = self.inner.transition_observers.borrow_mut();
+        let before = observers.len();
+        observers.retain(|(observer_id, _)| *observer_id != id);
+        before != observers.len()
+    }
+
+    fn notify_transition(&self, event: RouteTransitionEvent) {
+        let callbacks = self
+            .inner
+            .transition_observers
+            .borrow()
+            .iter()
+            .map(|(_, cb)| cb.clone())
+            .collect::<Vec<_>>();
+        for cb in callbacks {
+            cb(event.clone());
+        }
+    }
+}
+
+/// A segment match within a nested route resolution.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RouteSegmentMatch {
+    pattern: String,
+    name: Option<String>,
+    params: BTreeMap<String, String>,
+}
+
+impl RouteSegmentMatch {
+    pub fn pattern(&self) -> &str {
+        &self.pattern
+    }
+
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+
+    pub fn params(&self) -> &BTreeMap<String, String> {
+        &self.params
+    }
+
+    pub fn param(&self, key: &str) -> Option<&str> {
+        self.params.get(key).map(String::as_str)
+    }
+}
+
+/// The result of resolving a path against a nested route tree.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedRoute {
+    raw: String,
+    path: String,
+    query: BTreeMap<String, String>,
+    segments: Vec<RouteSegmentMatch>,
+}
+
+impl ResolvedRoute {
+    pub fn raw(&self) -> &str {
+        &self.raw
+    }
+
+    pub fn path(&self) -> &str {
+        &self.path
+    }
+
+    pub fn query_params(&self) -> &BTreeMap<String, String> {
+        &self.query
+    }
+
+    pub fn query(&self, key: &str) -> Option<&str> {
+        self.query.get(key).map(String::as_str)
+    }
+
+    /// The matched segments from root to leaf.
+    pub fn segments(&self) -> &[RouteSegmentMatch] {
+        &self.segments
+    }
+
+    pub fn depth(&self) -> usize {
+        self.segments.len()
+    }
+}
+
+/// A node in a nested route tree.
+#[derive(Debug, Clone)]
+pub struct RouteNode {
+    pattern: String,
+    name: Option<String>,
+    children: Vec<RouteNode>,
+}
+
+impl RouteNode {
+    pub fn new(pattern: impl Into<String>) -> Result<Self, RouteError> {
+        let pattern = normalize_path(pattern.into())?;
+        parse_pattern_segments(&pattern)?;
+        Ok(Self {
+            pattern,
+            name: None,
+            children: Vec::new(),
+        })
+    }
+
+    pub fn named(name: impl Into<String>, pattern: impl Into<String>) -> Result<Self, RouteError> {
+        let mut node = Self::new(pattern)?;
+        node.name = Some(name.into());
+        Ok(node)
+    }
+
+    pub fn child(mut self, child: RouteNode) -> Self {
+        self.children.push(child);
+        self
+    }
+
+    pub fn children(mut self, children: Vec<RouteNode>) -> Self {
+        self.children.extend(children);
+        self
+    }
+
+    pub fn pattern(&self) -> &str {
+        &self.pattern
+    }
+
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+}
+
+/// Internal tree node for nested route matching.
+#[derive(Debug, Clone)]
+struct RouteTreeNode {
+    pattern: String,
+    name: Option<String>,
+    segments: Vec<RouteSegment>,
+    children: Vec<RouteTreeNode>,
+}
+
+impl RouteTreeNode {
+    fn from_route_node(node: RouteNode) -> Result<Self, RouteError> {
+        let segments = parse_pattern_segments(&node.pattern)?;
+        let child_prefix = &node.pattern;
+        let children = node
+            .children
+            .into_iter()
+            .map(|child| Self::from_route_node_with_prefix(child, child_prefix))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self {
+            pattern: node.pattern,
+            name: node.name,
+            segments,
+            children,
+        })
+    }
+
+    fn from_route_node_with_prefix(node: RouteNode, parent_pattern: &str) -> Result<Self, RouteError> {
+        let segments = parse_pattern_segments(&node.pattern)?;
+        let relative_segments = if node.pattern.starts_with(parent_pattern) && parent_pattern != "/" {
+            let relative = &node.pattern[parent_pattern.len()..];
+            if relative.is_empty() {
+                Vec::new()
+            } else {
+                parse_pattern_segments(relative)?
+            }
+        } else if parent_pattern == "/" {
+            segments.clone()
+        } else {
+            segments.clone()
+        };
+        let child_prefix = &node.pattern;
+        let children = node
+            .children
+            .into_iter()
+            .map(|child| Self::from_route_node_with_prefix(child, child_prefix))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self {
+            pattern: node.pattern,
+            name: node.name,
+            segments: relative_segments,
+            children,
+        })
     }
 }
 
@@ -516,7 +897,8 @@ fn parse_query(query: &str) -> BTreeMap<String, String> {
     params
 }
 
-fn join_raw_path(path: &str, query: &BTreeMap<String, String>) -> String {
+/// Joins a path with query parameters into a raw path string.
+pub fn join_raw_path(path: &str, query: &BTreeMap<String, String>) -> String {
     if query.is_empty() {
         return path.to_string();
     }
@@ -571,6 +953,70 @@ fn hex_value(byte: u8) -> Option<u8> {
         b'A'..=b'F' => Some(byte - b'A' + 10),
         _ => None,
     }
+}
+
+/// Specificity score for route segments: Static(3) > Param(2) > Wildcard(1).
+/// Higher scores win; ties broken lexicographically by segment position.
+fn route_specificity(segments: &[RouteSegment]) -> Vec<u8> {
+    segments
+        .iter()
+        .map(|s| match s {
+            RouteSegment::Static(_) => 3,
+            RouteSegment::Param(_) => 2,
+            RouteSegment::Wildcard(_) => 1,
+        })
+        .collect()
+}
+
+/// Recursively match a path against a route tree node.
+/// Returns `Some(Vec<RouteSegmentMatch>)` if the tree matches (root to leaf),
+/// or `None` if it doesn't match.
+fn resolve_tree(
+    node: &RouteTreeNode,
+    path_segs: &[&str],
+) -> Option<Vec<RouteSegmentMatch>> {
+    // Match the current node's segments against the prefix of path_segs.
+    let own_len = node.segments.len();
+    let own_params = match_segments(&node.segments, &path_segs[..own_len.min(path_segs.len())])?;
+
+    // If this node's segments don't cover the full path_segs prefix, it's a mismatch.
+    if own_len > path_segs.len() {
+        return None;
+    }
+
+    let remaining = &path_segs[own_len..];
+    let seg_match = RouteSegmentMatch {
+        pattern: node.pattern.clone(),
+        name: node.name.clone(),
+        params: own_params,
+    };
+
+    // Leaf node: remaining must be empty for a full match.
+    if node.children.is_empty() {
+        if remaining.is_empty() {
+            return Some(vec![seg_match]);
+        }
+        return None;
+    }
+
+    // Try each child with specificity-based priority at this sibling level.
+    let mut best: Option<(Vec<u8>, Vec<RouteSegmentMatch>)> = None;
+    for child in &node.children {
+        if let Some(child_segments) = resolve_tree(child, remaining) {
+            let spec = route_specificity(&child.segments);
+            let is_better = match &best {
+                None => true,
+                Some((existing_spec, _)) => spec > *existing_spec,
+            };
+            if is_better {
+                let mut result = vec![seg_match.clone()];
+                result.extend(child_segments);
+                best = Some((spec, result));
+            }
+        }
+    }
+
+    best.map(|(_, segs)| segs)
 }
 
 #[cfg(test)]
@@ -632,5 +1078,105 @@ mod tests {
         let router = Router::new("/home");
         replace_global_router(router.clone());
         assert_eq!(global_router().current_path(), "/home");
+    }
+
+    #[test]
+    fn specificity_static_beats_param() {
+        let router = Router::new("/");
+        // Register param route first, static route second
+        router.register("/users/:id").expect("register param");
+        router.register("/users/me").expect("register static");
+
+        let route = router.resolve("/users/me").expect("resolve");
+        assert_eq!(route.pattern(), "/users/me");
+
+        let route2 = router.resolve("/users/42").expect("resolve param");
+        assert_eq!(route2.pattern(), "/users/:id");
+        assert_eq!(route2.param("id"), Some("42"));
+    }
+
+    #[test]
+    fn specificity_param_beats_wildcard() {
+        let router = Router::new("/");
+        router.register("/files/*rest").expect("register wildcard");
+        router.register("/files/:id").expect("register param");
+
+        let route = router.resolve("/files/42").expect("resolve");
+        assert_eq!(route.pattern(), "/files/:id");
+
+        let route2 = router.resolve("/files/a/b/c").expect("resolve wildcard");
+        assert_eq!(route2.pattern(), "/files/*rest");
+    }
+
+    #[test]
+    fn fallback_matches_unregistered_paths() {
+        let router = Router::new("/");
+        router.register("/").expect("register home");
+        router.register("/about").expect("register about");
+        router.register_fallback("*rest").expect("register fallback");
+
+        // Known route matches normally
+        let about = router.resolve("/about").expect("resolve");
+        assert_eq!(about.pattern(), "/about");
+
+        // Unknown route falls back to the catch-all
+        let unknown = router.resolve("/nonexistent/page").expect("fallback");
+        assert_eq!(unknown.pattern(), "/*rest");
+        assert_eq!(unknown.param("rest"), Some("nonexistent/page"));
+    }
+
+    #[test]
+    fn nested_route_tree_basic() {
+        use super::{RouteNode, RouteSegmentMatch};
+
+        let router = Router::new("/");
+        let tree = RouteNode::new("/")
+            .expect("root")
+            .child(RouteNode::new("/about").expect("about"))
+            .child(RouteNode::new("/users/:id").expect("user"));
+        router.register_tree(tree).expect("register tree");
+
+        let resolved = router.resolve_nested("/about").expect("resolve nested");
+        assert_eq!(resolved.depth(), 2);
+        assert_eq!(resolved.segments()[0].pattern(), "/");
+        assert_eq!(resolved.segments()[1].pattern(), "/about");
+    }
+
+    #[test]
+    fn nested_route_tree_params() {
+        use super::RouteNode;
+
+        let router = Router::new("/");
+        let tree = RouteNode::new("/")
+            .expect("root")
+            .child(RouteNode::new("/users/:id").expect("user"));
+        router.register_tree(tree).expect("register tree");
+
+        let resolved = router.resolve_nested("/users/42").expect("resolve nested");
+        assert_eq!(resolved.depth(), 2);
+        assert_eq!(resolved.segments()[1].param("id"), Some("42"));
+    }
+
+    #[test]
+    fn nested_route_tree_deep() {
+        use super::RouteNode;
+
+        let router = Router::new("/");
+        let tree = RouteNode::new("/")
+            .expect("root")
+            .child(
+                RouteNode::new("/users")
+                    .expect("users")
+                    .child(RouteNode::named("detail", "/users/:id").expect("detail")),
+            );
+        router.register_tree(tree).expect("register tree");
+
+        let resolved = router.resolve_nested("/users/7").expect("resolve nested");
+        assert_eq!(resolved.depth(), 3);
+        assert_eq!(resolved.segments()[0].pattern(), "/");
+        assert_eq!(resolved.segments()[1].pattern(), "/users");
+        assert_eq!(resolved.segments()[2].pattern(), "/users/:id");
+        assert_eq!(resolved.segments()[2].name(), Some("detail"));
+        assert_eq!(resolved.segments()[2].param("id"), Some("7"));
     }
 }

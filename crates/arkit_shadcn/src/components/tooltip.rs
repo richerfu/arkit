@@ -4,7 +4,7 @@ use arkit::{component, create_signal};
 use std::rc::Rc;
 
 #[component]
-pub fn tooltip(trigger_label: impl Into<String>, content: impl Into<String>) -> Element {
+pub fn tooltip(trigger_label: impl Into<String> + 'static, content: impl Into<String> + 'static) -> Element {
     let trigger_label = trigger_label.into();
     let content = content.into();
     let open = create_signal(false);

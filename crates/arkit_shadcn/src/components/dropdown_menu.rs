@@ -358,7 +358,7 @@ pub fn dropdown_submenu_with_state(
 }
 
 #[component]
-pub fn dropdown_submenu(title: impl Into<String>, items: Vec<Element>) -> Element {
+pub fn dropdown_submenu(title: impl Into<String> + 'static, items: Vec<Element>) -> Element {
     let open = create_signal(false);
     dropdown_submenu_with_state(title, items, open)
 }

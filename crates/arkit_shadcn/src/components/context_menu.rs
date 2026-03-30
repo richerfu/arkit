@@ -376,7 +376,7 @@ pub fn context_menu_submenu_inset_with_state(
 }
 
 #[component]
-pub fn context_menu_submenu_inset(title: impl Into<String>, items: Vec<Element>) -> Element {
+pub fn context_menu_submenu_inset(title: impl Into<String> + 'static, items: Vec<Element>) -> Element {
     let open = create_signal(false);
     context_menu_submenu_inset_with_state(title, items, open)
 }

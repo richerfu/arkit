@@ -10,6 +10,7 @@ mod overlay;
 mod owner;
 mod portal;
 mod route;
+mod route_animated;
 mod runtime;
 mod signal;
 mod view;
@@ -23,13 +24,19 @@ pub use overlay::{
 pub use portal::portal_scope;
 pub use route::{
     back_route, current_route, push_route, register_named_route, register_route, register_routes,
-    replace_route, reset_route, router, set_router, use_route, use_route_param, use_route_query,
-    use_route_transition, use_router, Route, RouteDefinition, RouteError, RouteTransition,
-    RouteTransitionDirection, Router,
+    replace_route, reset_route, router, router_register_tree, router_view, set_router, use_back_handler,
+    use_before_leave, use_outlet, use_route, use_route_context, use_route_param, use_route_query,
+    use_route_transition, use_router, ResolvedRoute, Route, RouteContext, RouteDefinition,
+    RouteError, RouteNode, RouteSegmentMatch, RouteTransition, RouteTransitionDirection, Router,
 };
+pub use route::{
+    register_fallback_route, use_route_param_signal, use_route_query_signal, use_search_param,
+};
+pub use route_animated::{animated_router_view, RouteTransitionConfig};
 pub use effect::{batch, create_effect, create_effect_on, untrack};
 pub use owner::{
-    create_root, create_scope, on_cleanup, on_mount, provide_context, use_context,
+    create_root, create_scope, enter_scope, on_cleanup, on_mount, provide_context, use_context,
+    ScopeGuard,
 };
 pub use runtime::{current_app, queue_after_mount, queue_ui_loop, Runtime};
 pub use signal::{create_memo, create_memo_on, create_signal, signal, ReadSignal, Signal};
@@ -43,14 +50,17 @@ pub use openharmony_ability;
 pub mod prelude {
     pub use crate::view::prelude::*;
     pub use crate::{
-        anchored_overlay, back_route, batch, component, create_effect, create_effect_on,
-        create_memo, create_memo_on, create_root, create_scope, create_signal, current_app,
-        current_route, entry, native_overlay, observe_layout_frame, observe_layout_frame_enabled,
-        observe_layout_size, on_cleanup, on_mount, portal_scope, provide_context, push_route,
-        register_named_route, register_route, register_routes, replace_route, reset_route, router,
-        set_router, signal, untrack, use_context,
-        use_route, use_route_param, use_route_query, use_route_transition, use_router,
-        LayoutFrame, LayoutSize, LifecycleEvent, NativeOverlayPlacement, ReadSignal, Route,
-        RouteDefinition, RouteTransition, RouteTransitionDirection, Router, Signal,
+        anchored_overlay, animated_router_view, back_route, batch, component, create_effect,
+        create_effect_on, create_memo, create_memo_on, create_root, create_scope, create_signal,
+        current_app, current_route, entry, native_overlay, observe_layout_frame,
+        observe_layout_frame_enabled, observe_layout_size, on_cleanup, on_mount, portal_scope,
+        provide_context, push_route, register_named_route, register_route, register_routes,
+        register_fallback_route, replace_route, reset_route, router, router_register_tree,
+        router_view, set_router, signal, untrack, use_back_handler, use_before_leave, use_context,
+        use_outlet, use_route, use_route_context, use_route_param, use_route_param_signal,
+        use_route_query, use_route_query_signal, use_route_transition, use_router, use_search_param,
+        LayoutFrame, LayoutSize, LifecycleEvent, NativeOverlayPlacement, ReadSignal,
+        ResolvedRoute, Route, RouteContext, RouteDefinition, RouteNode, RouteSegmentMatch,
+        RouteTransition, RouteTransitionConfig, RouteTransitionDirection, Router, Signal,
     };
 }
