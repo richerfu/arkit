@@ -1,4 +1,5 @@
 use crate::ohos_arkui_binding::component::built_in_component::Button;
+use crate::prelude::ArkUINodeAttributeType;
 
 use super::super::core::ComponentElement;
 
@@ -15,6 +16,7 @@ pub fn button(label: impl Into<String>) -> ButtonElement {
 impl ComponentElement<Button> {
     pub fn label(self, label: impl Into<String>) -> Self {
         let label = label.into();
-        self.with(move |node| node.set_button_label(label))
+        self.style(ArkUINodeAttributeType::ButtonLabel, label.clone())
+            .patch_attr(ArkUINodeAttributeType::ButtonLabel, label)
     }
 }

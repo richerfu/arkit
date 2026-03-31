@@ -16,7 +16,7 @@ use arkit::ohos_arkui_binding::component::attribute::{
 use arkit::ohos_arkui_binding::types::animation_finish_type::AnimationFinishCallbackType;
 use arkit::ohos_arkui_binding::types::animation_mode::AnimationMode;
 use arkit::ohos_arkui_binding::types::curve::Curve;
-use arkit::{component, create_signal, queue_after_mount, queue_ui_loop};
+use arkit::{component, create_effect, create_signal, queue_after_mount, queue_ui_loop};
 use arkit_icon as lucide;
 
 const ACCORDION_TRIGGER_GAP: f32 = spacing::LG;
@@ -274,8 +274,9 @@ pub fn accordion_item_parts(
     AccordionItemSpec::from_parts(value, trigger, content)
 }
 
-fn accordion_chevron(is_open: bool, should_animate: bool) -> Element {
-    let target_angle = if is_open {
+fn accordion_chevron(is_open_signal: Signal<bool>) -> Element {
+    let initial = is_open_signal.get();
+    let initial_angle = if initial {
         ACCORDION_CHEVRON_ROTATION
     } else {
         0.0
@@ -288,12 +289,30 @@ fn accordion_chevron(is_open: bool, should_animate: bool) -> Element {
         .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
         .native_with_cleanup(move |node| {
             node.set_transform_center(vec![0.0, 0.0, 0.0, 0.5, 0.5, 0.0])?;
+            node.set_rotate(vec![0.0, 0.0, 1.0, initial_angle, 0.0])?;
 
             let active = Rc::new(Cell::new(true));
-            if should_animate {
-                let animated_node = Rc::new(RefCell::new(node.borrow_mut().clone()));
+            let cleanup_active = active.clone();
+            let animated_node = Rc::new(RefCell::new(node.borrow_mut().clone()));
+            let signal = is_open_signal.clone();
+            let mut prev = initial;
+
+            create_effect(move || {
+                let current = signal.get();
+                if current == prev || !active.get() {
+                    return;
+                }
+                prev = current;
+
+                let target_angle = if current {
+                    ACCORDION_CHEVRON_ROTATION
+                } else {
+                    0.0
+                };
+                let animated_node = animated_node.clone();
                 let animation_slot = Rc::new(RefCell::new(None::<Animation>));
-                let animation = accordion_chevron_animation(is_open);
+
+                let animation = accordion_chevron_animation(current);
                 let update_node = animated_node.clone();
                 let update_active = active.clone();
 
@@ -320,16 +339,13 @@ fn accordion_chevron(is_open: bool, should_animate: bool) -> Element {
                     eprintln!(
                         "accordion chevron error: failed to start rotation animation: {error}"
                     );
-                    node.set_rotate(vec![0.0, 0.0, 1.0, target_angle, 0.0])?;
                 } else {
                     *animation_slot.borrow_mut() = Some(animation);
                 }
-            } else {
-                node.set_rotate(vec![0.0, 0.0, 1.0, target_angle, 0.0])?;
-            }
+            });
 
             Ok(move || {
-                active.set(false);
+                cleanup_active.set(false);
             })
         })
         .children(vec![lucide::icon("chevron-down")
@@ -420,55 +436,27 @@ fn accordion_content_body(
 
 fn accordion_content_panel(
     content: Vec<Element>,
-    is_open: bool,
-    did_mount: bool,
+    is_open_signal: Signal<bool>,
     measured_height: Signal<f32>,
     has_measured_height: Signal<bool>,
-    previous_target: Rc<RefCell<Option<f32>>>,
-    skip_open_animation_once: Signal<bool>,
 ) -> Element {
-    let measured = has_measured_height.get();
-    let content_height = measured_height.get();
-    let target_height = if is_open {
-        if measured {
-            Some(content_height)
+    let initial_open = is_open_signal.get();
+    let initial_measured = has_measured_height.get();
+    let initial_height = measured_height.get();
+
+    let initial_target: Option<f32> = if initial_open {
+        if initial_measured {
+            Some(initial_height)
         } else {
             None
         }
     } else {
         Some(0.0)
     };
-    let previous_height = *previous_target.borrow();
-    let skip_open_animation = skip_open_animation_once.get();
-    let needs_open_measure_pass =
-        is_open && !measured && same_height_target(previous_height, Some(0.0));
-    let should_animate = did_mount
-        && measured
-        && previous_height.is_some()
-        && target_height.is_some()
-        && !(is_open && skip_open_animation)
-        && !same_height_target(previous_height, target_height);
 
-    if needs_open_measure_pass && !skip_open_animation {
-        let skip_open_animation_once = skip_open_animation_once.clone();
-        queue_after_mount(move || {
-            skip_open_animation_once.set(true);
-        });
-    }
-
-    if is_open && measured && skip_open_animation {
-        let skip_open_animation_once = skip_open_animation_once.clone();
-        queue_after_mount(move || {
-            skip_open_animation_once.set(false);
-        });
-    }
-
-    if target_height.is_some() && !same_height_target(previous_height, target_height) {
-        let previous_target = previous_target.clone();
-        queue_after_mount(move || {
-            *previous_target.borrow_mut() = target_height;
-        });
-    }
+    // Clone signals for the children (before the closure consumes them)
+    let body_measured = measured_height.clone();
+    let body_has_measured = has_measured_height.clone();
 
     arkit::column_component()
         .percent_width(1.0)
@@ -476,96 +464,153 @@ fn accordion_content_panel(
         .style(ArkUINodeAttributeType::Clip, true)
         .native_with_cleanup(move |node| {
             let active = Rc::new(Cell::new(true));
-            if should_animate {
-                if let Some(previous_height) = previous_height {
-                    node.height(previous_height)?;
-                }
+            let cleanup_active = active.clone();
 
-                let animated_node = Rc::new(RefCell::new(node.borrow_mut().clone()));
-                let animation_slot = Rc::new(RefCell::new(None::<Animation>));
-                let target_height =
-                    target_height.expect("target height should exist when animated");
-
-                let animation = accordion_panel_animation();
-                let update_node = animated_node.clone();
-                let update_active = active.clone();
-                animation.update(move || {
-                    if !update_active.get() {
-                        return;
-                    }
-                    let node = update_node.borrow_mut();
-                    if let Err(error) = node.height(target_height) {
-                        eprintln!("accordion panel error: failed to animate height: {error}");
-                    }
-                });
-
-                let finish_slot = animation_slot.clone();
-                animation.finish(AnimationFinishCallbackType::Logically, move || {
-                    let release_slot = finish_slot.clone();
-                    queue_ui_loop(move || {
-                        let _ = release_slot.borrow_mut().take();
-                    });
-                });
-
-                let animation_node = animated_node.borrow().clone();
-                if let Err(error) = animation_node.animate_to(&animation) {
-                    eprintln!("accordion panel error: failed to start height animation: {error}");
-                    apply_panel_height(node, Some(target_height))?;
-                } else {
-                    *animation_slot.borrow_mut() = Some(animation);
-                }
-            } else {
-                apply_panel_height(node, target_height)?;
+            // Set initial height
+            if let Some(target) = initial_target {
+                apply_panel_height(node, Some(target))?;
             }
 
-            let cleanup_active = active.clone();
+            let node_ref = Rc::new(RefCell::new(node.borrow_mut().clone()));
+            let prev_target: Rc<RefCell<Option<f32>>> = Rc::new(RefCell::new(initial_target));
+            let prev_open = Rc::new(Cell::new(initial_open));
+            let prev_measured = Rc::new(Cell::new(initial_measured));
+
+            let sig = is_open_signal.clone();
+            let m_height = measured_height.clone();
+            let has_m = has_measured_height.clone();
+
+            create_effect(move || {
+                let current_open = sig.get();
+                let measured = has_m.get();
+                let content_height = m_height.get();
+
+                let open_changed = current_open != prev_open.get();
+                let just_measured = measured && !prev_measured.get();
+
+                if !open_changed && !just_measured {
+                    return;
+                }
+                if !active.get() {
+                    return;
+                }
+
+                prev_open.set(current_open);
+                prev_measured.set(measured);
+
+                let target_height: Option<f32> = if current_open {
+                    if measured {
+                        Some(content_height)
+                    } else {
+                        None
+                    }
+                } else {
+                    Some(0.0)
+                };
+
+                let previous = *prev_target.borrow();
+
+                // Animate only when we have both previous and target heights
+                let should_animate = previous.is_some()
+                    && target_height.is_some()
+                    && !same_height_target(previous, target_height);
+
+                if should_animate {
+                    let from_h = previous.unwrap();
+                    let to_h = target_height.unwrap();
+
+                    let node = node_ref.borrow().clone();
+                    let _ = node.set_i32_attribute(
+                        ArkUINodeAttributeType::HeightLayoutpolicy,
+                        ACCORDION_LAYOUTPOLICY_FIXATIDEALSIZE,
+                    );
+                    let _ = node.height(from_h.max(0.0));
+
+                    let animated_node = Rc::new(RefCell::new(node));
+                    let animation_slot = Rc::new(RefCell::new(None::<Animation>));
+
+                    let animation = accordion_panel_animation();
+                    let update_node = animated_node.clone();
+                    let update_active = active.clone();
+                    animation.update(move || {
+                        if !update_active.get() {
+                            return;
+                        }
+                        let node = update_node.borrow_mut();
+                        if let Err(error) = node.height(to_h) {
+                            eprintln!("accordion panel error: failed to animate height: {error}");
+                        }
+                    });
+
+                    let finish_slot = animation_slot.clone();
+                    animation.finish(AnimationFinishCallbackType::Logically, move || {
+                        let release_slot = finish_slot.clone();
+                        queue_ui_loop(move || {
+                            let _ = release_slot.borrow_mut().take();
+                        });
+                    });
+
+                    let animation_node = animated_node.borrow().clone();
+                    if let Err(error) = animation_node.animate_to(&animation) {
+                        eprintln!(
+                            "accordion panel error: failed to start height animation: {error}"
+                        );
+                    } else {
+                        *animation_slot.borrow_mut() = Some(animation);
+                    }
+                } else if let Some(h) = target_height {
+                    let node = node_ref.borrow().clone();
+                    let _ = apply_panel_height_on_node(&node, Some(h));
+                } else if current_open {
+                    // Not measured yet — use wrap content so body can measure
+                    let node = node_ref.borrow().clone();
+                    let _ = apply_panel_height_on_node(&node, None);
+                }
+
+                if target_height.is_some() && !same_height_target(previous, target_height) {
+                    *prev_target.borrow_mut() = target_height;
+                }
+            });
+
             Ok(move || {
                 cleanup_active.set(false);
             })
         })
         .children(vec![accordion_content_body(
             content,
-            measured_height.clone(),
-            has_measured_height.clone(),
-            is_open,
+            body_measured.clone(),
+            body_has_measured.clone(),
+            true, // always enable measurement
         )])
         .into()
+}
+
+fn apply_panel_height_on_node(node: &ArkUINode, height: Option<f32>) -> ArkUIResult<()> {
+    if let Some(height) = height {
+        node.set_i32_attribute(
+            ArkUINodeAttributeType::HeightLayoutpolicy,
+            ACCORDION_LAYOUTPOLICY_FIXATIDEALSIZE,
+        )?;
+        node.height(height.max(0.0))
+    } else {
+        node.set_i32_attribute(
+            ArkUINodeAttributeType::HeightLayoutpolicy,
+            ACCORDION_LAYOUTPOLICY_WRAPCONTENT,
+        )?;
+        Ok(())
+    }
 }
 
 #[component]
 fn accordion_item_view(
     trigger: Element,
-    is_open: bool,
+    is_open_signal: Signal<bool>,
     disabled: bool,
     on_toggle: AccordionToggleHandler,
     content: Vec<Element>,
 ) -> Element {
-    let mounted = create_signal(false);
-    let previous_open = create_signal(Rc::new(Cell::new(is_open)));
     let measured_height = create_signal(0.0_f32);
     let has_measured_height = create_signal(false);
-    let skip_open_animation_once = create_signal(false);
-    let previous_target =
-        create_signal(Rc::new(RefCell::new(if is_open { None } else { Some(0.0_f32) })));
-
-    {
-        let mounted = mounted.clone();
-        queue_after_mount(move || {
-            queue_ui_loop(move || {
-                mounted.set(true);
-            });
-        });
-    }
-
-    let did_mount = mounted.get();
-    let previous = previous_open.get().get();
-    let should_animate = did_mount && previous != is_open;
-    if previous != is_open {
-        let previous_open = previous_open.get();
-        queue_after_mount(move || {
-            previous_open.set(is_open);
-        });
-    }
 
     let mut trigger_row = arkit::row_component()
         .percent_width(1.0)
@@ -594,7 +639,7 @@ fn accordion_item_view(
                 )
                 .children(vec![trigger])
                 .into(),
-            accordion_chevron(is_open, should_animate),
+            accordion_chevron(is_open_signal.clone()),
         ]);
 
     if disabled {
@@ -609,12 +654,9 @@ fn accordion_item_view(
         trigger_row.into(),
         accordion_content_panel(
             content,
-            is_open,
-            did_mount,
+            is_open_signal,
             measured_height,
             has_measured_height,
-            previous_target.get(),
-            skip_open_animation_once,
         ),
     ];
 
@@ -635,19 +677,28 @@ fn render_single_items(
     collapsible: bool,
     on_value_change: Option<AccordionSingleChangeHandler>,
 ) -> Element {
-    let current = open_item.get();
     let children = items
         .into_iter()
         .map(|item| {
-            let is_open = current.as_deref() == Some(item.value.as_str());
-            let value = item.value.clone();
-            let next_value = value.clone();
+            let next_value = item.value.clone();
             let signal = open_item.clone();
             let callback = on_value_change.clone();
 
+            // Create derived signal for this item's open state
+            let is_open_signal =
+                create_signal(open_item.get().as_deref() == Some(item.value.as_str()));
+            {
+                let oi = open_item.clone();
+                let v = item.value.clone();
+                let ios = is_open_signal.clone();
+                create_effect(move || {
+                    ios.set(oi.get().as_deref() == Some(v.as_str()));
+                });
+            }
+
             accordion_item_view(
                 item.trigger,
-                is_open,
+                is_open_signal,
                 item.disabled,
                 Rc::new(move || {
                     let next = if signal.get().as_deref() == Some(next_value.as_str()) {
@@ -678,18 +729,27 @@ fn render_multiple_items(
     open_items: Signal<Vec<String>>,
     on_value_change: Option<AccordionMultipleChangeHandler>,
 ) -> Element {
-    let current = open_items.get();
     let children = items
         .into_iter()
         .map(|item| {
-            let is_open = current.contains(&item.value);
             let value = item.value.clone();
             let signal = open_items.clone();
             let callback = on_value_change.clone();
 
+            // Create derived signal for this item's open state
+            let is_open_signal = create_signal(signal.get().contains(&item.value));
+            {
+                let sig = signal.clone();
+                let v = value.clone();
+                let ios = is_open_signal.clone();
+                create_effect(move || {
+                    ios.set(sig.get().contains(&v));
+                });
+            }
+
             accordion_item_view(
                 item.trigger,
-                is_open,
+                is_open_signal,
                 item.disabled,
                 Rc::new(move || {
                     let mut next = signal.get();
@@ -719,20 +779,30 @@ fn render_root_items(
 ) -> Element {
     match spec.accordion_type {
         AccordionType::Single => {
-            let current = value.get().as_single();
             let children = items
                 .into_iter()
                 .map(|item| {
-                    let is_open = current.as_deref() == Some(item.value.as_str());
                     let item_value = item.value.clone();
                     let next_value = item_value.clone();
                     let signal = value.clone();
                     let callback = spec.on_value_change.clone();
                     let collapsible = spec.collapsible;
 
+                    let is_open_signal = create_signal(
+                        value.get().as_single().as_deref() == Some(item.value.as_str()),
+                    );
+                    {
+                        let sig = signal.clone();
+                        let v = item.value.clone();
+                        let ios = is_open_signal.clone();
+                        create_effect(move || {
+                            ios.set(sig.get().as_single().as_deref() == Some(v.as_str()));
+                        });
+                    }
+
                     accordion_item_view(
                         item.trigger,
-                        is_open,
+                        is_open_signal,
                         item.disabled,
                         Rc::new(move || {
                             let current = signal.get().as_single();
@@ -760,18 +830,27 @@ fn render_root_items(
             accordion_container(children)
         }
         AccordionType::Multiple => {
-            let current = value.get().as_multiple();
             let children = items
                 .into_iter()
                 .map(|item| {
-                    let is_open = current.contains(&item.value);
                     let item_value = item.value.clone();
                     let signal = value.clone();
                     let callback = spec.on_value_change.clone();
 
+                    let is_open_signal =
+                        create_signal(value.get().as_multiple().contains(&item.value));
+                    {
+                        let sig = signal.clone();
+                        let v = item.value.clone();
+                        let ios = is_open_signal.clone();
+                        create_effect(move || {
+                            ios.set(sig.get().as_multiple().contains(&v));
+                        });
+                    }
+
                     accordion_item_view(
                         item.trigger,
-                        is_open,
+                        is_open_signal,
                         item.disabled,
                         Rc::new(move || {
                             let mut next = signal.get().as_multiple();
@@ -811,11 +890,20 @@ pub fn accordion_item(
     let value = value.into();
     let click_value = value.clone();
     let click = open_item.clone();
-    let is_open = open_item.get().as_deref() == Some(value.as_str());
+
+    let is_open_signal = create_signal(open_item.get().as_deref() == Some(value.as_str()));
+    {
+        let oi = open_item.clone();
+        let v = value.clone();
+        let ios = is_open_signal.clone();
+        create_effect(move || {
+            ios.set(oi.get().as_deref() == Some(v.as_str()));
+        });
+    }
 
     accordion_item_view(
         accordion_trigger_text(title).child,
-        is_open,
+        is_open_signal,
         false,
         Rc::new(move || {
             click.update(|current| {

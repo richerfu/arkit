@@ -35,7 +35,8 @@ type Effect<T> = Box<dyn FnOnce(&mut T) -> ArkUIResult<Option<Cleanup>>>;
 pub struct ComponentElement<T> {
     constructor: fn() -> ArkUIResult<T>,
     key: Option<String>,
-    /// Attributes applied once at mount only (Solid-style static setup).
+    /// Attributes applied on mount and re-applied on patch to preserve visual identity
+    /// when the same component type is reused (e.g., via `dynamic()`).
     init_attrs: Vec<(ArkUINodeAttributeType, ArkUINodeAttributeItem)>,
     /// Attributes reapplied on every patch when the parent re-renders with new values.
     patch_attrs: Vec<(ArkUINodeAttributeType, ArkUINodeAttributeItem)>,
@@ -237,8 +238,7 @@ where
     {
         let apply = std::rc::Rc::new(apply);
         self.mount_effects.push(Box::new(move |node| {
-            let node_handle =
-                std::rc::Rc::new(std::cell::RefCell::new(node.borrow_mut().clone()));
+            let node_handle = std::rc::Rc::new(std::cell::RefCell::new(node.borrow_mut().clone()));
 
             // create_effect runs the closure immediately (initial apply) and
             // re-runs whenever the tracked signal changes. This unifies
@@ -350,19 +350,15 @@ where
     }
 
     pub fn background_color(mut self, value: u32) -> Self {
-        self.init_attrs.push((
-            ArkUINodeAttributeType::BackgroundColor,
-            value.into(),
-        ));
+        self.init_attrs
+            .push((ArkUINodeAttributeType::BackgroundColor, value.into()));
         self
     }
 
     /// Like [`Self::background_color`] but updates on patch when the value can change.
     pub fn patch_background_color(mut self, value: u32) -> Self {
-        self.patch_attrs.push((
-            ArkUINodeAttributeType::BackgroundColor,
-            value.into(),
-        ));
+        self.patch_attrs
+            .push((ArkUINodeAttributeType::BackgroundColor, value.into()));
         self
     }
 
@@ -638,17 +634,13 @@ where
         let key = element_key(&next_child);
 
         // Try to find a reusable old child.
-        let reused_idx = old_map
-            .get_mut(&key)
-            .and_then(|indices| indices.pop());
+        let reused_idx = old_map.get_mut(&key).and_then(|indices| indices.pop());
 
         if let Some(old_idx) = reused_idx {
             matched_old[old_idx] = true;
             let child_handle = parent.borrow_mut().children()[old_idx].clone();
             let mut child_node = child_handle.borrow_mut();
-            if let Err(error) =
-                next_child.patch(&mut child_node, &mut mounted_children[old_idx])
-            {
+            if let Err(error) = next_child.patch(&mut child_node, &mut mounted_children[old_idx]) {
                 logging::error(format!(
                     "tree error: failed to patch reused child {} from {} to {} under {}: {error}",
                     mounted_children[old_idx].name,
@@ -843,6 +835,7 @@ where
     ) -> ArkUIResult<()> {
         let Self {
             key,
+            init_attrs,
             patch_attrs,
             mount_effects: _, // mount-only — skip on patch
             effects,
@@ -851,6 +844,7 @@ where
         } = *self;
 
         let mut typed = T::from_existing(node.clone());
+        apply_attr_list(&mut typed, init_attrs, "patch", T::name());
         apply_attr_list(&mut typed, patch_attrs, "patch", T::name());
 
         let new_cleanups = apply_effects(&mut typed, effects).map_err(|error| {

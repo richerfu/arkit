@@ -113,12 +113,14 @@ pub(crate) fn carousel_frame(
     let prev_disabled = current == 1;
     let prev_button = if prev_disabled {
         shadcn::icon_button_with_variant("chevron-left", shadcn::ButtonVariant::Ghost)
+            .key(format!("carousel-prev:{current}:disabled"))
             .width(40.0)
             .height(40.0)
             .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
             .style(ArkUINodeAttributeType::Enabled, false)
     } else {
         shadcn::icon_button_with_variant("chevron-left", shadcn::ButtonVariant::Ghost)
+            .key(format!("carousel-prev:{current}:enabled"))
             .width(40.0)
             .height(40.0)
             .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
@@ -134,12 +136,14 @@ pub(crate) fn carousel_frame(
     let next_disabled = current == count;
     let next_button = if next_disabled {
         shadcn::icon_button_with_variant("chevron-right", shadcn::ButtonVariant::Ghost)
+            .key(format!("carousel-next:{current}:disabled"))
             .width(40.0)
             .height(40.0)
             .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
             .style(ArkUINodeAttributeType::Enabled, false)
     } else {
         shadcn::icon_button_with_variant("chevron-right", shadcn::ButtonVariant::Ghost)
+            .key(format!("carousel-next:{current}:enabled"))
             .width(40.0)
             .height(40.0)
             .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
@@ -160,8 +164,6 @@ pub(crate) fn carousel_frame(
         .children(vec![preview]);
 
     if !remove_bottom_safe_area {
-        // Align with RN `PreviewCarousel`: FlatList adds `pb-12 mb-safe` so the centered preview
-        // doesn't visually fight with the absolute bottom nav.
         preview_area = preview_area.style(
             ArkUINodeAttributeType::Padding,
             vec![0.0, 0.0, 48.0 + shadcn::theme::spacing::LG, 0.0],
@@ -176,7 +178,6 @@ pub(crate) fn carousel_frame(
         .children(vec![arkit::row_component()
             .percent_width(1.0)
             .height(48.0)
-            // Match the RN demo: the nav bar sits above the bottom safe area.
             .style(
                 ArkUINodeAttributeType::Margin,
                 vec![0.0, 0.0, shadcn::theme::spacing::LG, 0.0],
@@ -191,6 +192,118 @@ pub(crate) fn carousel_frame(
                 ],
                 shadcn::theme::spacing::SM,
             )])
+            .into()])
+        .into();
+
+    arkit::stack_component()
+        .percent_width(1.0)
+        .percent_height(1.0)
+        .children(vec![preview_area.into(), nav_bar])
+        .into()
+}
+
+pub(crate) fn carousel_frame_fn(
+    page: Signal<i32>,
+    count: i32,
+    render_preview: impl Fn(i32) -> Element + 'static,
+    remove_bottom_safe_area: bool,
+) -> Element {
+    let prev = page.clone();
+    let next = page.clone();
+    let nav_page = page.clone();
+    let preview_page = page.clone();
+
+    let mut preview_area = arkit::row_component()
+        .percent_width(1.0)
+        .percent_height(1.0)
+        .align_items_center()
+        .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
+        .children(vec![arkit::dynamic(move || {
+            let current = preview_page.get().clamp(1, count);
+            render_preview(current)
+        })]);
+
+    if !remove_bottom_safe_area {
+        preview_area = preview_area.style(
+            ArkUINodeAttributeType::Padding,
+            vec![0.0, 0.0, 48.0 + shadcn::theme::spacing::LG, 0.0],
+        );
+    }
+
+    let nav_bar = arkit::column_component()
+        .percent_width(1.0)
+        .percent_height(1.0)
+        .style(ArkUINodeAttributeType::ColumnJustifyContent, FLEX_ALIGN_END)
+        .align_items_center()
+        .children(vec![arkit::row_component()
+            .percent_width(1.0)
+            .height(48.0)
+            .style(
+                ArkUINodeAttributeType::Margin,
+                vec![0.0, 0.0, shadcn::theme::spacing::LG, 0.0],
+            )
+            .style(ArkUINodeAttributeType::Padding, vec![0.0, 16.0, 0.0, 16.0])
+            .align_items_center()
+            .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
+            .children(vec![arkit::dynamic(move || {
+                let current = nav_page.get().clamp(1, count);
+                let prev_disabled = current == 1;
+                let next_disabled = current == count;
+
+                let prev_button = if prev_disabled {
+                    shadcn::icon_button_with_variant("chevron-left", shadcn::ButtonVariant::Ghost)
+                        .key(format!("carousel-prev:{current}:disabled"))
+                        .width(40.0)
+                        .height(40.0)
+                        .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
+                        .style(ArkUINodeAttributeType::Enabled, false)
+                } else {
+                    let p = prev.clone();
+                    shadcn::icon_button_with_variant("chevron-left", shadcn::ButtonVariant::Ghost)
+                        .key(format!("carousel-prev:{current}:enabled"))
+                        .width(40.0)
+                        .height(40.0)
+                        .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
+                        .on_click(move || {
+                            p.update(|idx| {
+                                if *idx > 1 {
+                                    *idx -= 1;
+                                }
+                            });
+                        })
+                };
+
+                let next_button = if next_disabled {
+                    shadcn::icon_button_with_variant("chevron-right", shadcn::ButtonVariant::Ghost)
+                        .key(format!("carousel-next:{current}:disabled"))
+                        .width(40.0)
+                        .height(40.0)
+                        .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
+                        .style(ArkUINodeAttributeType::Enabled, false)
+                } else {
+                    let n = next.clone();
+                    shadcn::icon_button_with_variant("chevron-right", shadcn::ButtonVariant::Ghost)
+                        .key(format!("carousel-next:{current}:enabled"))
+                        .width(40.0)
+                        .height(40.0)
+                        .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
+                        .on_click(move || {
+                            n.update(|idx| {
+                                if *idx < count {
+                                    *idx += 1;
+                                }
+                            });
+                        })
+                };
+
+                h_stack(
+                    vec![
+                        carousel_nav_surface(prev_button.into(), prev_disabled),
+                        carousel_nav_surface(next_button.into(), next_disabled),
+                    ],
+                    shadcn::theme::spacing::SM,
+                )
+            })])
             .into()])
         .into();
 
@@ -236,14 +349,16 @@ pub(crate) fn button_carousel(page: Signal<i32>) -> Element {
         "Icon",
     ];
     let count = variants.len() as i32;
-    let label = variants[(page.get().clamp(1, count) - 1) as usize];
-    carousel_frame(
+    carousel_frame_fn(
         page,
         count,
-        arkit::row_component()
-            .key(format!("button-preview:{label}"))
-            .children(vec![button_preview(label)])
-            .into(),
+        move |current| {
+            let label = variants[(current - 1) as usize];
+            arkit::row_component()
+                .key(format!("button-preview:{label}"))
+                .children(vec![button_preview(label)])
+                .into()
+        },
         false,
     )
 }

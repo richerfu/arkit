@@ -75,6 +75,12 @@ struct ButtonInteractionStyle {
     text_decoration: i32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ButtonRenderMode {
+    Host,
+    Shell,
+}
+
 struct RuntimeButtonNode(ArkUINode);
 impl ArkUIAttributeBasic for RuntimeButtonNode {
     fn raw(&self) -> &ArkUINode {
@@ -88,6 +94,19 @@ impl ArkUIAttributeBasic for RuntimeButtonNode {
 
 impl ArkUICommonAttribute for RuntimeButtonNode {}
 impl ArkUICommonFontAttribute for RuntimeButtonNode {}
+
+struct RuntimeShellNode(ArkUINode);
+impl ArkUIAttributeBasic for RuntimeShellNode {
+    fn raw(&self) -> &ArkUINode {
+        &self.0
+    }
+
+    fn borrow_mut(&mut self) -> &mut ArkUINode {
+        &mut self.0
+    }
+}
+
+impl ArkUICommonAttribute for RuntimeShellNode {}
 
 pub fn button(label: impl Into<String>, variant: ButtonVariant) -> ButtonElement {
     button_with_options(label, variant, ButtonSize::Default, false)
@@ -116,8 +135,8 @@ pub fn button_with_options(
     let variant_style = variant_style(variant);
     let pressed_style = pressed_style(variant);
     let initial_text_decoration = TEXT_DECORATION_NONE;
-    let button = if matches!(variant, ButtonVariant::Link) {
-        button_surface(normal_button(label), size_style)
+    if matches!(variant, ButtonVariant::Link) {
+        let button = button_surface(normal_button(label), size_style)
             .patch_background_color(variant_style.background)
             .patch_font_size(size_style.text_size)
             .patch_attr(ArkUINodeAttributeType::FontWeight, FONT_WEIGHT_MEDIUM)
@@ -129,19 +148,33 @@ pub fn button_with_options(
             .patch_attr(
                 ArkUINodeAttributeType::TextDecoration,
                 text_decoration(initial_text_decoration, variant_style.foreground),
-            )
-    } else {
-        button_surface(normal_button_component(), size_style)
-            .patch_background_color(variant_style.background)
-            .children(vec![button_content_row(
-                Some(label),
-                None,
-                variant_style.foreground,
-                icon_size(size),
-            )])
-    };
+            );
 
-    finalize_button(button, size_style, variant_style, pressed_style, disabled)
+        finalize_button(
+            button,
+            size_style,
+            variant_style,
+            pressed_style,
+            disabled,
+            ButtonRenderMode::Host,
+        )
+    } else {
+        let button =
+            button_host(normal_button_component(), size_style).children(vec![button_shell(
+                button_content_row(Some(label), None, variant_style.foreground, icon_size(size)),
+                size_style,
+                variant_style,
+            )]);
+
+        finalize_button(
+            button,
+            size_style,
+            variant_style,
+            pressed_style,
+            disabled,
+            ButtonRenderMode::Shell,
+        )
+    }
 }
 
 pub fn button_with_icon(
@@ -164,16 +197,25 @@ pub fn button_with_icon_size(
     let variant_style = variant_style(variant);
     let pressed_style = pressed_style(variant);
 
-    let button = button_surface(normal_button_component(), size_style)
-        .patch_background_color(variant_style.background)
-        .children(vec![button_content_row(
+    let button = button_host(normal_button_component(), size_style).children(vec![button_shell(
+        button_content_row(
             Some(label),
             Some(icon_name),
             variant_style.foreground,
             icon_size(size),
-        )]);
+        ),
+        size_style,
+        variant_style,
+    )]);
 
-    finalize_button(button, size_style, variant_style, pressed_style, false)
+    finalize_button(
+        button,
+        size_style,
+        variant_style,
+        pressed_style,
+        false,
+        ButtonRenderMode::Shell,
+    )
 }
 
 pub fn icon_button(icon: impl Into<String>) -> ButtonElement {
@@ -185,16 +227,25 @@ pub fn icon_button_with_variant(icon: impl Into<String>, variant: ButtonVariant)
     let variant_style = variant_style(variant);
     let pressed_style = pressed_style(variant);
 
-    let button = button_surface(normal_button_component(), size_style)
-        .patch_background_color(variant_style.background)
-        .children(vec![button_content_row(
+    let button = button_host(normal_button_component(), size_style).children(vec![button_shell(
+        button_content_row(
             None,
             Some(icon.into()),
             variant_style.foreground,
             icon_size(ButtonSize::Icon),
-        )]);
+        ),
+        size_style,
+        variant_style,
+    )]);
 
-    finalize_button(button, size_style, variant_style, pressed_style, false)
+    finalize_button(
+        button,
+        size_style,
+        variant_style,
+        pressed_style,
+        false,
+        ButtonRenderMode::Shell,
+    )
 }
 
 pub fn normal_button_component() -> ButtonElement {
@@ -205,15 +256,13 @@ pub fn normal_button(label: impl Into<String>) -> ButtonElement {
     normal_button_component().label(label)
 }
 
-fn button_surface(element: ButtonElement, size_style: ButtonSizeStyle) -> ButtonElement {
+fn button_host(element: ButtonElement, size_style: ButtonSizeStyle) -> ButtonElement {
     let mut button = element
-        .style(ArkUINodeAttributeType::Clip, true)
         .style(ArkUINodeAttributeType::Focusable, false)
         .style(ArkUINodeAttributeType::FocusOnTouch, false)
+        .background_color(TRANSPARENT)
         .style(ArkUINodeAttributeType::BorderStyle, 0_i32)
-        .style(ArkUINodeAttributeType::BorderRadius, edge_all(radius::MD))
         .height(size_style.height)
-        .style(ArkUINodeAttributeType::Padding, size_style.padding.to_vec())
         .style(ArkUINodeAttributeType::BorderWidth, edge_all(0.0))
         .style(ArkUINodeAttributeType::BorderColor, color_all(TRANSPARENT))
         .style(ArkUINodeAttributeType::AlignSelf, 1_i32);
@@ -223,6 +272,48 @@ fn button_surface(element: ButtonElement, size_style: ButtonSizeStyle) -> Button
     }
 
     button
+}
+
+fn button_surface(element: ButtonElement, size_style: ButtonSizeStyle) -> ButtonElement {
+    button_host(element, size_style)
+        .style(ArkUINodeAttributeType::Clip, true)
+        .style(ArkUINodeAttributeType::BorderRadius, edge_all(radius::MD))
+        .style(ArkUINodeAttributeType::Padding, size_style.padding.to_vec())
+}
+
+fn button_shell(
+    content: Element,
+    size_style: ButtonSizeStyle,
+    variant_style: ButtonVariantStyle,
+) -> Element {
+    let mut shell = arkit::row_component()
+        .height(size_style.height)
+        .align_items_center()
+        .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
+        .style(ArkUINodeAttributeType::Clip, true)
+        .style(ArkUINodeAttributeType::BorderStyle, 0_i32)
+        .style(ArkUINodeAttributeType::BorderRadius, edge_all(radius::MD))
+        .style(ArkUINodeAttributeType::Padding, size_style.padding.to_vec())
+        .style(
+            ArkUINodeAttributeType::BorderWidth,
+            edge_all(variant_style.border_width),
+        )
+        .style(
+            ArkUINodeAttributeType::BorderColor,
+            color_all(variant_style.border_color),
+        )
+        .background_color(variant_style.background)
+        .children(vec![content]);
+
+    if let Some(width) = size_style.width {
+        shell = shell.width(width);
+    }
+
+    if variant_style.shadow {
+        shadow_sm(shell).into()
+    } else {
+        shell.into()
+    }
 }
 
 fn size_style(size: ButtonSize) -> ButtonSizeStyle {
@@ -371,60 +462,111 @@ fn finalize_button(
     variant_style: ButtonVariantStyle,
     pressed_style: Option<ButtonInteractionStyle>,
     disabled: bool,
+    render_mode: ButtonRenderMode,
 ) -> ButtonElement {
     let runtime_node = Rc::new(RefCell::new(None::<RuntimeButtonNode>));
+    let runtime_shell = Rc::new(RefCell::new(None::<RuntimeShellNode>));
     let capture_node = runtime_node.clone();
     let normal_style = ButtonInteractionStyle {
         text_decoration: TEXT_DECORATION_NONE,
         ..interaction_style(variant_style, if disabled { 0.5 } else { 1.0 })
     };
+    let host_style = match render_mode {
+        ButtonRenderMode::Host => normal_style,
+        ButtonRenderMode::Shell => transparent_style(if disabled { 0.5 } else { 1.0 }),
+    };
 
     button = button.native(move |node| {
         let runtime = RuntimeButtonNode(node.borrow_mut().clone());
-        apply_interaction_style(&runtime, normal_style);
+        apply_interaction_style(&runtime, host_style);
         capture_node.replace(Some(runtime));
         Ok(())
     });
 
-    button = button
-        .patch_attr(ArkUINodeAttributeType::BorderWidth, edge_all(variant_style.border_width))
-        .patch_attr(
-            ArkUINodeAttributeType::BorderColor,
-            color_all(variant_style.border_color),
-        );
+    if matches!(render_mode, ButtonRenderMode::Host) {
+        button = button
+            .patch_attr(
+                ArkUINodeAttributeType::BorderWidth,
+                edge_all(variant_style.border_width),
+            )
+            .patch_attr(
+                ArkUINodeAttributeType::BorderColor,
+                color_all(variant_style.border_color),
+            );
+    } else {
+        let attach_button = runtime_node.clone();
+        let attach_shell = runtime_shell.clone();
+        button =
+            button.on_event_no_param(arkit::prelude::NodeEventType::EventOnAttach, move || {
+                let button_binding = attach_button.borrow();
+                let Some(node) = button_binding.as_ref() else {
+                    return;
+                };
+                let Some(shell) = node.0.children().first() else {
+                    return;
+                };
+                let runtime = RuntimeShellNode(shell.borrow().clone());
+                apply_shell_interaction_style(&runtime, normal_style);
+                attach_shell.replace(Some(runtime));
+            });
+    }
 
     let detach_node = runtime_node.clone();
+    let detach_shell = runtime_shell.clone();
     button = button.on_event_no_param(arkit::prelude::NodeEventType::EventOnDetach, move || {
         detach_node.borrow_mut().take();
+        detach_shell.borrow_mut().take();
     });
 
     if !disabled {
         if let Some(pressed_style) = pressed_style {
-            let touch_node = runtime_node.clone();
+            let touch_button = runtime_node.clone();
+            let touch_shell = runtime_shell.clone();
             button = button.on_event(arkit::prelude::NodeEventType::TouchEvent, move |event| {
                 let Some(input_event) = event.input_event() else {
                     return;
                 };
-                let button_binding = touch_node.borrow();
-                let Some(node) = button_binding.as_ref() else {
-                    return;
-                };
-                match input_event.action {
-                    UIInputAction::Down => apply_interaction_style(node, pressed_style),
-                    UIInputAction::Up | UIInputAction::Cancel => {
-                        apply_interaction_style(node, normal_style);
+                match render_mode {
+                    ButtonRenderMode::Host => {
+                        let button_binding = touch_button.borrow();
+                        let Some(node) = button_binding.as_ref() else {
+                            return;
+                        };
+                        match input_event.action {
+                            UIInputAction::Down => apply_interaction_style(node, pressed_style),
+                            UIInputAction::Up | UIInputAction::Cancel => {
+                                apply_interaction_style(node, normal_style);
+                            }
+                            UIInputAction::Move => {}
+                        }
                     }
-                    UIInputAction::Move => {}
+                    ButtonRenderMode::Shell => {
+                        let shell_binding = touch_shell.borrow();
+                        let Some(node) = shell_binding.as_ref() else {
+                            return;
+                        };
+                        match input_event.action {
+                            UIInputAction::Down => {
+                                apply_shell_interaction_style(node, pressed_style)
+                            }
+                            UIInputAction::Up | UIInputAction::Cancel => {
+                                apply_shell_interaction_style(node, normal_style);
+                            }
+                            UIInputAction::Move => {}
+                        }
+                    }
                 }
             });
         }
     }
 
-    button = if variant_style.shadow {
-        subtle_button_shadow(button)
-    } else {
-        clear_button_shadow(button)
-    };
+    if matches!(render_mode, ButtonRenderMode::Host) {
+        button = if variant_style.shadow {
+            subtle_button_shadow(button)
+        } else {
+            clear_button_shadow(button)
+        };
+    }
 
     let button = if disabled {
         button
@@ -492,6 +634,16 @@ fn icon_size(size: ButtonSize) -> f32 {
     }
 }
 
+fn transparent_style(opacity: f32) -> ButtonInteractionStyle {
+    ButtonInteractionStyle {
+        background: TRANSPARENT,
+        foreground: TRANSPARENT,
+        border_width: 0.0,
+        border_color: TRANSPARENT,
+        opacity,
+        text_decoration: TEXT_DECORATION_NONE,
+    }
+}
 
 fn apply_interaction_style(node: &RuntimeButtonNode, style: ButtonInteractionStyle) {
     let _ = node.background_color(style.background);
@@ -513,6 +665,23 @@ fn apply_interaction_style(node: &RuntimeButtonNode, style: ButtonInteractionSty
         ArkUINodeAttributeType::TextDecoration,
         text_decoration(style.text_decoration, style.foreground),
     );
+}
+
+fn apply_shell_interaction_style(node: &RuntimeShellNode, style: ButtonInteractionStyle) {
+    let _ = node.background_color(style.background);
+    let _ = node.set_attribute(
+        ArkUINodeAttributeType::BorderWidth,
+        ArkUINodeAttributeItem::from(edge_all(style.border_width)),
+    );
+    let _ = node.set_attribute(
+        ArkUINodeAttributeType::BorderColor,
+        ArkUINodeAttributeItem::from(color_all(style.border_color)),
+    );
+    let _ = node.set_attribute(
+        ArkUINodeAttributeType::BorderRadius,
+        ArkUINodeAttributeItem::from(edge_all(radius::MD)),
+    );
+    let _ = node.opacity(style.opacity);
 }
 
 fn alpha_blend(foreground: u32, background: u32, alpha: f32) -> u32 {
