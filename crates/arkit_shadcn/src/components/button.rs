@@ -261,7 +261,9 @@ fn button_host(element: ButtonElement, size_style: ButtonSizeStyle) -> ButtonEle
         .style(ArkUINodeAttributeType::Focusable, false)
         .style(ArkUINodeAttributeType::FocusOnTouch, false)
         .background_color(TRANSPARENT)
+        .style(ArkUINodeAttributeType::Clip, true)
         .style(ArkUINodeAttributeType::BorderStyle, 0_i32)
+        .style(ArkUINodeAttributeType::BorderRadius, edge_all(radius::MD))
         .height(size_style.height)
         .style(ArkUINodeAttributeType::BorderWidth, edge_all(0.0))
         .style(ArkUINodeAttributeType::BorderColor, color_all(TRANSPARENT))
@@ -458,7 +460,7 @@ fn interaction_style(style: ButtonVariantStyle, opacity: f32) -> ButtonInteracti
 
 fn finalize_button(
     mut button: ButtonElement,
-    size_style: ButtonSizeStyle,
+    _size_style: ButtonSizeStyle,
     variant_style: ButtonVariantStyle,
     pressed_style: Option<ButtonInteractionStyle>,
     disabled: bool,
@@ -470,6 +472,12 @@ fn finalize_button(
     let normal_style = ButtonInteractionStyle {
         text_decoration: TEXT_DECORATION_NONE,
         ..interaction_style(variant_style, if disabled { 0.5 } else { 1.0 })
+    };
+    let pressed_style = match render_mode {
+        ButtonRenderMode::Host => pressed_style,
+        ButtonRenderMode::Shell => {
+            pressed_style.map(|style| normalize_shell_pressed_style(style, normal_style.foreground))
+        }
     };
     let host_style = match render_mode {
         ButtonRenderMode::Host => normal_style,
@@ -578,7 +586,7 @@ fn finalize_button(
             .patch_attr(ArkUINodeAttributeType::Opacity, 1.0_f32)
     };
 
-    button.patch_attr(ArkUINodeAttributeType::Height, size_style.height)
+    button.patch_attr(ArkUINodeAttributeType::Height, _size_style.height)
 }
 
 fn button_content_row(
@@ -642,6 +650,17 @@ fn transparent_style(opacity: f32) -> ButtonInteractionStyle {
         border_color: TRANSPARENT,
         opacity,
         text_decoration: TEXT_DECORATION_NONE,
+    }
+}
+
+fn normalize_shell_pressed_style(
+    style: ButtonInteractionStyle,
+    foreground: u32,
+) -> ButtonInteractionStyle {
+    ButtonInteractionStyle {
+        foreground,
+        text_decoration: TEXT_DECORATION_NONE,
+        ..style
     }
 }
 

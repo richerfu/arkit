@@ -220,7 +220,10 @@ where
 }
 
 /// Backward-compatible overload: create a memo from an explicit source signal.
-pub fn create_memo_on<S, T>(source: &Signal<S>, compute: impl Fn(&S) -> T + 'static) -> ReadSignal<T>
+pub fn create_memo_on<S, T>(
+    source: &Signal<S>,
+    compute: impl Fn(&S) -> T + 'static,
+) -> ReadSignal<T>
 where
     S: Clone + 'static,
     T: Clone + PartialEq + 'static,
@@ -228,5 +231,3 @@ where
     let source = source.clone();
     create_memo(move || source.with(|v| compute(v)))
 }
-
-

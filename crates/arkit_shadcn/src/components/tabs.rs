@@ -1,4 +1,5 @@
 use super::*;
+use arkit::ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
 
 pub fn tabs(tab_labels: Vec<String>, active: Signal<usize>, panels: Vec<Element>) -> Element {
     arkit::column_component()
@@ -22,36 +23,41 @@ fn tabs_list(tab_labels: Vec<String>, active: Signal<usize>) -> Element {
         .enumerate()
         .map(|(index, label)| {
             let click = active.clone();
-            let is_active = active.get() == index;
-            let trigger = arkit::row_component()
-                // Match RN `TabsList h-9 p-[3px]` with `TabsTrigger h-[calc(100%-1px)]`.
-                .height(35.0)
-                .align_items_center()
-                .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
-                .style(
-                    ArkUINodeAttributeType::Padding,
-                    vec![spacing::XXS, spacing::SM, spacing::XXS, spacing::SM],
-                )
-                .style(
-                    ArkUINodeAttributeType::BorderRadius,
-                    vec![radius::MD, radius::MD, radius::MD, radius::MD],
-                )
-                .style(
-                    ArkUINodeAttributeType::BorderWidth,
-                    vec![1.0, 1.0, 1.0, 1.0],
-                )
-                .style(ArkUINodeAttributeType::BorderColor, vec![0x00000000])
-                .patch_background_color(if is_active {
-                    color::BACKGROUND
-                } else {
-                    0x00000000
-                })
-                .on_click(move || click.set(index))
-                .children(vec![body_text(label)
-                    .style(ArkUINodeAttributeType::FontColor, color::FOREGROUND)
-                    .into()]);
+            let active_sig = active.clone();
 
-            trigger.into()
+            arkit::dynamic(move || {
+                let is_active = active_sig.get() == index;
+                let click = click.clone();
+
+                arkit::row_component()
+                    .height(35.0)
+                    .align_items_center()
+                    .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
+                    .style(
+                        ArkUINodeAttributeType::Padding,
+                        vec![spacing::XXS, spacing::SM, spacing::XXS, spacing::SM],
+                    )
+                    .style(
+                        ArkUINodeAttributeType::BorderRadius,
+                        vec![radius::MD, radius::MD, radius::MD, radius::MD],
+                    )
+                    .style(
+                        ArkUINodeAttributeType::BorderWidth,
+                        vec![1.0, 1.0, 1.0, 1.0],
+                    )
+                    .style(ArkUINodeAttributeType::BorderColor, vec![0x00000000])
+                    .patch_background_color(if is_active {
+                        color::BACKGROUND
+                    } else {
+                        0x00000000
+                    })
+                    .on_click(move || click.set(index))
+                    .children(vec![body_text(label.clone())
+                        .style(ArkUINodeAttributeType::FontColor, color::FOREGROUND)
+                        .into()])
+                    .into()
+            })
+            .into()
         })
         .collect::<Vec<_>>();
 
@@ -64,8 +70,30 @@ fn tabs_list(tab_labels: Vec<String>, active: Signal<usize>) -> Element {
 }
 
 fn tabs_content(panels: Vec<Element>, active: Signal<usize>) -> Element {
-    panels
+    // Render all panels in a stack, each with its own watch_signal
+    // to toggle visibility based on the active index. Only the active
+    // panel is visible; all others are gone (visibility = 2).
+    let panel_containers: Vec<Element> = panels
         .into_iter()
-        .nth(active.get())
-        .unwrap_or_else(|| arkit::column(vec![]))
+        .enumerate()
+        .map(|(index, panel)| {
+            let is_active = active.get() == index;
+            arkit::column_component()
+                .percent_width(1.0)
+                .style(
+                    ArkUINodeAttributeType::Visibility,
+                    if is_active { 0_i32 } else { 2_i32 },
+                )
+                .watch_signal(active.clone(), move |node, current| {
+                    node.set_visibility(if current == index { 0_i32 } else { 2_i32 })
+                })
+                .children(vec![panel])
+                .into()
+        })
+        .collect();
+
+    arkit::stack_component()
+        .percent_width(1.0)
+        .children(panel_containers)
+        .into()
 }

@@ -1,12 +1,9 @@
 use super::*;
 
 pub fn switch(state: Signal<bool>) -> ToggleElement {
-    let next = state.clone();
     shadow_sm(
         arkit::toggle_component()
-            .watch_signal(state.clone(), move |node, value| {
-                node.set_toggle_value(value)
-            })
+            .bind(state)
             .style(ArkUINodeAttributeType::ToggleSelectedColor, color::PRIMARY)
             .style(ArkUINodeAttributeType::ToggleUnselectedColor, color::INPUT)
             .style(
@@ -26,7 +23,6 @@ pub fn switch(state: Signal<bool>) -> ToggleElement {
             )
             .style(ArkUINodeAttributeType::Clip, true)
             .width(32.0)
-            .height(18.4)
-            .on_click(move || next.update(|value| *value = !*value)),
+            .height(18.4),
     )
 }

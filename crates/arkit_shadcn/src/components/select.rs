@@ -7,13 +7,6 @@ use std::rc::Rc;
 #[component]
 pub fn select(options: Vec<String>, selected: Signal<String>) -> Element {
     let open = create_signal(false);
-    let current = selected.get();
-    let has_value = !current.is_empty();
-    let label = if has_value {
-        current.clone()
-    } else {
-        String::from("Select a fruit")
-    };
     let toggle_open = open.clone();
 
     let trigger = shadow_sm(crate::styles::rounded(
@@ -33,18 +26,30 @@ pub fn select(options: Vec<String>, selected: Signal<String>) -> Element {
                     FLEX_ALIGN_SPACE_BETWEEN,
                 )
                 .children(vec![
-                    arkit::text(label)
-                        .font_size(typography::SM)
-                        .style(
-                            ArkUINodeAttributeType::FontColor,
-                            if has_value {
-                                color::FOREGROUND
+                    arkit::dynamic({
+                        let selected = selected.clone();
+                        move || {
+                            let current = selected.get();
+                            let has_value = !current.is_empty();
+                            let label = if has_value {
+                                current
                             } else {
-                                color::MUTED_FOREGROUND
-                            },
-                        )
-                        .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
-                        .into(),
+                                String::from("Select a fruit")
+                            };
+                            arkit::text(label)
+                                .font_size(typography::SM)
+                                .style(
+                                    ArkUINodeAttributeType::FontColor,
+                                    if has_value {
+                                        color::FOREGROUND
+                                    } else {
+                                        color::MUTED_FOREGROUND
+                                    },
+                                )
+                                .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
+                                .into()
+                        }
+                    }),
                     lucide::icon("chevron-down")
                         .size(16.0)
                         .color(color::MUTED_FOREGROUND)
@@ -60,7 +65,6 @@ pub fn select(options: Vec<String>, selected: Signal<String>) -> Element {
         let options = options.clone();
         let selected = selected.clone();
         let close = open.clone();
-        let current = current.clone();
         move |trigger_width| {
             let count = options.len();
             let items = options
@@ -69,52 +73,66 @@ pub fn select(options: Vec<String>, selected: Signal<String>) -> Element {
                 .map(|option| {
                     let value = selected.clone();
                     let close_dropdown = close.clone();
-                    let active = current == option;
-                    let option_label = option.clone();
-                    arkit::row_component()
-                        .percent_width(1.0)
-                        .height(36.0)
-                        .align_items_center()
-                        .style(
-                            ArkUINodeAttributeType::RowJustifyContent,
-                            FLEX_ALIGN_SPACE_BETWEEN,
-                        )
-                        .style(
-                            ArkUINodeAttributeType::Padding,
-                            vec![8.0, spacing::SM, 8.0, spacing::SM],
-                        )
-                        .style(
-                            ArkUINodeAttributeType::BorderRadius,
-                            vec![radius::SM, radius::SM, radius::SM, radius::SM],
-                        )
-                        .background_color(if active { color::ACCENT } else { 0x00000000 })
-                        .on_click(move || {
-                            value.set(option.clone());
-                            close_dropdown.set(false);
-                        })
-                        .children(vec![
-                            arkit::text(option_label)
-                                .font_size(typography::SM)
-                                .style(
-                                    ArkUINodeAttributeType::FontColor,
-                                    if active {
-                                        color::ACCENT_FOREGROUND
-                                    } else {
-                                        color::FOREGROUND
-                                    },
-                                )
-                                .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
-                                .into(),
-                            if active {
-                                lucide::icon("check")
-                                    .size(16.0)
-                                    .color(color::MUTED_FOREGROUND)
-                                    .render()
-                            } else {
-                                arkit::row_component().width(16.0).height(16.0).into()
-                            },
-                        ])
-                        .into()
+                    let sel = selected.clone();
+                    let opt = option.clone();
+
+                    // Wrap each option row in `dynamic` so it reactively updates
+                    // the highlight / check-icon when the `selected` signal changes.
+                    // The previous code read `selected.get()` once inside panel_builder,
+                    // but panel_builder is only re-invoked when trigger_frame changes,
+                    // not when `selected` itself changes.
+                    arkit::dynamic(move || {
+                        let active = sel.get() == opt;
+                        let value = value.clone();
+                        let close_dropdown = close_dropdown.clone();
+                        let opt_click = opt.clone();
+
+                        arkit::row_component()
+                            .percent_width(1.0)
+                            .height(36.0)
+                            .align_items_center()
+                            .style(
+                                ArkUINodeAttributeType::RowJustifyContent,
+                                FLEX_ALIGN_SPACE_BETWEEN,
+                            )
+                            .style(
+                                ArkUINodeAttributeType::Padding,
+                                vec![8.0, spacing::SM, 8.0, spacing::SM],
+                            )
+                            .style(
+                                ArkUINodeAttributeType::BorderRadius,
+                                vec![radius::SM, radius::SM, radius::SM, radius::SM],
+                            )
+                            .background_color(if active { color::ACCENT } else { 0x00000000 })
+                            .on_click(move || {
+                                value.set(opt_click.clone());
+                                close_dropdown.set(false);
+                            })
+                            .children(vec![
+                                arkit::text(opt.clone())
+                                    .font_size(typography::SM)
+                                    .style(
+                                        ArkUINodeAttributeType::FontColor,
+                                        if active {
+                                            color::ACCENT_FOREGROUND
+                                        } else {
+                                            color::FOREGROUND
+                                        },
+                                    )
+                                    .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
+                                    .into(),
+                                if active {
+                                    lucide::icon("check")
+                                        .size(16.0)
+                                        .color(color::MUTED_FOREGROUND)
+                                        .render()
+                                } else {
+                                    arkit::row_component().width(16.0).height(16.0).into()
+                                },
+                            ])
+                            .into()
+                    })
+                    .into()
                 })
                 .collect::<Vec<_>>();
 
@@ -169,7 +187,7 @@ pub fn select(options: Vec<String>, selected: Signal<String>) -> Element {
     };
     floating_panel_with_builder(
         trigger,
-        open.get(),
+        open,
         FloatingSide::Bottom,
         FloatingAlign::Start,
         panel_builder,

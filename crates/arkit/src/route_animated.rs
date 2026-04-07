@@ -126,7 +126,13 @@ impl AnimatedRouterState {
             if let Some(cancel) = &layer.cancel {
                 cancel.set(false);
             }
-            let last_idx = self.container.borrow().raw().children().len().saturating_sub(1);
+            let last_idx = self
+                .container
+                .borrow()
+                .raw()
+                .children()
+                .len()
+                .saturating_sub(1);
             if let Ok(Some(removed)) = self.container.borrow_mut().remove_child(last_idx) {
                 let _ = removed.borrow_mut().dispose();
             }
@@ -135,7 +141,7 @@ impl AnimatedRouterState {
         }
     }
 
-    fn set_base(&self, route: &Route, enabled: bool, render_fn: &RenderFn) {
+    fn set_base(&self, route: &Route, enabled: bool, render_fn: &RenderFn) -> ArkUIResult<()> {
         self.remove_base();
         let key = format!("route-base:{}", route.raw());
         let surface_key = format!("route-base-surface:{}", route.raw());
@@ -146,7 +152,7 @@ impl AnimatedRouterState {
         // so that all reactive effects are properly scoped under child_owner.
         // keyed_scope's mount() calls with_child_owner internally, which creates
         // nested child owners — all will be cleaned up when we dispose this owner.
-        let ((child_node, child_meta), child_owner) = with_child_owner(|| {
+        let (mount_result, child_owner) = with_child_owner(|| {
             let el = crate::view::keyed_scope(key, move || {
                 crate::view::stack_component()
                     .percent_width(1.0)
@@ -157,11 +163,16 @@ impl AnimatedRouterState {
                     .children(vec![route_surface(&route, surface_key.clone(), &render_fn)])
                     .into()
             });
-            mount_element(el).unwrap_or_else(|e| {
-                logging::error(format!("animated_router: base mount failed: {e}"));
-                panic!("animated_router: base mount failed: {e}");
-            })
+            mount_element(el)
         });
+        let (child_node, child_meta) = match mount_result {
+            Ok(mounted) => mounted,
+            Err(error) => {
+                child_owner.dispose();
+                logging::error(format!("animated_router: base mount failed: {error}"));
+                return Err(error);
+            }
+        };
 
         // Insert as first child
         let is_empty = self.container.borrow().raw().children().is_empty();
@@ -179,6 +190,7 @@ impl AnimatedRouterState {
             owner: child_owner,
             cancel: None,
         });
+        Ok(())
     }
 
     fn set_overlay(
@@ -189,14 +201,10 @@ impl AnimatedRouterState {
         base_route: Signal<Route>,
         overlay_state: Signal<Option<OverlayData>>,
         render_fn: &RenderFn,
-    ) {
+    ) -> ArkUIResult<()> {
         self.remove_overlay();
 
-        let surface_key = format!(
-            "route-overlay-surface:{}:{}",
-            data.id,
-            data.route.raw()
-        );
+        let surface_key = format!("route-overlay-surface:{}:{}", data.id, data.route.raw());
 
         let key = format!("route-overlay:{}:{}", data.id, data.route.raw());
         let surface_el = route_surface(&data.route, surface_key, render_fn);
@@ -312,12 +320,15 @@ impl AnimatedRouterState {
             });
         }
 
-        let ((child_node, child_meta), child_owner) = with_child_owner(|| {
-            mount_element(layer_el.into()).unwrap_or_else(|e| {
-                logging::error(format!("animated_router: overlay mount failed: {e}"));
-                panic!("animated_router: overlay mount failed: {e}");
-            })
-        });
+        let (mount_result, child_owner) = with_child_owner(|| mount_element(layer_el.into()));
+        let (child_node, child_meta) = match mount_result {
+            Ok(mounted) => mounted,
+            Err(error) => {
+                child_owner.dispose();
+                logging::error(format!("animated_router: overlay mount failed: {error}"));
+                return Err(error);
+            }
+        };
 
         let _ = self.container.borrow_mut().add_child(child_node.clone());
 
@@ -326,6 +337,7 @@ impl AnimatedRouterState {
             owner: child_owner,
             cancel: Some(is_active),
         });
+        Ok(())
     }
 }
 
@@ -382,7 +394,7 @@ impl ViewNode for AnimatedRouterView {
         let subscription_id = Rc::new(RefCell::new(None::<usize>));
 
         // Mount initial base
-        state.set_base(&initial, true, &render_fn);
+        state.set_base(&initial, true, &render_fn)?;
         schedule_after_mount_effects();
 
         // Subscribe to router transitions
@@ -479,15 +491,27 @@ impl ViewNode for AnimatedRouterView {
                     let ui_overlay = eff_overlay.clone();
                     queue_ui_loop(move || {
                         ui_state.remove_base();
-                        ui_state.set_base(&base, false, &ui_render_fn);
-                        ui_state.set_overlay(
+                        if let Err(error) = ui_state.set_base(&base, false, &ui_render_fn) {
+                            logging::error(format!(
+                                "animated_router: failed to refresh base layer: {error}"
+                            ));
+                            return;
+                        }
+                        if let Err(error) = ui_state.set_overlay(
                             data,
                             &ui_config,
                             ui_tid,
                             ui_base,
                             ui_overlay,
                             &ui_render_fn,
-                        );
+                        ) {
+                            logging::error(format!(
+                                "animated_router: failed to mount overlay layer: {error}"
+                            ));
+                            ui_state.remove_overlay();
+                            let _ = ui_state.set_base(&base, true, &ui_render_fn);
+                            return;
+                        }
                         schedule_after_mount_effects();
                     });
                 } else {
@@ -495,7 +519,12 @@ impl ViewNode for AnimatedRouterView {
                     let ui_render_fn = eff_render_fn.clone();
                     queue_ui_loop(move || {
                         ui_state.remove_overlay();
-                        ui_state.set_base(&base, true, &ui_render_fn);
+                        if let Err(error) = ui_state.set_base(&base, true, &ui_render_fn) {
+                            logging::error(format!(
+                                "animated_router: failed to mount settled base layer: {error}"
+                            ));
+                            return;
+                        }
                         schedule_after_mount_effects();
                     });
                 }

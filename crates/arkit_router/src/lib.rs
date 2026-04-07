@@ -23,12 +23,22 @@ pub enum RouteTransitionDirection {
 
 impl RouteTransitionEvent {
     pub fn new(from: Route, to: Route, direction: RouteTransitionDirection) -> Self {
-        Self { from, to, direction }
+        Self {
+            from,
+            to,
+            direction,
+        }
     }
 
-    pub fn from(&self) -> &Route { &self.from }
-    pub fn to(&self) -> &Route { &self.to }
-    pub fn direction(&self) -> RouteTransitionDirection { self.direction }
+    pub fn from(&self) -> &Route {
+        &self.from
+    }
+    pub fn to(&self) -> &Route {
+        &self.to
+    }
+    pub fn direction(&self) -> RouteTransitionDirection {
+        self.direction
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -134,6 +144,12 @@ pub struct Router {
     inner: Rc<RouterInner>,
 }
 
+#[derive(Clone)]
+struct NavigationDispatch {
+    route: Route,
+    transition: RouteTransitionEvent,
+}
+
 struct RouterInner {
     definitions: RefCell<Vec<RouteRecord>>,
     fallback: RefCell<Option<RouteRecord>>,
@@ -145,6 +161,8 @@ struct RouterInner {
     next_transition_observer_id: Cell<usize>,
     guards: RefCell<Vec<(usize, Rc<dyn Fn(&str) -> Option<String>>)>>,
     next_guard_id: Cell<usize>,
+    pending_dispatches: RefCell<Vec<NavigationDispatch>>,
+    dispatching: Cell<bool>,
 }
 
 #[derive(Debug, Clone)]
@@ -184,6 +202,8 @@ impl Router {
                 next_transition_observer_id: Cell::new(1),
                 guards: RefCell::new(Vec::new()),
                 next_guard_id: Cell::new(1),
+                pending_dispatches: RefCell::new(Vec::new()),
+                dispatching: Cell::new(false),
             }),
         })
     }
@@ -376,14 +396,11 @@ impl Router {
         self.run_guards(&raw_path)?;
         let route = self.resolve(&raw_path)?;
         let prev = self.current_route();
-        let prev_len = self.stack_len();
         self.inner.stack.borrow_mut().push(route.clone());
-        self.notify(route.clone());
-        self.notify_transition(RouteTransitionEvent::new(
-            prev,
+        self.dispatch_navigation(
             route.clone(),
-            RouteTransitionDirection::Forward,
-        ));
+            RouteTransitionEvent::new(prev, route.clone(), RouteTransitionDirection::Forward),
+        );
         Ok(route)
     }
 
@@ -399,12 +416,10 @@ impl Router {
             stack.push(route.clone());
         }
         drop(stack);
-        self.notify(route.clone());
-        self.notify_transition(RouteTransitionEvent::new(
-            prev,
+        self.dispatch_navigation(
             route.clone(),
-            RouteTransitionDirection::Replace,
-        ));
+            RouteTransitionEvent::new(prev, route.clone(), RouteTransitionDirection::Replace),
+        );
         Ok(route)
     }
 
@@ -417,12 +432,10 @@ impl Router {
         stack.clear();
         stack.push(route.clone());
         drop(stack);
-        self.notify(route.clone());
-        self.notify_transition(RouteTransitionEvent::new(
-            prev,
+        self.dispatch_navigation(
             route.clone(),
-            RouteTransitionDirection::Replace,
-        ));
+            RouteTransitionEvent::new(prev, route.clone(), RouteTransitionDirection::Replace),
+        );
         Ok(route)
     }
 
@@ -438,12 +451,10 @@ impl Router {
             .cloned()
             .expect("router stack always has at least one route after pop");
         drop(stack);
-        self.notify(current.clone());
-        self.notify_transition(RouteTransitionEvent::new(
-            prev,
-            current,
-            RouteTransitionDirection::Backward,
-        ));
+        self.dispatch_navigation(
+            current.clone(),
+            RouteTransitionEvent::new(prev, current, RouteTransitionDirection::Backward),
+        );
         true
     }
 
@@ -528,16 +539,13 @@ impl Router {
 
     /// Subscribe to route transition events (receives from, to, direction).
     /// Returns a subscription ID for removal.
-    pub fn subscribe_transition(
-        &self,
-        callback: impl Fn(RouteTransitionEvent) + 'static,
-    ) -> usize {
+    pub fn subscribe_transition(&self, callback: impl Fn(RouteTransitionEvent) + 'static) -> usize {
         let id = self.inner.next_transition_observer_id.get();
         self.inner.next_transition_observer_id.set(id + 1);
-        self.inner.transition_observers.borrow_mut().push((
-            id,
-            Rc::new(callback) as Rc<dyn Fn(RouteTransitionEvent)>,
-        ));
+        self.inner
+            .transition_observers
+            .borrow_mut()
+            .push((id, Rc::new(callback) as Rc<dyn Fn(RouteTransitionEvent)>));
         id
     }
 
@@ -559,6 +567,36 @@ impl Router {
             .collect::<Vec<_>>();
         for cb in callbacks {
             cb(event.clone());
+        }
+    }
+
+    fn dispatch_navigation(&self, route: Route, transition: RouteTransitionEvent) {
+        self.inner
+            .pending_dispatches
+            .borrow_mut()
+            .push(NavigationDispatch { route, transition });
+
+        if self.inner.dispatching.replace(true) {
+            return;
+        }
+
+        loop {
+            let next = {
+                let mut pending = self.inner.pending_dispatches.borrow_mut();
+                if pending.is_empty() {
+                    None
+                } else {
+                    Some(pending.remove(0))
+                }
+            };
+
+            let Some(dispatch) = next else {
+                self.inner.dispatching.set(false);
+                break;
+            };
+
+            self.notify(dispatch.route);
+            self.notify_transition(dispatch.transition);
         }
     }
 }
@@ -695,9 +733,13 @@ impl RouteTreeNode {
         })
     }
 
-    fn from_route_node_with_prefix(node: RouteNode, parent_pattern: &str) -> Result<Self, RouteError> {
+    fn from_route_node_with_prefix(
+        node: RouteNode,
+        parent_pattern: &str,
+    ) -> Result<Self, RouteError> {
         let segments = parse_pattern_segments(&node.pattern)?;
-        let relative_segments = if node.pattern.starts_with(parent_pattern) && parent_pattern != "/" {
+        let relative_segments = if node.pattern.starts_with(parent_pattern) && parent_pattern != "/"
+        {
             let relative = &node.pattern[parent_pattern.len()..];
             if relative.is_empty() {
                 Vec::new()
@@ -971,10 +1013,7 @@ fn route_specificity(segments: &[RouteSegment]) -> Vec<u8> {
 /// Recursively match a path against a route tree node.
 /// Returns `Some(Vec<RouteSegmentMatch>)` if the tree matches (root to leaf),
 /// or `None` if it doesn't match.
-fn resolve_tree(
-    node: &RouteTreeNode,
-    path_segs: &[&str],
-) -> Option<Vec<RouteSegmentMatch>> {
+fn resolve_tree(node: &RouteTreeNode, path_segs: &[&str]) -> Option<Vec<RouteSegmentMatch>> {
     // Match the current node's segments against the prefix of path_segs.
     let own_len = node.segments.len();
     let own_params = match_segments(&node.segments, &path_segs[..own_len.min(path_segs.len())])?;
@@ -1113,7 +1152,9 @@ mod tests {
         let router = Router::new("/");
         router.register("/").expect("register home");
         router.register("/about").expect("register about");
-        router.register_fallback("*rest").expect("register fallback");
+        router
+            .register_fallback("*rest")
+            .expect("register fallback");
 
         // Known route matches normally
         let about = router.resolve("/about").expect("resolve");
@@ -1162,13 +1203,11 @@ mod tests {
         use super::RouteNode;
 
         let router = Router::new("/");
-        let tree = RouteNode::new("/")
-            .expect("root")
-            .child(
-                RouteNode::new("/users")
-                    .expect("users")
-                    .child(RouteNode::named("detail", "/users/:id").expect("detail")),
-            );
+        let tree = RouteNode::new("/").expect("root").child(
+            RouteNode::new("/users")
+                .expect("users")
+                .child(RouteNode::named("detail", "/users/:id").expect("detail")),
+        );
         router.register_tree(tree).expect("register tree");
 
         let resolved = router.resolve_nested("/users/7").expect("resolve nested");

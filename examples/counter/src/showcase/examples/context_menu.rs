@@ -37,11 +37,13 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                     )
                     .style(ArkUINodeAttributeType::BorderStyle, 1_i32)
                     .style(ArkUINodeAttributeType::Clip, true)
-                    .on_click(move || toggle.update(|open| *open = !*open))
+                    .on_long_press(move || toggle.set(true))
                     .children(vec![shadcn::text_sm("Long press here")])
                     .into(),
                 vec![
-                    shadcn::context_menu_item_inset_with_shortcut("Back", "CMD+["),
+                    shadcn::context_menu_item_inset_with_shortcut_action("Back", "CMD+[", || {
+                        let _ = back_route();
+                    }),
                     shadcn::disabled_context_menu_item_inset_with_shortcut("Forward", "CMD+]"),
                     shadcn::context_menu_item_inset_with_shortcut("Reload", "CMD+R"),
                     shadcn::context_menu_submenu_inset(

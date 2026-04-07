@@ -57,18 +57,21 @@ pub fn pagination(page: Signal<i32>, total_pages: i32) -> Element {
 }
 
 pub fn pagination_item(page_num: i32, current: Signal<i32>) -> Element {
-    let variant = if current.get() == page_num {
-        ButtonVariant::Outline
-    } else {
-        ButtonVariant::Ghost
-    };
     let click = current.clone();
-    button(page_num.to_string(), variant)
-        .width(36.0)
-        .height(36.0)
-        .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
-        .on_click(move || click.set(page_num))
-        .into()
+    arkit::dynamic(move || {
+        let variant = if current.get() == page_num {
+            ButtonVariant::Outline
+        } else {
+            ButtonVariant::Ghost
+        };
+        let click = click.clone();
+        button(page_num.to_string(), variant)
+            .width(36.0)
+            .height(36.0)
+            .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
+            .on_click(move || click.set(page_num))
+            .into()
+    })
 }
 
 fn pagination_ellipsis() -> Element {

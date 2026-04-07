@@ -7,7 +7,8 @@ use arkit::ohos_arkui_binding::animate::options::Animation;
 use arkit::ohos_arkui_binding::animate::transition::{
     RotationOptions, ScaleOptions, TransitionEffect, TranslationOptions,
 };
-use arkit::ohos_arkui_binding::common::error::ArkUIResult;
+use arkit::ohos_arkui_binding::arkui_input_binding::ArkUIErrorCode;
+use arkit::ohos_arkui_binding::common::error::{ArkUIError, ArkUIResult};
 use arkit::ohos_arkui_binding::common::node::ArkUINode;
 use arkit::ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
 use arkit::ohos_arkui_binding::types::animation_finish_type::AnimationFinishCallbackType;
@@ -136,7 +137,7 @@ impl ManagedTransition {
     }
 
     pub fn asymmetric(mut appear: Self, mut disappear: Self) -> ArkUIResult<Self> {
-        let effect = TransitionEffect::asymmetric(appear.effect(), disappear.effect())?;
+        let effect = TransitionEffect::asymmetric(appear.effect()?, disappear.effect()?)?;
         let mut animations = Vec::new();
         animations.append(&mut appear.animations);
         animations.append(&mut disappear.animations);
@@ -157,10 +158,13 @@ impl ManagedTransition {
         })
     }
 
-    fn effect(&self) -> &TransitionEffect {
-        self.effect
-            .as_ref()
-            .expect("managed transition effect should exist while attached")
+    fn effect(&self) -> ArkUIResult<&TransitionEffect> {
+        self.effect.as_ref().ok_or_else(|| {
+            ArkUIError::new(
+                ArkUIErrorCode::ParamInvalid,
+                "managed transition effect was detached before use",
+            )
+        })
     }
 }
 
@@ -317,7 +321,7 @@ where
         transition: ManagedTransition,
     ) -> Self {
         self.native_with_cleanup(move |node| {
-            node.set_attribute(attr, transition.effect().into())?;
+            node.set_attribute(attr, transition.effect()?.into())?;
             Ok(move || drop(transition))
         })
     }

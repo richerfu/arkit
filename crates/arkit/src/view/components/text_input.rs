@@ -1,11 +1,9 @@
-use std::any::Any;
-use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::rc::Rc;
 
 use crate::ohos_arkui_binding::component::built_in_component::TextInput;
-use crate::{logging, queue_ui_loop, Signal};
+use crate::{logging, Signal};
 
-use super::super::core::ComponentElement;
+use super::super::core::{queue_guarded_ui_callback, run_guarded_ui_callback, ComponentElement};
 
 pub type TextInputElement = ComponentElement<TextInput>;
 
@@ -15,16 +13,6 @@ pub fn text_input_component() -> TextInputElement {
 
 pub fn text_input() -> TextInputElement {
     text_input_component()
-}
-
-fn panic_payload_message(payload: &(dyn Any + Send)) -> String {
-    if let Some(message) = payload.downcast_ref::<&'static str>() {
-        (*message).to_string()
-    } else if let Some(message) = payload.downcast_ref::<String>() {
-        message.clone()
-    } else {
-        "non-string panic payload".to_string()
-    }
 }
 
 impl ComponentElement<TextInput> {
@@ -83,16 +71,10 @@ impl ComponentElement<TextInput> {
             let callback = callback.clone();
             node.on_text_input_change(move |value| {
                 let callback = callback.clone();
-                queue_ui_loop(move || {
-                    if let Err(payload) =
-                        catch_unwind(AssertUnwindSafe(|| (callback.as_ref())(value)))
-                    {
-                        logging::error(format!(
-                            "text input error: on_change callback panicked: {}",
-                            panic_payload_message(payload.as_ref())
-                        ));
-                    }
-                });
+                queue_guarded_ui_callback(
+                    "text input error: on_change callback panicked",
+                    move || (callback.as_ref())(value),
+                );
             });
             Ok(())
         })
@@ -103,14 +85,9 @@ impl ComponentElement<TextInput> {
         self.with(move |node| {
             let callback = callback.clone();
             node.on_text_input_submit(move |enter_key| {
-                if let Err(payload) =
-                    catch_unwind(AssertUnwindSafe(|| (callback.as_ref())(enter_key)))
-                {
-                    logging::error(format!(
-                        "text input error: on_submit callback panicked: {}",
-                        panic_payload_message(payload.as_ref())
-                    ));
-                }
+                run_guarded_ui_callback("text input error: on_submit callback panicked", || {
+                    (callback.as_ref())(enter_key)
+                });
             });
             Ok(())
         })

@@ -94,9 +94,7 @@ impl Owner {
 
     /// Remove a specific child from the children list (used when a child is disposed independently).
     pub(crate) fn remove_child(&self, child: &Rc<Owner>) {
-        self.children
-            .borrow_mut()
-            .retain(|c| !Rc::ptr_eq(c, child));
+        self.children.borrow_mut().retain(|c| !Rc::ptr_eq(c, child));
     }
 }
 
@@ -240,14 +238,10 @@ pub struct ScopeGuard {
 /// `.exit()` will restore the previous owner as a safety measure.
 #[doc(hidden)]
 pub fn enter_scope() -> ScopeGuard {
-    let parent =
-        current_owner().expect("enter_scope called outside of reactive scope");
+    let parent = current_owner().expect("enter_scope called outside of reactive scope");
     let child = Owner::new_child(&parent);
     let previous = OWNER.with(|o| o.replace(Some(child.clone())));
-    ScopeGuard {
-        previous,
-        child,
-    }
+    ScopeGuard { previous, child }
 }
 
 impl ScopeGuard {

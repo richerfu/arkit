@@ -35,15 +35,30 @@ pub fn component(_attr: TokenStream, item: TokenStream) -> TokenStream {
     body_sig.ident = body_name.clone();
 
     // Collect parameter names so the wrapper can forward them to the renamed body.
-    let param_names: Vec<_> = sig.inputs.iter().map(|arg| {
+    let mut param_names = Vec::new();
+    for arg in sig.inputs.iter() {
         match arg {
             syn::FnArg::Typed(pat_type) => match &*pat_type.pat {
-                syn::Pat::Ident(ident) => &ident.ident,
-                _ => panic!("unsupported parameter pattern"),
+                syn::Pat::Ident(ident) => param_names.push(ident.ident.clone()),
+                _ => {
+                    return syn::Error::new_spanned(
+                        &pat_type.pat,
+                        "#[component] only supports identifier parameters",
+                    )
+                    .to_compile_error()
+                    .into();
+                }
             },
-            syn::FnArg::Receiver(_) => panic!("#[component] does not support self parameters"),
+            syn::FnArg::Receiver(receiver) => {
+                return syn::Error::new_spanned(
+                    receiver,
+                    "#[component] does not support self parameters",
+                )
+                .to_compile_error()
+                .into();
+            }
         }
-    }).collect();
+    }
 
     let expanded = quote! {
         #[doc(hidden)]

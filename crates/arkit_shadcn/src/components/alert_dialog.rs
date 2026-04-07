@@ -1,4 +1,5 @@
 use super::*;
+use std::rc::Rc;
 
 pub fn alert_dialog(
     title: impl Into<String>,
@@ -32,6 +33,23 @@ pub fn alert_dialog(
             )]),
     )
     .into()
+}
+
+pub fn alert_dialog_modal(
+    open: Signal<bool>,
+    title: impl Into<String>,
+    description: impl Into<String>,
+    actions: Vec<Element>,
+) -> Element {
+    let dismiss = {
+        let open = open.clone();
+        Rc::new(move || open.set(false))
+    };
+    super::dialog::modal_overlay(
+        open,
+        alert_dialog(title, description, actions),
+        Some(dismiss),
+    )
 }
 
 pub fn alert_dialog_actions(actions: Vec<Element>) -> Element {

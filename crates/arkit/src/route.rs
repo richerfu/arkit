@@ -8,8 +8,8 @@ pub use arkit_router::{
 
 use crate::owner::{provide_context, use_context};
 use crate::view::keyed_scope;
-use crate::{create_signal, on_cleanup};
 use crate::view::Element;
+use crate::{create_signal, on_cleanup};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RouteTransitionDirection {
@@ -126,9 +126,10 @@ pub fn use_route_transition() -> RouteTransition {
     let active_router = router();
     let initial_route = active_router.current_route();
     let initial_stack_len = active_router.stack_len();
-    let transition_state = create_signal(
-        RouteTransition::new(initial_route.clone(), RouteTransitionDirection::None)
-    );
+    let transition_state = create_signal(RouteTransition::new(
+        initial_route.clone(),
+        RouteTransitionDirection::None,
+    ));
 
     let subscription_id = Rc::new(RefCell::new(None::<usize>));
     let previous_route = Rc::new(RefCell::new(initial_route));
@@ -187,7 +188,10 @@ pub fn use_route_query(name: &str) -> Option<String> {
 pub fn use_route_param_signal(name: &str) -> crate::Signal<Option<String>> {
     let name = name.to_owned();
     let active_router = router();
-    let initial = active_router.current_route().param(&name).map(ToOwned::to_owned);
+    let initial = active_router
+        .current_route()
+        .param(&name)
+        .map(ToOwned::to_owned);
     let param_signal = create_signal(initial);
 
     let subscription_id = Rc::new(RefCell::new(None::<usize>));
@@ -223,7 +227,10 @@ pub fn use_route_param_signal(name: &str) -> crate::Signal<Option<String>> {
 pub fn use_route_query_signal(name: &str) -> crate::Signal<Option<String>> {
     let name = name.to_owned();
     let active_router = router();
-    let initial = active_router.current_route().query(&name).map(ToOwned::to_owned);
+    let initial = active_router
+        .current_route()
+        .query(&name)
+        .map(ToOwned::to_owned);
     let query_signal = create_signal(initial);
 
     let subscription_id = Rc::new(RefCell::new(None::<usize>));
@@ -256,9 +263,7 @@ pub fn use_route_query_signal(name: &str) -> crate::Signal<Option<String>> {
 
 /// Returns a reactive getter and setter for a search/query parameter.
 /// The setter navigates to the current path with the updated query string.
-pub fn use_search_param(
-    name: &str,
-) -> (crate::Signal<Option<String>>, Rc<dyn Fn(Option<String>)>) {
+pub fn use_search_param(name: &str) -> (crate::Signal<Option<String>>, Rc<dyn Fn(Option<String>)>) {
     let getter = use_route_query_signal(name);
     let name = name.to_owned();
     let setter: Rc<dyn Fn(Option<String>)> = Rc::new(move |value| {
@@ -349,22 +354,19 @@ pub fn use_outlet() -> Option<Element> {
         return None;
     }
     let resolved = ctx.resolved.clone();
-    Some(keyed_scope(
-        format!("outlet:{}", next_depth),
-        move || {
-            provide_context(RouteContext {
-                resolved,
-                depth: next_depth,
-            });
-            // The caller should use `use_outlet` inside their `router_view`
-            // render function. This returns an empty placeholder; the actual
-            // rendering is driven by the `router_view` callback.
-            crate::view::column_component()
-                .percent_width(1.0)
-                .percent_height(1.0)
-                .into()
-        },
-    ))
+    Some(keyed_scope(format!("outlet:{}", next_depth), move || {
+        provide_context(RouteContext {
+            resolved,
+            depth: next_depth,
+        });
+        // The caller should use `use_outlet` inside their `router_view`
+        // render function. This returns an empty placeholder; the actual
+        // rendering is driven by the `router_view` callback.
+        crate::view::column_component()
+            .percent_width(1.0)
+            .percent_height(1.0)
+            .into()
+    }))
 }
 
 /// Renders the current route as a nested layout using registered route trees.

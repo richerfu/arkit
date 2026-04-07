@@ -1,7 +1,7 @@
 use std::error::Error as StdError;
 use std::fmt::{Display, Formatter};
 use std::str;
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 
 use arkit::ohos_arkui_binding::api::attribute_option::DrawableDescriptor;
 use arkit::ohos_arkui_binding::arkui_input_binding::ArkUIErrorCode;
@@ -18,6 +18,8 @@ pub const DEFAULT_STROKE_WIDTH: f32 = 2.0;
 pub const DEFAULT_ICON_COLOR: u32 = 0xFF171717;
 
 static DISPLAY_SCALE: OnceLock<f32> = OnceLock::new();
+static SVG_CACHE: OnceLock<Mutex<std::collections::BTreeMap<IconCacheKey, String>>> =
+    OnceLock::new();
 
 #[derive(Debug)]
 pub enum IconError {
@@ -61,6 +63,25 @@ pub(crate) struct IconSpec {
     pub(crate) stroke_width: f32,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct IconCacheKey {
+    name: String,
+    size_bits: u32,
+    color: u32,
+    stroke_width_bits: u32,
+}
+
+impl From<&IconSpec> for IconCacheKey {
+    fn from(value: &IconSpec) -> Self {
+        Self {
+            name: value.name.clone(),
+            size_bits: value.size.to_bits(),
+            color: value.color,
+            stroke_width_bits: value.stroke_width.to_bits(),
+        }
+    }
+}
+
 pub fn icon(name: impl Into<String>) -> IconElement {
     IconElement {
         spec: IconSpec {
@@ -101,7 +122,11 @@ impl IconElement {
     }
 
     pub fn render(self) -> Element {
-        build_icon_element(&self.spec, true).unwrap_or_else(|_| {
+        build_icon_element(&self.spec, true).unwrap_or_else(|error| {
+            ohos_hilog_binding::error(format!(
+                "icon error: failed to render '{}': {error}",
+                self.spec.name
+            ));
             arkit::row_component()
                 .width(self.spec.size)
                 .height(self.spec.size)
@@ -122,7 +147,7 @@ fn build_icon_element(spec: &IconSpec, allow_fallback: bool) -> Result<Element, 
     Ok(arkit::image_component()
         .native_with_cleanup(move |image| {
             let native = NativeIconImage::decode(svg, size).map_err(icon_to_arkui_error)?;
-            image.set_image_src(native.drawable())?;
+            image.set_image_src(native.drawable().map_err(icon_to_arkui_error)?)?;
             Ok(move || drop(native))
         })
         .native(move |image| image.set_image_alt(alt))
@@ -136,11 +161,30 @@ fn icon_to_arkui_error(error: IconError) -> ArkUIError {
 }
 
 fn rendered_icon_svg(spec: &IconSpec) -> Result<String, IconError> {
+    let cache_key = IconCacheKey::from(spec);
+    if let Ok(cache) = SVG_CACHE
+        .get_or_init(|| Mutex::new(std::collections::BTreeMap::new()))
+        .lock()
+    {
+        if let Some(svg) = cache.get(&cache_key) {
+            return Ok(svg.clone());
+        }
+    }
+
     let embedded =
         embedded_icon(&spec.name).ok_or_else(|| IconError::MissingIcon(spec.name.clone()))?;
     let raw_svg = str::from_utf8(embedded.data.as_ref())?;
     let body = extract_svg_body(raw_svg, &spec.name)?;
-    Ok(compose_svg(spec, body))
+    let svg = compose_svg(spec, body);
+
+    if let Ok(mut cache) = SVG_CACHE
+        .get_or_init(|| Mutex::new(std::collections::BTreeMap::new()))
+        .lock()
+    {
+        cache.insert(cache_key, svg.clone());
+    }
+
+    Ok(svg)
 }
 
 fn extract_svg_body<'a>(raw_svg: &'a str, name: &str) -> Result<&'a str, IconError> {
@@ -220,10 +264,10 @@ impl NativeIconImage {
         })
     }
 
-    fn drawable(&self) -> &DrawableDescriptor {
+    fn drawable(&self) -> Result<&DrawableDescriptor, IconError> {
         self.drawable
             .as_ref()
-            .expect("native icon drawable should exist while mounted")
+            .ok_or_else(|| IconError::ArkUI("native icon drawable was already released".into()))
     }
 }
 

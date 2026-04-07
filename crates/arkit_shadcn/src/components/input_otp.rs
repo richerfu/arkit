@@ -1,16 +1,27 @@
 use super::*;
 
 pub fn input_otp(value: Signal<String>, digits: usize) -> Element {
-    let chars = value.get().chars().collect::<Vec<_>>();
     arkit::row_component()
         .percent_width(1.0)
         .children(
             (0..digits)
                 .map(|idx| {
                     let otp = value.clone();
+                    let watch = value.clone();
                     input_surface(
                         arkit::text_input_component()
-                            .value(chars.get(idx).map(char::to_string).unwrap_or_default())
+                            // Use watch_signal to reactively update each input's
+                            // displayed character when the `value` signal changes.
+                            // The previous code read `value.get()` once at construction
+                            // time, so external value changes never updated the inputs.
+                            .watch_signal(watch, move |node, val| {
+                                let ch = val
+                                    .chars()
+                                    .nth(idx)
+                                    .map(|c| c.to_string())
+                                    .unwrap_or_default();
+                                node.set_text_input_text(ch)
+                            })
                             .width(36.0)
                             .height(36.0)
                             .font_size(typography::SM)

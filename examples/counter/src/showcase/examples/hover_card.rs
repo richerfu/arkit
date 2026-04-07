@@ -54,7 +54,7 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                             .into(),
                     ])
                     .into()],
-                ctx.toggle_state.get(),
+                ctx.toggle_state,
                 320.0,
             ),
             320.0,

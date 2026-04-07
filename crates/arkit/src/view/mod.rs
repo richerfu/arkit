@@ -3,7 +3,7 @@ mod core;
 mod element;
 
 pub use components::*;
-pub use core::ComponentElement;
+pub use core::{ComponentElement, ReactiveHost};
 pub use element::Element;
 pub(crate) use element::ViewNode;
 

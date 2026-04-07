@@ -1,7 +1,7 @@
 use arkit::prelude::ArkUINodeAttributeType;
 use arkit::{
     ButtonElement, CalendarPickerElement, ComponentElement, DatePickerElement, Element,
-    ProgressElement, RowElement, ScrollElement, Signal, SliderElement, SwiperElement,
+    ProgressElement, ReactiveHost, RowElement, ScrollElement, Signal, SliderElement, SwiperElement,
     TextAreaElement, TextElement, TextInputElement, ToggleElement,
 };
 
@@ -38,6 +38,7 @@ mod hover_card;
 mod input;
 mod input_otp;
 mod label;
+mod menu_common;
 mod menubar;
 mod navigation_menu;
 mod pagination;
@@ -116,6 +117,29 @@ pub(crate) const FLEX_ALIGN_CENTER: i32 = 2;
 pub(crate) const FLEX_ALIGN_END: i32 = 3;
 pub(crate) const FLEX_ALIGN_SPACE_BETWEEN: i32 = 6;
 pub(crate) const FLEX_ALIGN_START: i32 = 1;
+pub(crate) const HIT_TEST_TRANSPARENT: i32 = 2;
+pub(crate) const VISIBILITY_HIDDEN: i32 = 2;
+
+pub(crate) fn visibility_gate<T>(
+    element: ComponentElement<T>,
+    open: Signal<bool>,
+) -> ComponentElement<T>
+where
+    T: ReactiveHost,
+{
+    element
+        .style(ArkUINodeAttributeType::Visibility, VISIBILITY_HIDDEN)
+        .style(ArkUINodeAttributeType::Opacity, 0.0_f32)
+        .style(
+            ArkUINodeAttributeType::HitTestBehavior,
+            HIT_TEST_TRANSPARENT,
+        )
+        .watch_signal(open, move |node, is_open| {
+            node.set_visibility(if is_open { 0_i32 } else { VISIBILITY_HIDDEN })?;
+            node.set_hit_test_behavior(if is_open { 0_i32 } else { HIT_TEST_TRANSPARENT })?;
+            node.opacity(if is_open { 1.0 } else { 0.0 })
+        })
+}
 
 pub(crate) fn stack(children: Vec<Element>, gap: f32) -> Element {
     let items = children

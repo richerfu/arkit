@@ -48,6 +48,7 @@ version = "0.1.0"
 dependencies = [
  "arkit",
  "ohos-display-binding 0.0.1",
+ "ohos-hilog-binding",
  "rust-embed",
 ]
 

@@ -31,8 +31,8 @@ pub fn popover_with_width(
                 .children(vec![stack(content, spacing::LG)]),
         )
         .into(),
-        open.get(),
-        FloatingSide::Top,
+        open,
+        FloatingSide::Bottom,
         Some(dismiss),
     )
 }

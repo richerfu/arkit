@@ -321,8 +321,7 @@ fn reconcile_for<K: Eq + std::hash::Hash + Clone>(
     }
 
     // Drain all existing entries out so we can move them freely.
-    let mut old_entries: Vec<Option<ForItemEntry<K>>> =
-        entries.drain(..).map(Some).collect();
+    let mut old_entries: Vec<Option<ForItemEntry<K>>> = entries.drain(..).map(Some).collect();
     let mut matched = vec![false; old_entries.len()];
 
     // Build result list: reuse matched old entries or mount new ones.

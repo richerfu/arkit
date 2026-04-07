@@ -1,5 +1,7 @@
-use std::any::{type_name, TypeId};
+use std::any::{type_name, Any, TypeId};
 use std::mem::{align_of, size_of, ManuallyDrop};
+use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::rc::Rc;
 
 use crate::component::{run_cleanups, Cleanup, MountedElement};
 use crate::logging;
@@ -23,14 +25,60 @@ use crate::ohos_arkui_binding::component::built_in_component::{
 #[cfg(feature = "api-22")]
 use crate::ohos_arkui_binding::component::built_in_component::{EmbeddedComponent, Undefined};
 use crate::ohos_arkui_binding::event::inner_event::Event as ArkEvent;
+use crate::ohos_arkui_binding::gesture::gesture_data::GestureEventData;
+use crate::ohos_arkui_binding::gesture::inner_gesture::Gesture;
 use crate::ohos_arkui_binding::types::advanced::NodeCustomEventType;
 use crate::ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
 use crate::ohos_arkui_binding::types::event::NodeEventType;
+use crate::ohos_arkui_binding::types::gesture_event::GestureEventAction;
 use crate::signal::Signal;
 
 use super::element::{Element, ViewNode};
 
 type Effect<T> = Box<dyn FnOnce(&mut T) -> ArkUIResult<Option<Cleanup>>>;
+const DEFAULT_LONG_PRESS_DURATION_MS: i32 = 500;
+
+struct LongPressCallbackContext {
+    callback: Rc<dyn Fn()>,
+}
+
+pub(crate) fn panic_payload_message(payload: &(dyn Any + Send)) -> String {
+    if let Some(message) = payload.downcast_ref::<&'static str>() {
+        (*message).to_string()
+    } else if let Some(message) = payload.downcast_ref::<String>() {
+        message.clone()
+    } else {
+        "non-string panic payload".to_string()
+    }
+}
+
+pub(crate) fn run_guarded_ui_callback(error_label: &'static str, callback: impl FnOnce()) {
+    if let Err(payload) = catch_unwind(AssertUnwindSafe(callback)) {
+        logging::error(format!(
+            "{error_label}: {}",
+            panic_payload_message(payload.as_ref())
+        ));
+    }
+}
+
+pub(crate) fn queue_guarded_ui_callback(
+    error_label: &'static str,
+    callback: impl FnOnce() + 'static,
+) {
+    crate::runtime::queue_ui_loop(move || run_guarded_ui_callback(error_label, callback));
+}
+
+fn long_press_gesture_callback(event: GestureEventData) {
+    let Some(data) = event.data else {
+        return;
+    };
+    let context = unsafe { &*(data as *const LongPressCallbackContext) };
+    let callback = context.callback.clone();
+    queue_guarded_ui_callback(
+        "gesture error: on_long_press callback panicked",
+        move || (callback.as_ref())(),
+    );
+}
 
 pub struct ComponentElement<T> {
     constructor: fn() -> ArkUIResult<T>,
@@ -49,8 +97,13 @@ pub struct ComponentElement<T> {
     children: Vec<Element>,
 }
 
-trait HostComponent: ArkUICommonAttribute + Into<ArkUINode> + 'static {
-    fn from_existing(node: ArkUINode) -> Self;
+mod sealed {
+    pub trait Sealed {}
+}
+
+pub trait ReactiveHost: sealed::Sealed + ArkUICommonAttribute + Into<ArkUINode> + 'static {
+    #[doc(hidden)]
+    fn from_existing_node(node: ArkUINode) -> Self;
 
     fn kind() -> TypeId {
         TypeId::of::<Self>()
@@ -112,8 +165,10 @@ fn apply_attr_list<T: ArkUICommonAttribute>(
 macro_rules! impl_host_component {
     ($($ty:ty),* $(,)?) => {
         $(
-            impl HostComponent for $ty {
-                fn from_existing(node: ArkUINode) -> Self {
+            impl sealed::Sealed for $ty {}
+
+            impl ReactiveHost for $ty {
+                fn from_existing_node(node: ArkUINode) -> Self {
                     // All generated ArkUI component wrappers are single-field tuple structs over
                     // `ArkUINode`. We reuse that representation here to patch existing nodes.
                     wrap_component(node)
@@ -226,7 +281,6 @@ impl<T> ComponentElement<T>
 where
     T: ArkUICommonAttribute + 'static,
 {
-    #[allow(private_bounds)]
     pub fn watch_signal<S>(
         mut self,
         signal: Signal<S>,
@@ -234,7 +288,7 @@ where
     ) -> Self
     where
         S: Clone + 'static,
-        T: HostComponent,
+        T: ReactiveHost,
     {
         let apply = std::rc::Rc::new(apply);
         self.mount_effects.push(Box::new(move |node| {
@@ -249,7 +303,7 @@ where
             crate::effect::create_effect(move || {
                 let value = signal.get();
                 let raw = effect_node.borrow().clone();
-                let mut typed = T::from_existing(raw);
+                let mut typed = T::from_existing_node(raw);
                 match effect_apply(&mut typed, value) {
                     Ok(()) => {
                         *effect_node.borrow_mut() = typed.into();
@@ -367,6 +421,58 @@ where
         T: ArkUIGesture,
     {
         self.mount_effects.push(wrap_effect(mutator));
+        self
+    }
+
+    pub fn on_long_press(self, callback: impl Fn() + 'static) -> Self
+    where
+        T: ArkUIGesture,
+    {
+        self.on_long_press_with_duration(DEFAULT_LONG_PRESS_DURATION_MS, callback)
+    }
+
+    pub fn on_long_press_with_duration(
+        mut self,
+        duration_ms: i32,
+        callback: impl Fn() + 'static,
+    ) -> Self
+    where
+        T: ArkUIGesture,
+    {
+        let callback = Rc::new(callback) as Rc<dyn Fn()>;
+        self.mount_effects.push(Box::new(move |node| {
+            let gesture = Gesture::create_long_gesture(1, false, duration_ms)?;
+            let callback_data = Box::into_raw(Box::new(LongPressCallbackContext {
+                callback: callback.clone(),
+            }));
+
+            if let Err(error) = gesture.on_gesture_with_data(
+                GestureEventAction::Accept,
+                callback_data.cast(),
+                long_press_gesture_callback,
+            ) {
+                unsafe {
+                    drop(Box::from_raw(callback_data));
+                }
+                let _ = gesture.dispose();
+                return Err(error);
+            }
+
+            if let Err(error) = node.add_gesture_ref(&gesture, None, None) {
+                unsafe {
+                    drop(Box::from_raw(callback_data));
+                }
+                let _ = gesture.dispose();
+                return Err(error);
+            }
+
+            Ok(Some(Box::new(move || {
+                let _ = gesture.dispose();
+                unsafe {
+                    drop(Box::from_raw(callback_data));
+                }
+            }) as Cleanup))
+        }));
         self
     }
 }
@@ -730,7 +836,7 @@ where
 
 impl<T> ViewNode for ComponentElement<T>
 where
-    T: HostComponent,
+    T: ReactiveHost,
 {
     fn kind(&self) -> TypeId {
         T::kind()
@@ -843,7 +949,7 @@ where
             ..
         } = *self;
 
-        let mut typed = T::from_existing(node.clone());
+        let mut typed = T::from_existing_node(node.clone());
         apply_attr_list(&mut typed, init_attrs, "patch", T::name());
         apply_attr_list(&mut typed, patch_attrs, "patch", T::name());
 

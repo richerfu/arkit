@@ -103,5 +103,7 @@ fn app() -> Element {
     let _ = register_named_route("components", "/components/:name");
     let _ = reset_route("/");
 
-    animated_router_view(RouteTransitionConfig::default(), |route| render_route(route))
+    animated_router_view(RouteTransitionConfig::default(), |route| {
+        render_route(route)
+    })
 }

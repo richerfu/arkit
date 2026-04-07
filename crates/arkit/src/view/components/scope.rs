@@ -169,7 +169,10 @@ impl ViewNode for OwnedScopeElement {
 
     fn mount(mut self: Box<Self>) -> ArkUIResult<(ArkUINode, MountedElement)> {
         let key = self.key.take();
-        let child_element = self.element.take().expect("OwnedScopeElement mount called twice");
+        let child_element = self
+            .element
+            .take()
+            .expect("OwnedScopeElement mount called twice");
         let child_owner = self.child_owner.clone();
 
         let mut container = Column::new()?;
