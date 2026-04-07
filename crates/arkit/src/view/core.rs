@@ -3,7 +3,7 @@ use std::mem::{align_of, size_of, ManuallyDrop};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::rc::Rc;
 
-use crate::component::{run_cleanups, Cleanup, MountedElement};
+use crate::component::{dispose_node_handle, run_cleanups, Cleanup, MountedElement};
 use crate::logging;
 use crate::ohos_arkui_binding::api::node_custom_event::NodeCustomEvent;
 use crate::ohos_arkui_binding::common::attribute::ArkUINodeAttributeItem;
@@ -31,7 +31,7 @@ use crate::ohos_arkui_binding::types::advanced::NodeCustomEventType;
 use crate::ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
 use crate::ohos_arkui_binding::types::event::NodeEventType;
 use crate::ohos_arkui_binding::types::gesture_event::GestureEventAction;
-use crate::signal::Signal;
+use crate::{Length, Padding};
 
 use super::element::{Element, ViewNode};
 
@@ -88,9 +88,8 @@ pub struct ComponentElement<T> {
     init_attrs: Vec<(ArkUINodeAttributeType, ArkUINodeAttributeItem)>,
     /// Attributes reapplied on every patch when the parent re-renders with new values.
     patch_attrs: Vec<(ArkUINodeAttributeType, ArkUINodeAttributeItem)>,
-    /// Side effects that run on mount only: event handlers, gestures, native blocks,
-    /// reactive signal watchers. In the SolidJS model these are set up once and never
-    /// re-run because updates are driven by reactive effects, not re-rendering.
+    /// Side effects that run on mount only: event handlers, gestures, and native
+    /// setup blocks that stay attached while the mounted node is reused.
     mount_effects: Vec<Effect<T>>,
     /// Side effects that run on both mount AND patch (reserved for future use).
     effects: Vec<Effect<T>>,
@@ -281,47 +280,6 @@ impl<T> ComponentElement<T>
 where
     T: ArkUICommonAttribute + 'static,
 {
-    pub fn watch_signal<S>(
-        mut self,
-        signal: Signal<S>,
-        apply: impl Fn(&mut T, S) -> ArkUIResult<()> + 'static,
-    ) -> Self
-    where
-        S: Clone + 'static,
-        T: ReactiveHost,
-    {
-        let apply = std::rc::Rc::new(apply);
-        self.mount_effects.push(Box::new(move |node| {
-            let node_handle = std::rc::Rc::new(std::cell::RefCell::new(node.borrow_mut().clone()));
-
-            // create_effect runs the closure immediately (initial apply) and
-            // re-runs whenever the tracked signal changes. This unifies
-            // watch_signal with the reactive system: batch() works, Owner
-            // cleanup works, and dependency tracking is automatic.
-            let effect_node = node_handle;
-            let effect_apply = apply;
-            crate::effect::create_effect(move || {
-                let value = signal.get();
-                let raw = effect_node.borrow().clone();
-                let mut typed = T::from_existing_node(raw);
-                match effect_apply(&mut typed, value) {
-                    Ok(()) => {
-                        *effect_node.borrow_mut() = typed.into();
-                    }
-                    Err(error) => {
-                        logging::error(format!(
-                            "signal error: effect apply failed on {}: {error}",
-                            T::name()
-                        ));
-                    }
-                }
-            });
-
-            Ok(None)
-        }));
-        self
-    }
-
     pub fn child(mut self, child: impl Into<Element>) -> Self {
         self.children.push(child.into());
         self
@@ -379,15 +337,37 @@ where
         self.constraint_size(0.0, value, 0.0, 100000.0)
     }
 
-    pub fn width(mut self, value: f32) -> Self {
-        self.init_attrs
-            .push((ArkUINodeAttributeType::Width, value.into()));
+    pub fn width(mut self, value: impl Into<Length>) -> Self {
+        match value.into() {
+            Length::Shrink => {}
+            Length::Fill => self
+                .init_attrs
+                .push((ArkUINodeAttributeType::WidthPercent, 1.0_f32.into())),
+            Length::FillPortion(portion) => self.init_attrs.push((
+                ArkUINodeAttributeType::LayoutWeight,
+                f32::from(portion).into(),
+            )),
+            Length::Fixed(value) => self
+                .init_attrs
+                .push((ArkUINodeAttributeType::Width, value.into())),
+        }
         self
     }
 
-    pub fn height(mut self, value: f32) -> Self {
-        self.init_attrs
-            .push((ArkUINodeAttributeType::Height, value.into()));
+    pub fn height(mut self, value: impl Into<Length>) -> Self {
+        match value.into() {
+            Length::Shrink => {}
+            Length::Fill => self
+                .init_attrs
+                .push((ArkUINodeAttributeType::HeightPercent, 1.0_f32.into())),
+            Length::FillPortion(portion) => self.init_attrs.push((
+                ArkUINodeAttributeType::LayoutWeight,
+                f32::from(portion).into(),
+            )),
+            Length::Fixed(value) => self
+                .init_attrs
+                .push((ArkUINodeAttributeType::Height, value.into())),
+        }
         self
     }
 
@@ -407,6 +387,22 @@ where
         self.init_attrs
             .push((ArkUINodeAttributeType::BackgroundColor, value.into()));
         self
+    }
+
+    pub fn padding(mut self, value: impl Into<Padding>) -> Self {
+        self.init_attrs.push((
+            ArkUINodeAttributeType::Padding,
+            value.into().to_vec().into(),
+        ));
+        self
+    }
+
+    pub fn padding_x(self, value: f32) -> Self {
+        self.padding(Padding::symmetric(value, 0.0))
+    }
+
+    pub fn padding_y(self, value: f32) -> Self {
+        self.padding(Padding::symmetric(0.0, value))
     }
 
     /// Like [`Self::background_color`] but updates on patch when the value can change.
@@ -599,7 +595,7 @@ where
     while mounted_children.len() > start {
         let removed_meta = mounted_children.remove(start);
         if let Some(removed) = parent.remove_child(start)? {
-            removed.borrow_mut().dispose()?;
+            dispose_node_handle(removed)?;
         }
         removed_meta.cleanup_recursive();
     }
@@ -795,7 +791,7 @@ where
         if !matched_old[i] {
             // Unmatched: dispose the native node and clean up metadata
             if let Some(removed) = removed {
-                removed.borrow_mut().dispose()?;
+                dispose_node_handle(removed)?;
             }
             let old_meta = mounted_children.remove(i);
             old_meta.cleanup_recursive();
@@ -868,7 +864,7 @@ where
         apply_attr_list(&mut node, init_attrs, "mount", T::name());
         apply_attr_list(&mut node, patch_attrs, "mount", T::name());
 
-        // Mount-only effects (event handlers, gestures, signal watchers, etc.)
+        // Mount-only effects (event handlers, gestures, native setup blocks, etc.)
         let mut self_cleanups = match apply_effects(&mut node, mount_effects) {
             Ok(cleanups) => cleanups,
             Err(error) => {

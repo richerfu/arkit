@@ -1,9 +1,9 @@
 use super::*;
 
-pub fn switch(state: Signal<bool>) -> ToggleElement {
+pub fn switch(state: bool) -> ToggleElement {
     shadow_sm(
         arkit::toggle_component()
-            .bind(state)
+            .patch_attr(ArkUINodeAttributeType::ToggleValue, state)
             .style(ArkUINodeAttributeType::ToggleSelectedColor, color::PRIMARY)
             .style(ArkUINodeAttributeType::ToggleUnselectedColor, color::INPUT)
             .style(

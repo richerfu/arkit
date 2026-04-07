@@ -1,4 +1,6 @@
 use std::any::{Any, TypeId};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use crate::ohos_arkui_binding::common::error::ArkUIResult;
 use crate::ohos_arkui_binding::common::node::ArkUINode;
@@ -69,4 +71,9 @@ pub(crate) fn patch_element(
     mounted: &mut MountedElement,
 ) -> ArkUIResult<()> {
     element.patch(node, mounted)
+}
+
+pub(crate) fn dispose_node_handle(handle: Rc<RefCell<ArkUINode>>) -> ArkUIResult<()> {
+    let mut node = handle.borrow().clone();
+    node.dispose()
 }

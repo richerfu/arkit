@@ -42,73 +42,67 @@ fn toggle_surface(
     }
 }
 
-pub fn toggle(label: impl Into<String>, state: Signal<bool>) -> Element {
+pub fn toggle(
+    label: impl Into<String>,
+    state: bool,
+    on_toggle: impl Fn(bool) + 'static,
+) -> Element {
     let label_text = label.into();
-    let next = state.clone();
-
-    arkit::dynamic(move || {
-        let active = state.get();
-        let next = next.clone();
-
-        toggle_surface(
-            normal_button(label_text.clone())
-                .height(40.0)
-                .style(ArkUINodeAttributeType::Padding, vec![8.0, 10.0, 8.0, 10.0])
-                .font_size(typography::SM)
-                .style(ArkUINodeAttributeType::FontWeight, 4_i32)
-                .style(
-                    ArkUINodeAttributeType::TextAlign,
-                    i32::from(TextAlignment::Center),
-                )
-                .patch_attr(
-                    ArkUINodeAttributeType::FontColor,
-                    if active {
-                        color::ACCENT_FOREGROUND
-                    } else {
-                        color::FOREGROUND
-                    },
-                ),
-            active,
-            TRANSPARENT,
-            [0.0, 0.0, 0.0, 0.0],
-            TRANSPARENT,
-            [radius::MD, radius::MD, radius::MD, radius::MD],
-            false,
-        )
-        .on_click(move || next.update(|value| *value = !*value))
-        .into()
-    })
+    toggle_surface(
+        normal_button(label_text)
+            .height(40.0)
+            .style(ArkUINodeAttributeType::Padding, vec![8.0, 10.0, 8.0, 10.0])
+            .font_size(typography::SM)
+            .style(ArkUINodeAttributeType::FontWeight, 4_i32)
+            .style(
+                ArkUINodeAttributeType::TextAlign,
+                i32::from(TextAlignment::Center),
+            )
+            .patch_attr(
+                ArkUINodeAttributeType::FontColor,
+                if state {
+                    color::ACCENT_FOREGROUND
+                } else {
+                    color::FOREGROUND
+                },
+            ),
+        state,
+        TRANSPARENT,
+        [0.0, 0.0, 0.0, 0.0],
+        TRANSPARENT,
+        [radius::MD, radius::MD, radius::MD, radius::MD],
+        false,
+    )
+    .on_click(move || on_toggle(!state))
+    .into()
 }
 
-pub fn toggle_icon(icon_name: impl Into<String>, state: Signal<bool>) -> Element {
+pub fn toggle_icon(
+    icon_name: impl Into<String>,
+    state: bool,
+    on_toggle: impl Fn(bool) + 'static,
+) -> Element {
     let icon = icon_name.into();
-    let next = state.clone();
-
-    arkit::dynamic(move || {
-        let active = state.get();
-        let next = next.clone();
-
-        toggle_surface(
-            normal_button_component()
-                .width(40.0)
-                .height(40.0)
-                .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
-                .children(vec![lucide::icon(icon.clone())
-                    .size(16.0)
-                    .color(if active {
-                        color::ACCENT_FOREGROUND
-                    } else {
-                        color::FOREGROUND
-                    })
-                    .render()]),
-            active,
-            TRANSPARENT,
-            [0.0, 0.0, 0.0, 0.0],
-            TRANSPARENT,
-            [radius::MD, radius::MD, radius::MD, radius::MD],
-            false,
-        )
-        .on_click(move || next.update(|value| *value = !*value))
-        .into()
-    })
+    toggle_surface(
+        normal_button_component()
+            .width(40.0)
+            .height(40.0)
+            .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
+            .children(vec![lucide::icon(icon)
+                .size(16.0)
+                .color(if state {
+                    color::ACCENT_FOREGROUND
+                } else {
+                    color::FOREGROUND
+                })
+                .render()]),
+        state,
+        TRANSPARENT,
+        [0.0, 0.0, 0.0, 0.0],
+        TRANSPARENT,
+        [radius::MD, radius::MD, radius::MD, radius::MD],
+        false,
+    )
+    .on_click(move || on_toggle(!state))
+    .into()
 }

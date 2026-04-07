@@ -4,20 +4,19 @@ use arkit::prelude::*;
 use arkit_shadcn as shadcn;
 
 #[component]
-pub(crate) fn render(_ctx: DemoContext) -> Element {
-    let first = create_signal(true);
-    let second = create_signal(true);
-    let disabled_toggle = create_signal(false);
-    let card_toggle = create_signal(false);
-    let card_toggle_click = card_toggle.clone();
-
+pub(crate) fn render(ctx: DemoContext) -> Element {
+    let on_first = ctx.on_checkbox_first.clone();
+    let on_second = ctx.on_checkbox_second.clone();
+    let on_card_click = ctx.on_checkbox_card.clone();
+    let on_card_checkbox = ctx.on_checkbox_card.clone();
+    let card_checked = ctx.checkbox_card;
     component_canvas(
         fixed_width(
             v_stack(
                 vec![
                     h_stack(
                         vec![
-                            shadcn::checkbox("", first.clone()),
+                            shadcn::checkbox("", ctx.checkbox_first, move |value| on_first(value)),
                             shadcn::label("Accept terms and conditions").into(),
                         ],
                         12.0,
@@ -25,7 +24,7 @@ pub(crate) fn render(_ctx: DemoContext) -> Element {
                     arkit::row_component()
                         .align_items_top()
                         .children(vec![
-                            shadcn::checkbox("", second.clone()),
+                            shadcn::checkbox("", ctx.checkbox_second, move |value| on_second(value)),
                             arkit::row_component()
                                 .style(
                                     ArkUINodeAttributeType::Margin,
@@ -48,7 +47,7 @@ pub(crate) fn render(_ctx: DemoContext) -> Element {
                     arkit::row_component()
                         .align_items_top()
                         .children(vec![
-                            shadcn::disabled_checkbox("", disabled_toggle.clone()),
+                            shadcn::disabled_checkbox("", false),
                             arkit::row_component()
                                 .style(
                                     ArkUINodeAttributeType::Margin,
@@ -66,7 +65,7 @@ pub(crate) fn render(_ctx: DemoContext) -> Element {
                         .style(ArkUINodeAttributeType::BorderWidth, vec![1.0, 1.0, 1.0, 1.0])
                         .style(
                             ArkUINodeAttributeType::BorderColor,
-                            vec![if card_toggle.get() {
+                            vec![if ctx.checkbox_card {
                                 0xFF2563EB
                             } else {
                                 shadcn::theme::color::BORDER
@@ -81,18 +80,19 @@ pub(crate) fn render(_ctx: DemoContext) -> Element {
                                 shadcn::theme::radius::LG,
                             ],
                         )
-                        .background_color(if card_toggle.get() {
+                        .background_color(if ctx.checkbox_card {
                             0xFFEFF6FF
                         } else {
                             shadcn::theme::color::BACKGROUND
                         })
-                        .on_click(move || card_toggle_click.update(|checked| *checked = !*checked))
+                        .on_click(move || on_card_click(!card_checked))
                         .children(vec![arkit::row_component()
                             .align_items_top()
                             .children(vec![
                                 shadcn::checkbox_with_checked_color(
                                     "",
-                                    card_toggle.clone(),
+                                    card_checked,
+                                    move |value| on_card_checkbox(value),
                                     0xFF2563EB,
                                 ),
                                 arkit::row_component()

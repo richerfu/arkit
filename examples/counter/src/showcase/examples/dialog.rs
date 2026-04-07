@@ -4,8 +4,10 @@ use arkit::prelude::*;
 use arkit_shadcn as shadcn;
 
 pub(crate) fn render(ctx: DemoContext) -> Element {
-    let toggle = ctx.toggle_state.clone();
-    let cancel = ctx.toggle_state.clone();
+    let on_toggle = ctx.on_toggle_state.clone();
+    let on_cancel = ctx.on_toggle_state.clone();
+    let on_dialog_toggle = ctx.on_toggle_state.clone();
+    let dialog_open = ctx.toggle_state;
 
     arkit::stack_component()
         .percent_width(1.0)
@@ -13,7 +15,7 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
         .children(vec![
             component_canvas(
                 shadcn::button("Open Dialog", shadcn::ButtonVariant::Outline)
-                    .on_click(move || toggle.update(|open| *open = !*open))
+                    .on_click(move || on_toggle(!dialog_open))
                     .into(),
                 true,
                 24.0,
@@ -21,6 +23,7 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
             shadcn::dialog(
                 "Edit profile",
                 ctx.toggle_state,
+                move |value| on_dialog_toggle(value),
                 vec![
                     shadcn::dialog_header(
                         "Edit profile",
@@ -54,7 +57,7 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                     shadcn::dialog_footer(vec![
                         shadcn::button("Cancel", shadcn::ButtonVariant::Outline)
                             .percent_width(1.0)
-                            .on_click(move || cancel.set(false))
+                            .on_click(move || on_cancel(false))
                             .into(),
                         shadcn::button("Save changes", shadcn::ButtonVariant::Default)
                             .percent_width(1.0)

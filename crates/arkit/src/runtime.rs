@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
 use napi_ohos::{Error, Result};
 use ohos_arkui_binding::common::error::ArkUIResult;
@@ -23,16 +23,26 @@ thread_local! {
     static UI_LOOP_EFFECTS: RefCell<Vec<Box<dyn FnOnce()>>> = RefCell::new(Vec::new());
     static UI_WAKER: RefCell<Option<OpenHarmonyWaker>> = RefCell::new(None);
     static CURRENT_APP: RefCell<Option<OpenHarmonyApp>> = RefCell::new(None);
+    static CURRENT_RUNTIME: RefCell<Option<Weak<RuntimeInner>>> = RefCell::new(None);
 }
 
 pub struct Runtime {
     inner: Rc<RuntimeInner>,
 }
 
+impl Clone for Runtime {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
+}
+
 struct RuntimeInner {
     app: OpenHarmonyApp,
     root: RefCell<RootNode>,
     mounted: RefCell<Option<MountedApp>>,
+    render: Option<Rc<dyn Fn() -> Element>>,
     /// Root owner for the entire application's reactive tree.
     root_owner: Rc<Owner>,
 }
@@ -40,23 +50,25 @@ struct RuntimeInner {
 #[allow(dead_code)]
 struct MountedApp {
     host_root: ArkUINode,
+    app_node: ArkUINode,
     app_root: MountedElement,
     portal_host: PortalHostHandle,
 }
 
 impl Runtime {
-    /// Create a new runtime. The render function `render` is called **once** to build
-    /// the initial UI tree. All subsequent updates are driven by reactive signals.
+    /// Create a new runtime and mount the initial element tree.
     pub fn new<F>(slot: ArkUIHandle, app: OpenHarmonyApp, render: F) -> Result<Self>
     where
-        F: FnOnce() -> Element + 'static,
+        F: Fn() -> Element + 'static,
     {
+        let render = Rc::new(render) as Rc<dyn Fn() -> Element>;
         let root_owner = Owner::new_root();
         let runtime = Self {
             inner: Rc::new(RuntimeInner {
                 app,
                 root: RefCell::new(RootNode::new(slot)),
                 mounted: RefCell::new(None),
+                render: Some(render.clone()),
                 root_owner: root_owner.clone(),
             }),
         };
@@ -64,6 +76,7 @@ impl Runtime {
         logging::init_hilog();
         logging::info("runtime created");
         set_current_app(Some(runtime.inner.app.clone()));
+        set_current_runtime(Some(Rc::downgrade(&runtime.inner)));
 
         let waker = runtime.inner.app.create_waker();
         set_ui_waker(Some(waker));
@@ -71,13 +84,54 @@ impl Runtime {
         runtime.install_ability_event_loop();
 
         // Render once inside the root owner
-        runtime.inner.mount_root(root_owner, render)?;
+        runtime.inner.mount_root(root_owner, move || render())?;
 
         Ok(runtime)
     }
 
+    pub fn new_static(slot: ArkUIHandle, app: OpenHarmonyApp, tree: Element) -> Result<Self> {
+        let root_owner = Owner::new_root();
+        let runtime = Self {
+            inner: Rc::new(RuntimeInner {
+                app,
+                root: RefCell::new(RootNode::new(slot)),
+                mounted: RefCell::new(None),
+                render: None,
+                root_owner: root_owner.clone(),
+            }),
+        };
+
+        logging::init_hilog();
+        logging::info("runtime created");
+        set_current_app(Some(runtime.inner.app.clone()));
+        set_current_runtime(Some(Rc::downgrade(&runtime.inner)));
+
+        let waker = runtime.inner.app.create_waker();
+        set_ui_waker(Some(waker));
+
+        runtime.install_ability_event_loop();
+
+        runtime.inner.mount_root(root_owner, move || tree)?;
+
+        Ok(runtime)
+    }
+
+    pub fn rerender<F>(&self, render: F) -> Result<()>
+    where
+        F: FnOnce() -> Element + 'static,
+    {
+        self.inner.rerender_root(render)
+    }
+
     pub fn app(&self) -> OpenHarmonyApp {
         self.inner.app.clone()
+    }
+
+    pub fn request_rerender(&self) -> Result<()> {
+        let Some(render) = self.inner.render.clone() else {
+            return Ok(());
+        };
+        self.rerender(move || render())
     }
 
     pub fn unmount(&self) -> Result<()> {
@@ -98,6 +152,7 @@ impl Drop for Runtime {
     fn drop(&mut self) {
         set_ui_waker(None);
         set_current_app(None);
+        set_current_runtime(None);
         clear_ui_loop_effects();
         clear_after_mount_effects();
         // Dispose the root owner — this cleans up all reactive computations,
@@ -115,10 +170,9 @@ impl RuntimeInner {
     {
         clear_after_mount_effects();
 
-        // Both building the element tree AND mounting it must happen inside
-        // the root owner scope. Component `mount()` implementations create
-        // reactive computations (effects, signals, child scopes) that require
-        // an active owner.
+        // Both building the element tree and mounting it happen inside the
+        // root owner scope so component-local owners, cleanup hooks, and
+        // scoped child trees are attached to the active runtime.
         with_owner(root_owner, || {
             let next_tree = render();
 
@@ -133,6 +187,24 @@ impl RuntimeInner {
                     self.mount_tree(build_fallback_element(format!("mount failed: {error}")))
                 }
             }
+        })
+    }
+
+    fn rerender_root<F>(&self, render: F) -> Result<()>
+    where
+        F: FnOnce() -> Element + 'static,
+    {
+        clear_after_mount_effects();
+
+        with_owner(self.root_owner.clone(), || {
+            let next_tree = render();
+            let result = self.patch_tree(next_tree);
+            if result.is_ok() {
+                schedule_after_mount_effects();
+            } else {
+                clear_after_mount_effects();
+            }
+            result
         })
     }
 
@@ -158,7 +230,7 @@ impl RuntimeInner {
             map_arkui_result(with_current_portal_host(portal_host.clone(), || {
                 mount_element(tree)
             }))?;
-        let host_root = map_arkui_result(build_host_root(app_node, portal_root))?;
+        let host_root = map_arkui_result(build_host_root(app_node.clone(), portal_root))?;
 
         let previous = self.mounted.borrow_mut().take();
         let mut root = self.root.borrow_mut();
@@ -186,10 +258,52 @@ impl RuntimeInner {
 
         self.mounted.borrow_mut().replace(MountedApp {
             host_root,
+            app_node,
             app_root,
             portal_host,
         });
         Ok(())
+    }
+
+    fn patch_tree(&self, tree: Element) -> Result<()> {
+        if self.mounted.borrow().is_none() {
+            return self.mount_tree(tree);
+        }
+
+        let next_kind = tree.kind();
+        let next_key = tree.key().map(str::to_owned);
+        let mut tree = Some(tree);
+
+        let patch_result: std::result::Result<(), ()> = {
+            let mut mounted = self.mounted.borrow_mut();
+            let mounted = mounted
+                .as_mut()
+                .expect("mounted app should exist during patch");
+
+            let patchable =
+                mounted.app_root.kind == next_kind
+                    && mounted.app_root.key.as_deref()
+                        == tree.as_ref().and_then(|next| next.key());
+
+            if patchable {
+                let next_tree = tree.take().expect("patch tree should exist");
+                with_current_portal_host(mounted.portal_host.clone(), || {
+                    next_tree.patch(&mut mounted.app_node, &mut mounted.app_root)
+                })
+                .map(|_| {
+                    mounted.app_root.kind = next_kind;
+                    mounted.app_root.key = next_key;
+                })
+                .map_err(|_| ())
+            } else {
+                Err(())
+            }
+        };
+
+        match patch_result {
+            Ok(()) => Ok(()),
+            Err(_) => self.mount_tree(tree.expect("mount tree should exist")),
+        }
     }
 }
 
@@ -229,6 +343,22 @@ fn set_current_app(app: Option<OpenHarmonyApp>) {
 
 pub fn current_app() -> Option<OpenHarmonyApp> {
     CURRENT_APP.with(|state| state.borrow().clone())
+}
+
+fn set_current_runtime(runtime: Option<Weak<RuntimeInner>>) {
+    CURRENT_RUNTIME.with(|state| {
+        state.replace(runtime);
+    });
+}
+
+pub fn current_runtime() -> Option<Runtime> {
+    CURRENT_RUNTIME.with(|state| {
+        state
+            .borrow()
+            .as_ref()
+            .and_then(Weak::upgrade)
+            .map(|inner| Runtime { inner })
+    })
 }
 
 pub fn queue_after_mount(effect: impl FnOnce() + 'static) {

@@ -5,7 +5,7 @@ pub(crate) const DIALOG_MAX_WIDTH: f32 = 512.0;
 const DIALOG_VIEWPORT_INSET: f32 = spacing::LG;
 
 pub(crate) fn modal_overlay(
-    open: Signal<bool>,
+    open: bool,
     panel: Element,
     on_dismiss: Option<Rc<dyn Fn()>>,
 ) -> Element {
@@ -15,9 +15,8 @@ pub(crate) fn modal_overlay(
         .background_color(0x80000000);
 
     if let Some(dismiss) = on_dismiss {
-        let dismiss_open = open.clone();
         backdrop = backdrop.on_click(move || {
-            if dismiss_open.get() {
+            if open {
                 dismiss();
             }
         });
@@ -27,7 +26,7 @@ pub(crate) fn modal_overlay(
         arkit::stack_component()
             .percent_width(1.0)
             .percent_height(1.0),
-        open.clone(),
+        open,
     )
     .children(vec![
         backdrop.into(),
@@ -54,11 +53,13 @@ pub(crate) fn modal_overlay(
     .into()
 }
 
-pub fn dialog(_title: impl Into<String>, open: Signal<bool>, content: Vec<Element>) -> Element {
-    let dismiss = {
-        let open = open.clone();
-        Rc::new(move || open.set(false))
-    };
+pub fn dialog(
+    _title: impl Into<String>,
+    open: bool,
+    on_open_change: impl Fn(bool) + 'static,
+    content: Vec<Element>,
+) -> Element {
+    let dismiss = Rc::new(move || on_open_change(false));
     let close = dismiss.clone();
 
     modal_overlay(

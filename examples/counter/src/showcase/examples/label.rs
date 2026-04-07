@@ -4,13 +4,15 @@ use arkit::prelude::*;
 use arkit_shadcn as shadcn;
 
 pub(crate) fn render(ctx: DemoContext) -> Element {
-    let toggle = ctx.toggle_state.clone();
+    let on_row_toggle = ctx.on_toggle_state.clone();
+    let on_checkbox_toggle = ctx.on_toggle_state.clone();
+    let checked = ctx.toggle_state;
     component_canvas(
         arkit::row_component()
             .align_items_center()
-            .on_click(move || toggle.update(|checked| *checked = !*checked))
+            .on_click(move || on_row_toggle(!checked))
             .children(vec![
-                shadcn::checkbox("", ctx.toggle_state.clone()),
+                shadcn::checkbox("", checked, move |value| on_checkbox_toggle(value)),
                 arkit::row_component()
                     .style(
                         ArkUINodeAttributeType::Margin,

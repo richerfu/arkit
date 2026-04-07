@@ -3,14 +3,20 @@ use super::*;
 
 const HOVER_CARD_DEFAULT_WIDTH: f32 = 256.0; // Tailwind `w-64`
 
-pub fn hover_card(trigger: Element, content: Vec<Element>, show: Signal<bool>) -> Element {
-    hover_card_with_width(trigger, content, show, HOVER_CARD_DEFAULT_WIDTH)
+pub fn hover_card(
+    trigger: Element,
+    content: Vec<Element>,
+    show: bool,
+    on_show_change: impl Fn(bool) + 'static,
+) -> Element {
+    hover_card_with_width(trigger, content, show, on_show_change, HOVER_CARD_DEFAULT_WIDTH)
 }
 
 pub fn hover_card_with_width(
     trigger: Element,
     content: Vec<Element>,
-    show: Signal<bool>,
+    show: bool,
+    _on_show_change: impl Fn(bool) + 'static,
     width: f32,
 ) -> Element {
     floating_panel(

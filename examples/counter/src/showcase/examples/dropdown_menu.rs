@@ -5,13 +5,15 @@ use arkit_shadcn as shadcn;
 
 #[component]
 pub(crate) fn render(ctx: DemoContext) -> Element {
-    let toggle = ctx.toggle_state.clone();
+    let on_toggle = ctx.on_toggle_state.clone();
+    let on_menu_toggle = ctx.on_toggle_state.clone();
+    let menu_open = ctx.toggle_state;
 
     top_center_canvas(
         fixed_width(
             shadcn::dropdown_menu(
                 shadcn::button("Open", shadcn::ButtonVariant::Outline)
-                    .on_click(move || toggle.update(|open| *open = !*open))
+                    .on_click(move || on_toggle(!menu_open))
                     .into(),
                 vec![
                     shadcn::dropdown_label("My Account"),
@@ -40,6 +42,7 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                     shadcn::dropdown_item_with_shortcut("Log out", "⇧⌘Q"),
                 ],
                 ctx.toggle_state,
+                move |value| on_menu_toggle(value),
             ),
             384.0,
         ),

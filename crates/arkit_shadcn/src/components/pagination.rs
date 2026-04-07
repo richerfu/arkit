@@ -1,10 +1,9 @@
 use super::*;
 
-pub fn pagination(page: Signal<i32>, total_pages: i32) -> Element {
+pub fn pagination(page: i32, total_pages: i32, on_page_change: impl Fn(i32) + 'static) -> Element {
     let total_pages = total_pages.max(1);
-    let current = page.get().clamp(1, total_pages);
-    let prev_page = page.clone();
-    let next_page = page.clone();
+    let current = page.clamp(1, total_pages);
+    let on_page_change = std::rc::Rc::new(on_page_change);
     let mut page_numbers = vec![1_i32, total_pages, current - 1, current, current + 1]
         .into_iter()
         .filter(|value| *value >= 1 && *value <= total_pages)
@@ -15,12 +14,9 @@ pub fn pagination(page: Signal<i32>, total_pages: i32) -> Element {
     let mut items = vec![button("Prev", ButtonVariant::Ghost)
         .height(36.0)
         .style(ArkUINodeAttributeType::Padding, vec![0.0, 10.0, 0.0, 10.0])
-        .on_click(move || {
-            prev_page.update(|p| {
-                if *p > 1 {
-                    *p -= 1;
-                }
-            });
+        .on_click({
+            let on_page_change = on_page_change.clone();
+            move || on_page_change((current - 1).max(1))
         })
         .into()];
 
@@ -31,7 +27,7 @@ pub fn pagination(page: Signal<i32>, total_pages: i32) -> Element {
                 items.push(pagination_ellipsis());
             }
         }
-        items.push(pagination_item(number, page.clone()));
+        items.push(pagination_item(number, current, on_page_change.clone()));
         previous_number = Some(number);
     }
 
@@ -39,13 +35,7 @@ pub fn pagination(page: Signal<i32>, total_pages: i32) -> Element {
         button("Next", ButtonVariant::Ghost)
             .height(36.0)
             .style(ArkUINodeAttributeType::Padding, vec![0.0, 10.0, 0.0, 10.0])
-            .on_click(move || {
-                next_page.update(|p| {
-                    if *p < total_pages {
-                        *p += 1;
-                    }
-                });
-            })
+            .on_click(move || on_page_change((current + 1).min(total_pages)))
             .into(),
     );
 
@@ -56,22 +46,22 @@ pub fn pagination(page: Signal<i32>, total_pages: i32) -> Element {
         .into()
 }
 
-pub fn pagination_item(page_num: i32, current: Signal<i32>) -> Element {
-    let click = current.clone();
-    arkit::dynamic(move || {
-        let variant = if current.get() == page_num {
-            ButtonVariant::Outline
-        } else {
-            ButtonVariant::Ghost
-        };
-        let click = click.clone();
-        button(page_num.to_string(), variant)
-            .width(36.0)
-            .height(36.0)
-            .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
-            .on_click(move || click.set(page_num))
-            .into()
-    })
+pub fn pagination_item(
+    page_num: i32,
+    current: i32,
+    on_page_change: std::rc::Rc<dyn Fn(i32)>,
+) -> Element {
+    let variant = if current == page_num {
+        ButtonVariant::Outline
+    } else {
+        ButtonVariant::Ghost
+    };
+    button(page_num.to_string(), variant)
+        .width(36.0)
+        .height(36.0)
+        .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
+        .on_click(move || on_page_change(page_num))
+        .into()
 }
 
 fn pagination_ellipsis() -> Element {

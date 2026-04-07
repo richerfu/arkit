@@ -772,6 +772,66 @@ impl Default for Router {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NavigationStack<Route> {
+    stack: Vec<Route>,
+}
+
+impl<Route: Clone> NavigationStack<Route> {
+    pub fn new(initial: Route) -> Self {
+        Self {
+            stack: vec![initial],
+        }
+    }
+
+    pub fn current(&self) -> &Route {
+        self.stack
+            .last()
+            .expect("navigation stack must always contain at least one route")
+    }
+
+    pub fn push(&mut self, route: Route) {
+        self.stack.push(route);
+    }
+
+    pub fn replace(&mut self, route: Route) {
+        if let Some(current) = self.stack.last_mut() {
+            *current = route;
+        } else {
+            self.stack.push(route);
+        }
+    }
+
+    pub fn reset(&mut self, route: Route) {
+        self.stack.clear();
+        self.stack.push(route);
+    }
+
+    pub fn back(&mut self) -> bool {
+        if self.stack.len() <= 1 {
+            return false;
+        }
+        self.stack.pop();
+        true
+    }
+
+    pub fn can_go_back(&self) -> bool {
+        self.stack.len() > 1
+    }
+
+    pub fn len(&self) -> usize {
+        self.stack.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.stack.is_empty()
+    }
+
+    pub fn stack(&self) -> &[Route] {
+        &self.stack
+    }
+}
+
 thread_local! {
     static GLOBAL_ROUTER: RefCell<Router> = RefCell::new(Router::new("/"));
 }

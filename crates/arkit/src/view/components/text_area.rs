@@ -1,8 +1,7 @@
 use std::rc::Rc;
 
-use crate::logging;
 use crate::ohos_arkui_binding::component::built_in_component::TextArea;
-use crate::Signal;
+use crate::prelude::ArkUINodeAttributeType;
 
 use super::super::core::{queue_guarded_ui_callback, run_guarded_ui_callback, ComponentElement};
 
@@ -12,58 +11,31 @@ pub fn text_area_component() -> TextAreaElement {
     ComponentElement::new(TextArea::new)
 }
 
-pub fn text_area() -> TextAreaElement {
-    text_area_component()
+pub fn text_area(placeholder: impl Into<String>, value: impl Into<String>) -> TextAreaElement {
+    text_area_component().placeholder(placeholder).value(value)
 }
 
 impl ComponentElement<TextArea> {
     pub fn value(self, value: impl Into<String>) -> Self {
         let value = value.into();
-        let value_len = value.len();
-        self.with(move |node| {
-            node.set_text_area_text(value).map_err(|error| {
-                logging::error(format!(
-                    "text area error: failed to set text (len={value_len}): {error}"
-                ));
-                error
-            })
-        })
+        self.style(ArkUINodeAttributeType::TextAreaText, value.clone())
+            .patch_attr(ArkUINodeAttributeType::TextAreaText, value)
     }
 
     pub fn placeholder(self, value: impl Into<String>) -> Self {
         let value = value.into();
-        let value_len = value.len();
-        self.with(move |node| {
-            node.set_text_area_placeholder(value).map_err(|error| {
-                logging::error(format!(
-                    "text area error: failed to set placeholder (len={value_len}): {error}"
-                ));
-                error
-            })
-        })
+        self.style(ArkUINodeAttributeType::TextAreaPlaceholder, value.clone())
+            .patch_attr(ArkUINodeAttributeType::TextAreaPlaceholder, value)
     }
 
     pub fn placeholder_color(self, value: u32) -> Self {
-        self.with(move |node| {
-            node.set_text_area_placeholder_color(value)
-                .map_err(|error| {
-                    logging::error(format!(
-                        "text area error: failed to set placeholder color {value:#010x}: {error}"
-                    ));
-                    error
-                })
-        })
+        self.style(ArkUINodeAttributeType::TextAreaPlaceholderColor, value)
+            .patch_attr(ArkUINodeAttributeType::TextAreaPlaceholderColor, value)
     }
 
     pub fn line_height(self, value: f32) -> Self {
-        self.with(move |node| {
-            node.set_text_area_line_height(value).map_err(|error| {
-                logging::error(format!(
-                    "text area error: failed to set line height {value}: {error}"
-                ));
-                error
-            })
-        })
+        self.style(ArkUINodeAttributeType::TextAreaLineHeight, value)
+            .patch_attr(ArkUINodeAttributeType::TextAreaLineHeight, value)
     }
 
     pub fn on_change(self, callback: impl Fn(String) + 'static) -> Self {
@@ -91,24 +63,6 @@ impl ComponentElement<TextArea> {
                 });
             });
             Ok(())
-        })
-    }
-
-    pub fn bind(self, state: Signal<String>) -> Self {
-        let value_state = state.clone();
-        self.watch_signal(value_state, move |node, value| {
-            let value_len = value.len();
-            node.set_text_area_text(value).map_err(|error| {
-                logging::error(format!(
-                    "text area error: failed to sync bound text (len={value_len}): {error}"
-                ));
-                error
-            })
-        })
-        .on_change(move |value| {
-            if state.get() != value {
-                state.set(value);
-            }
         })
     }
 }

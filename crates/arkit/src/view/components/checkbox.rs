@@ -1,7 +1,6 @@
 use std::rc::Rc;
 
 use crate::ohos_arkui_binding::component::built_in_component::Checkbox;
-use crate::{logging, Signal};
 
 use super::super::core::{queue_guarded_ui_callback, ComponentElement};
 
@@ -28,23 +27,6 @@ impl ComponentElement<Checkbox> {
                 );
             });
             Ok(())
-        })
-    }
-
-    pub fn bind(self, state: Signal<bool>) -> Self {
-        let value_state = state.clone();
-        self.watch_signal(value_state, move |node, value| {
-            node.set_checkbox_select(value).map_err(|error| {
-                logging::error(format!(
-                    "checkbox error: failed to sync bound value {value}: {error}"
-                ));
-                error
-            })
-        })
-        .on_change(move |value| {
-            if state.get() != value {
-                state.set(value);
-            }
         })
     }
 }

@@ -5,10 +5,8 @@ use arkit_shadcn as shadcn;
 
 #[component]
 pub(crate) fn render(ctx: DemoContext) -> Element {
-    let toggle = ctx.toggle_state.clone();
-    let bookmarks = create_signal(false);
-    let full_urls = create_signal(false);
-    let people = create_signal(String::from("pedro"));
+    let on_toggle = ctx.on_toggle_state.clone();
+    let on_menu_toggle = ctx.on_toggle_state.clone();
 
     top_center_canvas(
         fixed_width(
@@ -37,7 +35,7 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                     )
                     .style(ArkUINodeAttributeType::BorderStyle, 1_i32)
                     .style(ArkUINodeAttributeType::Clip, true)
-                    .on_long_press(move || toggle.set(true))
+                    .on_long_press(move || on_toggle(true))
                     .children(vec![shadcn::text_sm("Long press here")])
                     .into(),
                 vec![
@@ -59,14 +57,45 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                         ],
                     ),
                     shadcn::context_menu_separator(),
-                    shadcn::context_menu_checkbox_item("Show Bookmarks", bookmarks),
-                    shadcn::context_menu_checkbox_item("Show Full URLs", full_urls),
+                    shadcn::context_menu_checkbox_item(
+                        "Show Bookmarks",
+                        ctx.context_bookmarks,
+                        {
+                            let on_toggle = ctx.on_context_bookmarks.clone();
+                            move |value| on_toggle(value)
+                        },
+                    ),
+                    shadcn::context_menu_checkbox_item(
+                        "Show Full URLs",
+                        ctx.context_full_urls,
+                        {
+                            let on_toggle = ctx.on_context_full_urls.clone();
+                            move |value| on_toggle(value)
+                        },
+                    ),
                     shadcn::context_menu_separator(),
                     shadcn::context_menu_label_inset("People"),
-                    shadcn::context_menu_radio_item("Pedro Duarte", "pedro", people.clone()),
-                    shadcn::context_menu_radio_item("Colm Tuite", "colm", people),
+                    shadcn::context_menu_radio_item(
+                        "Pedro Duarte",
+                        "pedro",
+                        ctx.context_person.clone(),
+                        {
+                            let on_select = ctx.on_context_person.clone();
+                            move |value| on_select(value)
+                        },
+                    ),
+                    shadcn::context_menu_radio_item(
+                        "Colm Tuite",
+                        "colm",
+                        ctx.context_person,
+                        {
+                            let on_select = ctx.on_context_person.clone();
+                            move |value| on_select(value)
+                        },
+                    ),
                 ],
                 ctx.toggle_state,
+                move |value| on_menu_toggle(value),
             ),
             300.0,
         ),

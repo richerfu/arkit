@@ -1,5 +1,9 @@
 use super::*;
 
-pub fn combobox(options: Vec<String>, value: Signal<String>) -> Element {
-    super::select::select(options, value)
+pub fn combobox(
+    options: Vec<String>,
+    selected: impl Into<String>,
+    on_select: impl Fn(String) + 'static,
+) -> Element {
+    super::select::select(options, selected, on_select)
 }

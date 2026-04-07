@@ -7,12 +7,12 @@ use arkit::ohos_arkui_binding::component::attribute::{
 };
 use arkit::ohos_arkui_binding::types::alignment::Alignment;
 use arkit::{
-    anchored_overlay, component, create_effect, create_signal, native_overlay,
-    observe_layout_frame, observe_layout_frame_enabled, observe_layout_size, on_cleanup,
-    LayoutFrame, LayoutSize, NativeOverlayPlacement, Signal,
+    anchored_overlay, component, native_overlay, observe_layout_frame,
+    observe_layout_frame_enabled, observe_layout_size, on_cleanup, LayoutFrame, LayoutSize,
+    NativeOverlayPlacement,
 };
 use ohos_display_binding::default_display_virtual_pixel_ratio;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 const FLOATING_SIDE_OFFSET_VP: f32 = spacing::XXS;
@@ -21,6 +21,44 @@ const FLOATING_HIDDEN_POSITION_VP: f32 = -10_000.0;
 const TRANSPARENT: u32 = 0x00000000;
 const HIT_TEST_TRANSPARENT: i32 = 2;
 const WRAP_CONTENT_POLICY: i32 = 1;
+
+#[derive(Clone)]
+struct Shared<T>(Rc<RefCell<T>>);
+
+impl<T> Shared<T> {
+    fn new(value: T) -> Self {
+        Self(Rc::new(RefCell::new(value)))
+    }
+
+    fn set(&self, value: T) {
+        self.0.replace(value);
+    }
+}
+
+impl<T: Clone> Shared<T> {
+    fn get(&self) -> T {
+        self.0.borrow().clone()
+    }
+}
+
+impl<T: Clone + PartialEq> Shared<T> {
+    fn set_if_changed(&self, value: T) -> bool {
+        let mut current = self.0.borrow_mut();
+        if *current == value {
+            return false;
+        }
+        *current = value;
+        true
+    }
+}
+
+fn request_runtime_rerender() {
+    arkit::queue_ui_loop(|| {
+        if let Some(runtime) = arkit_runtime::current_runtime() {
+            let _ = runtime.request_rerender();
+        }
+    });
+}
 
 fn px_to_vp(value: f32) -> f32 {
     let ratio = default_display_virtual_pixel_ratio();
@@ -42,6 +80,7 @@ fn vp_to_px(value: f32) -> f32 {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum FloatingSide {
+    Right,
     Top,
     Bottom,
 }
@@ -63,21 +102,83 @@ fn floating_position(
         FloatingAlign::Start => trigger.x,
         FloatingAlign::Center => trigger.x + ((trigger.width - panel.width) / 2.0),
     };
-    let y = match side {
-        FloatingSide::Top => trigger.y - panel.height - side_offset,
-        FloatingSide::Bottom => trigger.y + trigger.height + side_offset,
+    let [x, y] = match side {
+        FloatingSide::Right => [trigger.x + trigger.width + side_offset, trigger.y],
+        FloatingSide::Top => [x, trigger.y - panel.height - side_offset],
+        FloatingSide::Bottom => [x, trigger.y + trigger.height + side_offset],
     };
 
     [x, y]
 }
 
+#[derive(Clone)]
+pub(crate) struct FloatingSurfaceRegistry {
+    next_id: Rc<Cell<usize>>,
+    surfaces: Rc<RefCell<Vec<(usize, Shared<LayoutFrame>)>>>,
+}
+
+impl FloatingSurfaceRegistry {
+    pub(crate) fn new() -> Self {
+        Self {
+            next_id: Rc::new(Cell::new(1)),
+            surfaces: Rc::new(RefCell::new(Vec::new())),
+        }
+    }
+
+    pub(crate) fn same_instance(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.surfaces, &other.surfaces)
+    }
+
+    fn register_surface(&self) -> FloatingSurfaceHandle {
+        let id = self.next_id.get();
+        self.next_id.set(id + 1);
+        let frame = Shared::new(LayoutFrame::default());
+        self.surfaces.borrow_mut().push((id, frame.clone()));
+        FloatingSurfaceHandle {
+            registry: self.clone(),
+            id,
+            frame,
+        }
+    }
+
+    fn unregister(&self, id: usize) {
+        self.surfaces.borrow_mut().retain(|(current, _)| *current != id);
+    }
+
+    fn contains_point(&self, x: f32, y: f32) -> bool {
+        self.surfaces.borrow().iter().any(|(_, frame)| {
+            let frame = frame.get();
+            frame.is_measured()
+                && x >= frame.x
+                && x <= frame.x + frame.width
+                && y >= frame.y
+                && y <= frame.y + frame.height
+        })
+    }
+}
+
+#[derive(Clone)]
+struct FloatingSurfaceHandle {
+    registry: FloatingSurfaceRegistry,
+    id: usize,
+    frame: Shared<LayoutFrame>,
+}
+
+impl FloatingSurfaceHandle {
+    fn set(&self, frame: LayoutFrame) {
+        self.frame.set(frame);
+    }
+
+    fn cleanup(&self) {
+        self.frame.set(LayoutFrame::default());
+        self.registry.unregister(self.id);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Shared imperative state for floating position updates.
-//
-// Layout-observer signals are created with `arkit::signal` (standalone) so
-// that writing to them does not schedule a parent-scope re-render. Position
-// and hit testing are updated imperatively via direct ArkUI-node mutation, but
-// the dependency tracking still stays inside the framework effect system.
+// Layout observers write into these shared cells. Position and hit testing are
+// updated imperatively via direct ArkUI-node mutation.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
@@ -87,30 +188,61 @@ struct FloatingNodes {
 }
 
 #[derive(Clone)]
-struct FloatingSignals {
-    trigger_frame: arkit::Signal<LayoutFrame>,
-    panel_size: arkit::Signal<LayoutSize>,
-    container_offset: arkit::Signal<LayoutFrame>,
+struct FloatingState {
+    trigger_frame: Shared<LayoutFrame>,
+    panel_size: Shared<LayoutSize>,
+    container_offset: Shared<LayoutFrame>,
     nodes: FloatingNodes,
+    surface_handles: Rc<Vec<FloatingSurfaceHandle>>,
 }
 
-impl FloatingSignals {
-    fn new() -> Self {
+impl FloatingState {
+    fn new(surface_handles: Vec<FloatingSurfaceHandle>) -> Self {
         Self {
-            trigger_frame: arkit::signal(LayoutFrame::default()),
-            panel_size: arkit::signal(LayoutSize::default()),
-            container_offset: arkit::signal(LayoutFrame::default()),
+            trigger_frame: Shared::new(LayoutFrame::default()),
+            panel_size: Shared::new(LayoutSize::default()),
+            container_offset: Shared::new(LayoutFrame::default()),
             nodes: FloatingNodes {
                 position_column: Rc::new(RefCell::new(None)),
                 backdrop_stack: Rc::new(RefCell::new(None)),
             },
+            surface_handles: Rc::new(surface_handles),
         }
+    }
+    fn cleanup(&self) {
+        for handle in self.surface_handles.iter() {
+            handle.cleanup();
+        }
+        self.nodes.position_column.replace(None);
+        self.nodes.backdrop_stack.replace(None);
     }
 }
 
+#[derive(Clone)]
+struct FloatingPanelState(Rc<FloatingState>);
+
+fn use_floating_state(register_surfaces: Vec<FloatingSurfaceRegistry>) -> Rc<FloatingState> {
+    if let Some(state) = arkit::use_local_context::<FloatingPanelState>() {
+        return state.0;
+    }
+
+    let state = Rc::new(FloatingState::new(
+        register_surfaces
+            .into_iter()
+            .map(|registry| registry.register_surface())
+            .collect(),
+    ));
+    arkit::provide_context(FloatingPanelState(state.clone()));
+    on_cleanup({
+        let state = state.clone();
+        move || state.cleanup()
+    });
+    state
+}
+
 fn apply_floating_position(
-    fs: &FloatingSignals,
-    open: &Signal<bool>,
+    fs: &FloatingState,
+    open: bool,
     side: FloatingSide,
     align: FloatingAlign,
     has_dismiss: bool,
@@ -118,12 +250,18 @@ fn apply_floating_position(
     let trigger = fs.trigger_frame.get();
     let panel_size = fs.panel_size.get();
     let container = fs.container_offset.get();
-    let ready =
-        open.get() && trigger.is_measured() && panel_size.is_measured() && container.is_measured();
+    let ready = open && trigger.is_measured() && panel_size.is_measured() && container.is_measured();
+    let mut surface_frame = LayoutFrame::default();
 
     if let Some(col) = fs.nodes.position_column.borrow().as_ref() {
         let position: ArkUINodeAttributeItem = if ready {
             let [px_x, px_y] = floating_position(trigger, panel_size, side, align);
+            surface_frame = LayoutFrame {
+                x: px_x,
+                y: px_y,
+                width: panel_size.width,
+                height: panel_size.height,
+            };
             vec![px_to_vp(px_x - container.x), px_to_vp(px_y - container.y)].into()
         } else {
             vec![FLOATING_HIDDEN_POSITION_VP, FLOATING_HIDDEN_POSITION_VP].into()
@@ -142,20 +280,10 @@ fn apply_floating_position(
         };
         let _ = stack.set_hit_test_behavior(hit);
     }
-}
 
-fn install_floating_effect(
-    fs: &FloatingSignals,
-    open: Signal<bool>,
-    side: FloatingSide,
-    align: FloatingAlign,
-    has_dismiss: bool,
-) {
-    create_effect({
-        let fs = fs.clone();
-        let open = open.clone();
-        move || apply_floating_position(&fs, &open, side, align, has_dismiss)
-    });
+    for handle in fs.surface_handles.iter() {
+        handle.set(surface_frame);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -164,20 +292,20 @@ fn install_floating_effect(
 
 fn floating_portal_layer(
     panel: Element,
-    fs: &FloatingSignals,
-    open: Signal<bool>,
+    fs: &Rc<FloatingState>,
+    open: bool,
     side: FloatingSide,
     align: FloatingAlign,
     on_dismiss: Option<Rc<dyn Fn()>>,
     pass_through_dismiss: bool,
+    dismiss_registry: Option<FloatingSurfaceRegistry>,
 ) -> Element {
     let position_node = fs.nodes.position_column.clone();
     let backdrop_node = fs.nodes.backdrop_stack.clone();
     let has_dismiss = on_dismiss.is_some() && !pass_through_dismiss;
     let sync_backdrop = Rc::new({
         let fs = fs.clone();
-        let open = open.clone();
-        move || apply_floating_position(&fs, &open, side, align, has_dismiss)
+        move || apply_floating_position(&fs, open, side, align, has_dismiss)
     });
 
     let layer_sync_backdrop = sync_backdrop.clone();
@@ -202,14 +330,14 @@ fn floating_portal_layer(
 
     if pass_through_dismiss {
         if let Some(dismiss) = on_dismiss {
-            let dismiss_open = open.clone();
             let dismiss_fs = fs.clone();
+            let dismiss_registry = dismiss_registry.clone();
             layer_stack = layer_stack.native(move |node| {
                 let dismiss = dismiss.clone();
-                let open = dismiss_open.clone();
                 let fs = dismiss_fs.clone();
+                let dismiss_registry = dismiss_registry.clone();
                 node.on_touch_intercept(move |event| {
-                    if !open.get_untracked() {
+                    if !open {
                         return Some(false);
                     }
                     let Some(input) = event.input_event() else {
@@ -222,9 +350,17 @@ fn floating_portal_layer(
                     let touch_x = input.pointer_window_x();
                     let touch_y = input.pointer_window_y();
 
-                    let trigger = fs.trigger_frame.get_untracked();
-                    let panel_size = fs.panel_size.get_untracked();
-                    let container = fs.container_offset.get_untracked();
+                    if let Some(registry) = dismiss_registry.as_ref() {
+                        if registry.contains_point(touch_x, touch_y) {
+                            return Some(false);
+                        }
+                        dismiss();
+                        return Some(false);
+                    }
+
+                    let trigger = fs.trigger_frame.get();
+                    let panel_size = fs.panel_size.get();
+                    let container = fs.container_offset.get();
 
                     if !trigger.is_measured()
                         || !panel_size.is_measured()
@@ -233,8 +369,7 @@ fn floating_portal_layer(
                         return Some(false);
                     }
 
-                    let [panel_x, panel_y] =
-                        floating_position(trigger, panel_size, side, align);
+                    let [panel_x, panel_y] = floating_position(trigger, panel_size, side, align);
                     let inside = touch_x >= panel_x
                         && touch_x <= panel_x + panel_size.width
                         && touch_y >= panel_y
@@ -249,7 +384,6 @@ fn floating_portal_layer(
             });
         }
     } else if let Some(dismiss) = on_dismiss {
-        let dismiss_open = open.clone();
         let click_backdrop = backdrop_node.clone();
         let click_position = position_node.clone();
         children.push(
@@ -267,7 +401,7 @@ fn floating_portal_layer(
                     Ok(())
                 })
                 .on_click(move || {
-                    if dismiss_open.get() {
+                    if open {
                         dismiss();
                         if let Some(node) = click_backdrop.borrow().as_ref() {
                             let _ = node.set_hit_test_behavior(HIT_TEST_TRANSPARENT);
@@ -303,24 +437,36 @@ fn floating_portal_layer(
                 HIT_TEST_TRANSPARENT,
             )
             .style(ArkUINodeAttributeType::ZIndex, 1_i32)
-            .native({
+                .native({
+                    let fs = fs.clone();
+                    move |node| {
+                        position_node.replace(Some(node.borrow_mut().clone()));
+                        apply_floating_position(&fs, open, side, align, has_dismiss);
+                        Ok(())
+                    }
+                })
+            .children(vec![observe_layout_size(panel, {
                 let fs = fs.clone();
-                let open = open.clone();
-                move |node| {
-                    position_node.replace(Some(node.borrow_mut().clone()));
-                    apply_floating_position(&fs, &open, side, align, has_dismiss);
-                    Ok(())
+                move |size| {
+                    if fs.panel_size.set_if_changed(size) {
+                        apply_floating_position(&fs, open, side, align, has_dismiss);
+                    }
                 }
             })
-            .children(vec![
-                observe_layout_size(panel, fs.panel_size.clone()).into()
-            ])
+            .into()])
             .into(),
     );
 
     let layer = layer_stack.children(children).into();
 
-    observe_layout_frame(layer, fs.container_offset.clone())
+    observe_layout_frame(layer, {
+        let fs = fs.clone();
+        move |frame| {
+            if fs.container_offset.set_if_changed(frame) {
+                apply_floating_position(&fs, open, side, align, has_dismiss);
+            }
+        }
+    })
 }
 
 fn floating_trigger_anchor(trigger: Element) -> Element {
@@ -334,46 +480,48 @@ fn floating_trigger_anchor(trigger: Element) -> Element {
 #[allow(dead_code)]
 fn native_floating_placement(side: FloatingSide, align: FloatingAlign) -> NativeOverlayPlacement {
     let alignment = match (side, align) {
+        (FloatingSide::Right, FloatingAlign::Start) => Alignment::End,
+        (FloatingSide::Right, FloatingAlign::Center) => Alignment::End,
         (FloatingSide::Top, FloatingAlign::Start) => Alignment::TopStart,
         (FloatingSide::Top, FloatingAlign::Center) => Alignment::Top,
         (FloatingSide::Bottom, FloatingAlign::Start) => Alignment::BottomStart,
         (FloatingSide::Bottom, FloatingAlign::Center) => Alignment::Bottom,
     };
-    let offset_y = match side {
-        FloatingSide::Top => -FLOATING_SIDE_OFFSET_VP,
-        FloatingSide::Bottom => FLOATING_SIDE_OFFSET_VP,
+    let (offset_x, offset_y) = match side {
+        FloatingSide::Right => (FLOATING_SIDE_OFFSET_VP, 0.0),
+        FloatingSide::Top => (0.0, -FLOATING_SIDE_OFFSET_VP),
+        FloatingSide::Bottom => (0.0, FLOATING_SIDE_OFFSET_VP),
     };
 
-    NativeOverlayPlacement::new(alignment).with_offset(0.0, offset_y)
+    NativeOverlayPlacement::new(alignment).with_offset(offset_x, offset_y)
 }
 
 #[component]
 pub(crate) fn floating_panel_aligned(
     trigger: Element,
     panel: Element,
-    open: Signal<bool>,
+    open: bool,
     side: FloatingSide,
     align: FloatingAlign,
     on_dismiss: Option<Rc<dyn Fn()>>,
     pass_through_dismiss: bool,
+    register_surfaces: Vec<FloatingSurfaceRegistry>,
+    dismiss_registry: Option<FloatingSurfaceRegistry>,
 ) -> Element {
-    // Standalone signals: writing to them does NOT re‑render the parent scope.
-    let fs_holder = create_signal(FloatingSignals::new());
-    let fs = fs_holder.get();
+    let fs = use_floating_state(register_surfaces);
     let has_backdrop = on_dismiss.is_some() && !pass_through_dismiss;
-    install_floating_effect(&fs, open.clone(), side, align, has_backdrop);
-    on_cleanup({
-        let fs = fs.clone();
-        move || {
-            fs.nodes.position_column.replace(None);
-            fs.nodes.backdrop_stack.replace(None);
-        }
-    });
 
     let observed_trigger = observe_layout_frame_enabled(
         floating_trigger_anchor(trigger),
-        fs.trigger_frame.clone(),
         true,
+        {
+            let fs = fs.clone();
+            move |frame| {
+                if fs.trigger_frame.set_if_changed(frame) {
+                    apply_floating_position(&fs, open, side, align, has_backdrop);
+                }
+            }
+        },
     );
 
     anchored_overlay(
@@ -381,11 +529,12 @@ pub(crate) fn floating_panel_aligned(
         Some(floating_portal_layer(
             panel,
             &fs,
-            open.clone(),
+            open,
             side,
             align,
             on_dismiss,
             pass_through_dismiss,
+            dismiss_registry,
         )),
     )
 }
@@ -394,7 +543,7 @@ pub(crate) fn floating_panel_aligned(
 pub(crate) fn floating_panel(
     trigger: Element,
     panel: Element,
-    open: Signal<bool>,
+    open: bool,
     side: FloatingSide,
     on_dismiss: Option<Rc<dyn Fn()>>,
 ) -> Element {
@@ -406,6 +555,8 @@ pub(crate) fn floating_panel(
         FloatingAlign::Center,
         on_dismiss,
         false,
+        vec![],
+        None,
     )
 }
 
@@ -437,51 +588,47 @@ pub(crate) fn native_floating_panel_aligned(
 #[component]
 pub(crate) fn floating_panel_with_builder(
     trigger: Element,
-    open: Signal<bool>,
+    open: bool,
     side: FloatingSide,
     align: FloatingAlign,
     panel_builder: Rc<dyn Fn(Option<f32>) -> Element>,
     on_dismiss: Option<Rc<dyn Fn()>>,
 ) -> Element {
-    let fs_holder = create_signal(FloatingSignals::new());
-    let fs = fs_holder.get();
-    install_floating_effect(&fs, open.clone(), side, align, on_dismiss.is_some());
-    on_cleanup({
-        let fs = fs.clone();
-        move || {
-            fs.nodes.position_column.replace(None);
-            fs.nodes.backdrop_stack.replace(None);
-        }
-    });
+    let fs = use_floating_state(Vec::<FloatingSurfaceRegistry>::new());
+    let has_dismiss = on_dismiss.is_some();
 
     let observed_trigger = observe_layout_frame_enabled(
         floating_trigger_anchor(trigger),
-        fs.trigger_frame.clone(),
         true,
+        {
+            let fs = fs.clone();
+            move |frame| {
+                if fs.trigger_frame.set_if_changed(frame) {
+                    apply_floating_position(&fs, open, side, align, has_dismiss);
+                    request_runtime_rerender();
+                }
+            }
+        },
     );
-    let panel = arkit::dynamic({
-        let fs = fs.clone();
-        move || {
-            let tf = fs.trigger_frame.get();
-            let trigger_width = if tf.width > FLOATING_LAYOUT_EPSILON {
-                Some(px_to_vp(tf.width))
-            } else {
-                None
-            };
-            panel_builder(trigger_width)
-        }
-    });
+    let tf = fs.trigger_frame.get();
+    let trigger_width = if tf.width > FLOATING_LAYOUT_EPSILON {
+        Some(px_to_vp(tf.width))
+    } else {
+        None
+    };
+    let panel = panel_builder(trigger_width);
 
     anchored_overlay(
         observed_trigger,
         Some(floating_portal_layer(
             panel,
             &fs,
-            open.clone(),
+            open,
             side,
             align,
             on_dismiss,
             false,
+            None,
         )),
     )
 }

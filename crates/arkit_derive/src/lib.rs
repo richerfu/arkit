@@ -128,7 +128,7 @@ pub fn entry(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 LazyLock::new(::arkit::openharmony_ability::OpenHarmonyApp::new);
 
             thread_local! {
-                static RUNTIME: RefCell<Option<::arkit::Runtime>> = RefCell::new(None);
+                static RUNTIME: RefCell<Option<Box<dyn ::arkit::MountedEntryHandle>>> = RefCell::new(None);
             }
 
             #[::arkit::napi_derive_ohos::napi]
@@ -168,7 +168,7 @@ pub fn entry(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         // Already mounted — SolidJS model renders once.
                         Ok(())
                     } else {
-                        let runtime = ::arkit::Runtime::new(slot, (*APP).clone(), || #fn_name().into())?;
+                        let runtime = ::arkit::mount_entry(slot, (*APP).clone(), #fn_name())?;
                         runtime_state.replace(runtime);
                         Ok(())
                     }

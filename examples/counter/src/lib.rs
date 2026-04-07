@@ -1,14 +1,91 @@
 use arkit::prelude::*;
-use arkit::{animated_router_view, RouteTransitionConfig};
-use arkit_shadcn as shadcn;
+use arkit::{application, dispatch, NavigationStack, Task};
 use ohos_hilogs_sys::{
     LogLevel, LogLevel_LOG_ERROR, LogLevel_LOG_INFO, LogType_LOG_APP, OH_LOG_PrintMsgByLen,
 };
+use std::rc::Rc;
 
 mod showcase;
 
 const ROUTE_LOG_TAG: &[u8] = b"arkit_route";
-const ROUTE_DEBUG_COLOR: u32 = 0xFF64748B;
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum AppRoute {
+    Home,
+    Component { name: String },
+}
+
+#[derive(Clone, Debug)]
+enum Message {
+    Navigate(AppRoute),
+    Back,
+    SetHomeSearch(String),
+    SetActiveTab(usize),
+    SetPage(i32),
+    SetRadioChoice(String),
+    SetSelectChoice(String),
+    SetQuery(String),
+    SetToggleState(bool),
+    SetContextBookmarks(bool),
+    SetContextFullUrls(bool),
+    SetContextPerson(String),
+    SetCheckboxFirst(bool),
+    SetCheckboxSecond(bool),
+    SetCheckboxCard(bool),
+    SetToggleGroupValues(Vec<String>),
+}
+
+#[derive(Clone, Debug)]
+struct DemoState {
+    active_tab: usize,
+    page: i32,
+    radio_choice: String,
+    select_choice: String,
+    query: String,
+    toggle_state: bool,
+    context_bookmarks: bool,
+    context_full_urls: bool,
+    context_person: String,
+    checkbox_first: bool,
+    checkbox_second: bool,
+    checkbox_card: bool,
+    toggle_group_values: Vec<String>,
+}
+
+impl Default for DemoState {
+    fn default() -> Self {
+        Self {
+            active_tab: 0,
+            page: 1,
+            radio_choice: String::from("Comfortable"),
+            select_choice: String::new(),
+            query: String::new(),
+            toggle_state: false,
+            context_bookmarks: false,
+            context_full_urls: false,
+            context_person: String::from("pedro"),
+            checkbox_first: true,
+            checkbox_second: true,
+            checkbox_card: false,
+            toggle_group_values: Vec::new(),
+        }
+    }
+}
+
+struct AppState {
+    routes: NavigationStack<AppRoute>,
+    home_search: String,
+    demo: DemoState,
+}
+
+impl AppState {
+    fn new() -> Self {
+        Self {
+            routes: NavigationStack::new(AppRoute::Home),
+            home_search: String::new(),
+            demo: DemoState::default(),
+        }
+    }
+}
 
 fn route_log(level: LogLevel, message: &str) {
     unsafe {
@@ -32,78 +109,89 @@ fn route_log_error(message: impl AsRef<str>) {
     route_log(LogLevel_LOG_ERROR, message.as_ref());
 }
 
-fn extract_components_slug(path: &str) -> Option<String> {
-    let clean_path = path.split('?').next().unwrap_or(path);
-    let mut segments = clean_path.split('/').filter(|segment| !segment.is_empty());
-    match (segments.next(), segments.next(), segments.next()) {
-        (Some("components"), Some(slug), None) if !slug.is_empty() && !slug.starts_with(':') => {
-            Some(slug.to_string())
+fn update(state: &mut AppState, message: Message) -> Task<Message> {
+    match message {
+        Message::Navigate(route) => {
+            route_log_info(format!("route navigate: {:?}", route));
+            if matches!(route, AppRoute::Component { .. }) {
+                state.demo = DemoState::default();
+            }
+            state.routes.push(route);
         }
-        _ => None,
+        Message::Back => {
+            if !state.routes.back() {
+                route_log_error("route back ignored: already at root");
+            }
+        }
+        Message::SetHomeSearch(value) => state.home_search = value,
+        Message::SetActiveTab(value) => state.demo.active_tab = value,
+        Message::SetPage(value) => state.demo.page = value,
+        Message::SetRadioChoice(value) => state.demo.radio_choice = value,
+        Message::SetSelectChoice(value) => state.demo.select_choice = value,
+        Message::SetQuery(value) => state.demo.query = value,
+        Message::SetToggleState(value) => state.demo.toggle_state = value,
+        Message::SetContextBookmarks(value) => state.demo.context_bookmarks = value,
+        Message::SetContextFullUrls(value) => state.demo.context_full_urls = value,
+        Message::SetContextPerson(value) => state.demo.context_person = value,
+        Message::SetCheckboxFirst(value) => state.demo.checkbox_first = value,
+        Message::SetCheckboxSecond(value) => state.demo.checkbox_second = value,
+        Message::SetCheckboxCard(value) => state.demo.checkbox_card = value,
+        Message::SetToggleGroupValues(value) => state.demo.toggle_group_values = value,
     }
+
+    Task::none()
 }
 
-fn is_home(route: &Route) -> bool {
-    route.path() == "/" || route.raw() == "/"
-}
+fn view(state: &AppState) -> Element {
+    let on_back: Rc<dyn Fn()> = Rc::new(|| dispatch(Message::Back));
+    let on_open: Rc<dyn Fn(String)> =
+        Rc::new(|name| dispatch(Message::Navigate(AppRoute::Component { name })));
+    let on_home_search: Rc<dyn Fn(String)> = Rc::new(|value| dispatch(Message::SetHomeSearch(value)));
 
-fn get_slug(route: &Route) -> Option<String> {
-    route
-        .param("name")
-        .filter(|value| !value.is_empty() && !value.starts_with(':'))
-        .map(ToOwned::to_owned)
-        .or_else(|| extract_components_slug(route.raw()))
-        .or_else(|| extract_components_slug(route.path()))
-}
-
-fn render_route(route: &Route) -> Element {
-    if is_home(route) {
-        route_log_info(format!("route render: home"));
-        showcase::catalog_home()
-    } else if let Some(name) = get_slug(route) {
-        route_log_info(format!("route render: component={name}"));
-        showcase::component_page(name)
-    } else {
-        route_log_error(format!(
-            "route render: unknown raw={} path={} pattern={}",
-            route.raw(),
-            route.path(),
-            route.pattern()
-        ));
-        arkit::column(vec![
-            showcase::nav_bar("Not Found", true),
-            showcase::page_scroll(vec![shadcn::card(vec![
-                shadcn::card_title("Route Not Found"),
-                shadcn::card_description("无法解析当前路由"),
-                arkit::text(format!("raw: {}", route.raw()))
-                    .font_size(12.0)
-                    .style(ArkUINodeAttributeType::FontColor, ROUTE_DEBUG_COLOR)
-                    .into(),
-                arkit::text(format!("path: {}", route.path()))
-                    .font_size(12.0)
-                    .style(ArkUINodeAttributeType::FontColor, ROUTE_DEBUG_COLOR)
-                    .into(),
-                arkit::text(format!("pattern: {}", route.pattern()))
-                    .font_size(12.0)
-                    .style(ArkUINodeAttributeType::FontColor, ROUTE_DEBUG_COLOR)
-                    .into(),
-                shadcn::button("返回首页", shadcn::ButtonVariant::Default)
-                    .on_click(|| {
-                        let _ = reset_route("/");
-                    })
-                    .into(),
-            ])]),
-        ])
+    match state.routes.current().clone() {
+        AppRoute::Home => {
+            route_log_info("route render: home");
+            showcase::catalog_home(state.home_search.clone(), on_home_search, on_open)
+        }
+        AppRoute::Component { name } => {
+            route_log_info(format!("route render: component={name}"));
+            showcase::component_page(
+                name,
+                showcase::DemoContext {
+                    active_tab: state.demo.active_tab,
+                    on_active_tab: Rc::new(|value| dispatch(Message::SetActiveTab(value))),
+                    page: state.demo.page,
+                    on_page: Rc::new(|value| dispatch(Message::SetPage(value))),
+                    radio_choice: state.demo.radio_choice.clone(),
+                    on_radio_choice: Rc::new(|value| dispatch(Message::SetRadioChoice(value))),
+                    select_choice: state.demo.select_choice.clone(),
+                    on_select_choice: Rc::new(|value| dispatch(Message::SetSelectChoice(value))),
+                    query: state.demo.query.clone(),
+                    on_query: Rc::new(|value| dispatch(Message::SetQuery(value))),
+                    toggle_state: state.demo.toggle_state,
+                    on_toggle_state: Rc::new(|value| dispatch(Message::SetToggleState(value))),
+                    context_bookmarks: state.demo.context_bookmarks,
+                    on_context_bookmarks: Rc::new(|value| dispatch(Message::SetContextBookmarks(value))),
+                    context_full_urls: state.demo.context_full_urls,
+                    on_context_full_urls: Rc::new(|value| dispatch(Message::SetContextFullUrls(value))),
+                    context_person: state.demo.context_person.clone(),
+                    on_context_person: Rc::new(|value| dispatch(Message::SetContextPerson(value))),
+                    checkbox_first: state.demo.checkbox_first,
+                    on_checkbox_first: Rc::new(|value| dispatch(Message::SetCheckboxFirst(value))),
+                    checkbox_second: state.demo.checkbox_second,
+                    on_checkbox_second: Rc::new(|value| dispatch(Message::SetCheckboxSecond(value))),
+                    checkbox_card: state.demo.checkbox_card,
+                    on_checkbox_card: Rc::new(|value| dispatch(Message::SetCheckboxCard(value))),
+                    toggle_group_values: state.demo.toggle_group_values.clone(),
+                    on_toggle_group_values: Rc::new(|value| dispatch(Message::SetToggleGroupValues(value))),
+                },
+                on_back,
+            )
+        }
     }
 }
 
 #[entry]
-fn app() -> Element {
-    let _ = register_route("/");
-    let _ = register_named_route("components", "/components/:name");
-    let _ = reset_route("/");
-
-    animated_router_view(RouteTransitionConfig::default(), |route| {
-        render_route(route)
-    })
+fn app() -> impl arkit::EntryPoint {
+    application("arkit counter", update, view).run_with(|| (AppState::new(), Task::none()))
 }

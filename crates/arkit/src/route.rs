@@ -9,7 +9,7 @@ pub use arkit_router::{
 use crate::owner::{provide_context, use_context};
 use crate::view::keyed_scope;
 use crate::view::Element;
-use crate::{create_signal, on_cleanup};
+use crate::{on_cleanup, queue_ui_loop};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RouteTransitionDirection {
@@ -94,50 +94,30 @@ pub fn use_router() -> Router {
 }
 
 pub fn use_route() -> Route {
-    let active_router = router();
-    let route_state = create_signal(active_router.current_route());
-
-    let subscription_id = Rc::new(RefCell::new(None::<usize>));
-
-    {
-        let router = active_router.clone();
-        let signal = route_state.clone();
-        let sub_id = subscription_id.clone();
-        let id = router.subscribe(move |route| {
-            signal.set(route);
-        });
-        *sub_id.borrow_mut() = Some(id);
-    }
-
-    on_cleanup({
-        let router = active_router.clone();
-        let sub_id = subscription_id.clone();
-        move || {
-            if let Some(id) = sub_id.borrow_mut().take() {
-                router.unsubscribe(id);
-            }
-        }
-    });
-
-    route_state.get()
+    ensure_route_subscription().route.borrow().clone()
 }
 
 pub fn use_route_transition() -> RouteTransition {
     let active_router = router();
+    if let Some(state) = use_context::<RouteTransitionState>() {
+        return state.value.borrow().clone();
+    }
+
     let initial_route = active_router.current_route();
     let initial_stack_len = active_router.stack_len();
-    let transition_state = create_signal(RouteTransition::new(
-        initial_route.clone(),
-        RouteTransitionDirection::None,
-    ));
-
-    let subscription_id = Rc::new(RefCell::new(None::<usize>));
+    let state = RouteTransitionState {
+        value: Rc::new(RefCell::new(RouteTransition::new(
+            initial_route.clone(),
+            RouteTransitionDirection::None,
+        ))),
+    };
     let previous_route = Rc::new(RefCell::new(initial_route));
     let previous_stack_len = Rc::new(RefCell::new(initial_stack_len));
+    let subscription_id = Rc::new(RefCell::new(None::<usize>));
 
     {
-        let signal = transition_state.clone();
         let router = active_router.clone();
+        let value = state.value.clone();
         let sub_id = subscription_id.clone();
         let previous_route = previous_route.clone();
         let previous_stack_len = previous_stack_len.clone();
@@ -157,7 +137,8 @@ pub fn use_route_transition() -> RouteTransition {
 
             *previous_stack_len.borrow_mut() = next_stack_len;
             *previous_route.borrow_mut() = route.clone();
-            signal.set(RouteTransition::new(route, direction));
+            value.replace(RouteTransition::new(route, direction));
+            request_router_rerender();
         });
         *sub_id.borrow_mut() = Some(id);
     }
@@ -172,7 +153,9 @@ pub fn use_route_transition() -> RouteTransition {
         }
     });
 
-    transition_state.get()
+    provide_context(state.clone());
+    let transition = state.value.borrow().clone();
+    transition
 }
 
 pub fn use_route_param(name: &str) -> Option<String> {
@@ -183,88 +166,10 @@ pub fn use_route_query(name: &str) -> Option<String> {
     use_route().query(name).map(ToOwned::to_owned)
 }
 
-/// Returns a reactive signal for a specific route parameter.
-/// Only triggers dependent effects when this specific parameter changes.
-pub fn use_route_param_signal(name: &str) -> crate::Signal<Option<String>> {
-    let name = name.to_owned();
-    let active_router = router();
-    let initial = active_router
-        .current_route()
-        .param(&name)
-        .map(ToOwned::to_owned);
-    let param_signal = create_signal(initial);
-
-    let subscription_id = Rc::new(RefCell::new(None::<usize>));
-
-    {
-        let signal = param_signal.clone();
-        let sub_id = subscription_id.clone();
-        let id = active_router.subscribe(move |route| {
-            let new_val = route.param(&name).map(ToOwned::to_owned);
-            let current = signal.get_untracked();
-            if new_val != current {
-                signal.set(new_val);
-            }
-        });
-        *sub_id.borrow_mut() = Some(id);
-    }
-
-    on_cleanup({
-        let router = active_router.clone();
-        let sub_id = subscription_id.clone();
-        move || {
-            if let Some(id) = sub_id.borrow_mut().take() {
-                router.unsubscribe(id);
-            }
-        }
-    });
-
-    param_signal
-}
-
-/// Returns a reactive signal for a specific query parameter.
-/// Only triggers dependent effects when this specific query parameter changes.
-pub fn use_route_query_signal(name: &str) -> crate::Signal<Option<String>> {
-    let name = name.to_owned();
-    let active_router = router();
-    let initial = active_router
-        .current_route()
-        .query(&name)
-        .map(ToOwned::to_owned);
-    let query_signal = create_signal(initial);
-
-    let subscription_id = Rc::new(RefCell::new(None::<usize>));
-
-    {
-        let signal = query_signal.clone();
-        let sub_id = subscription_id.clone();
-        let id = active_router.subscribe(move |route| {
-            let new_val = route.query(&name).map(ToOwned::to_owned);
-            let current = signal.get_untracked();
-            if new_val != current {
-                signal.set(new_val);
-            }
-        });
-        *sub_id.borrow_mut() = Some(id);
-    }
-
-    on_cleanup({
-        let router = active_router.clone();
-        let sub_id = subscription_id.clone();
-        move || {
-            if let Some(id) = sub_id.borrow_mut().take() {
-                router.unsubscribe(id);
-            }
-        }
-    });
-
-    query_signal
-}
-
-/// Returns a reactive getter and setter for a search/query parameter.
-/// The setter navigates to the current path with the updated query string.
-pub fn use_search_param(name: &str) -> (crate::Signal<Option<String>>, Rc<dyn Fn(Option<String>)>) {
-    let getter = use_route_query_signal(name);
+/// Returns the current query parameter and a setter that navigates to the
+/// current path with the updated value.
+pub fn use_search_param(name: &str) -> (Option<String>, Rc<dyn Fn(Option<String>)>) {
+    let getter = use_route_query(name);
     let name = name.to_owned();
     let setter: Rc<dyn Fn(Option<String>)> = Rc::new(move |value| {
         let current = current_route();
@@ -283,9 +188,6 @@ pub fn use_search_param(name: &str) -> (crate::Signal<Option<String>>, Rc<dyn Fn
     (getter, setter)
 }
 
-/// Register a navigation guard that runs before each navigation.
-/// If the guard returns `Some(reason)`, the navigation is blocked.
-/// The guard is automatically removed when the current scope is disposed.
 pub fn use_before_leave(guard: impl Fn(&str) -> Option<String> + 'static) {
     let active_router = router();
     let guard_id = active_router.add_guard(guard);
@@ -294,9 +196,6 @@ pub fn use_before_leave(guard: impl Fn(&str) -> Option<String> + 'static) {
     });
 }
 
-/// Register a platform back-press handler that calls `back_route()` when
-/// the router can go back. When the stack has only one route, the back
-/// press is passed through to the system.
 pub fn use_back_handler() {
     let app = crate::runtime::current_app();
     let Some(app) = app else {
@@ -309,6 +208,60 @@ pub fn use_back_handler() {
             true
         } else {
             false
+        }
+    });
+}
+
+#[derive(Clone)]
+struct RouteState {
+    route: Rc<RefCell<Route>>,
+}
+
+#[derive(Clone)]
+struct RouteTransitionState {
+    value: Rc<RefCell<RouteTransition>>,
+}
+
+fn ensure_route_subscription() -> RouteState {
+    let active_router = router();
+    // Route state is intentionally inherited by descendants so the whole route
+    // subtree shares one subscription and a consistent current route snapshot.
+    if let Some(state) = use_context::<RouteState>() {
+        return state;
+    }
+
+    let state = RouteState {
+        route: Rc::new(RefCell::new(active_router.current_route())),
+    };
+    let subscription_id = Rc::new(RefCell::new(None::<usize>));
+    on_cleanup({
+        let router = active_router.clone();
+        let sub_id = subscription_id.clone();
+        move || {
+            if let Some(id) = sub_id.borrow_mut().take() {
+                router.unsubscribe(id);
+            }
+        }
+    });
+
+    {
+        let route_state = state.route.clone();
+        let sub_id = subscription_id.clone();
+        let id = active_router.subscribe(move |route| {
+            route_state.replace(route);
+            request_router_rerender();
+        });
+        *sub_id.borrow_mut() = Some(id);
+    }
+
+    provide_context(state.clone());
+    state
+}
+
+fn request_router_rerender() {
+    queue_ui_loop(|| {
+        if let Some(runtime) = crate::runtime::current_runtime() {
+            let _ = runtime.request_rerender();
         }
     });
 }
@@ -394,37 +347,11 @@ pub fn use_outlet() -> Option<Element> {
 pub fn router_view(
     render_fn: impl Fn(&RouteSegmentMatch, Option<Element>) -> Element + 'static + Clone,
 ) -> Element {
+    let _ = use_route();
     let active_router = router();
-    let initial = active_router.current_route();
-    let initial_resolved = active_router.resolve_nested(initial.raw());
-
-    let resolved_signal = create_signal(initial_resolved.ok());
-    let subscription_id = Rc::new(RefCell::new(None::<usize>));
-
-    {
-        let signal = resolved_signal.clone();
-        let sub_id = subscription_id.clone();
-        let router_for_sub = active_router.clone();
-        let router_for_closure = active_router.clone();
-        let id = router_for_sub.subscribe(move |route| {
-            signal.set(router_for_closure.resolve_nested(route.raw()).ok());
-        });
-        *sub_id.borrow_mut() = Some(id);
-    }
-
-    on_cleanup({
-        let router = active_router.clone();
-        let sub_id = subscription_id.clone();
-        move || {
-            if let Some(id) = sub_id.borrow_mut().take() {
-                router.unsubscribe(id);
-            }
-        }
-    });
-
-    let resolved = match resolved_signal.get() {
-        Some(r) => r,
-        None => {
+    let resolved = match active_router.resolve_nested(active_router.current_route().raw()) {
+        Ok(r) => r,
+        Err(_) => {
             return crate::view::column_component()
                 .percent_width(1.0)
                 .percent_height(1.0)

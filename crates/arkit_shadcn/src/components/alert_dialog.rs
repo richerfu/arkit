@@ -36,15 +36,13 @@ pub fn alert_dialog(
 }
 
 pub fn alert_dialog_modal(
-    open: Signal<bool>,
+    open: bool,
+    on_open_change: impl Fn(bool) + 'static,
     title: impl Into<String>,
     description: impl Into<String>,
     actions: Vec<Element>,
 ) -> Element {
-    let dismiss = {
-        let open = open.clone();
-        Rc::new(move || open.set(false))
-    };
+    let dismiss = Rc::new(move || on_open_change(false));
     super::dialog::modal_overlay(
         open,
         alert_dialog(title, description, actions),

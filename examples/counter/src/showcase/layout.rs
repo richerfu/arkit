@@ -1,6 +1,7 @@
 use arkit::prelude::*;
 use arkit_icon as lucide;
 use arkit_shadcn as shadcn;
+use std::rc::Rc;
 
 pub(crate) const FLEX_ALIGN_CENTER: i32 = 2;
 pub(crate) const FLEX_ALIGN_END: i32 = 3;
@@ -38,7 +39,7 @@ fn nav_title_text(title: impl Into<String>, home: bool) -> Element {
     text.into()
 }
 
-fn plain_back_button() -> Element {
+fn plain_back_button(on_back: Rc<dyn Fn()>) -> Element {
     arkit::row_component()
         .width(36.0)
         .height(36.0)
@@ -53,9 +54,7 @@ fn plain_back_button() -> Element {
                 shadcn::theme::radius::MD,
             ],
         )
-        .on_click(|| {
-            let _ = back_route();
-        })
+        .on_click(move || on_back())
         .children(vec![lucide::icon("chevron-left")
             .size(20.0)
             .stroke_width(2.0)
@@ -150,6 +149,7 @@ pub(crate) fn h_stack(children: Vec<Element>, gap: f32) -> Element {
         .into()
 }
 
+#[allow(dead_code)]
 pub(crate) fn page_scroll(children: Vec<Element>) -> Element {
     arkit::scroll_component()
         .percent_width(1.0)
@@ -229,7 +229,7 @@ pub(crate) fn component_canvas_with(
         .into()
 }
 
-pub(crate) fn nav_bar(title: impl Into<String>, back: bool) -> Element {
+pub(crate) fn nav_bar(title: impl Into<String>, back: bool, on_back: Option<Rc<dyn Fn()>>) -> Element {
     let title = title.into();
 
     if !back {
@@ -257,7 +257,7 @@ pub(crate) fn nav_bar(title: impl Into<String>, back: bool) -> Element {
         .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_START)
         .children(vec![
             if back {
-                plain_back_button()
+                plain_back_button(on_back.expect("back nav bar requires an on_back callback"))
             } else {
                 empty_box(36.0, 36.0)
             },
@@ -286,8 +286,14 @@ pub(crate) fn nav_bar(title: impl Into<String>, back: bool) -> Element {
         .into()
 }
 
-pub(crate) fn component_list_cell(slug: &str, title: &str, first: bool, last: bool) -> Element {
-    let path = format!("/components/{slug}");
+pub(crate) fn component_list_cell(
+    slug: &str,
+    title: &str,
+    first: bool,
+    last: bool,
+    on_open: Rc<dyn Fn(String)>,
+) -> Element {
+    let slug = slug.to_string();
     let border_width = if last {
         vec![1.0, 1.0, 1.0, 1.0]
     } else {
@@ -320,9 +326,7 @@ pub(crate) fn component_list_cell(slug: &str, title: &str, first: bool, last: bo
         )
         .style(ArkUINodeAttributeType::BorderRadius, border_radius)
         .background_color(shadcn::theme::color::CARD)
-        .on_click(move || {
-            let _ = push_route(path.clone());
-        })
+        .on_click(move || on_open(slug.clone()))
         .children(vec![
             arkit::text(title)
                 .font_size(shadcn::theme::typography::MD)

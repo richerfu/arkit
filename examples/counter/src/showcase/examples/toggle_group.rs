@@ -4,9 +4,7 @@ use arkit::prelude::*;
 use arkit_shadcn as shadcn;
 
 #[component]
-pub(crate) fn render(_ctx: DemoContext) -> Element {
-    let values = create_signal(Vec::<String>::new());
-
+pub(crate) fn render(ctx: DemoContext) -> Element {
     component_canvas(
         shadcn::toggle_group_icons_multi(
             vec![
@@ -14,7 +12,11 @@ pub(crate) fn render(_ctx: DemoContext) -> Element {
                 String::from("italic"),
                 String::from("underline"),
             ],
-            values,
+            ctx.toggle_group_values,
+            {
+                let on_change = ctx.on_toggle_group_values.clone();
+                move |values| on_change(values)
+            },
         ),
         true,
         24.0,

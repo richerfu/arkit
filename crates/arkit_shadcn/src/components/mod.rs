@@ -1,9 +1,11 @@
 use arkit::prelude::ArkUINodeAttributeType;
 use arkit::{
     ButtonElement, CalendarPickerElement, ComponentElement, DatePickerElement, Element,
-    ProgressElement, ReactiveHost, RowElement, ScrollElement, Signal, SliderElement, SwiperElement,
+    ProgressElement, ReactiveHost, RowElement, ScrollElement, SliderElement, SwiperElement,
     TextAreaElement, TextElement, TextInputElement, ToggleElement,
 };
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
 
 use crate::styles::{
     body_text, body_text_regular, border_color, card_surface, input_surface, margin_top,
@@ -122,23 +124,21 @@ pub(crate) const VISIBILITY_HIDDEN: i32 = 2;
 
 pub(crate) fn visibility_gate<T>(
     element: ComponentElement<T>,
-    open: Signal<bool>,
+    open: bool,
 ) -> ComponentElement<T>
 where
     T: ReactiveHost,
 {
     element
-        .style(ArkUINodeAttributeType::Visibility, VISIBILITY_HIDDEN)
-        .style(ArkUINodeAttributeType::Opacity, 0.0_f32)
+        .style(
+            ArkUINodeAttributeType::Visibility,
+            if open { 0_i32 } else { VISIBILITY_HIDDEN },
+        )
+        .style(ArkUINodeAttributeType::Opacity, if open { 1.0_f32 } else { 0.0_f32 })
         .style(
             ArkUINodeAttributeType::HitTestBehavior,
-            HIT_TEST_TRANSPARENT,
+            if open { 0_i32 } else { HIT_TEST_TRANSPARENT },
         )
-        .watch_signal(open, move |node, is_open| {
-            node.set_visibility(if is_open { 0_i32 } else { VISIBILITY_HIDDEN })?;
-            node.set_hit_test_behavior(if is_open { 0_i32 } else { HIT_TEST_TRANSPARENT })?;
-            node.opacity(if is_open { 1.0 } else { 0.0 })
-        })
 }
 
 pub(crate) fn stack(children: Vec<Element>, gap: f32) -> Element {
@@ -234,4 +234,57 @@ pub(crate) fn rounded_tabs_list_surface(element: RowElement) -> RowElement {
             vec![radius::LG, radius::LG, radius::LG, radius::LG],
         )
         .background_color(color::MUTED)
+}
+
+pub(crate) fn request_runtime_rerender() {
+    arkit::queue_ui_loop(|| {
+        if let Some(runtime) = arkit_runtime::current_runtime() {
+            let _ = runtime.request_rerender();
+        }
+    });
+}
+
+pub(crate) fn local_bool_state<T: Clone + 'static>(marker: T, initial: bool) -> Rc<Cell<bool>> {
+    #[derive(Clone)]
+    struct LocalBool<T> {
+        _marker: T,
+        value: Rc<Cell<bool>>,
+    }
+
+    // Component-local state must stay on the current owner only. Walking up the
+    // owner tree would incorrectly reuse parent widget state in nested widgets.
+    if let Some(state) = arkit::use_local_context::<LocalBool<T>>() {
+        return state.value;
+    }
+
+    let value = Rc::new(Cell::new(initial));
+    arkit::provide_context(LocalBool {
+        _marker: marker,
+        value: value.clone(),
+    });
+    value
+}
+
+pub(crate) fn local_ref_state<M: Clone + 'static, T: Clone + 'static>(
+    marker: M,
+    initial: T,
+) -> Rc<RefCell<T>> {
+    #[derive(Clone)]
+    struct LocalRef<M, T> {
+        _marker: M,
+        value: Rc<RefCell<T>>,
+    }
+
+    // Same rule as `local_bool_state`: this state is private to the current
+    // component owner and must not inherit from ancestors.
+    if let Some(state) = arkit::use_local_context::<LocalRef<M, T>>() {
+        return state.value;
+    }
+
+    let value = Rc::new(RefCell::new(initial));
+    arkit::provide_context(LocalRef {
+        _marker: marker,
+        value: value.clone(),
+    });
+    value
 }

@@ -9,6 +9,7 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
             shadcn::tabs(
                 vec![String::from("Feedback"), String::from("Survey")],
                 ctx.active_tab,
+                move |value| (ctx.on_active_tab)(value),
                 vec![
                     shadcn::card(vec![
                         shadcn::card_header(

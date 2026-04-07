@@ -7,7 +7,8 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
     component_canvas(
         fixed_width(
             shadcn::input("Email")
-                .bind(ctx.query)
+                .value(ctx.query)
+                .on_change(move |value| (ctx.on_query)(value))
                 .percent_width(1.0)
                 .into(),
             384.0,

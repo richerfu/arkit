@@ -75,6 +75,15 @@ impl Owner {
         None
     }
 
+    /// Look up a context value of type `T` on this owner only.
+    pub(crate) fn use_local_context<T: Clone + 'static>(&self) -> Option<T> {
+        self.contexts
+            .borrow()
+            .get(&TypeId::of::<T>())
+            .and_then(|value| value.downcast_ref::<T>())
+            .cloned()
+    }
+
     /// Dispose this owner, running all cleanups and recursively disposing children.
     pub(crate) fn dispose(&self) {
         if self.disposed.replace(true) {
@@ -158,6 +167,12 @@ pub fn provide_context<T: 'static>(value: T) {
 pub fn use_context<T: Clone + 'static>() -> Option<T> {
     let owner = current_owner()?;
     owner.use_context::<T>()
+}
+
+/// Look up a context value of type `T` on the current owner only.
+pub fn use_local_context<T: Clone + 'static>() -> Option<T> {
+    let owner = current_owner()?;
+    owner.use_local_context::<T>()
 }
 
 /// A handle that disposes a reactive scope when dropped or explicitly called.
@@ -265,5 +280,74 @@ impl Drop for ScopeGuard {
         if let Some(previous) = self.previous.take() {
             OWNER.with(|o| o.replace(Some(previous)));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct TestContext(&'static str);
+
+    #[test]
+    fn inherited_context_walks_up_owner_tree() {
+        let ((), dispose) = create_root(|| {
+            provide_context(TestContext("root"));
+
+            let ((), child_dispose) = create_scope(|| {
+                assert_eq!(use_context::<TestContext>(), Some(TestContext("root")));
+                assert_eq!(use_local_context::<TestContext>(), None);
+            });
+
+            child_dispose.dispose();
+        });
+
+        dispose();
+    }
+
+    #[test]
+    fn local_context_stays_bound_to_current_owner() {
+        let ((), dispose) = create_root(|| {
+            let ((), child_dispose) = create_scope(|| {
+                provide_context(TestContext("child"));
+
+                assert_eq!(use_context::<TestContext>(), Some(TestContext("child")));
+                assert_eq!(use_local_context::<TestContext>(), Some(TestContext("child")));
+
+                let ((), grandchild_dispose) = create_scope(|| {
+                    assert_eq!(use_context::<TestContext>(), Some(TestContext("child")));
+                    assert_eq!(use_local_context::<TestContext>(), None);
+                });
+
+                grandchild_dispose.dispose();
+            });
+
+            child_dispose.dispose();
+        });
+
+        dispose();
+    }
+
+    #[test]
+    fn sibling_local_contexts_do_not_collide() {
+        let ((), dispose) = create_root(|| {
+            let ((), first_dispose) = create_scope(|| {
+                provide_context(TestContext("first"));
+                assert_eq!(use_local_context::<TestContext>(), Some(TestContext("first")));
+            });
+            first_dispose.dispose();
+
+            let ((), second_dispose) = create_scope(|| {
+                assert_eq!(use_context::<TestContext>(), None);
+                assert_eq!(use_local_context::<TestContext>(), None);
+
+                provide_context(TestContext("second"));
+                assert_eq!(use_local_context::<TestContext>(), Some(TestContext("second")));
+            });
+            second_dispose.dispose();
+        });
+
+        dispose();
     }
 }

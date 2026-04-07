@@ -29,11 +29,13 @@ fn repo_row(name: &str) -> Element {
 }
 
 pub(crate) fn render(ctx: DemoContext) -> Element {
+    let on_toggle = ctx.on_toggle_state.clone();
     component_canvas(
         fixed_width(
             shadcn::collapsible(
                 "@peduarte starred 3 repositories",
                 ctx.toggle_state,
+                move |value| on_toggle(value),
                 vec![
                     repo_row("@radix-ui/primitives"),
                     repo_row("@radix-ui/react"),

@@ -1,7 +1,11 @@
 use super::*;
 
-pub fn collapsible(title: impl Into<String>, open: Signal<bool>, content: Vec<Element>) -> Element {
-    let click = open.clone();
+pub fn collapsible(
+    title: impl Into<String>,
+    open: bool,
+    on_open_change: impl Fn(bool) + 'static,
+    content: Vec<Element>,
+) -> Element {
     let mut items = content.into_iter();
     let first = items.next();
     let rest: Vec<Element> = items
@@ -27,7 +31,7 @@ pub fn collapsible(title: impl Into<String>, open: Signal<bool>, content: Vec<El
             ArkUINodeAttributeType::Padding,
             vec![0.0, spacing::LG, 0.0, spacing::LG],
         )
-        .on_click(move || click.update(|value| *value = !*value))
+        .on_click(move || on_open_change(!open))
         .children(vec![
             body_text(title)
                 .style(ArkUINodeAttributeType::FontWeight, 5_i32)
@@ -53,9 +57,8 @@ pub fn collapsible(title: impl Into<String>, open: Signal<bool>, content: Vec<El
         );
     }
 
-    // Wrap rest children in a visibility-toggled container.
-    // `watch_signal` reactively toggles visibility when the `open` signal changes,
-    // avoiding the stale static `if open.get()` that only evaluated once at mount.
+    // Keep the body mounted and let normal patching update visibility so layout
+    // and interaction remain stable across explicit runtime rerenders.
     if !rest.is_empty() {
         children.push(
             visibility_gate(arkit::column_component().percent_width(1.0), open)

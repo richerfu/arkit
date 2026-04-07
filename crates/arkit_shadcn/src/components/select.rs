@@ -1,13 +1,22 @@
 use super::floating_layer::{floating_panel_with_builder, FloatingAlign, FloatingSide};
 use super::*;
-use arkit::{component, create_signal};
+use arkit::component;
 use arkit_icon as lucide;
 use std::rc::Rc;
 
+#[derive(Clone)]
+struct SelectOpenMarker;
+
 #[component]
-pub fn select(options: Vec<String>, selected: Signal<String>) -> Element {
-    let open = create_signal(false);
+pub fn select(
+    options: Vec<String>,
+    selected: impl Into<String>,
+    on_select: impl Fn(String) + 'static,
+) -> Element {
+    let selected = selected.into();
+    let open = local_bool_state(SelectOpenMarker, false);
     let toggle_open = open.clone();
+    let on_select = Rc::new(on_select);
 
     let trigger = shadow_sm(crate::styles::rounded(
         crate::styles::border(
@@ -29,7 +38,7 @@ pub fn select(options: Vec<String>, selected: Signal<String>) -> Element {
                     arkit::dynamic({
                         let selected = selected.clone();
                         move || {
-                            let current = selected.get();
+                            let current = selected.clone();
                             let has_value = !current.is_empty();
                             let label = if has_value {
                                 current
@@ -58,81 +67,75 @@ pub fn select(options: Vec<String>, selected: Signal<String>) -> Element {
         ),
         radius::MD,
     ))
-    .on_click(move || toggle_open.update(|value| *value = !*value))
+    .on_click(move || {
+        toggle_open.set(!toggle_open.get());
+        request_runtime_rerender();
+    })
     .into();
 
     let panel_builder: Rc<dyn Fn(Option<f32>) -> Element> = Rc::new({
         let options = options.clone();
         let selected = selected.clone();
         let close = open.clone();
+        let on_select = on_select.clone();
         move |trigger_width| {
             let count = options.len();
             let items = options
                 .iter()
                 .cloned()
                 .map(|option| {
-                    let value = selected.clone();
                     let close_dropdown = close.clone();
                     let sel = selected.clone();
                     let opt = option.clone();
+                    let on_select = on_select.clone();
+                    let active = sel == opt;
+                    let opt_click = opt.clone();
 
-                    // Wrap each option row in `dynamic` so it reactively updates
-                    // the highlight / check-icon when the `selected` signal changes.
-                    // The previous code read `selected.get()` once inside panel_builder,
-                    // but panel_builder is only re-invoked when trigger_frame changes,
-                    // not when `selected` itself changes.
-                    arkit::dynamic(move || {
-                        let active = sel.get() == opt;
-                        let value = value.clone();
-                        let close_dropdown = close_dropdown.clone();
-                        let opt_click = opt.clone();
-
-                        arkit::row_component()
-                            .percent_width(1.0)
-                            .height(36.0)
-                            .align_items_center()
-                            .style(
-                                ArkUINodeAttributeType::RowJustifyContent,
-                                FLEX_ALIGN_SPACE_BETWEEN,
-                            )
-                            .style(
-                                ArkUINodeAttributeType::Padding,
-                                vec![8.0, spacing::SM, 8.0, spacing::SM],
-                            )
-                            .style(
-                                ArkUINodeAttributeType::BorderRadius,
-                                vec![radius::SM, radius::SM, radius::SM, radius::SM],
-                            )
-                            .background_color(if active { color::ACCENT } else { 0x00000000 })
-                            .on_click(move || {
-                                value.set(opt_click.clone());
-                                close_dropdown.set(false);
-                            })
-                            .children(vec![
-                                arkit::text(opt.clone())
-                                    .font_size(typography::SM)
-                                    .style(
-                                        ArkUINodeAttributeType::FontColor,
-                                        if active {
-                                            color::ACCENT_FOREGROUND
-                                        } else {
-                                            color::FOREGROUND
-                                        },
-                                    )
-                                    .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
-                                    .into(),
-                                if active {
-                                    lucide::icon("check")
-                                        .size(16.0)
-                                        .color(color::MUTED_FOREGROUND)
-                                        .render()
-                                } else {
-                                    arkit::row_component().width(16.0).height(16.0).into()
-                                },
-                            ])
-                            .into()
-                    })
-                    .into()
+                    arkit::row_component()
+                        .percent_width(1.0)
+                        .height(36.0)
+                        .align_items_center()
+                        .style(
+                            ArkUINodeAttributeType::RowJustifyContent,
+                            FLEX_ALIGN_SPACE_BETWEEN,
+                        )
+                        .style(
+                            ArkUINodeAttributeType::Padding,
+                            vec![8.0, spacing::SM, 8.0, spacing::SM],
+                        )
+                        .style(
+                            ArkUINodeAttributeType::BorderRadius,
+                            vec![radius::SM, radius::SM, radius::SM, radius::SM],
+                        )
+                        .background_color(if active { color::ACCENT } else { 0x00000000 })
+                        .on_click(move || {
+                            on_select(opt_click.clone());
+                            close_dropdown.set(false);
+                            request_runtime_rerender();
+                        })
+                        .children(vec![
+                            arkit::text(opt.clone())
+                                .font_size(typography::SM)
+                                .style(
+                                    ArkUINodeAttributeType::FontColor,
+                                    if active {
+                                        color::ACCENT_FOREGROUND
+                                    } else {
+                                        color::FOREGROUND
+                                    },
+                                )
+                                .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
+                                .into(),
+                            if active {
+                                lucide::icon("check")
+                                    .size(16.0)
+                                    .color(color::MUTED_FOREGROUND)
+                                    .render()
+                            } else {
+                                arkit::row_component().width(16.0).height(16.0).into()
+                            },
+                        ])
+                        .into()
                 })
                 .collect::<Vec<_>>();
 
@@ -183,11 +186,14 @@ pub fn select(options: Vec<String>, selected: Signal<String>) -> Element {
 
     let dismiss = {
         let open = open.clone();
-        Rc::new(move || open.set(false))
+        Rc::new(move || {
+            open.set(false);
+            request_runtime_rerender();
+        })
     };
     floating_panel_with_builder(
         trigger,
-        open,
+        open.get(),
         FloatingSide::Bottom,
         FloatingAlign::Start,
         panel_builder,

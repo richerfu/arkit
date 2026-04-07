@@ -2,13 +2,12 @@ use std::any::TypeId;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use crate::component::{mount_element, MountedElement};
-use crate::logging;
+use crate::component::{dispose_node_handle, mount_element, MountedElement};
 use crate::ohos_arkui_binding::common::error::ArkUIResult;
 use crate::ohos_arkui_binding::common::node::ArkUINode;
 use crate::ohos_arkui_binding::component::attribute::{ArkUIAttributeBasic, ArkUICommonAttribute};
 use crate::ohos_arkui_binding::component::built_in_component::Column;
-use crate::owner::{with_child_owner, Owner};
+use crate::owner::{with_child_owner, with_owner, Owner};
 use crate::runtime::schedule_after_mount_effects;
 use crate::view::element::{Element, ViewNode};
 
@@ -43,12 +42,15 @@ struct ShowState {
     container: RefCell<Column>,
     mounted_child: RefCell<Option<MountedElement>>,
     child_owner: RefCell<Option<Rc<Owner>>>,
+    condition: RefCell<Rc<dyn Fn() -> bool>>,
+    child: RefCell<Rc<dyn Fn() -> Element>>,
+    visible: Cell<bool>,
 }
 
 impl ShowState {
     fn mount_child(&self, child_fn: &dyn Fn() -> Element) -> ArkUIResult<()> {
         let (element, child_owner) = with_child_owner(|| child_fn());
-        let (child_node, child_meta) = mount_element(element)?;
+        let (child_node, child_meta) = with_owner(child_owner.clone(), || mount_element(element))?;
         self.container.borrow_mut().add_child(child_node)?;
         self.mounted_child.replace(Some(child_meta));
         self.child_owner.replace(Some(child_owner));
@@ -58,24 +60,55 @@ impl ShowState {
 
     fn unmount_child(&self) -> ArkUIResult<()> {
         if let Some(removed) = self.container.borrow_mut().remove_child(0)? {
-            removed.borrow_mut().dispose()?;
+            dispose_node_handle(removed)?;
         }
-        if let Some(meta) = self.mounted_child.borrow_mut().take() {
+        let meta = self.mounted_child.borrow_mut().take();
+        if let Some(meta) = meta {
             meta.cleanup_recursive();
         }
-        if let Some(owner) = self.child_owner.borrow_mut().take() {
+        let owner = self.child_owner.borrow_mut().take();
+        if let Some(owner) = owner {
             owner.dispose();
         }
         Ok(())
     }
 
     fn cleanup(&self) {
-        if let Some(meta) = self.mounted_child.borrow_mut().take() {
+        let meta = self.mounted_child.borrow_mut().take();
+        if let Some(meta) = meta {
             meta.cleanup_recursive();
         }
-        if let Some(owner) = self.child_owner.borrow_mut().take() {
+        let owner = self.child_owner.borrow_mut().take();
+        if let Some(owner) = owner {
             owner.dispose();
         }
+    }
+
+    fn has_child(&self) -> bool {
+        self.mounted_child.borrow().is_some()
+    }
+
+    fn replace_child(&self, child_fn: &dyn Fn() -> Element) -> ArkUIResult<()> {
+        if self.has_child() {
+            self.unmount_child()?;
+        }
+        self.mount_child(child_fn)
+    }
+
+    fn sync_current(&self) -> ArkUIResult<()> {
+        let next = {
+            let condition = self.condition.borrow().clone();
+            condition()
+        };
+        let child = self.child.borrow().clone();
+        match (next, self.has_child()) {
+            (true, true) => self.replace_child(child.as_ref())?,
+            (true, false) => self.mount_child(child.as_ref())?,
+            (false, true) => self.unmount_child()?,
+            (false, false) => {}
+        }
+        self.visible.set(next);
+        Ok(())
     }
 }
 
@@ -97,44 +130,23 @@ impl ViewNode for ShowElement {
             container: RefCell::new(container),
             mounted_child: RefCell::new(None),
             child_owner: RefCell::new(None),
+            condition: RefCell::new(condition.clone()),
+            child: RefCell::new(child.clone()),
+            visible: Cell::new(false),
         });
 
         // Initial render
-        if (condition)() {
-            state.mount_child(child.as_ref())?;
-        }
-
-        // Reactive effect: re-evaluate condition when signals change
-        let effect_state = state.clone();
-        let prev_value = Rc::new(Cell::new((condition)()));
-        crate::effect::create_effect(move || {
-            let next = condition();
-            if next == prev_value.get() {
-                return;
-            }
-            prev_value.set(next);
-            let update_state = effect_state.clone();
-            let update_child = child.clone();
-            crate::runtime::queue_ui_loop(move || {
-                let result = if next {
-                    update_state.mount_child(update_child.as_ref())
-                } else {
-                    update_state.unmount_child()
-                };
-                if let Err(e) = result {
-                    logging::error(format!("show: update failed: {e}"));
-                }
-            });
-        });
+        state.sync_current()?;
 
         let cleanup_state = state.clone();
-        let mounted = MountedElement::new(
+        let mut mounted = MountedElement::new(
             TypeId::of::<ShowElement>(),
             std::any::type_name::<ShowElement>(),
             None,
             vec![Box::new(move || cleanup_state.cleanup())],
             vec![],
         );
+        mounted.set_state(Box::new(state));
 
         Ok((container_node, mounted))
     }
@@ -142,17 +154,22 @@ impl ViewNode for ShowElement {
     fn patch(
         self: Box<Self>,
         _node: &mut ArkUINode,
-        _mounted: &mut MountedElement,
+        mounted: &mut MountedElement,
     ) -> ArkUIResult<()> {
-        // Self-managed via reactive effects — patch is a no-op.
-        Ok(())
+        let Self { condition, child } = *self;
+        let state = mounted
+            .state_mut::<Rc<ShowState>>()
+            .expect("show patch missing ShowState");
+        state.condition.replace(condition);
+        state.child.replace(child);
+        state.sync_current()
     }
 }
 
 // ── For ─────────────────────────────────────────────────────────────────────
 
-/// Render a reactive keyed list of items. When the list signal changes,
-/// items are added/removed/reordered with minimal DOM mutations.
+/// Render a keyed list of items. On patch, items are added/removed/reordered
+/// with minimal DOM mutations based on the current `each()` result.
 ///
 /// ```ignore
 /// for_each(
@@ -184,25 +201,79 @@ struct ForElement<T, K> {
     key_fn: Rc<dyn Fn(&T) -> K>,
 }
 
-struct ForItemEntry<K> {
-    key: K,
-    node: ArkUINode,
+struct ForItemEntry {
     mounted: MountedElement,
     owner: Rc<Owner>,
 }
 
-struct ForState<K> {
+struct ForState<T, K> {
     container: RefCell<Column>,
-    entries: RefCell<Vec<ForItemEntry<K>>>,
+    entries: RefCell<Vec<ForItemEntry>>,
+    each: RefCell<Rc<dyn Fn() -> Vec<T>>>,
+    child: RefCell<Rc<dyn Fn(&T) -> Element>>,
+    key_fn: RefCell<Rc<dyn Fn(&T) -> K>>,
 }
 
-impl<K: Eq + std::hash::Hash + Clone> ForState<K> {
+struct PreparedForEntry {
+    element: Element,
+    owner: Rc<Owner>,
+}
+
+impl<T: 'static, K: Eq + std::hash::Hash + Clone + 'static> ForState<T, K> {
     fn cleanup(&self) {
-        for entry in self.entries.borrow_mut().drain(..) {
+        let entries = std::mem::take(&mut *self.entries.borrow_mut());
+        for entry in entries {
             entry.mounted.cleanup_recursive();
             entry.owner.dispose();
         }
     }
+
+    fn rebuild(&self, next_entries: Vec<PreparedForEntry>) -> ArkUIResult<()> {
+        let old_count = self.container.borrow().raw().children().len();
+        for i in (0..old_count).rev() {
+            if let Ok(Some(removed)) = self.container.borrow_mut().remove_child(i) {
+                let _ = dispose_node_handle(removed);
+            }
+        }
+
+        let old_entries = std::mem::take(&mut *self.entries.borrow_mut());
+        for entry in old_entries {
+            entry.mounted.cleanup_recursive();
+            entry.owner.dispose();
+        }
+
+        let mut mounted_entries = Vec::with_capacity(next_entries.len());
+        for entry in next_entries {
+            let PreparedForEntry { element, owner } = entry;
+            let (child_node, child_meta) = with_owner(owner.clone(), || mount_element(element))?;
+            self.container.borrow_mut().add_child(child_node.clone())?;
+            mounted_entries.push(ForItemEntry {
+                mounted: child_meta,
+                owner,
+            });
+        }
+
+        self.entries.replace(mounted_entries);
+        schedule_after_mount_effects();
+        Ok(())
+    }
+}
+
+fn prepare_for_entries<T: 'static, K: Eq + std::hash::Hash + Clone + 'static>(
+    state: &ForState<T, K>,
+) -> Vec<PreparedForEntry> {
+    let items = (state.each.borrow().clone())();
+    let child = state.child.borrow().clone();
+    let key_fn = state.key_fn.borrow().clone();
+
+    items
+        .into_iter()
+        .map(|item| {
+            let _key = key_fn(&item);
+            let (element, owner) = with_child_owner(|| child(&item));
+            PreparedForEntry { element, owner }
+        })
+        .collect()
 }
 
 impl<T: 'static, K: Eq + std::hash::Hash + Clone + 'static> ViewNode for ForElement<T, K> {
@@ -224,72 +295,26 @@ impl<T: 'static, K: Eq + std::hash::Hash + Clone + 'static> ViewNode for ForElem
         let mut container = Column::new()?;
         let container_node: ArkUINode = container.borrow_mut().clone();
 
-        let state = Rc::new(ForState::<K> {
+        let state = Rc::new(ForState::<T, K> {
             container: RefCell::new(container),
             entries: RefCell::new(Vec::new()),
+            each: RefCell::new(each.clone()),
+            child: RefCell::new(child.clone()),
+            key_fn: RefCell::new(key_fn.clone()),
         });
 
-        // Initial render (untracked so we don't create deps from initial mount)
-        {
-            let items = crate::effect::untrack(|| each());
-            let mut entries = state.entries.borrow_mut();
-            let mut container_guard = state.container.borrow_mut();
-            for item in &items {
-                let (element, item_owner) = with_child_owner(|| child(item));
-                let (child_node, child_meta) = mount_element(element)?;
-                container_guard.add_child(child_node.clone())?;
-                entries.push(ForItemEntry {
-                    key: key_fn(item),
-                    node: child_node,
-                    mounted: child_meta,
-                    owner: item_owner,
-                });
-            }
-        }
-
-        // Reactive effect for list changes
-        let effect_state = state.clone();
-        crate::effect::create_effect(move || {
-            let next_items = each();
-            let next_keys: Vec<K> = next_items.iter().map(|item| key_fn(item)).collect();
-
-            // Build new elements for items that don't exist yet (must happen in
-            // the reactive context so with_child_owner has the right parent).
-            let current_keys: std::collections::HashSet<K> = effect_state
-                .entries
-                .borrow()
-                .iter()
-                .map(|e| e.key.clone())
-                .collect();
-
-            let mut new_item_data: Vec<Option<(Element, Rc<Owner>)>> =
-                Vec::with_capacity(next_keys.len());
-            for (i, item) in next_items.iter().enumerate() {
-                let key = &next_keys[i];
-                if current_keys.contains(key) {
-                    new_item_data.push(None);
-                } else {
-                    let (el, owner) = with_child_owner(|| child(item));
-                    new_item_data.push(Some((el, owner)));
-                }
-            }
-
-            let update_state = effect_state.clone();
-            crate::runtime::queue_ui_loop(move || {
-                if let Err(e) = reconcile_for(&update_state, next_keys, new_item_data) {
-                    logging::error(format!("for_each: reconciliation failed: {e}"));
-                }
-            });
-        });
+        let initial_entries = prepare_for_entries(state.as_ref());
+        state.rebuild(initial_entries)?;
 
         let cleanup_state = state.clone();
-        let mounted = MountedElement::new(
+        let mut mounted = MountedElement::new(
             TypeId::of::<ForElement<T, K>>(),
             "ForElement",
             None,
             vec![Box::new(move || cleanup_state.cleanup())],
             vec![],
         );
+        mounted.set_state(Box::new(state));
 
         Ok((container_node, mounted))
     }
@@ -297,85 +322,22 @@ impl<T: 'static, K: Eq + std::hash::Hash + Clone + 'static> ViewNode for ForElem
     fn patch(
         self: Box<Self>,
         _node: &mut ArkUINode,
-        _mounted: &mut MountedElement,
+        mounted: &mut MountedElement,
     ) -> ArkUIResult<()> {
-        // Self-managed via effects
-        Ok(())
+        let Self {
+            each,
+            child,
+            key_fn,
+        } = *self;
+        let state = mounted
+            .state_mut::<Rc<ForState<T, K>>>()
+            .expect("for_each patch missing ForState");
+        state.each.replace(each);
+        state.child.replace(child);
+        state.key_fn.replace(key_fn);
+        let next_entries = prepare_for_entries(state.as_ref());
+        state.rebuild(next_entries)
     }
-}
-
-fn reconcile_for<K: Eq + std::hash::Hash + Clone>(
-    state: &ForState<K>,
-    next_keys: Vec<K>,
-    new_item_data: Vec<Option<(Element, Rc<Owner>)>>,
-) -> ArkUIResult<()> {
-    use std::collections::HashMap;
-
-    let mut entries = state.entries.borrow_mut();
-    let mut container = state.container.borrow_mut();
-
-    // Build key→index map for current entries
-    let mut old_map: HashMap<K, usize> = HashMap::new();
-    for (i, entry) in entries.iter().enumerate() {
-        old_map.insert(entry.key.clone(), i);
-    }
-
-    // Drain all existing entries out so we can move them freely.
-    let mut old_entries: Vec<Option<ForItemEntry<K>>> = entries.drain(..).map(Some).collect();
-    let mut matched = vec![false; old_entries.len()];
-
-    // Build result list: reuse matched old entries or mount new ones.
-    let mut result_entries: Vec<ForItemEntry<K>> = Vec::with_capacity(next_keys.len());
-
-    for (key, data) in next_keys.into_iter().zip(new_item_data.into_iter()) {
-        if let Some(&old_idx) = old_map.get(&key) {
-            // Reuse existing entry by taking it out of the old vec
-            matched[old_idx] = true;
-            if let Some(mut entry) = old_entries[old_idx].take() {
-                entry.key = key;
-                result_entries.push(entry);
-            }
-        } else if let Some((element, owner)) = data {
-            // Mount new item
-            let (child_node, child_meta) = mount_element(element)?;
-            result_entries.push(ForItemEntry {
-                key,
-                node: child_node,
-                mounted: child_meta,
-                owner,
-            });
-        }
-    }
-
-    // Cleanup and dispose unmatched old entries
-    for (i, was_matched) in matched.iter().enumerate() {
-        if !was_matched {
-            if let Some(entry) = old_entries[i].take() {
-                entry.mounted.cleanup_recursive();
-                entry.owner.dispose();
-            }
-        }
-    }
-
-    // Remove all children from the container (in reverse order)
-    let old_count = container.raw().children().len();
-    for i in (0..old_count).rev() {
-        if let Ok(Some(removed)) = container.remove_child(i) {
-            // Don't dispose matched nodes — they're reused
-            if !matched.get(i).copied().unwrap_or(false) {
-                let _ = removed.borrow_mut().dispose();
-            }
-        }
-    }
-
-    // Add children back in new order
-    for entry in &result_entries {
-        container.add_child(entry.node.clone())?;
-    }
-
-    *entries = result_entries;
-    schedule_after_mount_effects();
-    Ok(())
 }
 
 // ── Dynamic ─────────────────────────────────────────────────────────────────
@@ -403,6 +365,7 @@ struct DynamicState {
     container: RefCell<Column>,
     mounted_child: RefCell<Option<MountedElement>>,
     child_owner: RefCell<Option<Rc<Owner>>>,
+    render: RefCell<Rc<dyn Fn() -> Element>>,
 }
 
 impl DynamicState {
@@ -425,18 +388,20 @@ impl DynamicState {
         {
             let mut container = self.container.borrow_mut();
             if let Ok(Some(removed)) = container.remove_child(0) {
-                let _ = removed.borrow_mut().dispose();
+                let _ = dispose_node_handle(removed);
             }
         }
         if let Some(old_meta) = mounted_child.take() {
             old_meta.cleanup_recursive();
         }
-        if let Some(owner) = self.child_owner.borrow_mut().take() {
+        let owner = self.child_owner.borrow_mut().take();
+        if let Some(owner) = owner {
             owner.dispose();
         }
 
         let (new_element, new_owner) = with_child_owner(|| element);
-        let (child_node, child_meta) = mount_element(new_element)?;
+        let (child_node, child_meta) =
+            with_owner(new_owner.clone(), || mount_element(new_element))?;
         self.container.borrow_mut().add_child(child_node)?;
         *mounted_child = Some(child_meta);
         self.child_owner.replace(Some(new_owner));
@@ -445,12 +410,22 @@ impl DynamicState {
     }
 
     fn cleanup(&self) {
-        if let Some(meta) = self.mounted_child.borrow_mut().take() {
+        let meta = self.mounted_child.borrow_mut().take();
+        if let Some(meta) = meta {
             meta.cleanup_recursive();
         }
-        if let Some(owner) = self.child_owner.borrow_mut().take() {
+        let owner = self.child_owner.borrow_mut().take();
+        if let Some(owner) = owner {
             owner.dispose();
         }
+    }
+
+    fn rerender_current(&self) -> ArkUIResult<()> {
+        let next = {
+            let render = self.render.borrow().clone();
+            render()
+        };
+        self.update(next)
     }
 }
 
@@ -472,32 +447,21 @@ impl ViewNode for DynamicElement {
             container: RefCell::new(container),
             mounted_child: RefCell::new(None),
             child_owner: RefCell::new(None),
+            render: RefCell::new(render.clone()),
         });
 
         // Initial render
-        let initial = crate::effect::untrack(|| render());
-        state.update(initial)?;
-
-        // Reactive effect
-        let effect_state = state.clone();
-        crate::effect::create_effect(move || {
-            let next = render();
-            let update_state = effect_state.clone();
-            crate::runtime::queue_ui_loop(move || {
-                if let Err(e) = update_state.update(next) {
-                    logging::error(format!("dynamic: update failed: {e}"));
-                }
-            });
-        });
+        state.rerender_current()?;
 
         let cleanup_state = state.clone();
-        let mounted = MountedElement::new(
+        let mut mounted = MountedElement::new(
             TypeId::of::<DynamicElement>(),
             "DynamicElement",
             None,
             vec![Box::new(move || cleanup_state.cleanup())],
             vec![],
         );
+        mounted.set_state(Box::new(state));
 
         Ok((container_node, mounted))
     }
@@ -505,8 +469,13 @@ impl ViewNode for DynamicElement {
     fn patch(
         self: Box<Self>,
         _node: &mut ArkUINode,
-        _mounted: &mut MountedElement,
+        mounted: &mut MountedElement,
     ) -> ArkUIResult<()> {
-        Ok(())
+        let Self { render } = *self;
+        let state = mounted
+            .state_mut::<Rc<DynamicState>>()
+            .expect("dynamic patch missing DynamicState");
+        state.render.replace(render);
+        state.rerender_current()
     }
 }

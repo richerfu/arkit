@@ -4,12 +4,14 @@ use arkit::prelude::*;
 use arkit_shadcn as shadcn;
 
 pub(crate) fn render(ctx: DemoContext) -> Element {
-    let toggle = ctx.toggle_state.clone();
+    let on_toggle = ctx.on_toggle_state.clone();
+    let on_card_toggle = ctx.on_toggle_state.clone();
+    let is_open = ctx.toggle_state;
     component_canvas(
         fixed_width(
             shadcn::hover_card_with_width(
                 shadcn::button("@expo", shadcn::ButtonVariant::Link)
-                    .on_click(move || toggle.update(|show| *show = !*show))
+                    .on_click(move || on_toggle(!is_open))
                     .into(),
                 vec![arkit::row_component()
                     .percent_width(1.0)
@@ -55,6 +57,7 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                     ])
                     .into()],
                 ctx.toggle_state,
+                move |value| on_card_toggle(value),
                 320.0,
             ),
             320.0,

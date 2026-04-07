@@ -1,8 +1,8 @@
 use super::*;
 use arkit::ohos_arkui_binding::common::attribute::ArkUINodeAttributeNumber;
-use arkit::ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
 use arkit::ohos_arkui_binding::types::alignment::Alignment;
 use arkit_icon as lucide;
+use std::rc::Rc;
 
 const CHECKBOX_SIZE: f32 = 16.0;
 const CHECKBOX_BORDER_WIDTH: f32 = 1.0;
@@ -113,45 +113,42 @@ fn checkbox_mark_style() -> Vec<ArkUINodeAttributeNumber> {
     ]
 }
 
-fn checkbox_impl(label_text: String, checked: Signal<bool>, style: CheckboxStyle) -> Element {
-    let watch_state = checked.clone();
+fn checkbox_impl(
+    label_text: String,
+    checked: bool,
+    on_toggle: Option<Rc<dyn Fn(bool)>>,
+    style: CheckboxStyle,
+) -> Element {
     let checked_color = style.checked_color;
     let disabled = style.disabled;
-    let change_state = checked.clone();
     let has_label = !label_text.is_empty();
 
     let mut checkbox = arkit::checkbox_component()
-        .watch_signal(watch_state, move |node, value| {
-            node.set_checkbox_select(value)?;
+        .native(move |node| {
             node.set_checkbox_shape(CHECKBOX_SHAPE_ROUNDED_SQUARE)?;
             node.set_checkbox_mark(checkbox_mark_style())?;
             node.set_checkbox_select_color(checked_color)?;
-            node.set_checkbox_unselect_color(checkbox_unselect_color(value))?;
-            node.set_attribute(
-                ArkUINodeAttributeType::BackgroundColor,
-                checkbox_background_color(value, checked_color).into(),
-            )?;
-            node.set_attribute(
-                ArkUINodeAttributeType::BorderColor,
-                vec![checkbox_border_color(value, checked_color)].into(),
-            )?;
-            node.set_attribute(
-                ArkUINodeAttributeType::BorderWidth,
-                vec![
-                    checkbox_border_width(value),
-                    checkbox_border_width(value),
-                    checkbox_border_width(value),
-                    checkbox_border_width(value),
-                ]
-                .into(),
-            )?;
-            node.set_attribute(ArkUINodeAttributeType::Opacity, 0.0_f32.into())
+            node.set_checkbox_unselect_color(checkbox_unselect_color(checked))?;
+            Ok(())
         })
-        .on_change(move |value| {
-            if change_state.get() != value {
-                change_state.set(value);
-            }
-        })
+        .patch_attr(ArkUINodeAttributeType::CheckboxSelect, checked)
+        .patch_attr(
+            ArkUINodeAttributeType::BackgroundColor,
+            checkbox_background_color(checked, checked_color),
+        )
+        .patch_attr(
+            ArkUINodeAttributeType::BorderColor,
+            vec![checkbox_border_color(checked, checked_color)],
+        )
+        .patch_attr(
+            ArkUINodeAttributeType::BorderWidth,
+            vec![
+                checkbox_border_width(checked),
+                checkbox_border_width(checked),
+                checkbox_border_width(checked),
+                checkbox_border_width(checked),
+            ],
+        )
         .style(ArkUINodeAttributeType::CheckboxSelectColor, checked_color)
         .style(
             ArkUINodeAttributeType::BorderRadius,
@@ -160,21 +157,19 @@ fn checkbox_impl(label_text: String, checked: Signal<bool>, style: CheckboxStyle
         .style(ArkUINodeAttributeType::Opacity, 0.0_f32)
         .style(ArkUINodeAttributeType::Clip, true);
 
+    if let Some(on_toggle) = on_toggle {
+        checkbox = checkbox.on_change(move |value| on_toggle(value));
+    }
+
     if disabled {
         checkbox = checkbox.style(ArkUINodeAttributeType::Enabled, false);
     }
 
-    let visual_indicator = arkit::dynamic({
-        let checked = checked.clone();
-        let checked_color = style.checked_color;
-        move || {
-            if checked.get() {
-                checked_shell(checked_color).into()
-            } else {
-                unchecked_shell().into()
-            }
-        }
-    });
+    let visual_indicator = if checked {
+        checked_shell(style.checked_color).into()
+    } else {
+        unchecked_shell().into()
+    };
 
     let indicator = arkit::stack_component()
         .width(CHECKBOX_SIZE)
@@ -183,7 +178,7 @@ fn checkbox_impl(label_text: String, checked: Signal<bool>, style: CheckboxStyle
             ArkUINodeAttributeType::HitTestBehavior,
             HIT_TEST_TRANSPARENT,
         )
-        .children(vec![visual_indicator.into()]);
+        .children(vec![visual_indicator]);
 
     let mut children = vec![indicator.into()];
 
@@ -224,10 +219,15 @@ fn checkbox_impl(label_text: String, checked: Signal<bool>, style: CheckboxStyle
         .into()
 }
 
-pub fn checkbox(label: impl Into<String>, checked: Signal<bool>) -> Element {
+pub fn checkbox(
+    label: impl Into<String>,
+    checked: bool,
+    on_toggle: impl Fn(bool) + 'static,
+) -> Element {
     checkbox_impl(
         label.into(),
         checked,
+        Some(Rc::new(on_toggle)),
         CheckboxStyle {
             checked_color: color::PRIMARY,
             disabled: false,
@@ -237,12 +237,14 @@ pub fn checkbox(label: impl Into<String>, checked: Signal<bool>) -> Element {
 
 pub fn checkbox_with_checked_color(
     label: impl Into<String>,
-    checked: Signal<bool>,
+    checked: bool,
+    on_toggle: impl Fn(bool) + 'static,
     checked_color: u32,
 ) -> Element {
     checkbox_impl(
         label.into(),
         checked,
+        Some(Rc::new(on_toggle)),
         CheckboxStyle {
             checked_color,
             disabled: false,
@@ -250,10 +252,11 @@ pub fn checkbox_with_checked_color(
     )
 }
 
-pub fn disabled_checkbox(label: impl Into<String>, checked: Signal<bool>) -> Element {
+pub fn disabled_checkbox(label: impl Into<String>, checked: bool) -> Element {
     checkbox_impl(
         label.into(),
         checked,
+        None,
         CheckboxStyle {
             checked_color: color::PRIMARY,
             disabled: true,

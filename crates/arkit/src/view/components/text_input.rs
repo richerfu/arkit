@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use crate::ohos_arkui_binding::component::built_in_component::TextInput;
-use crate::{logging, Signal};
+use crate::prelude::ArkUINodeAttributeType;
 
 use super::super::core::{queue_guarded_ui_callback, run_guarded_ui_callback, ComponentElement};
 
@@ -11,58 +11,31 @@ pub fn text_input_component() -> TextInputElement {
     ComponentElement::new(TextInput::new)
 }
 
-pub fn text_input() -> TextInputElement {
-    text_input_component()
+pub fn text_input(placeholder: impl Into<String>, value: impl Into<String>) -> TextInputElement {
+    text_input_component().placeholder(placeholder).value(value)
 }
 
 impl ComponentElement<TextInput> {
     pub fn value(self, value: impl Into<String>) -> Self {
         let value = value.into();
-        let value_len = value.len();
-        self.with(move |node| {
-            node.set_text_input_text(value).map_err(|error| {
-                logging::error(format!(
-                    "text input error: failed to set text (len={value_len}): {error}"
-                ));
-                error
-            })
-        })
+        self.style(ArkUINodeAttributeType::TextInputText, value.clone())
+            .patch_attr(ArkUINodeAttributeType::TextInputText, value)
     }
 
     pub fn placeholder(self, value: impl Into<String>) -> Self {
         let value = value.into();
-        let value_len = value.len();
-        self.with(move |node| {
-            node.set_text_input_placeholder(value).map_err(|error| {
-                logging::error(format!(
-                    "text input error: failed to set placeholder (len={value_len}): {error}"
-                ));
-                error
-            })
-        })
+        self.style(ArkUINodeAttributeType::TextInputPlaceholder, value.clone())
+            .patch_attr(ArkUINodeAttributeType::TextInputPlaceholder, value)
     }
 
     pub fn placeholder_color(self, value: u32) -> Self {
-        self.with(move |node| {
-            node.set_text_input_placeholder_color(value)
-                .map_err(|error| {
-                    logging::error(format!(
-                        "text input error: failed to set placeholder color {value:#010x}: {error}"
-                    ));
-                    error
-                })
-        })
+        self.style(ArkUINodeAttributeType::TextInputPlaceholderColor, value)
+            .patch_attr(ArkUINodeAttributeType::TextInputPlaceholderColor, value)
     }
 
     pub fn line_height(self, value: f32) -> Self {
-        self.with(move |node| {
-            node.set_text_input_line_height(value).map_err(|error| {
-                logging::error(format!(
-                    "text input error: failed to set line height {value}: {error}"
-                ));
-                error
-            })
-        })
+        self.style(ArkUINodeAttributeType::TextInputLineHeight, value)
+            .patch_attr(ArkUINodeAttributeType::TextInputLineHeight, value)
     }
 
     pub fn on_change(self, callback: impl Fn(String) + 'static) -> Self {
@@ -90,24 +63,6 @@ impl ComponentElement<TextInput> {
                 });
             });
             Ok(())
-        })
-    }
-
-    pub fn bind(self, state: Signal<String>) -> Self {
-        let value_state = state.clone();
-        self.watch_signal(value_state.clone(), move |node, value| {
-            let value_len = value.len();
-            node.set_text_input_text(value).map_err(|error| {
-                logging::error(format!(
-                    "text input error: failed to sync bound text (len={value_len}): {error}"
-                ));
-                error
-            })
-        })
-        .on_change(move |value| {
-            if state.get() != value {
-                state.set(value);
-            }
         })
     }
 }

@@ -2,19 +2,20 @@ use std::any::TypeId;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::component::{mount_element, MountedElement};
+use crate::component::{dispose_node_handle, mount_element, MountedElement};
 use crate::logging;
 use crate::ohos_arkui_binding::common::error::ArkUIResult;
 use crate::ohos_arkui_binding::common::node::ArkUINode;
 use crate::ohos_arkui_binding::component::attribute::{ArkUIAttributeBasic, ArkUICommonAttribute};
 use crate::ohos_arkui_binding::component::built_in_component::Column;
-use crate::owner::{with_child_owner, Owner};
+use crate::owner::{with_child_owner, with_owner, Owner};
 use crate::runtime::schedule_after_mount_effects;
 
 use super::super::element::{Element, ViewNode};
 
-/// Internal state for a scoped element in the new reactive model.
-/// The render function runs once; signals drive all updates via effects.
+/// Internal state for a scoped element.
+/// The render function mounts a child owner and later runtime rerenders replace
+/// the subtree explicitly through `patch`.
 #[allow(dead_code)]
 struct ScopedState {
     container: RefCell<Column>,
@@ -23,11 +24,54 @@ struct ScopedState {
 }
 
 impl ScopedState {
-    fn cleanup(&self) {
-        if let Some(meta) = self.mounted_child.borrow_mut().take() {
+    fn replace(&self, element: Element, child_owner: Rc<Owner>) -> ArkUIResult<()> {
+        {
+            let mut container = self.container.borrow_mut();
+            if let Ok(Some(removed)) = container.remove_child(0) {
+                let _ = dispose_node_handle(removed);
+            }
+        }
+
+        let meta = self.mounted_child.borrow_mut().take();
+        if let Some(meta) = meta {
             meta.cleanup_recursive();
         }
-        if let Some(owner) = self.child_owner.borrow_mut().take() {
+        let owner = self.child_owner.borrow_mut().take();
+        if let Some(owner) = owner {
+            owner.dispose();
+        }
+
+        let (child_node, child_meta) = with_owner(child_owner.clone(), || mount_element(element))
+            .map_err(|error| {
+            logging::error(format!(
+                "scope error: failed to mount replacement scoped root child: {error}"
+            ));
+            error
+        })?;
+
+        self.container
+            .borrow_mut()
+            .add_child(child_node)
+            .map_err(|error| {
+                logging::error(format!(
+                    "scope error: failed to attach replacement scoped root child: {error}"
+                ));
+                error
+            })?;
+
+        self.mounted_child.replace(Some(child_meta));
+        self.child_owner.replace(Some(child_owner));
+        schedule_after_mount_effects();
+        Ok(())
+    }
+
+    fn cleanup(&self) {
+        let meta = self.mounted_child.borrow_mut().take();
+        if let Some(meta) = meta {
+            meta.cleanup_recursive();
+        }
+        let owner = self.child_owner.borrow_mut().take();
+        if let Some(owner) = owner {
             owner.dispose();
         }
     }
@@ -103,12 +147,13 @@ impl ViewNode for ScopeElement {
 
         // Render once inside a child owner scope
         let (child_element, child_owner) = with_child_owner(|| render_fn());
-        let (child_node, child_meta) = mount_element(child_element).map_err(|error| {
-            logging::error(format!(
-                "scope error: failed to mount scoped root child: {error}"
-            ));
-            error
-        })?;
+        let (child_node, child_meta) =
+            with_owner(child_owner.clone(), || mount_element(child_element)).map_err(|error| {
+                logging::error(format!(
+                    "scope error: failed to mount scoped root child: {error}"
+                ));
+                error
+            })?;
 
         container.add_child(child_node).map_err(|error| {
             logging::error(format!(
@@ -140,11 +185,18 @@ impl ViewNode for ScopeElement {
     fn patch(
         self: Box<Self>,
         _node: &mut ArkUINode,
-        _mounted: &mut MountedElement,
+        mounted: &mut MountedElement,
     ) -> ArkUIResult<()> {
-        // In the fine-grained reactive model, the scope renders once and
-        // signals drive updates via effects. Patch is a no-op.
-        Ok(())
+        let Self { render, .. } = *self;
+        let render_fn = render
+            .borrow_mut()
+            .take()
+            .expect("scope render function called more than once");
+        let (child_element, child_owner) = with_child_owner(|| render_fn());
+        mounted
+            .state_mut::<Rc<ScopedState>>()
+            .expect("scope patch missing ScopedState")
+            .replace(child_element, child_owner)
     }
 }
 
@@ -178,12 +230,13 @@ impl ViewNode for OwnedScopeElement {
         let mut container = Column::new()?;
         let container_node = container.borrow_mut().clone();
 
-        let (child_node, child_meta) = mount_element(child_element).map_err(|error| {
-            logging::error(format!(
-                "scope error: failed to mount scoped root child: {error}"
-            ));
-            error
-        })?;
+        let (child_node, child_meta) =
+            with_owner(child_owner.clone(), || mount_element(child_element)).map_err(|error| {
+                logging::error(format!(
+                    "scope error: failed to mount scoped root child: {error}"
+                ));
+                error
+            })?;
 
         container.add_child(child_node).map_err(|error| {
             logging::error(format!(
@@ -213,10 +266,18 @@ impl ViewNode for OwnedScopeElement {
     }
 
     fn patch(
-        self: Box<Self>,
+        mut self: Box<Self>,
         _node: &mut ArkUINode,
-        _mounted: &mut MountedElement,
+        mounted: &mut MountedElement,
     ) -> ArkUIResult<()> {
-        Ok(())
+        let child_element = self
+            .element
+            .take()
+            .expect("OwnedScopeElement patch called twice");
+        let child_owner = self.child_owner.clone();
+        mounted
+            .state_mut::<Rc<ScopedState>>()
+            .expect("owned scope patch missing ScopedState")
+            .replace(child_element, child_owner)
     }
 }

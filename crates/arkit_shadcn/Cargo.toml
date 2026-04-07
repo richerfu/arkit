@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 arkit.workspace = true
+arkit_runtime.workspace = true
 arkit_animation.workspace = true
 arkit_icon.workspace = true
 ohos-display-binding.workspace = true

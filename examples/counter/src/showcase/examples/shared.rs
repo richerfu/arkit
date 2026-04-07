@@ -1,6 +1,7 @@
 use arkit::prelude::*;
 use arkit_icon as lucide;
 use arkit_shadcn as shadcn;
+use std::rc::Rc;
 
 use super::super::layout::{
     component_canvas_with, fixed_width, h_stack, v_stack, FLEX_ALIGN_CENTER, FLEX_ALIGN_END,
@@ -12,12 +13,32 @@ const SKY_500: u32 = 0xFF0EA5E9;
 
 #[derive(Clone)]
 pub(crate) struct DemoContext {
-    pub active_tab: Signal<usize>,
-    pub page: Signal<i32>,
-    pub radio_choice: Signal<String>,
-    pub select_choice: Signal<String>,
-    pub query: Signal<String>,
-    pub toggle_state: Signal<bool>,
+    pub active_tab: usize,
+    pub on_active_tab: Rc<dyn Fn(usize)>,
+    pub page: i32,
+    pub on_page: Rc<dyn Fn(i32)>,
+    pub radio_choice: String,
+    pub on_radio_choice: Rc<dyn Fn(String)>,
+    pub select_choice: String,
+    pub on_select_choice: Rc<dyn Fn(String)>,
+    pub query: String,
+    pub on_query: Rc<dyn Fn(String)>,
+    pub toggle_state: bool,
+    pub on_toggle_state: Rc<dyn Fn(bool)>,
+    pub context_bookmarks: bool,
+    pub on_context_bookmarks: Rc<dyn Fn(bool)>,
+    pub context_full_urls: bool,
+    pub on_context_full_urls: Rc<dyn Fn(bool)>,
+    pub context_person: String,
+    pub on_context_person: Rc<dyn Fn(String)>,
+    pub checkbox_first: bool,
+    pub on_checkbox_first: Rc<dyn Fn(bool)>,
+    pub checkbox_second: bool,
+    pub on_checkbox_second: Rc<dyn Fn(bool)>,
+    pub checkbox_card: bool,
+    pub on_checkbox_card: Rc<dyn Fn(bool)>,
+    pub toggle_group_values: Vec<String>,
+    pub on_toggle_group_values: Rc<dyn Fn(Vec<String>)>,
 }
 
 fn showcase_horizontal_padding(value: f32) -> f32 {
@@ -101,14 +122,13 @@ fn carousel_nav_surface(child: Element, disabled: bool) -> Element {
 }
 
 pub(crate) fn carousel_frame(
-    page: Signal<i32>,
+    page: i32,
+    on_page: Rc<dyn Fn(i32)>,
     count: i32,
     preview: Element,
     remove_bottom_safe_area: bool,
 ) -> Element {
-    let current = page.get().clamp(1, count);
-    let prev = page.clone();
-    let next = page.clone();
+    let current = page.clamp(1, count);
 
     let prev_disabled = current == 1;
     let prev_button = if prev_disabled {
@@ -119,17 +139,14 @@ pub(crate) fn carousel_frame(
             .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
             .style(ArkUINodeAttributeType::Enabled, false)
     } else {
+        let on_prev_page = on_page.clone();
         shadcn::icon_button_with_variant("chevron-left", shadcn::ButtonVariant::Ghost)
             .key(format!("carousel-prev:{current}:enabled"))
             .width(40.0)
             .height(40.0)
             .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
             .on_click(move || {
-                prev.update(|idx| {
-                    if *idx > 1 {
-                        *idx -= 1;
-                    }
-                });
+                on_prev_page((current - 1).max(1));
             })
     };
 
@@ -142,17 +159,14 @@ pub(crate) fn carousel_frame(
             .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
             .style(ArkUINodeAttributeType::Enabled, false)
     } else {
+        let on_next_page = on_page.clone();
         shadcn::icon_button_with_variant("chevron-right", shadcn::ButtonVariant::Ghost)
             .key(format!("carousel-next:{current}:enabled"))
             .width(40.0)
             .height(40.0)
             .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
             .on_click(move || {
-                next.update(|idx| {
-                    if *idx < count {
-                        *idx += 1;
-                    }
-                });
+                on_next_page((current + 1).min(count));
             })
     };
 
@@ -203,25 +217,20 @@ pub(crate) fn carousel_frame(
 }
 
 pub(crate) fn carousel_frame_fn(
-    page: Signal<i32>,
+    page: i32,
+    on_page: Rc<dyn Fn(i32)>,
     count: i32,
-    render_preview: impl Fn(i32) -> Element + 'static,
+    render_preview: impl Fn(i32) -> Element,
     remove_bottom_safe_area: bool,
 ) -> Element {
-    let prev = page.clone();
-    let next = page.clone();
-    let nav_page = page.clone();
-    let preview_page = page.clone();
+    let current = page.clamp(1, count);
 
     let mut preview_area = arkit::row_component()
         .percent_width(1.0)
         .percent_height(1.0)
         .align_items_center()
         .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
-        .children(vec![arkit::dynamic(move || {
-            let current = preview_page.get().clamp(1, count);
-            render_preview(current)
-        })]);
+        .children(vec![render_preview(current)]);
 
     if !remove_bottom_safe_area {
         preview_area = preview_area.style(
@@ -245,11 +254,9 @@ pub(crate) fn carousel_frame_fn(
             .style(ArkUINodeAttributeType::Padding, vec![0.0, 16.0, 0.0, 16.0])
             .align_items_center()
             .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
-            .children(vec![arkit::dynamic(move || {
-                let current = nav_page.get().clamp(1, count);
+            .children(vec![{
                 let prev_disabled = current == 1;
                 let next_disabled = current == count;
-
                 let prev_button = if prev_disabled {
                     shadcn::icon_button_with_variant("chevron-left", shadcn::ButtonVariant::Ghost)
                         .key(format!("carousel-prev:{current}:disabled"))
@@ -258,21 +265,14 @@ pub(crate) fn carousel_frame_fn(
                         .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
                         .style(ArkUINodeAttributeType::Enabled, false)
                 } else {
-                    let p = prev.clone();
+                    let on_page = on_page.clone();
                     shadcn::icon_button_with_variant("chevron-left", shadcn::ButtonVariant::Ghost)
                         .key(format!("carousel-prev:{current}:enabled"))
                         .width(40.0)
                         .height(40.0)
                         .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
-                        .on_click(move || {
-                            p.update(|idx| {
-                                if *idx > 1 {
-                                    *idx -= 1;
-                                }
-                            });
-                        })
+                        .on_click(move || on_page((current - 1).max(1)))
                 };
-
                 let next_button = if next_disabled {
                     shadcn::icon_button_with_variant("chevron-right", shadcn::ButtonVariant::Ghost)
                         .key(format!("carousel-next:{current}:disabled"))
@@ -281,21 +281,14 @@ pub(crate) fn carousel_frame_fn(
                         .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
                         .style(ArkUINodeAttributeType::Enabled, false)
                 } else {
-                    let n = next.clone();
+                    let on_page = on_page.clone();
                     shadcn::icon_button_with_variant("chevron-right", shadcn::ButtonVariant::Ghost)
                         .key(format!("carousel-next:{current}:enabled"))
                         .width(40.0)
                         .height(40.0)
                         .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
-                        .on_click(move || {
-                            n.update(|idx| {
-                                if *idx < count {
-                                    *idx += 1;
-                                }
-                            });
-                        })
+                        .on_click(move || on_page((current + 1).min(count)))
                 };
-
                 h_stack(
                     vec![
                         carousel_nav_surface(prev_button.into(), prev_disabled),
@@ -303,7 +296,7 @@ pub(crate) fn carousel_frame_fn(
                     ],
                     shadcn::theme::spacing::SM,
                 )
-            })])
+            }])
             .into()])
         .into();
 
@@ -336,7 +329,7 @@ fn button_preview(variant: &str) -> Element {
     }
 }
 
-pub(crate) fn button_carousel(page: Signal<i32>) -> Element {
+pub(crate) fn button_carousel(page: i32, on_page: Rc<dyn Fn(i32)>) -> Element {
     let variants = [
         "Default",
         "Destructive",
@@ -351,6 +344,7 @@ pub(crate) fn button_carousel(page: Signal<i32>) -> Element {
     let count = variants.len() as i32;
     carousel_frame_fn(
         page,
+        on_page,
         count,
         move |current| {
             let label = variants[(current - 1) as usize];
@@ -464,7 +458,12 @@ pub(crate) fn icon_showcase() -> Element {
     )
 }
 
-pub(crate) fn select_carousel(page: Signal<i32>, selected: Signal<String>) -> Element {
+pub(crate) fn select_carousel(
+    page: i32,
+    on_page: Rc<dyn Fn(i32)>,
+    selected: String,
+    on_select: Rc<dyn Fn(String)>,
+) -> Element {
     let default_items = vec!["Apple", "Banana", "Blueberry", "Grapes", "Pineapple"];
     let scrollable_items = vec![
         "Apple",
@@ -488,7 +487,7 @@ pub(crate) fn select_carousel(page: Signal<i32>, selected: Signal<String>) -> El
     ];
 
     let count = 2;
-    let options = if page.get().clamp(1, count) == 2 {
+    let options = if page.clamp(1, count) == 2 {
         scrollable_items
     } else {
         default_items
@@ -499,15 +498,19 @@ pub(crate) fn select_carousel(page: Signal<i32>, selected: Signal<String>) -> El
 
     carousel_frame(
         page,
+        on_page,
         count,
-        fixed_width(shadcn::select(options, selected), 180.0),
+        fixed_width(
+            shadcn::select(options, selected, move |value| on_select(value)),
+            180.0,
+        ),
         false,
     )
 }
 
-pub(crate) fn text_carousel(page: Signal<i32>) -> Element {
+pub(crate) fn text_carousel(page: i32, on_page: Rc<dyn Fn(i32)>) -> Element {
     let count = 3;
-    let preview = match page.get().clamp(1, count) {
+    let preview = match page.clamp(1, count) {
         2 => {
             fn spacer(height: f32) -> Element {
                 arkit::row_component()
@@ -708,5 +711,5 @@ pub(crate) fn text_carousel(page: Signal<i32>) -> Element {
         _ => shadcn::text("Hello, world!"),
     };
 
-    carousel_frame(page, count, preview, true)
+    carousel_frame(page, on_page, count, preview, true)
 }

@@ -1,9 +1,10 @@
 use super::*;
+use super::floating_layer::FloatingSurfaceRegistry;
 use arkit::ohos_arkui_binding::arkui_input_binding::UIInputAction;
 use arkit::ohos_arkui_binding::common::node::ArkUINode;
 use arkit::ohos_arkui_binding::component::attribute::{ArkUIAttributeBasic, ArkUICommonAttribute};
 use arkit::ohos_arkui_binding::types::text_alignment::TextAlignment;
-use arkit::{component, create_effect};
+use arkit::component;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -12,7 +13,9 @@ pub(crate) const TRANSPARENT: u32 = 0x00000000;
 #[derive(Clone)]
 pub(crate) struct MenuContext {
     pub(crate) dismiss: Rc<dyn Fn()>,
-    pub(crate) root_open: Signal<bool>,
+    pub(crate) root_open: bool,
+    pub(crate) root_surfaces: FloatingSurfaceRegistry,
+    pub(crate) current_surfaces: FloatingSurfaceRegistry,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -89,18 +92,55 @@ pub(crate) fn menu_action_row(mut row: RowElement, on_select: impl Fn() + 'stati
 }
 
 pub(crate) fn menu_dismiss_context() -> Option<MenuContext> {
+    // Menu context is intentionally inherited so nested submenus participate in
+    // the same dismiss tree and root-surface registry.
     arkit::use_context::<MenuContext>()
 }
 
-pub(crate) fn sync_submenu_with_root(open: Signal<bool>) {
-    if let Some(menu) = menu_dismiss_context() {
-        let root_open = menu.root_open;
-        create_effect(move || {
-            if !root_open.get() && open.get() {
-                open.set(false);
-            }
-        });
+pub(crate) fn root_menu_context(dismiss: Rc<dyn Fn()>, root_open: bool) -> MenuContext {
+    let root_surfaces = FloatingSurfaceRegistry::new();
+    MenuContext {
+        dismiss,
+        root_open,
+        root_surfaces: root_surfaces.clone(),
+        current_surfaces: root_surfaces,
     }
+}
+
+pub(crate) fn submenu_menu_context(
+    parent: &MenuContext,
+    current_surfaces: FloatingSurfaceRegistry,
+) -> MenuContext {
+    MenuContext {
+        dismiss: parent.dismiss.clone(),
+        root_open: parent.root_open.clone(),
+        root_surfaces: parent.root_surfaces.clone(),
+        current_surfaces,
+    }
+}
+
+pub(crate) fn root_menu_surfaces(context: &MenuContext) -> Vec<FloatingSurfaceRegistry> {
+    vec![context.root_surfaces.clone()]
+}
+
+pub(crate) fn current_menu_surface(context: &MenuContext) -> FloatingSurfaceRegistry {
+    context.current_surfaces.clone()
+}
+
+pub(crate) fn submenu_menu_surfaces(
+    parent: &MenuContext,
+    current: &FloatingSurfaceRegistry,
+) -> Vec<FloatingSurfaceRegistry> {
+    let mut registries = vec![parent.root_surfaces.clone()];
+    if !parent.current_surfaces.same_instance(&parent.root_surfaces) {
+        registries.push(parent.current_surfaces.clone());
+    }
+    if !current.same_instance(&parent.root_surfaces)
+        && !current.same_instance(&parent.current_surfaces)
+    {
+        registries.push(current.clone());
+    }
+    registries
 }
 
 pub(crate) fn item_text(content: impl Into<String>, color_value: u32, weight: i32) -> Element {
@@ -181,33 +221,33 @@ fn menu_row_pressed_background(variant: MenuInteractionVariant) -> u32 {
     }
 }
 
-fn apply_menu_row_background(node: &RuntimeMenuRowNode, color_value: u32) {
-    let _ = node.background_color(color_value);
-}
-
 pub(crate) fn interactive_menu_row(
     children: Vec<Element>,
     disabled: bool,
     variant: MenuInteractionVariant,
-    rest_background: u32,
+    active: Option<bool>,
 ) -> RowElement {
     let runtime_node = Rc::new(RefCell::new(None::<RuntimeMenuRowNode>));
     let capture_node = runtime_node.clone();
     let mut row = menu_row(children, disabled)
-        .background_color(rest_background)
+        .background_color(if active.unwrap_or(false) {
+            menu_row_pressed_background(variant)
+        } else {
+            TRANSPARENT
+        })
         .native(move |node| {
             capture_node.replace(Some(RuntimeMenuRowNode(node.borrow_mut().clone())));
             Ok(())
         });
 
+    if disabled {
+        return row;
+    }
+
     let detach_node = runtime_node.clone();
     row = row.on_event_no_param(arkit::prelude::NodeEventType::EventOnDetach, move || {
         detach_node.borrow_mut().take();
     });
-
-    if disabled {
-        return row;
-    }
 
     row.on_event(arkit::prelude::NodeEventType::TouchEvent, move |event| {
         let Some(input_event) = event.input_event() else {
@@ -220,10 +260,15 @@ pub(crate) fn interactive_menu_row(
 
         match input_event.action {
             UIInputAction::Down => {
-                apply_menu_row_background(node, menu_row_pressed_background(variant))
+                let _ = node.background_color(menu_row_pressed_background(variant));
             }
             UIInputAction::Up | UIInputAction::Cancel => {
-                apply_menu_row_background(node, rest_background)
+                let keep_active = active.unwrap_or(false);
+                let _ = node.background_color(if keep_active {
+                    menu_row_pressed_background(variant)
+                } else {
+                    TRANSPARENT
+                });
             }
             UIInputAction::Move => {}
         }

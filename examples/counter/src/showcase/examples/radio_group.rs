@@ -13,6 +13,7 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                     String::from("Compact"),
                 ],
                 ctx.radio_choice,
+                move |value| (ctx.on_radio_choice)(value),
             ),
             384.0,
         ),

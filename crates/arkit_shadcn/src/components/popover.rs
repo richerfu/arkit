@@ -4,20 +4,25 @@ use std::rc::Rc;
 
 const POPOVER_DEFAULT_WIDTH: f32 = 288.0; // Tailwind `w-72`
 
-pub fn popover(trigger: Element, content: Vec<Element>, open: Signal<bool>) -> Element {
-    popover_with_width(trigger, content, open, POPOVER_DEFAULT_WIDTH)
+pub fn popover(
+    trigger: Element,
+    content: Vec<Element>,
+    open: bool,
+    on_open_change: impl Fn(bool) + 'static,
+) -> Element {
+    popover_with_width(trigger, content, open, on_open_change, POPOVER_DEFAULT_WIDTH)
 }
 
 pub fn popover_with_width(
     trigger: Element,
     content: Vec<Element>,
-    open: Signal<bool>,
+    open: bool,
+    on_open_change: impl Fn(bool) + 'static,
     width: f32,
 ) -> Element {
-    let dismiss = {
-        let open = open.clone();
-        Rc::new(move || open.set(false))
-    };
+    let dismiss = Rc::new(move || {
+        on_open_change(false);
+    });
     floating_panel(
         trigger,
         panel_surface(
@@ -28,7 +33,7 @@ pub fn popover_with_width(
                     ArkUINodeAttributeType::Padding,
                     vec![spacing::LG, spacing::LG, spacing::LG, spacing::LG],
                 )
-                .children(vec![stack(content, spacing::LG)]),
+        .children(vec![stack(content, spacing::LG)]),
         )
         .into(),
         open,

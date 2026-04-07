@@ -2,7 +2,7 @@ use std::any::TypeId;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use crate::component::{mount_element, patch_element, MountedElement};
+use crate::component::{dispose_node_handle, mount_element, patch_element, MountedElement};
 use crate::logging;
 use crate::ohos_arkui_binding::arkui_input_binding::ArkUIErrorCode;
 use crate::ohos_arkui_binding::common::error::{ArkUIError, ArkUIResult};
@@ -181,10 +181,11 @@ impl PortalHostHandle {
         };
 
         if let Some(removed) = removed {
-            removed.borrow_mut().dispose()?;
+            dispose_node_handle(removed)?;
         }
 
-        if let Some(mounted) = entry.borrow_mut().mounted.take() {
+        let mounted = { entry.borrow_mut().mounted.take() };
+        if let Some(mounted) = mounted {
             mounted.cleanup_recursive();
         }
         Ok(())
@@ -247,8 +248,9 @@ pub(crate) fn with_current_portal_host<R>(host: PortalHostHandle, f: impl FnOnce
     })
 }
 
-/// State for a portal scope in the reactive model.
-/// The render function runs once; signals auto-track and drive updates via effects.
+/// State for a portal scope.
+/// The render function mounts a child owner once and later updates are driven by
+/// explicit runtime rerenders that patch the subtree.
 struct PortalScopeState {
     host: PortalHostHandle,
     entry_id: usize,
@@ -257,7 +259,8 @@ struct PortalScopeState {
 
 impl PortalScopeState {
     fn cleanup(&self) {
-        if let Some(owner) = self.child_owner.borrow_mut().take() {
+        let owner = self.child_owner.borrow_mut().take();
+        if let Some(owner) = owner {
             owner.dispose();
         }
         if let Err(error) = self.host.remove(self.entry_id) {
@@ -335,8 +338,8 @@ impl ViewNode for PortalScopeElement {
         _node: &mut ArkUINode,
         _mounted: &mut MountedElement,
     ) -> ArkUIResult<()> {
-        // In the fine-grained reactive model, the portal scope renders once and
-        // signals drive updates via effects. Patch is a no-op.
+        // Portal content is patched through normal runtime rerenders after the
+        // initial mount, so this placeholder node has no direct patch work.
         Ok(())
     }
 }

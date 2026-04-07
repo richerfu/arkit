@@ -25,12 +25,14 @@ fn form_row(label_text: &str, value: Element) -> Element {
 }
 
 pub(crate) fn render(ctx: DemoContext) -> Element {
-    let toggle = ctx.toggle_state.clone();
+    let on_toggle = ctx.on_toggle_state.clone();
+    let on_popover_toggle = ctx.on_toggle_state.clone();
+    let is_open = ctx.toggle_state;
     component_canvas(
         fixed_width(
             shadcn::popover_with_width(
                 shadcn::button("Open popover", shadcn::ButtonVariant::Outline)
-                    .on_click(move || toggle.update(|open| *open = !*open))
+                    .on_click(move || on_toggle(!is_open))
                     .into(),
                 vec![
                     v_stack(
@@ -90,6 +92,7 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                     ),
                 ],
                 ctx.toggle_state,
+                move |value| on_popover_toggle(value),
                 320.0,
             ),
             384.0,

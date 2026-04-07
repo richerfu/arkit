@@ -1,7 +1,10 @@
 use super::floating_layer::floating_panel;
 use super::*;
-use arkit::{component, create_signal};
+use arkit::component;
 use std::rc::Rc;
+
+#[derive(Clone)]
+struct TooltipOpenMarker;
 
 #[component]
 pub fn tooltip(
@@ -10,16 +13,22 @@ pub fn tooltip(
 ) -> Element {
     let trigger_label = trigger_label.into();
     let content = content.into();
-    let open = create_signal(false);
+    let open = local_bool_state(TooltipOpenMarker, false);
     let toggle = open.clone();
     let dismiss = {
         let open = open.clone();
-        Rc::new(move || open.set(false))
+        Rc::new(move || {
+            open.set(false);
+            request_runtime_rerender();
+        })
     };
 
     floating_panel(
         button(trigger_label, ButtonVariant::Outline)
-            .on_click(move || toggle.update(|value| *value = !*value))
+            .on_click(move || {
+                toggle.set(!toggle.get());
+                request_runtime_rerender();
+            })
             .into(),
         arkit::row_component()
             .style(ArkUINodeAttributeType::Padding, vec![8.0, 12.0, 8.0, 12.0])
@@ -34,7 +43,7 @@ pub fn tooltip(
                 .style(ArkUINodeAttributeType::TextLineHeight, 16.0)
                 .into()])
             .into(),
-        open,
+        open.get(),
         super::floating_layer::FloatingSide::Top,
         Some(dismiss),
     )

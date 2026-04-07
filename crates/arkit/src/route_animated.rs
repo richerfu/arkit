@@ -13,10 +13,10 @@ use ohos_arkui_binding::r#type::attribute::ArkUINodeAttributeType;
 use ohos_arkui_binding::r#type::curve::Curve;
 
 use crate::component::{mount_element, MountedElement};
+use crate::component::dispose_node_handle;
 use crate::logging;
 use crate::owner::{on_cleanup, with_child_owner, Owner};
 use crate::runtime::{queue_after_mount, queue_ui_loop, schedule_after_mount_effects};
-use crate::signal::{create_signal, Signal};
 use crate::view::Element;
 use crate::view::ViewNode;
 
@@ -109,12 +109,13 @@ impl AnimatedRouterState {
     }
 
     fn remove_base(&self) {
-        if let Some(layer) = self.base.borrow_mut().take() {
+        let layer = self.base.borrow_mut().take();
+        if let Some(layer) = layer {
             if let Some(cancel) = &layer.cancel {
                 cancel.set(false);
             }
             if let Ok(Some(removed)) = self.container.borrow_mut().remove_child(0) {
-                let _ = removed.borrow_mut().dispose();
+                let _ = dispose_node_handle(removed);
             }
             layer.mounted.cleanup_recursive();
             layer.owner.dispose();
@@ -122,7 +123,8 @@ impl AnimatedRouterState {
     }
 
     fn remove_overlay(&self) {
-        if let Some(layer) = self.overlay.borrow_mut().take() {
+        let layer = self.overlay.borrow_mut().take();
+        if let Some(layer) = layer {
             if let Some(cancel) = &layer.cancel {
                 cancel.set(false);
             }
@@ -134,7 +136,7 @@ impl AnimatedRouterState {
                 .len()
                 .saturating_sub(1);
             if let Ok(Some(removed)) = self.container.borrow_mut().remove_child(last_idx) {
-                let _ = removed.borrow_mut().dispose();
+                let _ = dispose_node_handle(removed);
             }
             layer.mounted.cleanup_recursive();
             layer.owner.dispose();
@@ -197,9 +199,8 @@ impl AnimatedRouterState {
         &self,
         data: OverlayData,
         config: &RouteTransitionConfig,
-        transition_id: Signal<u64>,
-        base_route: Signal<Route>,
-        overlay_state: Signal<Option<OverlayData>>,
+        state_ref: Rc<AnimatedRouterState>,
+        transition_id: Rc<Cell<u64>>,
         render_fn: &RenderFn,
     ) -> ArkUIResult<()> {
         self.remove_overlay();
@@ -240,6 +241,7 @@ impl AnimatedRouterState {
 
             let expected_id = data.id;
             let settles_to = data.settles_to.clone();
+            let overlay_render_fn = render_fn.clone();
 
             let active_ref = is_active.clone();
             layer_el = layer_el.native_with_cleanup(move |node| {
@@ -286,17 +288,23 @@ impl AnimatedRouterState {
                             return;
                         }
                         let finish_tid = transition_id.clone();
-                        let finish_base = base_route.clone();
-                        let finish_overlay = overlay_state.clone();
+                        let finish_state = state_ref.clone();
+                        let finish_render_fn = overlay_render_fn.clone();
                         let finish_settles = settles_to.clone();
                         queue_ui_loop(move || {
                             if finish_tid.get() != expected_id {
                                 return;
                             }
-                            crate::effect::batch(|| {
-                                finish_base.set(finish_settles);
-                                finish_overlay.set(None);
-                            });
+                            finish_state.remove_overlay();
+                            if let Err(error) =
+                                finish_state.set_base(&finish_settles, true, &finish_render_fn)
+                            {
+                                logging::error(format!(
+                                    "animated_router: failed to settle base layer: {error}"
+                                ));
+                                return;
+                            }
+                            schedule_after_mount_effects();
                         });
                     });
 
@@ -387,10 +395,8 @@ impl ViewNode for AnimatedRouterView {
             overlay: RefCell::new(None),
         });
 
-        let base_route = create_signal(initial.clone());
-        let overlay_state = create_signal(None::<OverlayData>);
-        let transition_id = create_signal(0u64);
-        let animations_ready = create_signal(false);
+        let transition_id = Rc::new(Cell::new(0u64));
+        let animations_ready = Rc::new(Cell::new(false));
         let subscription_id = Rc::new(RefCell::new(None::<usize>));
 
         // Mount initial base
@@ -399,135 +405,91 @@ impl ViewNode for AnimatedRouterView {
 
         // Subscribe to router transitions
         {
-            let sub_base = base_route.clone();
-            let sub_overlay = overlay_state.clone();
+            let sub_state = state.clone();
+            let sub_render_fn = render_fn.clone();
+            let sub_config = config.clone();
             let sub_tid = transition_id.clone();
             let sub_ready = animations_ready.clone();
             let mount_ready = animations_ready.clone();
 
             let id = active_router.subscribe_transition(move |event: RouteTransitionEvent| {
-                crate::effect::batch(|| {
-                    if !sub_ready.get() {
-                        sub_overlay.set(None);
-                        sub_base.set(event.to().clone());
+                if !sub_ready.get() || event.direction() == RouteTransitionDirection::None {
+                    let ui_state = sub_state.clone();
+                    let ui_render_fn = sub_render_fn.clone();
+                    let base = event.to().clone();
+                    queue_ui_loop(move || {
+                        ui_state.remove_overlay();
+                        if let Err(error) = ui_state.set_base(&base, true, &ui_render_fn) {
+                            logging::error(format!(
+                                "animated_router: failed to refresh settled base layer: {error}"
+                            ));
+                            return;
+                        }
+                        schedule_after_mount_effects();
+                    });
+                    return;
+                }
+
+                let direction = event.direction();
+                let next_id = sub_tid.get().wrapping_add(1);
+                sub_tid.set(next_id);
+
+                let (base, data) = match direction {
+                    RouteTransitionDirection::Forward | RouteTransitionDirection::Replace => (
+                        event.from().clone(),
+                        OverlayData {
+                            id: next_id,
+                            route: event.to().clone(),
+                            direction,
+                            is_enter: true,
+                            settles_to: event.to().clone(),
+                        },
+                    ),
+                    RouteTransitionDirection::Backward => (
+                        event.to().clone(),
+                        OverlayData {
+                            id: next_id,
+                            route: event.from().clone(),
+                            direction,
+                            is_enter: false,
+                            settles_to: event.to().clone(),
+                        },
+                    ),
+                    RouteTransitionDirection::None => unreachable!(),
+                };
+
+                let ui_state = sub_state.clone();
+                let ui_render_fn = sub_render_fn.clone();
+                let ui_config = sub_config.clone();
+                let ui_tid = sub_tid.clone();
+                queue_ui_loop(move || {
+                    if let Err(error) = ui_state.set_base(&base, false, &ui_render_fn) {
+                        logging::error(format!(
+                            "animated_router: failed to refresh base layer: {error}"
+                        ));
                         return;
                     }
-
-                    let direction = event.direction();
-                    if direction == RouteTransitionDirection::None {
-                        sub_overlay.set(None);
-                        sub_base.set(event.to().clone());
+                    if let Err(error) = ui_state.set_overlay(
+                        data,
+                        &ui_config,
+                        ui_state.clone(),
+                        ui_tid,
+                        &ui_render_fn,
+                    ) {
+                        logging::error(format!(
+                            "animated_router: failed to mount overlay layer: {error}"
+                        ));
+                        ui_state.remove_overlay();
+                        let _ = ui_state.set_base(&base, true, &ui_render_fn);
                         return;
                     }
-
-                    let next_id = sub_tid.get().wrapping_add(1);
-                    sub_tid.set(next_id);
-
-                    match direction {
-                        RouteTransitionDirection::Forward | RouteTransitionDirection::Replace => {
-                            sub_base.set(event.from().clone());
-                            sub_overlay.set(Some(OverlayData {
-                                id: next_id,
-                                route: event.to().clone(),
-                                direction,
-                                is_enter: true,
-                                settles_to: event.to().clone(),
-                            }));
-                        }
-                        RouteTransitionDirection::Backward => {
-                            sub_base.set(event.to().clone());
-                            sub_overlay.set(Some(OverlayData {
-                                id: next_id,
-                                route: event.from().clone(),
-                                direction,
-                                is_enter: false,
-                                settles_to: event.to().clone(),
-                            }));
-                        }
-                        RouteTransitionDirection::None => unreachable!(),
-                    }
+                    schedule_after_mount_effects();
                 });
             });
             *subscription_id.borrow_mut() = Some(id);
 
             queue_after_mount(move || {
                 mount_ready.set(true);
-            });
-        }
-
-        // Reactive effect: update layers when signals change
-        {
-            let eff_state = state.clone();
-            let eff_render_fn = render_fn.clone();
-            let eff_config = config.clone();
-            let eff_tid = transition_id.clone();
-            let eff_base = base_route.clone();
-            let eff_overlay = overlay_state.clone();
-            let prev_base = Rc::new(RefCell::new(initial.clone()));
-            let prev_has_overlay = Rc::new(Cell::new(false));
-
-            crate::effect::create_effect(move || {
-                let base = eff_base.get();
-                let overlay = eff_overlay.get();
-                let has_overlay = overlay.is_some();
-
-                let base_changed = base != *prev_base.borrow();
-                let overlay_changed = has_overlay != prev_has_overlay.get();
-
-                // Nothing changed — skip (covers initial run AND no-op updates)
-                if !base_changed && !overlay_changed {
-                    return;
-                }
-
-                *prev_base.borrow_mut() = base.clone();
-                prev_has_overlay.set(has_overlay);
-
-                if let Some(data) = overlay {
-                    let ui_state = eff_state.clone();
-                    let ui_render_fn = eff_render_fn.clone();
-                    let ui_config = eff_config.clone();
-                    let ui_tid = eff_tid.clone();
-                    let ui_base = eff_base.clone();
-                    let ui_overlay = eff_overlay.clone();
-                    queue_ui_loop(move || {
-                        ui_state.remove_base();
-                        if let Err(error) = ui_state.set_base(&base, false, &ui_render_fn) {
-                            logging::error(format!(
-                                "animated_router: failed to refresh base layer: {error}"
-                            ));
-                            return;
-                        }
-                        if let Err(error) = ui_state.set_overlay(
-                            data,
-                            &ui_config,
-                            ui_tid,
-                            ui_base,
-                            ui_overlay,
-                            &ui_render_fn,
-                        ) {
-                            logging::error(format!(
-                                "animated_router: failed to mount overlay layer: {error}"
-                            ));
-                            ui_state.remove_overlay();
-                            let _ = ui_state.set_base(&base, true, &ui_render_fn);
-                            return;
-                        }
-                        schedule_after_mount_effects();
-                    });
-                } else {
-                    let ui_state = eff_state.clone();
-                    let ui_render_fn = eff_render_fn.clone();
-                    queue_ui_loop(move || {
-                        ui_state.remove_overlay();
-                        if let Err(error) = ui_state.set_base(&base, true, &ui_render_fn) {
-                            logging::error(format!(
-                                "animated_router: failed to mount settled base layer: {error}"
-                            ));
-                            return;
-                        }
-                        schedule_after_mount_effects();
-                    });
-                }
             });
         }
 

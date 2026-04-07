@@ -51,46 +51,45 @@ fn toggle_group_item_surface(
         })
 }
 
-pub fn toggle_group(options: Vec<String>, selected: Signal<String>) -> Element {
+pub fn toggle_group(
+    options: Vec<String>,
+    selected: impl Into<String>,
+    on_select: impl Fn(String) + 'static,
+) -> Element {
+    let selected = selected.into();
+    let on_select = std::rc::Rc::new(on_select);
     let total = options.len();
     let children = options
         .into_iter()
         .enumerate()
         .map(|(index, item)| {
-            let sel = selected.clone();
-            let value = selected.clone();
             let text = item.clone();
+            let active = selected == text;
+            let on_select = on_select.clone();
 
-            arkit::dynamic(move || {
-                let active = sel.get() == text;
-                let value = value.clone();
-                let text = text.clone();
-
-                toggle_group_item_surface(
-                    normal_button(text.clone())
-                        .height(40.0)
-                        .style(ArkUINodeAttributeType::Padding, vec![8.0, 10.0, 8.0, 10.0])
-                        .font_size(typography::SM)
-                        .style(ArkUINodeAttributeType::FontWeight, 4_i32)
-                        .style(
-                            ArkUINodeAttributeType::TextAlign,
-                            i32::from(TextAlignment::Center),
-                        )
-                        .patch_attr(
-                            ArkUINodeAttributeType::FontColor,
-                            if active {
-                                color::ACCENT_FOREGROUND
-                            } else {
-                                color::FOREGROUND
-                            },
-                        ),
-                    active,
-                    toggle_group_border(index),
-                    toggle_group_radius(index, total),
-                )
-                .on_click(move || value.set(text.clone()))
-                .into()
-            })
+            toggle_group_item_surface(
+                normal_button(text.clone())
+                    .height(40.0)
+                    .style(ArkUINodeAttributeType::Padding, vec![8.0, 10.0, 8.0, 10.0])
+                    .font_size(typography::SM)
+                    .style(ArkUINodeAttributeType::FontWeight, 4_i32)
+                    .style(
+                        ArkUINodeAttributeType::TextAlign,
+                        i32::from(TextAlignment::Center),
+                    )
+                    .patch_attr(
+                        ArkUINodeAttributeType::FontColor,
+                        if active {
+                            color::ACCENT_FOREGROUND
+                        } else {
+                            color::FOREGROUND
+                        },
+                    ),
+                active,
+                toggle_group_border(index),
+                toggle_group_radius(index, total),
+            )
+            .on_click(move || on_select(text.clone()))
             .into()
         })
         .collect::<Vec<_>>();
@@ -98,41 +97,40 @@ pub fn toggle_group(options: Vec<String>, selected: Signal<String>) -> Element {
     toggle_group_shell(children)
 }
 
-pub fn toggle_group_icons(options: Vec<String>, selected: Signal<String>) -> Element {
+pub fn toggle_group_icons(
+    options: Vec<String>,
+    selected: impl Into<String>,
+    on_select: impl Fn(String) + 'static,
+) -> Element {
+    let selected = selected.into();
+    let on_select = std::rc::Rc::new(on_select);
     let total = options.len();
     let children = options
         .into_iter()
         .enumerate()
         .map(|(index, item)| {
-            let sel = selected.clone();
-            let value = selected.clone();
             let icon_name = item.clone();
+            let active = selected == icon_name;
+            let on_select = on_select.clone();
 
-            arkit::dynamic(move || {
-                let active = sel.get() == icon_name;
-                let value = value.clone();
-                let icon_name = icon_name.clone();
-
-                toggle_group_item_surface(
-                    normal_button_component()
-                        .width(40.0)
-                        .height(40.0)
-                        .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
-                        .children(vec![lucide::icon(icon_name.clone())
-                            .size(16.0)
-                            .color(if active {
-                                color::ACCENT_FOREGROUND
-                            } else {
-                                color::FOREGROUND
-                            })
-                            .render()]),
-                    active,
-                    toggle_group_border(index),
-                    toggle_group_radius(index, total),
-                )
-                .on_click(move || value.set(icon_name.clone()))
-                .into()
-            })
+            toggle_group_item_surface(
+                normal_button_component()
+                    .width(40.0)
+                    .height(40.0)
+                    .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
+                    .children(vec![lucide::icon(icon_name.clone())
+                        .size(16.0)
+                        .color(if active {
+                            color::ACCENT_FOREGROUND
+                        } else {
+                            color::FOREGROUND
+                        })
+                        .render()]),
+                active,
+                toggle_group_border(index),
+                toggle_group_radius(index, total),
+            )
+            .on_click(move || on_select(icon_name.clone()))
             .into()
         })
         .collect::<Vec<_>>();
@@ -140,53 +138,52 @@ pub fn toggle_group_icons(options: Vec<String>, selected: Signal<String>) -> Ele
     toggle_group_shell(children)
 }
 
-pub fn toggle_group_multi(options: Vec<String>, selected: Signal<Vec<String>>) -> Element {
+pub fn toggle_group_multi(
+    options: Vec<String>,
+    selected: Vec<String>,
+    on_change: impl Fn(Vec<String>) + 'static,
+) -> Element {
+    let on_change = std::rc::Rc::new(on_change);
     let total = options.len();
     let children = options
         .into_iter()
         .enumerate()
         .map(|(index, item)| {
-            let sel = selected.clone();
-            let values = selected.clone();
             let text = item.clone();
+            let active = selected.contains(&text);
+            let on_change = on_change.clone();
+            let selected_values = selected.clone();
 
-            arkit::dynamic(move || {
-                let active = sel.get().contains(&text);
-                let values = values.clone();
-                let text = text.clone();
-
-                toggle_group_item_surface(
-                    normal_button(text.clone())
-                        .height(40.0)
-                        .style(ArkUINodeAttributeType::Padding, vec![8.0, 10.0, 8.0, 10.0])
-                        .font_size(typography::SM)
-                        .style(ArkUINodeAttributeType::FontWeight, 4_i32)
-                        .style(
-                            ArkUINodeAttributeType::TextAlign,
-                            i32::from(TextAlignment::Center),
-                        )
-                        .patch_attr(
-                            ArkUINodeAttributeType::FontColor,
-                            if active {
-                                color::ACCENT_FOREGROUND
-                            } else {
-                                color::FOREGROUND
-                            },
-                        ),
-                    active,
-                    toggle_group_border(index),
-                    toggle_group_radius(index, total),
-                )
-                .on_click(move || {
-                    values.update(|items| {
-                        if let Some(pos) = items.iter().position(|value| value == &text) {
-                            items.remove(pos);
+            toggle_group_item_surface(
+                normal_button(text.clone())
+                    .height(40.0)
+                    .style(ArkUINodeAttributeType::Padding, vec![8.0, 10.0, 8.0, 10.0])
+                    .font_size(typography::SM)
+                    .style(ArkUINodeAttributeType::FontWeight, 4_i32)
+                    .style(
+                        ArkUINodeAttributeType::TextAlign,
+                        i32::from(TextAlignment::Center),
+                    )
+                    .patch_attr(
+                        ArkUINodeAttributeType::FontColor,
+                        if active {
+                            color::ACCENT_FOREGROUND
                         } else {
-                            items.push(text.clone());
-                        }
-                    });
-                })
-                .into()
+                            color::FOREGROUND
+                        },
+                    ),
+                active,
+                toggle_group_border(index),
+                toggle_group_radius(index, total),
+            )
+            .on_click(move || {
+                let mut next = selected_values.clone();
+                if let Some(pos) = next.iter().position(|value| value == &text) {
+                    next.remove(pos);
+                } else {
+                    next.push(text.clone());
+                }
+                on_change(next);
             })
             .into()
         })
@@ -195,48 +192,47 @@ pub fn toggle_group_multi(options: Vec<String>, selected: Signal<Vec<String>>) -
     toggle_group_shell(children)
 }
 
-pub fn toggle_group_icons_multi(options: Vec<String>, selected: Signal<Vec<String>>) -> Element {
+pub fn toggle_group_icons_multi(
+    options: Vec<String>,
+    selected: Vec<String>,
+    on_change: impl Fn(Vec<String>) + 'static,
+) -> Element {
+    let on_change = std::rc::Rc::new(on_change);
     let total = options.len();
     let children = options
         .into_iter()
         .enumerate()
         .map(|(index, item)| {
-            let sel = selected.clone();
-            let values = selected.clone();
             let icon_name = item.clone();
+            let active = selected.contains(&icon_name);
+            let on_change = on_change.clone();
+            let selected_values = selected.clone();
 
-            arkit::dynamic(move || {
-                let active = sel.get().contains(&icon_name);
-                let values = values.clone();
-                let icon_name = icon_name.clone();
-
-                toggle_group_item_surface(
-                    normal_button_component()
-                        .width(40.0)
-                        .height(40.0)
-                        .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
-                        .children(vec![lucide::icon(icon_name.clone())
-                            .size(16.0)
-                            .color(if active {
-                                color::ACCENT_FOREGROUND
-                            } else {
-                                color::FOREGROUND
-                            })
-                            .render()]),
-                    active,
-                    toggle_group_border(index),
-                    toggle_group_radius(index, total),
-                )
-                .on_click(move || {
-                    values.update(|items| {
-                        if let Some(pos) = items.iter().position(|value| value == &icon_name) {
-                            items.remove(pos);
+            toggle_group_item_surface(
+                normal_button_component()
+                    .width(40.0)
+                    .height(40.0)
+                    .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
+                    .children(vec![lucide::icon(icon_name.clone())
+                        .size(16.0)
+                        .color(if active {
+                            color::ACCENT_FOREGROUND
                         } else {
-                            items.push(icon_name.clone());
-                        }
-                    });
-                })
-                .into()
+                            color::FOREGROUND
+                        })
+                        .render()]),
+                active,
+                toggle_group_border(index),
+                toggle_group_radius(index, total),
+            )
+            .on_click(move || {
+                let mut next = selected_values.clone();
+                if let Some(pos) = next.iter().position(|value| value == &icon_name) {
+                    next.remove(pos);
+                } else {
+                    next.push(icon_name.clone());
+                }
+                on_change(next);
             })
             .into()
         })

@@ -16,7 +16,6 @@ use crate::portal::{current_portal_host, PortalHostHandle};
 use crate::queue_after_mount;
 use crate::queue_ui_loop;
 use crate::view::{Element, ViewNode};
-use crate::Signal;
 
 const FLOATING_LAYOUT_EPSILON: f32 = 0.5;
 
@@ -78,30 +77,36 @@ pub fn native_overlay(
     .into()
 }
 
-pub fn observe_layout_size(element: Element, size: Signal<LayoutSize>) -> Element {
+pub fn observe_layout_size(
+    element: Element,
+    on_change: impl Fn(LayoutSize) + 'static,
+) -> Element {
     LayoutObserverElement {
         element,
         observer: LayoutObserver::Size {
-            signal: size,
+            on_change: Rc::new(on_change),
             enabled: true,
         },
     }
     .into()
 }
 
-pub fn observe_layout_frame(element: Element, frame: Signal<LayoutFrame>) -> Element {
-    observe_layout_frame_enabled(element, frame, true)
+pub fn observe_layout_frame(
+    element: Element,
+    on_change: impl Fn(LayoutFrame) + 'static,
+) -> Element {
+    observe_layout_frame_enabled(element, true, on_change)
 }
 
 pub fn observe_layout_frame_enabled(
     element: Element,
-    frame: Signal<LayoutFrame>,
     enabled: bool,
+    on_change: impl Fn(LayoutFrame) + 'static,
 ) -> Element {
     LayoutObserverElement {
         element,
         observer: LayoutObserver::Frame {
-            signal: frame,
+            on_change: Rc::new(on_change),
             enabled,
         },
     }
@@ -171,7 +176,8 @@ struct NativeOverlayState {
 
 impl AnchoredOverlayState {
     fn cleanup(&self) {
-        if let Some(trigger) = self.trigger.borrow_mut().take() {
+        let trigger = self.trigger.borrow_mut().take();
+        if let Some(trigger) = trigger {
             trigger.cleanup_recursive();
         }
 
@@ -183,11 +189,13 @@ impl NativeOverlayState {
     fn cleanup(&self) {
         let _ = clear_native_overlay(&self.trigger_node.borrow());
 
-        if let Some(panel) = self.panel.borrow_mut().take() {
+        let panel = self.panel.borrow_mut().take();
+        if let Some(panel) = panel {
             panel.cleanup();
         }
 
-        if let Some(trigger) = self.trigger.borrow_mut().take() {
+        let trigger = self.trigger.borrow_mut().take();
+        if let Some(trigger) = trigger {
             trigger.cleanup_recursive();
         }
     }
@@ -196,11 +204,11 @@ impl NativeOverlayState {
 #[derive(Clone)]
 enum LayoutObserver {
     Size {
-        signal: Signal<LayoutSize>,
+        on_change: Rc<dyn Fn(LayoutSize)>,
         enabled: bool,
     },
     Frame {
-        signal: Signal<LayoutFrame>,
+        on_change: Rc<dyn Fn(LayoutFrame)>,
         enabled: bool,
     },
 }
@@ -214,7 +222,8 @@ struct LayoutObserverState {
 impl LayoutObserverState {
     fn cleanup(&self) {
         self.active.set(false);
-        if let Some(child) = self.child.borrow_mut().take() {
+        let child = self.child.borrow_mut().take();
+        if let Some(child) = child {
             child.cleanup_recursive();
         }
     }
@@ -477,37 +486,19 @@ fn attach_layout_observer(
 
 fn update_layout_observer(node: &ArkUINode, observer: &LayoutObserver) {
     match observer {
-        LayoutObserver::Size { signal, enabled } => {
+        LayoutObserver::Size { on_change, enabled } => {
             if !enabled {
                 return;
             }
-            let next = layout_size(node);
-            if !size_approx_equal(signal.get(), next) {
-                signal.set(next);
-            }
+            on_change(layout_size(node));
         }
-        LayoutObserver::Frame { signal, enabled } => {
+        LayoutObserver::Frame { on_change, enabled } => {
             if !enabled {
                 return;
             }
-            let next = layout_frame(node);
-            if !frame_approx_equal(signal.get(), next) {
-                signal.set(next);
-            }
+            on_change(layout_frame(node));
         }
     }
-}
-
-fn frame_approx_equal(a: LayoutFrame, b: LayoutFrame) -> bool {
-    (a.x - b.x).abs() < FLOATING_LAYOUT_EPSILON
-        && (a.y - b.y).abs() < FLOATING_LAYOUT_EPSILON
-        && (a.width - b.width).abs() < FLOATING_LAYOUT_EPSILON
-        && (a.height - b.height).abs() < FLOATING_LAYOUT_EPSILON
-}
-
-fn size_approx_equal(a: LayoutSize, b: LayoutSize) -> bool {
-    (a.width - b.width).abs() < FLOATING_LAYOUT_EPSILON
-        && (a.height - b.height).abs() < FLOATING_LAYOUT_EPSILON
 }
 
 fn layout_size(node: &ArkUINode) -> LayoutSize {

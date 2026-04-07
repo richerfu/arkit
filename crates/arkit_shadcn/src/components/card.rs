@@ -3,7 +3,7 @@ use super::*;
 pub fn card(children: Vec<Element>) -> Element {
     card_surface(
         arkit::column_component()
-            .percent_width(1.0)
+            .width(arkit::Length::Fill)
             .children(vec![stack(children, spacing::XXL)]),
     )
     .into()
@@ -11,13 +11,10 @@ pub fn card(children: Vec<Element>) -> Element {
 
 pub fn card_header(title: impl Into<String>, description: impl Into<String>) -> Element {
     arkit::row_component()
-        .percent_width(1.0)
+        .width(arkit::Length::Fill)
         .children(vec![arkit::column_component()
-            .percent_width(1.0)
-            .style(
-                ArkUINodeAttributeType::Padding,
-                vec![0.0, spacing::XXL, 0.0, spacing::XXL],
-            )
+            .width(arkit::Length::Fill)
+            .padding([0.0, spacing::XXL, 0.0, spacing::XXL])
             .children(vec![
                 card_title(title),
                 arkit::row_component()
@@ -48,22 +45,16 @@ pub fn card_description(content: impl Into<String>) -> Element {
 
 pub fn card_content(children: Vec<Element>) -> Element {
     arkit::column_component()
-        .percent_width(1.0)
-        .style(
-            ArkUINodeAttributeType::Padding,
-            vec![0.0, spacing::XXL, 0.0, spacing::XXL],
-        )
+        .width(arkit::Length::Fill)
+        .padding([0.0, spacing::XXL, 0.0, spacing::XXL])
         .children(children)
         .into()
 }
 
 pub fn card_footer(children: Vec<Element>) -> Element {
     arkit::row_component()
-        .percent_width(1.0)
-        .style(
-            ArkUINodeAttributeType::Padding,
-            vec![0.0, spacing::XXL, 0.0, spacing::XXL],
-        )
+        .width(arkit::Length::Fill)
+        .padding([0.0, spacing::XXL, 0.0, spacing::XXL])
         .align_items_center()
         .children(children)
         .into()

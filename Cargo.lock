@@ -17,12 +17,7 @@ version = "0.1.0"
 dependencies = [
  "arkit_derive",
  "arkit_router",
- "napi-derive-ohos",
- "napi-ohos",
- "ohos-arkui-binding 0.1.0",
- "ohos-arkui-sys 0.0.1",
- "ohos-hilog-binding",
- "openharmony-ability",
+ "arkit_runtime",
 ]
 
 [[package]]
@@ -57,12 +52,27 @@ name = "arkit_router"
 version = "0.1.0"
 
 [[package]]
+name = "arkit_runtime"
+version = "0.1.0"
+dependencies = [
+ "arkit_derive",
+ "arkit_router",
+ "napi-derive-ohos",
+ "napi-ohos",
+ "ohos-arkui-binding 0.1.0",
+ "ohos-arkui-sys 0.0.1",
+ "ohos-hilog-binding",
+ "openharmony-ability",
+]
+
+[[package]]
 name = "arkit_shadcn"
 version = "0.1.0"
 dependencies = [
  "arkit",
  "arkit_animation",
  "arkit_icon",
+ "arkit_runtime",
  "ohos-arkui-sys 0.0.1",
  "ohos-display-binding 0.0.1",
 ]
