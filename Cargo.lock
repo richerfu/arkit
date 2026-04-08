@@ -15,9 +15,15 @@ dependencies = [
 name = "arkit"
 version = "0.1.0"
 dependencies = [
+ "arkit_core",
  "arkit_derive",
- "arkit_router",
+ "arkit_futures",
  "arkit_runtime",
+ "arkit_widget",
+ "napi-derive-ohos",
+ "napi-ohos",
+ "ohos-arkui-binding 0.1.0",
+ "openharmony-ability",
 ]
 
 [[package]]
@@ -25,8 +31,13 @@ name = "arkit_animation"
 version = "0.1.0"
 dependencies = [
  "arkit",
+ "arkit_widget",
  "ohos-hilog-binding",
 ]
+
+[[package]]
+name = "arkit_core"
+version = "0.1.0"
 
 [[package]]
 name = "arkit_derive"
@@ -36,6 +47,10 @@ dependencies = [
  "quote",
  "syn",
 ]
+
+[[package]]
+name = "arkit_futures"
+version = "0.1.0"
 
 [[package]]
 name = "arkit_icon"
@@ -55,14 +70,8 @@ version = "0.1.0"
 name = "arkit_runtime"
 version = "0.1.0"
 dependencies = [
- "arkit_derive",
- "arkit_router",
- "napi-derive-ohos",
- "napi-ohos",
- "ohos-arkui-binding 0.1.0",
- "ohos-arkui-sys 0.0.1",
- "ohos-hilog-binding",
- "openharmony-ability",
+ "arkit_core",
+ "arkit_futures",
 ]
 
 [[package]]
@@ -70,11 +79,20 @@ name = "arkit_shadcn"
 version = "0.1.0"
 dependencies = [
  "arkit",
- "arkit_animation",
  "arkit_icon",
- "arkit_runtime",
- "ohos-arkui-sys 0.0.1",
+ "arkit_widget",
  "ohos-display-binding 0.0.1",
+]
+
+[[package]]
+name = "arkit_widget"
+version = "0.1.0"
+dependencies = [
+ "arkit_core",
+ "arkit_runtime",
+ "ohos-arkui-binding 0.1.0",
+ "ohos-arkui-sys 0.0.1",
+ "ohos-hilog-binding",
 ]
 
 [[package]]
@@ -121,8 +139,6 @@ name = "counter"
 version = "0.1.0"
 dependencies = [
  "arkit",
- "arkit_icon",
- "arkit_shadcn",
  "napi-build-ohos",
  "napi-derive-ohos",
  "napi-ohos",
@@ -815,6 +831,19 @@ dependencies = [
  "cfg-if",
  "cpufeatures",
  "digest",
+]
+
+[[package]]
+name = "shadcn_showcase"
+version = "0.1.0"
+dependencies = [
+ "arkit",
+ "arkit_icon",
+ "arkit_shadcn",
+ "napi-build-ohos",
+ "napi-derive-ohos",
+ "napi-ohos",
+ "ohos-hilogs-sys",
 ]
 
 [[package]]

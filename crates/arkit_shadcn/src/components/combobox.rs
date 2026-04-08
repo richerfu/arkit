@@ -1,9 +1,14 @@
 use super::*;
 
-pub fn combobox(
+pub fn combobox<Message>(
     options: Vec<String>,
-    selected: impl Into<String>,
-    on_select: impl Fn(String) + 'static,
-) -> Element {
-    super::select::select(options, selected, on_select)
+    selected: impl Into<String> + 'static,
+    open: bool,
+    on_open_change: impl Fn(bool) -> Message + 'static,
+    on_select: impl Fn(String) -> Message + 'static,
+) -> Element<Message>
+where
+    Message: Send + 'static,
+{
+    super::select::select_message(options, selected, open, on_open_change, on_select)
 }

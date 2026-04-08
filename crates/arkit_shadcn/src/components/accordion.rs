@@ -1,7 +1,6 @@
 use std::rc::Rc;
 
 use super::*;
-use arkit::component;
 use arkit::ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
 use arkit_icon as lucide;
 
@@ -10,136 +9,41 @@ const ACCORDION_TRIGGER_RADIUS: f32 = radius::MD;
 const ACCORDION_ICON_SIZE: f32 = 16.0;
 const ACCORDION_CHEVRON_ROTATION: f32 = 180.0;
 
-pub type AccordionSingleChangeHandler = Rc<dyn Fn(Option<String>)>;
-pub type AccordionMultipleChangeHandler = Rc<dyn Fn(Vec<String>)>;
-pub type AccordionValueChangeHandler = Rc<dyn Fn(AccordionValue)>;
+type AccordionSingleChangeHandler = Rc<dyn Fn(Option<String>)>;
 type AccordionToggleHandler = Rc<dyn Fn()>;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum AccordionType {
-    Single,
-    Multiple,
+pub struct AccordionTriggerSpec<Message = ()> {
+    child: Element<Message>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum AccordionValue {
-    Single(Option<String>),
-    Multiple(Vec<String>),
+pub struct AccordionContentSpec<Message = ()> {
+    children: Vec<Element<Message>>,
 }
 
-impl AccordionValue {
-    pub fn single(value: impl Into<String>) -> Self {
-        Self::Single(Some(value.into()))
-    }
-
-    pub fn single_optional(value: Option<String>) -> Self {
-        Self::Single(value)
-    }
-
-    pub fn multiple<I, S>(values: I) -> Self
-    where
-        I: IntoIterator<Item = S>,
-        S: Into<String>,
-    {
-        Self::Multiple(values.into_iter().map(Into::into).collect())
-    }
-
-    fn as_single(&self) -> Option<String> {
-        match self {
-            Self::Single(value) => value.clone(),
-            Self::Multiple(values) => values.first().cloned(),
-        }
-    }
-
-    fn as_multiple(&self) -> Vec<String> {
-        match self {
-            Self::Single(value) => value.iter().cloned().collect(),
-            Self::Multiple(values) => values.clone(),
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct AccordionRootSpec {
-    accordion_type: AccordionType,
-    collapsible: bool,
-    default_value: AccordionValue,
-    on_value_change: Option<AccordionValueChangeHandler>,
-}
-
-impl AccordionRootSpec {
-    pub fn single() -> Self {
-        Self {
-            accordion_type: AccordionType::Single,
-            collapsible: false,
-            default_value: AccordionValue::Single(None),
-            on_value_change: None,
-        }
-    }
-
-    pub fn multiple() -> Self {
-        Self {
-            accordion_type: AccordionType::Multiple,
-            collapsible: false,
-            default_value: AccordionValue::Multiple(Vec::new()),
-            on_value_change: None,
-        }
-    }
-
-    pub fn collapsible(mut self, collapsible: bool) -> Self {
-        self.collapsible = collapsible;
-        self
-    }
-
-    pub fn default_single(mut self, value: impl Into<String>) -> Self {
-        self.default_value = AccordionValue::single(value);
-        self
-    }
-
-    pub fn default_single_optional(mut self, value: Option<String>) -> Self {
-        self.default_value = AccordionValue::single_optional(value);
-        self
-    }
-
-    pub fn default_multiple<I, S>(mut self, values: I) -> Self
-    where
-        I: IntoIterator<Item = S>,
-        S: Into<String>,
-    {
-        self.default_value = AccordionValue::multiple(values);
-        self
-    }
-
-    pub fn on_value_change(mut self, handler: AccordionValueChangeHandler) -> Self {
-        self.on_value_change = Some(handler);
-        self
-    }
-}
-
-pub struct AccordionTriggerSpec {
-    child: Element,
-}
-
-pub struct AccordionContentSpec {
-    children: Vec<Element>,
-}
-
-pub struct AccordionItemSpec {
-    trigger: Element,
+pub struct AccordionItemSpec<Message = ()> {
+    trigger: Element<Message>,
     value: String,
-    content: Vec<Element>,
+    content: Vec<Element<Message>>,
     disabled: bool,
 }
 
-impl AccordionItemSpec {
-    pub fn new(title: impl Into<String>, value: impl Into<String>, content: Vec<Element>) -> Self {
-        Self::from_parts(value, accordion_trigger_text(title), accordion_content(content))
+impl<Message: 'static> AccordionItemSpec<Message> {
+    pub fn new(
+        title: impl Into<String>,
+        value: impl Into<String>,
+        content: Vec<Element<Message>>,
+    ) -> Self {
+        Self::from_parts(
+            value,
+            accordion_trigger_text(title),
+            accordion_content(content),
+        )
     }
 
     pub fn from_parts(
         value: impl Into<String>,
-        trigger: AccordionTriggerSpec,
-        content: AccordionContentSpec,
+        trigger: AccordionTriggerSpec<Message>,
+        content: AccordionContentSpec<Message>,
     ) -> Self {
         Self {
             trigger: trigger.child,
@@ -155,42 +59,48 @@ impl AccordionItemSpec {
     }
 }
 
-pub fn accordion_trigger(child: Element) -> AccordionTriggerSpec {
+pub fn accordion_trigger<Message: 'static>(
+    child: Element<Message>,
+) -> AccordionTriggerSpec<Message> {
     AccordionTriggerSpec { child }
 }
 
-pub fn accordion_trigger_text(title: impl Into<String>) -> AccordionTriggerSpec {
+pub fn accordion_trigger_text<Message: 'static>(
+    title: impl Into<String>,
+) -> AccordionTriggerSpec<Message> {
     accordion_trigger(text_sm_medium(title))
 }
 
-pub fn accordion_content(children: Vec<Element>) -> AccordionContentSpec {
+pub fn accordion_content<Message: 'static>(
+    children: Vec<Element<Message>>,
+) -> AccordionContentSpec<Message> {
     AccordionContentSpec { children }
 }
 
-pub fn accordion_item_spec(
+pub fn accordion_item_spec<Message: 'static>(
     title: impl Into<String>,
     value: impl Into<String>,
-    content: Vec<Element>,
-) -> AccordionItemSpec {
+    content: Vec<Element<Message>>,
+) -> AccordionItemSpec<Message> {
     AccordionItemSpec::new(title, value, content)
 }
 
-pub fn accordion_item_parts(
+pub fn accordion_item_parts<Message: 'static>(
     value: impl Into<String>,
-    trigger: AccordionTriggerSpec,
-    content: AccordionContentSpec,
-) -> AccordionItemSpec {
+    trigger: AccordionTriggerSpec<Message>,
+    content: AccordionContentSpec<Message>,
+) -> AccordionItemSpec<Message> {
     AccordionItemSpec::from_parts(value, trigger, content)
 }
 
-fn accordion_chevron(is_open: bool) -> Element {
+fn accordion_chevron<Message: 'static>(is_open: bool) -> Element<Message> {
     let angle = if is_open {
         ACCORDION_CHEVRON_ROTATION
     } else {
         0.0
     };
 
-    arkit::row_component()
+    arkit::row_component::<Message, arkit::Theme>()
         .width(ACCORDION_ICON_SIZE)
         .height(ACCORDION_ICON_SIZE)
         .align_items_center()
@@ -203,21 +113,24 @@ fn accordion_chevron(is_open: bool) -> Element {
         .children(vec![lucide::icon("chevron-down")
             .size(ACCORDION_ICON_SIZE)
             .color(color::MUTED_FOREGROUND)
-            .render()])
+            .render::<Message, arkit::Theme>()])
         .into()
 }
 
-fn accordion_container(children: Vec<Element>) -> Element {
-    arkit::column_component()
+fn accordion_container<Message: 'static>(children: Vec<Element<Message>>) -> Element<Message> {
+    arkit::column_component::<Message, arkit::Theme>()
         .percent_width(1.0)
         .align_items_start()
         .children(children)
         .into()
 }
 
-fn accordion_content_panel(content: Vec<Element>, is_open: bool) -> Element {
+fn accordion_content_panel<Message: 'static>(
+    content: Vec<Element<Message>>,
+    is_open: bool,
+) -> Element<Message> {
     if is_open {
-        arkit::column_component()
+        arkit::column_component::<Message, arkit::Theme>()
             .percent_width(1.0)
             .align_items_start()
             .style(
@@ -227,24 +140,29 @@ fn accordion_content_panel(content: Vec<Element>, is_open: bool) -> Element {
             .children(content)
             .into()
     } else {
-        arkit::column_component()
+        arkit::column_component::<Message, arkit::Theme>()
             .percent_width(1.0)
             .height(0.0)
             .style(ArkUINodeAttributeType::Opacity, 0.0_f32)
-            .style(ArkUINodeAttributeType::HitTestBehavior, HIT_TEST_TRANSPARENT)
+            .style(
+                ArkUINodeAttributeType::HitTestBehavior,
+                HIT_TEST_TRANSPARENT,
+            )
             .into()
     }
 }
 
-#[component]
-fn accordion_item_view(
-    trigger: Element,
+fn accordion_item_view<Message>(
+    trigger: Element<Message>,
     is_open: bool,
     disabled: bool,
     on_toggle: AccordionToggleHandler,
-    content: Vec<Element>,
-) -> Element {
-    let mut trigger_row = arkit::row_component()
+    content: Vec<Element<Message>>,
+) -> Element<Message>
+where
+    Message: 'static,
+{
+    let mut trigger_row = arkit::row_component::<Message, arkit::Theme>()
         .percent_width(1.0)
         .align_items_top()
         .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_START)
@@ -262,7 +180,7 @@ fn accordion_item_view(
             ],
         )
         .children(vec![
-            arkit::column_component()
+            arkit::column_component::<Message, arkit::Theme>()
                 .style(ArkUINodeAttributeType::LayoutWeight, 1.0_f32)
                 .align_items_start()
                 .style(
@@ -271,7 +189,7 @@ fn accordion_item_view(
                 )
                 .children(vec![trigger])
                 .into(),
-            accordion_chevron(is_open),
+            accordion_chevron::<Message>(is_open),
         ]);
 
     if disabled {
@@ -282,7 +200,7 @@ fn accordion_item_view(
         trigger_row = trigger_row.on_click(move || on_toggle());
     }
 
-    arkit::column_component()
+    arkit::column_component::<Message, arkit::Theme>()
         .percent_width(1.0)
         .style(
             ArkUINodeAttributeType::BorderWidth,
@@ -296,12 +214,15 @@ fn accordion_item_view(
         .into()
 }
 
-fn render_single_items(
-    items: Vec<AccordionItemSpec>,
+fn render_single_items<Message>(
+    items: Vec<AccordionItemSpec<Message>>,
     open_item: Option<String>,
     collapsible: bool,
     on_value_change: Option<AccordionSingleChangeHandler>,
-) -> Element {
+) -> Element<Message>
+where
+    Message: 'static,
+{
     let children = items
         .into_iter()
         .map(|item| {
@@ -336,156 +257,23 @@ fn render_single_items(
     accordion_container(children)
 }
 
-fn render_multiple_items(
-    items: Vec<AccordionItemSpec>,
-    open_items: Vec<String>,
-    on_value_change: Option<AccordionMultipleChangeHandler>,
-) -> Element {
-    let children = items
-        .into_iter()
-        .map(|item| {
-            let value = item.value.clone();
-            let current_values = open_items.clone();
-            let callback = on_value_change.clone();
-
-            accordion_item_view(
-                item.trigger,
-                open_items.contains(&item.value),
-                item.disabled,
-                Rc::new(move || {
-                    let mut next = current_values.clone();
-                    if let Some(index) = next.iter().position(|item| item == &value) {
-                        next.remove(index);
-                    } else {
-                        next.push(value.clone());
-                    }
-
-                    if let Some(handler) = callback.as_ref() {
-                        handler(next);
-                    }
-                }),
-                item.content,
-            )
-        })
-        .collect::<Vec<_>>();
-
+pub fn accordion<Message: 'static>(children: Vec<Element<Message>>) -> Element<Message> {
     accordion_container(children)
 }
 
-fn render_root_items(
-    items: Vec<AccordionItemSpec>,
-    value: AccordionValue,
-    spec: AccordionRootSpec,
-    on_value_change: Option<AccordionValueChangeHandler>,
-) -> Element {
-    match spec.accordion_type {
-        AccordionType::Single => {
-            let single_handler = on_value_change.map(|handler| {
-                Rc::new(move |value: Option<String>| handler(AccordionValue::Single(value)))
-                    as AccordionSingleChangeHandler
-            });
-            render_single_items(items, value.as_single(), spec.collapsible, single_handler)
-        }
-        AccordionType::Multiple => {
-            let multi_handler = on_value_change.map(|handler| {
-                Rc::new(move |value: Vec<String>| handler(AccordionValue::Multiple(value)))
-                    as AccordionMultipleChangeHandler
-            });
-            render_multiple_items(items, value.as_multiple(), multi_handler)
-        }
-    }
-}
-
-pub fn accordion(children: Vec<Element>) -> Element {
-    accordion_container(children)
-}
-
-pub fn accordion_item(
-    title: impl Into<String>,
-    value: impl Into<String>,
-    open_item: Option<String>,
-    on_value_change: Option<AccordionSingleChangeHandler>,
-    content: Vec<Element>,
-) -> Element {
-    render_single_items(
-        vec![AccordionItemSpec::new(title, value, content)],
-        open_item,
-        true,
-        on_value_change,
-    )
-}
-
-#[derive(Clone)]
-struct AccordionRootMarker;
-
-#[component]
-pub fn accordion_root(items: Vec<AccordionItemSpec>, spec: AccordionRootSpec) -> Element {
-    let state = local_ref_state(AccordionRootMarker, spec.default_value.clone());
-    let current = state.borrow().clone();
-    let external_handler = spec.on_value_change.clone();
-    let on_value_change: AccordionValueChangeHandler = Rc::new(move |next| {
-        state.replace(next.clone());
-        request_runtime_rerender();
-        if let Some(handler) = external_handler.as_ref() {
-            handler(next);
-        }
-    });
-    render_root_items(items, current, spec, Some(on_value_change))
-}
-
-pub fn accordion_root_controlled(
-    items: Vec<AccordionItemSpec>,
-    value: AccordionValue,
-    spec: AccordionRootSpec,
-) -> Element {
-    render_root_items(items, value, spec.clone(), spec.on_value_change.clone())
-}
-
-#[derive(Clone)]
-struct AccordionSingleMarker;
-
-#[component]
-pub fn accordion_single(
-    items: Vec<AccordionItemSpec>,
-    collapsible: bool,
-    default_value: Option<String>,
-) -> Element {
-    let state = local_ref_state(AccordionSingleMarker, default_value);
-    let current = state.borrow().clone();
-    let on_value_change: AccordionSingleChangeHandler = Rc::new(move |next| {
-        state.replace(next);
-        request_runtime_rerender();
-    });
-    render_single_items(items, current, collapsible, Some(on_value_change))
-}
-
-pub fn accordion_single_controlled(
-    items: Vec<AccordionItemSpec>,
+pub fn accordion_single_controlled<Message>(
+    items: Vec<AccordionItemSpec<Message>>,
     value: Option<String>,
     collapsible: bool,
-    on_value_change: Option<AccordionSingleChangeHandler>,
-) -> Element {
-    render_single_items(items, value, collapsible, on_value_change)
-}
-
-#[derive(Clone)]
-struct AccordionMultipleMarker;
-
-#[component]
-pub fn accordion_multiple(items: Vec<AccordionItemSpec>, default_value: Vec<String>) -> Element {
-    let state = local_ref_state(AccordionMultipleMarker, default_value);
-    let current = state.borrow().clone();
-    let on_value_change: AccordionMultipleChangeHandler = Rc::new(move |next| {
-        state.replace(next);
-        request_runtime_rerender();
-    });
-    render_multiple_items(items, current, Some(on_value_change))
-}
-
-pub fn accordion_multiple_controlled(
-    items: Vec<AccordionItemSpec>,
-    value: Vec<String>,
-    on_value_change: Option<AccordionMultipleChangeHandler>,
-) -> Element {
-    render_multiple_items(items, value, on_value_change)
+    on_value_change: impl Fn(Option<String>) -> Message + 'static,
+) -> Element<Message>
+where
+    Message: Send + 'static,
+{
+    render_single_items(
+        items,
+        value,
+        collapsible,
+        Some(dispatch_optional_string(on_value_change)),
+    )
 }

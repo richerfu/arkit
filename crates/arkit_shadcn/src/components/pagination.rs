@@ -1,9 +1,17 @@
 use super::*;
+use std::rc::Rc;
 
-pub fn pagination(page: i32, total_pages: i32, on_page_change: impl Fn(i32) + 'static) -> Element {
+pub fn pagination<Message>(
+    page: i32,
+    total_pages: i32,
+    on_page_change: impl Fn(i32) -> Message + 'static,
+) -> Element<Message>
+where
+    Message: Clone + Send + 'static,
+{
     let total_pages = total_pages.max(1);
     let current = page.clamp(1, total_pages);
-    let on_page_change = std::rc::Rc::new(on_page_change);
+    let on_page_change = Rc::new(on_page_change) as Rc<dyn Fn(i32) -> Message>;
     let mut page_numbers = vec![1_i32, total_pages, current - 1, current, current + 1]
         .into_iter()
         .filter(|value| *value >= 1 && *value <= total_pages)
@@ -11,13 +19,10 @@ pub fn pagination(page: i32, total_pages: i32, on_page_change: impl Fn(i32) + 's
     page_numbers.sort_unstable();
     page_numbers.dedup();
 
-    let mut items = vec![button("Prev", ButtonVariant::Ghost)
+    let mut items: Vec<Element<Message>> = vec![button("Prev", ButtonVariant::Ghost)
         .height(36.0)
         .style(ArkUINodeAttributeType::Padding, vec![0.0, 10.0, 0.0, 10.0])
-        .on_click({
-            let on_page_change = on_page_change.clone();
-            move || on_page_change((current - 1).max(1))
-        })
+        .on_press((on_page_change.as_ref())((current - 1).max(1)))
         .into()];
 
     let mut previous_number = None;
@@ -35,22 +40,25 @@ pub fn pagination(page: i32, total_pages: i32, on_page_change: impl Fn(i32) + 's
         button("Next", ButtonVariant::Ghost)
             .height(36.0)
             .style(ArkUINodeAttributeType::Padding, vec![0.0, 10.0, 0.0, 10.0])
-            .on_click(move || on_page_change((current + 1).min(total_pages)))
+            .on_press((on_page_change.as_ref())((current + 1).min(total_pages)))
             .into(),
     );
 
-    arkit::row_component()
+    arkit::row_component::<Message, arkit::Theme>()
         .percent_width(1.0)
         .align_items_center()
         .children(inline(items, spacing::XXS))
         .into()
 }
 
-pub fn pagination_item(
+pub fn pagination_item<Message>(
     page_num: i32,
     current: i32,
-    on_page_change: std::rc::Rc<dyn Fn(i32)>,
-) -> Element {
+    on_page_change: Rc<dyn Fn(i32) -> Message>,
+) -> Element<Message>
+where
+    Message: Clone + Send + 'static,
+{
     let variant = if current == page_num {
         ButtonVariant::Outline
     } else {
@@ -60,17 +68,17 @@ pub fn pagination_item(
         .width(36.0)
         .height(36.0)
         .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
-        .on_click(move || on_page_change(page_num))
+        .on_press((on_page_change.as_ref())(page_num))
         .into()
 }
 
-fn pagination_ellipsis() -> Element {
+fn pagination_ellipsis<Message: 'static>() -> Element<Message> {
     arkit::row_component()
         .width(36.0)
         .height(36.0)
         .align_items_center()
         .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
-        .children(vec![arkit::text("...")
+        .children(vec![arkit::text::<Message, arkit::Theme>("...")
             .font_size(typography::SM)
             .style(ArkUINodeAttributeType::FontColor, color::MUTED_FOREGROUND)
             .style(ArkUINodeAttributeType::TextLineHeight, 20.0)

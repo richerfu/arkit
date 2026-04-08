@@ -1,14 +1,14 @@
 use super::*;
 
-pub fn menubar(items: Vec<Element>) -> Element {
+pub fn menubar<Message: 'static>(items: Vec<Element<Message>>) -> Element<Message> {
     shadow_sm(rounded_menubar_surface(
-        arkit::row_component().children(inline(items, spacing::XXS)),
+        arkit::row_component::<Message, arkit::Theme>().children(inline(items, spacing::XXS)),
     ))
     .into()
 }
 
-pub fn menubar_item(title: impl Into<String>) -> Element {
-    button(title, ButtonVariant::Ghost)
+pub fn menubar_item<Message: Send + 'static>(title: impl Into<String>) -> Element<Message> {
+    button::<Message>(title, ButtonVariant::Ghost)
         .height(32.0)
         .style(
             ArkUINodeAttributeType::Padding,
@@ -17,8 +17,8 @@ pub fn menubar_item(title: impl Into<String>) -> Element {
         .into()
 }
 
-pub fn menubar_item_active(title: impl Into<String>) -> Element {
-    button(title, ButtonVariant::Secondary)
+pub fn menubar_item_active<Message: Send + 'static>(title: impl Into<String>) -> Element<Message> {
+    button::<Message>(title, ButtonVariant::Secondary)
         .height(32.0)
         .style(
             ArkUINodeAttributeType::Padding,

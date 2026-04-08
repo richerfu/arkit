@@ -6,8 +6,6 @@ license.workspace = true
 
 [dependencies]
 arkit.workspace = true
-arkit_runtime.workspace = true
-arkit_animation.workspace = true
 arkit_icon.workspace = true
+arkit_widget.workspace = true
 ohos-display-binding.workspace = true
-ohos-arkui-sys = { path = "/Users/ranger/Desktop/project/ohos-rs/ohos-native-bindings/sys/ohos-arkui-sys", features = ["api-22"] }

@@ -2,83 +2,6 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, ItemFn};
 
-/// Mark a function as a reactive component.
-///
-/// The function body runs **once** inside a child reactive owner scope.
-/// All subsequent updates are driven by reactive signals via effects —
-/// aligned with the SolidJS component model.
-///
-/// ## How it works (for IDE / rust-analyzer)
-///
-/// The macro uses a **rename + wrapper** pattern inspired by Leptos:
-///
-/// 1. The original function is renamed to `__component_{snake_case}`
-///    and marked `#[doc(hidden)]`.
-/// 2. A new wrapper function with the original name is generated;
-///    it enters a reactive scope, calls the renamed body, and returns
-///    a scoped element.
-///
-/// Since the wrapper directly calls the renamed body, rust-analyzer can
-/// trace the full call chain without any `#[allow(dead_code)]` workarounds.
-#[proc_macro_attribute]
-pub fn component(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(item as ItemFn);
-    let vis = &input.vis;
-    let sig = &input.sig;
-    let attrs = &input.attrs;
-    let body = &input.block;
-    let fn_name = &sig.ident;
-
-    // Rename the original function so we can call it from the wrapper.
-    let body_name = quote::format_ident!("__component_{}", fn_name);
-    let mut body_sig = sig.clone();
-    body_sig.ident = body_name.clone();
-
-    // Collect parameter names so the wrapper can forward them to the renamed body.
-    let mut param_names = Vec::new();
-    for arg in sig.inputs.iter() {
-        match arg {
-            syn::FnArg::Typed(pat_type) => match &*pat_type.pat {
-                syn::Pat::Ident(ident) => param_names.push(ident.ident.clone()),
-                _ => {
-                    return syn::Error::new_spanned(
-                        &pat_type.pat,
-                        "#[component] only supports identifier parameters",
-                    )
-                    .to_compile_error()
-                    .into();
-                }
-            },
-            syn::FnArg::Receiver(receiver) => {
-                return syn::Error::new_spanned(
-                    receiver,
-                    "#[component] does not support self parameters",
-                )
-                .to_compile_error()
-                .into();
-            }
-        }
-    }
-
-    let expanded = quote! {
-        #[doc(hidden)]
-        #[allow(non_snake_case)]
-        #(#attrs)*
-        #vis #body_sig {
-            #body
-        }
-
-        #vis #sig {
-            let __arkit_scope_guard = ::arkit::enter_scope();
-            let __arkit_result = #body_name(#(#param_names),*);
-            let __arkit_child_owner = __arkit_scope_guard.exit();
-            ::arkit::scope_owned(__arkit_child_owner, __arkit_result)
-        }
-    };
-
-    expanded.into()
-}
-
 /// Mark a function as the application entry point.
 ///
 /// Generates OpenHarmony NAPI bindings (init / render / destroy lifecycle)
@@ -165,7 +88,7 @@ pub fn entry(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 RUNTIME.with(|state| -> ::arkit::napi_ohos::Result<()> {
                     let mut runtime_state = state.borrow_mut();
                     if runtime_state.is_some() {
-                        // Already mounted — SolidJS model renders once.
+                        // Already mounted — the OHOS entrypoint only mounts once.
                         Ok(())
                     } else {
                         let runtime = ::arkit::mount_entry(slot, (*APP).clone(), #fn_name())?;

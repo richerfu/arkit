@@ -1,25 +1,24 @@
 use super::*;
 
-pub fn command(
+pub fn command<Message>(
     query: impl Into<String>,
     options: Vec<String>,
-    on_query_change: impl Fn(String) + 'static,
-) -> Element {
+    on_query_change: impl Fn(String) -> Message + Clone + 'static,
+) -> Element<Message>
+where
+    Message: Clone + Send + 'static,
+{
     let query = query.into();
     let keyword = query.to_lowercase();
-    let on_query_change = std::rc::Rc::new(on_query_change);
     let mut children = vec![arkit::row_component()
         .style(
             ArkUINodeAttributeType::BorderWidth,
             vec![0.0, 0.0, 1.0, 0.0],
         )
         .style(ArkUINodeAttributeType::BorderColor, vec![color::BORDER])
-        .children(vec![input("Search command...")
+        .children(vec![input::<Message>("Search command...")
             .value(query.clone())
-            .on_change({
-                let on_query_change = on_query_change.clone();
-                move |value| on_query_change(value)
-            })
+            .on_input(on_query_change.clone())
             .into()])
         .into()];
     children.extend(
@@ -27,7 +26,6 @@ pub fn command(
             .iter()
             .filter(|option| keyword.is_empty() || option.to_lowercase().contains(&keyword))
             .map(|option| {
-                let on_query_change = on_query_change.clone();
                 let option_label = option.clone();
                 let click_option = option.clone();
                 arkit::row_component()
@@ -42,8 +40,8 @@ pub fn command(
                         ArkUINodeAttributeType::BorderRadius,
                         vec![radius::SM, radius::SM, radius::SM, radius::SM],
                     )
-                    .on_click(move || on_query_change(click_option.clone()))
-                    .children(vec![arkit::text(option_label)
+                    .on_press(on_query_change(click_option.clone()))
+                    .children(vec![arkit::text::<Message, arkit::Theme>(option_label)
                         .font_size(typography::SM)
                         .style(ArkUINodeAttributeType::FontColor, color::FOREGROUND)
                         .style(ArkUINodeAttributeType::TextLineHeight, 20.0)

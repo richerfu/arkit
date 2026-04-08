@@ -13,10 +13,6 @@ pub mod prelude {
         NodeCustomEventType, NodeEventType,
     };
     pub use arkit::{
-        back_route, component, container, current_route, entry, on_cleanup, on_mount, push_route,
-        register_named_route, register_route, register_routes, replace_route, reset_route, router,
-        set_router, style, use_context, use_route, use_route_param, use_route_query, use_router,
-        Element, Horizontal, Length, LifecycleEvent, Padding, Route, RouteDefinition, Router,
-        Vertical,
+        container, entry, Element, Horizontal, Length, LifecycleEvent, Padding, Vertical,
     };
 }

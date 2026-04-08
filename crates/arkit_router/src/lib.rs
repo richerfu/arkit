@@ -832,20 +832,6 @@ impl<Route: Clone> NavigationStack<Route> {
     }
 }
 
-thread_local! {
-    static GLOBAL_ROUTER: RefCell<Router> = RefCell::new(Router::new("/"));
-}
-
-pub fn global_router() -> Router {
-    GLOBAL_ROUTER.with(|state| state.borrow().clone())
-}
-
-pub fn replace_global_router(router: Router) {
-    GLOBAL_ROUTER.with(|state| {
-        state.replace(router);
-    });
-}
-
 fn parse_raw_route(raw_path: &str) -> Result<Route, RouteError> {
     let (path, query) = split_raw_path(raw_path)?;
     Ok(Route {
@@ -1120,7 +1106,7 @@ fn resolve_tree(node: &RouteTreeNode, path_segs: &[&str]) -> Option<Vec<RouteSeg
 
 #[cfg(test)]
 mod tests {
-    use super::{global_router, replace_global_router, RouteDefinition, Router};
+    use super::{RouteDefinition, Router};
 
     #[test]
     fn match_and_extract_route_params_and_query() {
@@ -1170,13 +1156,6 @@ mod tests {
         let detail = router.resolve("/detail/9").expect("resolve");
         assert_eq!(detail.name(), Some("detail"));
         assert_eq!(detail.param("id"), Some("9"));
-    }
-
-    #[test]
-    fn global_router_replace_isolated() {
-        let router = Router::new("/home");
-        replace_global_router(router.clone());
-        assert_eq!(global_router().current_path(), "/home");
     }
 
     #[test]

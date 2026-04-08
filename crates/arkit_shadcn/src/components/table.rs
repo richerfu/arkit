@@ -1,7 +1,7 @@
 use super::*;
 
-pub fn table(headers: Vec<String>, rows: Vec<Vec<String>>) -> Element {
-    let header_row = arkit::row_component()
+pub fn table<Message: 'static>(headers: Vec<String>, rows: Vec<Vec<String>>) -> Element<Message> {
+    let header_row = arkit::row_component::<Message, arkit::Theme>()
         .percent_width(1.0)
         .style(
             ArkUINodeAttributeType::BorderWidth,
@@ -12,7 +12,7 @@ pub fn table(headers: Vec<String>, rows: Vec<Vec<String>>) -> Element {
             headers
                 .into_iter()
                 .map(|header| {
-                    arkit::row_component()
+                    arkit::row_component::<Message, arkit::Theme>()
                         .style(ArkUINodeAttributeType::LayoutWeight, 1.0_f32)
                         .height(40.0)
                         .align_items_center()
@@ -31,7 +31,7 @@ pub fn table(headers: Vec<String>, rows: Vec<Vec<String>>) -> Element {
         .into_iter()
         .enumerate()
         .map(|(index, row)| {
-            arkit::row_component()
+            arkit::row_component::<Message, arkit::Theme>()
                 .percent_width(1.0)
                 .align_items_center()
                 .style(
@@ -46,11 +46,11 @@ pub fn table(headers: Vec<String>, rows: Vec<Vec<String>>) -> Element {
                 .children(
                     row.into_iter()
                         .map(|cell| {
-                            arkit::row_component()
+                            arkit::row_component::<Message, arkit::Theme>()
                                 .style(ArkUINodeAttributeType::LayoutWeight, 1.0_f32)
                                 .align_items_center()
                                 .style(ArkUINodeAttributeType::Padding, vec![8.0, 8.0, 8.0, 8.0])
-                                .children(vec![arkit::text(cell)
+                                .children(vec![arkit::text::<Message, arkit::Theme>(cell)
                                     .font_size(typography::SM)
                                     .style(ArkUINodeAttributeType::FontColor, color::FOREGROUND)
                                     .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
@@ -61,10 +61,10 @@ pub fn table(headers: Vec<String>, rows: Vec<Vec<String>>) -> Element {
                 )
                 .into()
         })
-        .collect::<Vec<Element>>();
+        .collect::<Vec<Element<Message>>>();
 
     rounded_table_surface(
-        arkit::column_component()
+        arkit::column_component::<Message, arkit::Theme>()
             .percent_width(1.0)
             .style(
                 ArkUINodeAttributeType::BorderWidth,
@@ -85,17 +85,29 @@ pub fn table(headers: Vec<String>, rows: Vec<Vec<String>>) -> Element {
     .into()
 }
 
-pub fn data_table(headers: Vec<String>, rows: Vec<Vec<String>>) -> Element {
+pub fn data_table<Message: 'static>(
+    headers: Vec<String>,
+    rows: Vec<Vec<String>>,
+) -> Element<Message> {
     table(headers, rows)
 }
 
-pub fn scrollable_table(headers: Vec<String>, rows: Vec<Vec<String>>) -> Element {
-    scroll_area(vec![table(headers, rows)]).into()
+pub fn scrollable_table<Message: 'static>(
+    headers: Vec<String>,
+    rows: Vec<Vec<String>>,
+) -> Element<Message> {
+    scroll_area::<Message>(vec![table(headers, rows)]).into()
 }
 
-pub fn table_row(cells: Vec<String>) -> Element {
-    arkit::row_component()
+pub fn table_row<Message: 'static>(cells: Vec<String>) -> Element<Message> {
+    arkit::row_component::<Message, arkit::Theme>()
         .percent_width(1.0)
-        .children(cells.into_iter().map(body_text).map(Into::into).collect())
+        .children(
+            cells
+                .into_iter()
+                .map(body_text::<Message>)
+                .map(Into::into)
+                .collect(),
+        )
         .into()
 }

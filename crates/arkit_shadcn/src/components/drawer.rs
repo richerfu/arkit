@@ -1,10 +1,13 @@
 use super::*;
 
-pub fn drawer(
+pub fn drawer<Message>(
     title: impl Into<String>,
     open: bool,
-    on_open_change: impl Fn(bool) + 'static,
-    content: Vec<Element>,
-) -> Element {
-    dialog(title, open, on_open_change, content)
+    on_open_change: impl Fn(bool) -> Message + 'static,
+    content: Vec<Element<Message>>,
+) -> Element<Message>
+where
+    Message: Send + 'static,
+{
+    super::dialog::dialog_message(title, open, on_open_change, content)
 }

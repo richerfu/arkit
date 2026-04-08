@@ -1,17 +1,17 @@
 use super::*;
 use std::rc::Rc;
 
-pub fn tabs(
+pub fn tabs<Message: 'static>(
     tab_labels: Vec<String>,
     active: usize,
     on_change: impl Fn(usize) + 'static,
-    panels: Vec<Element>,
-) -> Element {
-    arkit::column_component()
+    panels: Vec<Element<Message>>,
+) -> Element<Message> {
+    arkit::column_component::<Message, arkit::Theme>()
         .width(arkit::Length::Fill)
         .children(vec![
             tabs_list(tab_labels, active, Rc::new(on_change)),
-            arkit::row_component()
+            arkit::row_component::<Message, arkit::Theme>()
                 .style(
                     ArkUINodeAttributeType::Margin,
                     vec![spacing::SM, 0.0, 0.0, 0.0],
@@ -22,14 +22,35 @@ pub fn tabs(
         .into()
 }
 
-fn tabs_list(tab_labels: Vec<String>, active: usize, on_change: Rc<dyn Fn(usize)>) -> Element {
+pub fn tabs_message<Message>(
+    tab_labels: Vec<String>,
+    active: usize,
+    on_change: impl Fn(usize) -> Message + 'static,
+    panels: Vec<Element<Message>>,
+) -> Element<Message>
+where
+    Message: Send + 'static,
+{
+    tabs(
+        tab_labels,
+        active,
+        move |value| dispatch_message(on_change(value)),
+        panels,
+    )
+}
+
+fn tabs_list<Message: 'static>(
+    tab_labels: Vec<String>,
+    active: usize,
+    on_change: Rc<dyn Fn(usize)>,
+) -> Element<Message> {
     let children = tab_labels
         .into_iter()
         .enumerate()
         .map(|(index, label)| {
             let is_active = active == index;
             let on_change = on_change.clone();
-            arkit::row_component()
+            arkit::row_component::<Message, arkit::Theme>()
                 .height(35.0)
                 .align_items_center()
                 .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
@@ -49,28 +70,31 @@ fn tabs_list(tab_labels: Vec<String>, active: usize, on_change: Rc<dyn Fn(usize)
                     0x00000000
                 })
                 .on_click(move || on_change(index))
-                .children(vec![body_text(label)
+                .children(vec![body_text::<Message>(label)
                     .style(ArkUINodeAttributeType::FontColor, color::FOREGROUND)
                     .into()])
                 .into()
         })
         .collect::<Vec<_>>();
 
-    rounded_tabs_list_surface(
-        arkit::row_component()
+    rounded_tabs_list_surface::<Message>(
+        arkit::row_component::<Message, arkit::Theme>()
             .align_items_center()
             .children(children),
     )
     .into()
 }
 
-fn tabs_content(panels: Vec<Element>, active: usize) -> Element {
-    let panel_containers: Vec<Element> = panels
+fn tabs_content<Message: 'static>(
+    panels: Vec<Element<Message>>,
+    active: usize,
+) -> Element<Message> {
+    let panel_containers: Vec<Element<Message>> = panels
         .into_iter()
         .enumerate()
         .map(|(index, panel)| {
             let is_active = active == index;
-            arkit::column_component()
+            arkit::column_component::<Message, arkit::Theme>()
                 .width(arkit::Length::Fill)
                 .style(
                     ArkUINodeAttributeType::Visibility,
@@ -81,7 +105,7 @@ fn tabs_content(panels: Vec<Element>, active: usize) -> Element {
         })
         .collect();
 
-    arkit::stack_component()
+    arkit::stack_component::<Message, arkit::Theme>()
         .width(arkit::Length::Fill)
         .children(panel_containers)
         .into()

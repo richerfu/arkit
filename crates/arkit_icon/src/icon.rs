@@ -6,8 +6,10 @@ use std::sync::{Mutex, OnceLock};
 use arkit::ohos_arkui_binding::api::attribute_option::DrawableDescriptor;
 use arkit::ohos_arkui_binding::arkui_input_binding::ArkUIErrorCode;
 use arkit::ohos_arkui_binding::common::error::ArkUIError;
+use arkit::ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
 use arkit::ohos_arkui_binding::image_native_binding::types::ImageSize;
 use arkit::ohos_arkui_binding::image_native_binding::{DecodingOptions, ImageSource, PixelMap};
+use arkit::ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
 use arkit::Element;
 use ohos_display_binding::default_display_virtual_pixel_ratio;
 
@@ -93,7 +95,9 @@ pub fn icon(name: impl Into<String>) -> IconElement {
     }
 }
 
-pub fn try_icon(name: impl Into<String>) -> Result<Element, IconError> {
+pub fn try_icon<Message: 'static, AppTheme: 'static>(
+    name: impl Into<String>,
+) -> Result<Element<Message, AppTheme>, IconError> {
     icon(name).try_render()
 }
 
@@ -117,11 +121,13 @@ impl IconElement {
         self
     }
 
-    pub fn try_render(self) -> Result<Element, IconError> {
+    pub fn try_render<Message: 'static, AppTheme: 'static>(
+        self,
+    ) -> Result<Element<Message, AppTheme>, IconError> {
         build_icon_element(&self.spec, false)
     }
 
-    pub fn render(self) -> Element {
+    pub fn render<Message: 'static, AppTheme: 'static>(self) -> Element<Message, AppTheme> {
         build_icon_element(&self.spec, true).unwrap_or_else(|error| {
             ohos_hilog_binding::error(format!(
                 "icon error: failed to render '{}': {error}",
@@ -135,7 +141,10 @@ impl IconElement {
     }
 }
 
-fn build_icon_element(spec: &IconSpec, allow_fallback: bool) -> Result<Element, IconError> {
+fn build_icon_element<Message: 'static, AppTheme: 'static>(
+    spec: &IconSpec,
+    allow_fallback: bool,
+) -> Result<Element<Message, AppTheme>, IconError> {
     let svg = match rendered_icon_svg(spec) {
         Ok(payload) => payload,
         Err(_error) if allow_fallback => missing_icon_svg(spec),
@@ -147,10 +156,13 @@ fn build_icon_element(spec: &IconSpec, allow_fallback: bool) -> Result<Element, 
     Ok(arkit::image_component()
         .native_with_cleanup(move |image| {
             let native = NativeIconImage::decode(svg, size).map_err(icon_to_arkui_error)?;
-            image.set_image_src(native.drawable().map_err(icon_to_arkui_error)?)?;
+            image.set_attribute(
+                ArkUINodeAttributeType::ImageSrc,
+                native.drawable().map_err(icon_to_arkui_error)?.into(),
+            )?;
             Ok(move || drop(native))
         })
-        .native(move |image| image.set_image_alt(alt))
+        .style(ArkUINodeAttributeType::ImageAlt, alt)
         .width(size)
         .height(size)
         .into())

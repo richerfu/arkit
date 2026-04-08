@@ -13,9 +13,9 @@ fn toggle_group_radius(index: usize, total: usize) -> [f32; 4] {
     [left_radius, right_radius, right_radius, left_radius]
 }
 
-fn toggle_group_shell(children: Vec<Element>) -> Element {
+fn toggle_group_shell<Message: 'static>(children: Vec<Element<Message>>) -> Element<Message> {
     shadow_sm(
-        arkit::row_component()
+        arkit::row_component::<Message, arkit::Theme>()
             .align_items_center()
             .style(ArkUINodeAttributeType::Clip, true)
             .style(
@@ -27,12 +27,12 @@ fn toggle_group_shell(children: Vec<Element>) -> Element {
     .into()
 }
 
-fn toggle_group_item_surface(
-    element: ButtonElement,
+fn toggle_group_item_surface<Message>(
+    element: ButtonElement<Message>,
     active: bool,
     border_width: [f32; 4],
     border_radius: [f32; 4],
-) -> ButtonElement {
+) -> ButtonElement<Message> {
     element
         .style(ArkUINodeAttributeType::Clip, true)
         .style(ArkUINodeAttributeType::BorderStyle, 0_i32)
@@ -97,6 +97,19 @@ pub fn toggle_group(
     toggle_group_shell(children)
 }
 
+pub fn toggle_group_message<Message>(
+    options: Vec<String>,
+    selected: impl Into<String>,
+    on_select: impl Fn(String) -> Message + 'static,
+) -> Element
+where
+    Message: Send + 'static,
+{
+    toggle_group(options, selected, move |value| {
+        dispatch_message(on_select(value))
+    })
+}
+
 pub fn toggle_group_icons(
     options: Vec<String>,
     selected: impl Into<String>,
@@ -136,6 +149,19 @@ pub fn toggle_group_icons(
         .collect::<Vec<_>>();
 
     toggle_group_shell(children)
+}
+
+pub fn toggle_group_icons_message<Message>(
+    options: Vec<String>,
+    selected: impl Into<String>,
+    on_select: impl Fn(String) -> Message + 'static,
+) -> Element
+where
+    Message: Send + 'static,
+{
+    toggle_group_icons(options, selected, move |value| {
+        dispatch_message(on_select(value))
+    })
 }
 
 pub fn toggle_group_multi(
@@ -192,11 +218,24 @@ pub fn toggle_group_multi(
     toggle_group_shell(children)
 }
 
-pub fn toggle_group_icons_multi(
+pub fn toggle_group_multi_message<Message>(
+    options: Vec<String>,
+    selected: Vec<String>,
+    on_change: impl Fn(Vec<String>) -> Message + 'static,
+) -> Element
+where
+    Message: Send + 'static,
+{
+    toggle_group_multi(options, selected, move |value| {
+        dispatch_message(on_change(value))
+    })
+}
+
+pub fn toggle_group_icons_multi<Message: Send + 'static>(
     options: Vec<String>,
     selected: Vec<String>,
     on_change: impl Fn(Vec<String>) + 'static,
-) -> Element {
+) -> Element<Message> {
     let on_change = std::rc::Rc::new(on_change);
     let total = options.len();
     let children = options
@@ -209,7 +248,7 @@ pub fn toggle_group_icons_multi(
             let selected_values = selected.clone();
 
             toggle_group_item_surface(
-                normal_button_component()
+                normal_button_component::<Message, arkit::Theme>()
                     .width(40.0)
                     .height(40.0)
                     .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
@@ -220,7 +259,7 @@ pub fn toggle_group_icons_multi(
                         } else {
                             color::FOREGROUND
                         })
-                        .render()]),
+                        .render::<Message, arkit::Theme>()]),
                 active,
                 toggle_group_border(index),
                 toggle_group_radius(index, total),
@@ -238,5 +277,18 @@ pub fn toggle_group_icons_multi(
         })
         .collect::<Vec<_>>();
 
-    toggle_group_shell(children)
+    toggle_group_shell::<Message>(children)
+}
+
+pub fn toggle_group_icons_multi_message<Message>(
+    options: Vec<String>,
+    selected: Vec<String>,
+    on_change: impl Fn(Vec<String>) -> Message + 'static,
+) -> Element<Message>
+where
+    Message: Send + 'static,
+{
+    toggle_group_icons_multi(options, selected, move |value| {
+        dispatch_message(on_change(value))
+    })
 }

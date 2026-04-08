@@ -1,17 +1,20 @@
 use super::*;
 
-pub fn avatar(src: Option<String>, fallback_text: impl Into<String>) -> Element {
+pub fn avatar<Message: 'static>(
+    src: Option<String>,
+    fallback_text: impl Into<String>,
+) -> Element<Message> {
     avatar_with_radius(src, fallback_text, radius::FULL)
 }
 
-pub fn avatar_with_radius(
+pub fn avatar_with_radius<Message: 'static>(
     src: Option<String>,
     fallback_text: impl Into<String>,
     radius_value: f32,
-) -> Element {
+) -> Element<Message> {
     let fallback = fallback_text.into();
     if let Some(src) = src {
-        arkit::image_component()
+        arkit::image_component::<Message, arkit::Theme>()
             .attr(ArkUINodeAttributeType::ImageSrc, src)
             .width(32.0)
             .height(32.0)
@@ -22,7 +25,7 @@ pub fn avatar_with_radius(
             .style(ArkUINodeAttributeType::Clip, true)
             .into()
     } else {
-        arkit::row_component()
+        arkit::row_component::<Message, arkit::Theme>()
             .width(32.0)
             .height(32.0)
             .background_color(color::MUTED)
@@ -37,18 +40,21 @@ pub fn avatar_with_radius(
     }
 }
 
-pub fn avatar_ring(src: Option<String>, fallback_text: impl Into<String>) -> Element {
+pub fn avatar_ring<Message: 'static>(
+    src: Option<String>,
+    fallback_text: impl Into<String>,
+) -> Element<Message> {
     avatar_ring_with_radius(src, fallback_text, radius::FULL)
 }
 
-pub fn avatar_ring_with_radius(
+pub fn avatar_ring_with_radius<Message: 'static>(
     src: Option<String>,
     fallback_text: impl Into<String>,
     radius_value: f32,
-) -> Element {
+) -> Element<Message> {
     let fallback = fallback_text.into();
     if let Some(src) = src {
-        arkit::image_component()
+        arkit::image_component::<Message, arkit::Theme>()
             .attr(ArkUINodeAttributeType::ImageSrc, src)
             .width(32.0)
             .height(32.0)
@@ -64,7 +70,7 @@ pub fn avatar_ring_with_radius(
             .style(ArkUINodeAttributeType::BorderColor, vec![color::BACKGROUND])
             .into()
     } else {
-        arkit::row_component()
+        arkit::row_component::<Message, arkit::Theme>()
             .width(32.0)
             .height(32.0)
             .background_color(color::MUTED)

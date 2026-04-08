@@ -1,7 +1,6 @@
-use arkit::ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
 use arkit::ohos_arkui_binding::types::text_alignment::TextAlignment;
 use arkit::prelude::ArkUINodeAttributeType;
-use arkit::ComponentElement;
+use arkit::Node;
 
 use crate::theme::{color, radius, spacing, typography};
 
@@ -17,71 +16,63 @@ fn edge_all(value: f32) -> Vec<f32> {
     vec![value, value, value, value]
 }
 
-pub fn padding_xy<T>(element: ComponentElement<T>, x: f32, y: f32) -> ComponentElement<T>
-where
-    T: ArkUICommonAttribute + 'static,
-{
+pub fn padding_xy<Message, AppTheme>(
+    element: Node<Message, AppTheme>,
+    x: f32,
+    y: f32,
+) -> Node<Message, AppTheme> {
     element.style(ArkUINodeAttributeType::Padding, edge(y, x, y, x))
 }
 
-pub fn margin_top<T>(element: ComponentElement<T>, value: f32) -> ComponentElement<T>
-where
-    T: ArkUICommonAttribute + 'static,
-{
+pub fn margin_top<Message, AppTheme>(
+    element: Node<Message, AppTheme>,
+    value: f32,
+) -> Node<Message, AppTheme> {
     element.style(ArkUINodeAttributeType::Margin, edge(value, 0.0, 0.0, 0.0))
 }
 
-pub fn rounded<T>(element: ComponentElement<T>, value: f32) -> ComponentElement<T>
-where
-    T: ArkUICommonAttribute + 'static,
-{
+pub fn rounded<Message, AppTheme>(
+    element: Node<Message, AppTheme>,
+    value: f32,
+) -> Node<Message, AppTheme> {
     element.style(ArkUINodeAttributeType::BorderRadius, edge_all(value))
 }
 
-pub fn border<T>(element: ComponentElement<T>) -> ComponentElement<T>
-where
-    T: ArkUICommonAttribute + 'static,
-{
+pub fn border<Message, AppTheme>(element: Node<Message, AppTheme>) -> Node<Message, AppTheme> {
     element
         .style(ArkUINodeAttributeType::BorderWidth, edge_all(1.0))
         .style(ArkUINodeAttributeType::BorderColor, vec![color::BORDER])
 }
 
-pub fn border_color<T>(element: ComponentElement<T>, color_value: u32) -> ComponentElement<T>
-where
-    T: ArkUICommonAttribute + 'static,
-{
+pub fn border_color<Message, AppTheme>(
+    element: Node<Message, AppTheme>,
+    color_value: u32,
+) -> Node<Message, AppTheme> {
     element.style(ArkUINodeAttributeType::BorderColor, vec![color_value])
 }
 
-pub fn shadow_sm<T>(element: ComponentElement<T>) -> ComponentElement<T>
-where
-    T: ArkUICommonAttribute + 'static,
-{
+pub fn shadow_sm<Message, AppTheme>(element: Node<Message, AppTheme>) -> Node<Message, AppTheme> {
     element.style(
         ArkUINodeAttributeType::Shadow,
         vec![SHADOW_OUTER_DEFAULT_SM],
     )
 }
 
-pub fn font_weight_medium<T>(element: ComponentElement<T>) -> ComponentElement<T>
-where
-    T: ArkUICommonAttribute + 'static,
-{
+pub fn font_weight_medium<Message, AppTheme>(
+    element: Node<Message, AppTheme>,
+) -> Node<Message, AppTheme> {
     element.style(ArkUINodeAttributeType::FontWeight, FONT_WEIGHT_W500)
 }
 
-pub fn font_weight_semibold<T>(element: ComponentElement<T>) -> ComponentElement<T>
-where
-    T: ArkUICommonAttribute + 'static,
-{
+pub fn font_weight_semibold<Message, AppTheme>(
+    element: Node<Message, AppTheme>,
+) -> Node<Message, AppTheme> {
     element.style(ArkUINodeAttributeType::FontWeight, FONT_WEIGHT_W600)
 }
 
-pub fn card_surface<T>(element: ComponentElement<T>) -> ComponentElement<T>
-where
-    T: ArkUICommonAttribute + 'static,
-{
+pub fn card_surface<Message, AppTheme>(
+    element: Node<Message, AppTheme>,
+) -> Node<Message, AppTheme> {
     shadow_sm(rounded(
         border(
             element
@@ -99,10 +90,9 @@ where
     ))
 }
 
-pub fn input_surface<T>(element: ComponentElement<T>) -> ComponentElement<T>
-where
-    T: ArkUICommonAttribute + 'static,
-{
+pub fn input_surface<Message, AppTheme>(
+    element: Node<Message, AppTheme>,
+) -> Node<Message, AppTheme> {
     shadow_sm(rounded(
         border(
             padding_xy(
@@ -116,10 +106,9 @@ where
     ))
 }
 
-pub fn panel_surface<T>(element: ComponentElement<T>) -> ComponentElement<T>
-where
-    T: ArkUICommonAttribute + 'static,
-{
+pub fn panel_surface<Message, AppTheme>(
+    element: Node<Message, AppTheme>,
+) -> Node<Message, AppTheme> {
     shadow_sm(rounded(
         border(element.background_color(color::POPOVER).style(
             ArkUINodeAttributeType::ForegroundColor,
@@ -129,9 +118,9 @@ where
     ))
 }
 
-pub fn title_text(content: impl Into<String>) -> arkit::TextElement {
+pub fn title_text<Message: 'static>(content: impl Into<String>) -> arkit::TextElement<Message> {
     font_weight_semibold(
-        arkit::text(content)
+        arkit::text::<Message, arkit::Theme>(content)
             .font_size(typography::LG)
             .style(ArkUINodeAttributeType::FontColor, color::FOREGROUND)
             .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
@@ -142,9 +131,9 @@ pub fn title_text(content: impl Into<String>) -> arkit::TextElement {
     )
 }
 
-pub fn body_text(content: impl Into<String>) -> arkit::TextElement {
+pub fn body_text<Message: 'static>(content: impl Into<String>) -> arkit::TextElement<Message> {
     font_weight_medium(
-        arkit::text(content)
+        arkit::text::<Message, arkit::Theme>(content)
             .font_size(typography::SM)
             .style(ArkUINodeAttributeType::FontColor, color::FOREGROUND)
             .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
@@ -155,8 +144,10 @@ pub fn body_text(content: impl Into<String>) -> arkit::TextElement {
     )
 }
 
-pub fn body_text_regular(content: impl Into<String>) -> arkit::TextElement {
-    arkit::text(content)
+pub fn body_text_regular<Message: 'static>(
+    content: impl Into<String>,
+) -> arkit::TextElement<Message> {
+    arkit::text::<Message, arkit::Theme>(content)
         .font_size(typography::MD)
         .style(ArkUINodeAttributeType::FontColor, color::FOREGROUND)
         .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
@@ -166,8 +157,8 @@ pub fn body_text_regular(content: impl Into<String>) -> arkit::TextElement {
         )
 }
 
-pub fn muted_text(content: impl Into<String>) -> arkit::TextElement {
-    arkit::text(content)
+pub fn muted_text<Message: 'static>(content: impl Into<String>) -> arkit::TextElement<Message> {
+    arkit::text::<Message, arkit::Theme>(content)
         .font_size(typography::SM)
         .style(ArkUINodeAttributeType::FontColor, color::MUTED_FOREGROUND)
         .style(ArkUINodeAttributeType::TextLineHeight, 20.0)

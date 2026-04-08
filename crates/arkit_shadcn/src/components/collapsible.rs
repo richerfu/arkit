@@ -1,16 +1,16 @@
 use super::*;
 
-pub fn collapsible(
+pub fn collapsible<Message: Send + 'static>(
     title: impl Into<String>,
     open: bool,
     on_open_change: impl Fn(bool) + 'static,
-    content: Vec<Element>,
-) -> Element {
+    content: Vec<Element<Message>>,
+) -> Element<Message> {
     let mut items = content.into_iter();
     let first = items.next();
-    let rest: Vec<Element> = items
+    let rest: Vec<Element<Message>> = items
         .map(|child| {
-            arkit::row_component()
+            arkit::row_component::<Message, arkit::Theme>()
                 .style(
                     ArkUINodeAttributeType::Margin,
                     vec![spacing::SM, 0.0, 0.0, 0.0],
@@ -20,7 +20,7 @@ pub fn collapsible(
         })
         .collect();
 
-    let mut children: Vec<Element> = vec![arkit::row_component()
+    let mut children: Vec<Element<Message>> = vec![arkit::row_component::<Message, arkit::Theme>()
         .percent_width(1.0)
         .align_items_center()
         .style(
@@ -47,7 +47,7 @@ pub fn collapsible(
 
     if let Some(first) = first {
         children.push(
-            arkit::row_component()
+            arkit::row_component::<Message, arkit::Theme>()
                 .style(
                     ArkUINodeAttributeType::Margin,
                     vec![spacing::SM, 0.0, 0.0, 0.0],
@@ -61,14 +61,34 @@ pub fn collapsible(
     // and interaction remain stable across explicit runtime rerenders.
     if !rest.is_empty() {
         children.push(
-            visibility_gate(arkit::column_component().percent_width(1.0), open)
-                .children(rest)
-                .into(),
+            visibility_gate(
+                arkit::column_component::<Message, arkit::Theme>().percent_width(1.0),
+                open,
+            )
+            .children(rest)
+            .into(),
         );
     }
 
-    arkit::column_component()
+    arkit::column_component::<Message, arkit::Theme>()
         .percent_width(1.0)
         .children(children)
         .into()
+}
+
+pub fn collapsible_message<Message>(
+    title: impl Into<String>,
+    open: bool,
+    on_open_change: impl Fn(bool) -> Message + 'static,
+    content: Vec<Element<Message>>,
+) -> Element<Message>
+where
+    Message: Send + 'static,
+{
+    collapsible(
+        title,
+        open,
+        move |value| dispatch_message(on_open_change(value)),
+        content,
+    )
 }

@@ -45,8 +45,11 @@ fn badge_style(variant: BadgeVariant) -> (u32, u32, Vec<f32>, Vec<u32>) {
     }
 }
 
-fn badge_label_text(content: impl Into<String>, foreground: u32) -> Element {
-    arkit::text(content)
+fn badge_label_text<Message: 'static>(
+    content: impl Into<String>,
+    foreground: u32,
+) -> Element<Message> {
+    arkit::text::<Message, arkit::Theme>(content)
         .font_size(typography::XS)
         .style(ArkUINodeAttributeType::FontWeight, 4_i32)
         .style(ArkUINodeAttributeType::FontColor, foreground)
@@ -57,14 +60,14 @@ fn badge_label_text(content: impl Into<String>, foreground: u32) -> Element {
         .into()
 }
 
-fn badge_shell(
+fn badge_shell<Message: 'static>(
     background: u32,
     border_width: Vec<f32>,
     border_color: Vec<u32>,
     horizontal_padding: f32,
-    children: Vec<Element>,
-) -> Element {
-    arkit::row_component()
+    children: Vec<Element<Message>>,
+) -> Element<Message> {
+    arkit::row_component::<Message, arkit::Theme>()
         .constraint_size(0.0, 100000.0, BADGE_MIN_HEIGHT, 100000.0)
         .style(
             ArkUINodeAttributeType::BorderRadius,
@@ -89,11 +92,14 @@ fn badge_shell(
         .into()
 }
 
-pub fn badge(label: impl Into<String>) -> Element {
+pub fn badge<Message: 'static>(label: impl Into<String>) -> Element<Message> {
     badge_with_variant(label, BadgeVariant::Default)
 }
 
-pub fn badge_with_variant(label: impl Into<String>, variant: BadgeVariant) -> Element {
+pub fn badge_with_variant<Message: 'static>(
+    label: impl Into<String>,
+    variant: BadgeVariant,
+) -> Element<Message> {
     let (background, foreground, border_width, border_color) = badge_style(variant);
     badge_shell(
         background,
@@ -104,11 +110,11 @@ pub fn badge_with_variant(label: impl Into<String>, variant: BadgeVariant) -> El
     )
 }
 
-pub fn badge_with_icon(
+pub fn badge_with_icon<Message: 'static>(
     label: impl Into<String>,
     icon_name: impl Into<String>,
     variant: BadgeVariant,
-) -> Element {
+) -> Element<Message> {
     let (background, foreground, border_width, border_color) = badge_style(variant);
     badge_shell(
         background,
@@ -119,8 +125,8 @@ pub fn badge_with_icon(
             lucide::icon(icon_name.into())
                 .size(BADGE_ICON_SIZE)
                 .color(foreground)
-                .render(),
-            arkit::row_component()
+                .render::<Message, arkit::Theme>(),
+            arkit::row_component::<Message, arkit::Theme>()
                 .style(
                     ArkUINodeAttributeType::Margin,
                     vec![0.0, 0.0, 0.0, BADGE_ICON_GAP],
@@ -131,12 +137,12 @@ pub fn badge_with_icon(
     )
 }
 
-pub fn badge_with_icon_colors(
+pub fn badge_with_icon_colors<Message: 'static>(
     label: impl Into<String>,
     icon_name: impl Into<String>,
     background: u32,
     foreground: u32,
-) -> Element {
+) -> Element<Message> {
     badge_shell(
         background,
         vec![1.0, 1.0, 1.0, 1.0],
@@ -146,8 +152,8 @@ pub fn badge_with_icon_colors(
             lucide::icon(icon_name.into())
                 .size(BADGE_ICON_SIZE)
                 .color(foreground)
-                .render(),
-            arkit::row_component()
+                .render::<Message, arkit::Theme>(),
+            arkit::row_component::<Message, arkit::Theme>()
                 .style(
                     ArkUINodeAttributeType::Margin,
                     vec![0.0, 0.0, 0.0, BADGE_ICON_GAP],
@@ -158,9 +164,12 @@ pub fn badge_with_icon_colors(
     )
 }
 
-pub fn pill_badge_with_variant(label: impl Into<String>, variant: BadgeVariant) -> Element {
+pub fn pill_badge_with_variant<Message: 'static>(
+    label: impl Into<String>,
+    variant: BadgeVariant,
+) -> Element<Message> {
     let (background, foreground, border_width, border_color) = badge_style(variant);
-    arkit::row_component()
+    arkit::row_component::<Message, arkit::Theme>()
         .constraint_size(20.0, 100000.0, BADGE_MIN_HEIGHT, 100000.0)
         .style(
             ArkUINodeAttributeType::BorderRadius,

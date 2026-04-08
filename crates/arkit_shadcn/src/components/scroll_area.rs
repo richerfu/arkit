@@ -1,8 +1,8 @@
 use super::*;
 
-pub fn scroll_area(children: Vec<Element>) -> ScrollElement {
+pub fn scroll_area<Message: 'static>(children: Vec<Element<Message>>) -> ScrollElement<Message> {
     panel_surface(
-        arkit::scroll_component()
+        arkit::scroll_component::<Message, arkit::Theme>()
             .percent_width(1.0)
             .children(children),
     )

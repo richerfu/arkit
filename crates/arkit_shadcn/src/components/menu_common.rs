@@ -1,14 +1,16 @@
-use super::*;
 use super::floating_layer::FloatingSurfaceRegistry;
+use super::*;
 use arkit::ohos_arkui_binding::arkui_input_binding::UIInputAction;
 use arkit::ohos_arkui_binding::common::node::ArkUINode;
 use arkit::ohos_arkui_binding::component::attribute::{ArkUIAttributeBasic, ArkUICommonAttribute};
 use arkit::ohos_arkui_binding::types::text_alignment::TextAlignment;
-use arkit::component;
 use std::cell::RefCell;
 use std::rc::Rc;
 
 pub(crate) const TRANSPARENT: u32 = 0x00000000;
+
+#[derive(Clone)]
+struct StableMenuSurfaceRegistry(FloatingSurfaceRegistry);
 
 #[derive(Clone)]
 pub(crate) struct MenuContext {
@@ -38,9 +40,12 @@ impl ArkUIAttributeBasic for RuntimeMenuRowNode {
 
 impl ArkUICommonAttribute for RuntimeMenuRowNode {}
 
-pub(crate) fn menu_content_with_width(width: f32, items: Vec<Element>) -> Element {
+pub(crate) fn menu_content_with_width<Message: 'static>(
+    width: f32,
+    items: Vec<Element<Message>>,
+) -> Element<Message> {
     shadow_sm(
-        arkit::column_component()
+        arkit::column_component::<Message, arkit::Theme>()
             .width(width)
             .align_items_start()
             .style(
@@ -63,22 +68,36 @@ pub(crate) fn menu_content_with_width(width: f32, items: Vec<Element>) -> Elemen
     .into()
 }
 
-#[component]
-pub(crate) fn provided_menu_content(
+pub(crate) fn provided_menu_content<Message: 'static>(
     width: f32,
-    items: Vec<Element>,
+    items: Vec<Element<Message>>,
     context: MenuContext,
-) -> Element {
-    arkit::provide_context(context);
-    menu_content_with_width(width, items)
+) -> Element<Message> {
+    arkit_widget::scope(move || {
+        arkit_widget::provide_context(context);
+        menu_content_with_width(width, items)
+    })
 }
 
-pub(crate) fn dismiss_menu_row(row: RowElement) -> RowElement {
+pub(crate) fn menu_surface_registry() -> FloatingSurfaceRegistry {
+    if let Some(existing) = arkit_widget::use_local_context::<StableMenuSurfaceRegistry>() {
+        return existing.0;
+    }
+
+    let registry = FloatingSurfaceRegistry::new();
+    arkit_widget::provide_context(StableMenuSurfaceRegistry(registry.clone()));
+    registry
+}
+
+pub(crate) fn dismiss_menu_row<Message>(row: RowElement<Message>) -> RowElement<Message> {
     menu_action_row(row, || {})
 }
 
-pub(crate) fn menu_action_row(mut row: RowElement, on_select: impl Fn() + 'static) -> RowElement {
-    if let Some(menu) = arkit::use_context::<MenuContext>() {
+pub(crate) fn menu_action_row<Message>(
+    mut row: RowElement<Message>,
+    on_select: impl Fn() + 'static,
+) -> RowElement<Message> {
+    if let Some(menu) = arkit_widget::use_context::<MenuContext>() {
         let dismiss = menu.dismiss.clone();
         row = row.on_click(move || {
             on_select();
@@ -94,11 +113,14 @@ pub(crate) fn menu_action_row(mut row: RowElement, on_select: impl Fn() + 'stati
 pub(crate) fn menu_dismiss_context() -> Option<MenuContext> {
     // Menu context is intentionally inherited so nested submenus participate in
     // the same dismiss tree and root-surface registry.
-    arkit::use_context::<MenuContext>()
+    arkit_widget::use_context::<MenuContext>()
 }
 
-pub(crate) fn root_menu_context(dismiss: Rc<dyn Fn()>, root_open: bool) -> MenuContext {
-    let root_surfaces = FloatingSurfaceRegistry::new();
+pub(crate) fn root_menu_context(
+    dismiss: Rc<dyn Fn()>,
+    root_open: bool,
+    root_surfaces: FloatingSurfaceRegistry,
+) -> MenuContext {
     MenuContext {
         dismiss,
         root_open,
@@ -143,8 +165,12 @@ pub(crate) fn submenu_menu_surfaces(
     registries
 }
 
-pub(crate) fn item_text(content: impl Into<String>, color_value: u32, weight: i32) -> Element {
-    arkit::text(content)
+pub(crate) fn item_text<Message: 'static>(
+    content: impl Into<String>,
+    color_value: u32,
+    weight: i32,
+) -> Element<Message> {
+    arkit::text::<Message, arkit::Theme>(content)
         .font_size(typography::SM)
         .style(ArkUINodeAttributeType::FontColor, color_value)
         .style(ArkUINodeAttributeType::FontWeight, weight)
@@ -156,8 +182,8 @@ pub(crate) fn item_text(content: impl Into<String>, color_value: u32, weight: i3
         .into()
 }
 
-pub(crate) fn shortcut_text(content: impl Into<String>) -> Element {
-    arkit::text(content)
+pub(crate) fn shortcut_text<Message: 'static>(content: impl Into<String>) -> Element<Message> {
+    arkit::text::<Message, arkit::Theme>(content)
         .font_size(typography::XS)
         .style(ArkUINodeAttributeType::FontColor, color::MUTED_FOREGROUND)
         .style(ArkUINodeAttributeType::TextLineHeight, 16.0)
@@ -169,8 +195,8 @@ pub(crate) fn shortcut_text(content: impl Into<String>) -> Element {
         .into()
 }
 
-pub(crate) fn leading_slot(child: Option<Element>) -> Element {
-    let mut slot = arkit::row_component()
+pub(crate) fn leading_slot<Message: 'static>(child: Option<Element<Message>>) -> Element<Message> {
+    let mut slot = arkit::row_component::<Message, arkit::Theme>()
         .width(16.0)
         .height(16.0)
         .align_items_center()
@@ -180,21 +206,24 @@ pub(crate) fn leading_slot(child: Option<Element>) -> Element {
         slot = slot.children(vec![child]);
     }
 
-    arkit::row_component()
+    arkit::row_component::<Message, arkit::Theme>()
         .style(ArkUINodeAttributeType::Margin, vec![0.0, 8.0, 0.0, 0.0])
         .children(vec![slot.into()])
         .into()
 }
 
-pub(crate) fn fill_slot(child: Element) -> Element {
-    arkit::row_component()
+pub(crate) fn fill_slot<Message: 'static>(child: Element<Message>) -> Element<Message> {
+    arkit::row_component::<Message, arkit::Theme>()
         .style(ArkUINodeAttributeType::LayoutWeight, 1.0_f32)
         .children(vec![child])
         .into()
 }
 
-pub(crate) fn menu_row(children: Vec<Element>, disabled: bool) -> RowElement {
-    let mut row = arkit::row_component()
+pub(crate) fn menu_row<Message: 'static>(
+    children: Vec<Element<Message>>,
+    disabled: bool,
+) -> RowElement<Message> {
+    let mut row = arkit::row_component::<Message, arkit::Theme>()
         .percent_width(1.0)
         .height(36.0)
         .align_items_center()
@@ -221,16 +250,21 @@ fn menu_row_pressed_background(variant: MenuInteractionVariant) -> u32 {
     }
 }
 
-pub(crate) fn interactive_menu_row(
-    children: Vec<Element>,
+pub(crate) fn interactive_menu_row<Message: 'static>(
+    children: Vec<Element<Message>>,
     disabled: bool,
     variant: MenuInteractionVariant,
     active: Option<bool>,
-) -> RowElement {
+) -> RowElement<Message> {
     let runtime_node = Rc::new(RefCell::new(None::<RuntimeMenuRowNode>));
     let capture_node = runtime_node.clone();
     let mut row = menu_row(children, disabled)
         .background_color(if active.unwrap_or(false) {
+            menu_row_pressed_background(variant)
+        } else {
+            TRANSPARENT
+        })
+        .patch_background_color(if active.unwrap_or(false) {
             menu_row_pressed_background(variant)
         } else {
             TRANSPARENT

@@ -15,7 +15,8 @@ use arkit::ohos_arkui_binding::types::animation_finish_type::AnimationFinishCall
 use arkit::ohos_arkui_binding::types::animation_mode::AnimationMode;
 use arkit::ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
 use arkit::ohos_arkui_binding::types::curve::Curve;
-use arkit::{queue_after_mount, queue_ui_loop, ComponentElement};
+use arkit::Node;
+use arkit_widget::queue_ui_loop;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Motion {
@@ -181,10 +182,7 @@ fn log_animation_error(message: impl AsRef<str>) {
     ohos_hilog_binding::error(message.as_ref());
 }
 
-pub trait MotionExt<T>
-where
-    T: ArkUICommonAttribute + 'static,
-{
+pub trait MotionExt: Sized {
     fn with_mount_motion(
         self,
         motion: Motion,
@@ -201,10 +199,7 @@ where
     ) -> Self;
 }
 
-impl<T> MotionExt<T> for ComponentElement<T>
-where
-    T: ArkUICommonAttribute + 'static,
-{
+impl<Message: 'static, AppTheme: 'static> MotionExt for Node<Message, AppTheme> {
     fn with_mount_motion(
         self,
         motion: Motion,
@@ -226,8 +221,8 @@ where
         let on_finish = Rc::new(on_finish);
 
         self.native_with_cleanup(move |node| {
-            initial(node.borrow_mut())?;
-            let animated_node = Rc::new(RefCell::new(node.borrow_mut().clone()));
+            initial(node)?;
+            let animated_node = Rc::new(RefCell::new(node.clone()));
             let animation_slot = Rc::new(RefCell::new(None::<Animation>));
             let is_active = Rc::new(Cell::new(true));
             let queued_node = animated_node.clone();
@@ -236,7 +231,7 @@ where
             let queued_target = target.clone();
             let queued_finish = on_finish.clone();
 
-            queue_after_mount(move || {
+            queue_ui_loop(move || {
                 if !queued_active.get() {
                     return;
                 }
@@ -292,10 +287,7 @@ where
     }
 }
 
-pub trait TransitionExt<T>
-where
-    T: ArkUICommonAttribute + 'static,
-{
+pub trait TransitionExt: Sized {
     fn with_transition_attr(
         self,
         attr: ArkUINodeAttributeType,
@@ -311,10 +303,7 @@ where
     fn with_translate_transition(self, transition: ManagedTransition) -> Self;
 }
 
-impl<T> TransitionExt<T> for ComponentElement<T>
-where
-    T: ArkUICommonAttribute + 'static,
-{
+impl<Message: 'static, AppTheme: 'static> TransitionExt for Node<Message, AppTheme> {
     fn with_transition_attr(
         self,
         attr: ArkUINodeAttributeType,

@@ -108,28 +108,34 @@ impl ArkUIAttributeBasic for RuntimeShellNode {
 
 impl ArkUICommonAttribute for RuntimeShellNode {}
 
-pub fn button(label: impl Into<String>, variant: ButtonVariant) -> ButtonElement {
+pub fn button<Message: Send + 'static>(
+    label: impl Into<String>,
+    variant: ButtonVariant,
+) -> ButtonElement<Message> {
     button_with_options(label, variant, ButtonSize::Default, false)
 }
 
-pub fn button_with_size(
+pub fn button_with_size<Message: Send + 'static>(
     label: impl Into<String>,
     variant: ButtonVariant,
     size: ButtonSize,
-) -> ButtonElement {
+) -> ButtonElement<Message> {
     button_with_options(label, variant, size, false)
 }
 
-pub fn disabled_button(label: impl Into<String>, variant: ButtonVariant) -> ButtonElement {
+pub fn disabled_button<Message: Send + 'static>(
+    label: impl Into<String>,
+    variant: ButtonVariant,
+) -> ButtonElement<Message> {
     button_with_options(label, variant, ButtonSize::Default, true)
 }
 
-pub fn button_with_options(
+pub fn button_with_options<Message: Send + 'static>(
     label: impl Into<String>,
     variant: ButtonVariant,
     size: ButtonSize,
     disabled: bool,
-) -> ButtonElement {
+) -> ButtonElement<Message> {
     let label = label.into();
     let size_style = size_style(size);
     let variant_style = variant_style(variant);
@@ -177,20 +183,20 @@ pub fn button_with_options(
     }
 }
 
-pub fn button_with_icon(
+pub fn button_with_icon<Message: Send + 'static>(
     label: impl Into<String>,
     icon_name: impl Into<String>,
     variant: ButtonVariant,
-) -> ButtonElement {
+) -> ButtonElement<Message> {
     button_with_icon_size(label, icon_name, variant, ButtonSize::Default)
 }
 
-pub fn button_with_icon_size(
+pub fn button_with_icon_size<Message: Send + 'static>(
     label: impl Into<String>,
     icon_name: impl Into<String>,
     variant: ButtonVariant,
     size: ButtonSize,
-) -> ButtonElement {
+) -> ButtonElement<Message> {
     let label = label.into();
     let icon_name = icon_name.into();
     let size_style = size_style(size);
@@ -218,11 +224,14 @@ pub fn button_with_icon_size(
     )
 }
 
-pub fn icon_button(icon: impl Into<String>) -> ButtonElement {
+pub fn icon_button<Message: Send + 'static>(icon: impl Into<String>) -> ButtonElement<Message> {
     icon_button_with_variant(icon, ButtonVariant::Outline)
 }
 
-pub fn icon_button_with_variant(icon: impl Into<String>, variant: ButtonVariant) -> ButtonElement {
+pub fn icon_button_with_variant<Message: Send + 'static>(
+    icon: impl Into<String>,
+    variant: ButtonVariant,
+) -> ButtonElement<Message> {
     let size_style = size_style(ButtonSize::Icon);
     let variant_style = variant_style(variant);
     let pressed_style = pressed_style(variant);
@@ -248,15 +257,20 @@ pub fn icon_button_with_variant(icon: impl Into<String>, variant: ButtonVariant)
     )
 }
 
-pub fn normal_button_component() -> ButtonElement {
+pub fn normal_button_component<Message, AppTheme>() -> ButtonElement<Message, AppTheme> {
     arkit::button_component().style(ArkUINodeAttributeType::ButtonType, 0_i32)
 }
 
-pub fn normal_button(label: impl Into<String>) -> ButtonElement {
+pub fn normal_button<Message, AppTheme>(
+    label: impl Into<String>,
+) -> ButtonElement<Message, AppTheme> {
     normal_button_component().label(label)
 }
 
-fn button_host(element: ButtonElement, size_style: ButtonSizeStyle) -> ButtonElement {
+fn button_host<Message, AppTheme>(
+    element: ButtonElement<Message, AppTheme>,
+    size_style: ButtonSizeStyle,
+) -> ButtonElement<Message, AppTheme> {
     let mut button = element
         .style(ArkUINodeAttributeType::Focusable, false)
         .style(ArkUINodeAttributeType::FocusOnTouch, false)
@@ -276,18 +290,21 @@ fn button_host(element: ButtonElement, size_style: ButtonSizeStyle) -> ButtonEle
     button
 }
 
-fn button_surface(element: ButtonElement, size_style: ButtonSizeStyle) -> ButtonElement {
+fn button_surface<Message, AppTheme>(
+    element: ButtonElement<Message, AppTheme>,
+    size_style: ButtonSizeStyle,
+) -> ButtonElement<Message, AppTheme> {
     button_host(element, size_style)
         .style(ArkUINodeAttributeType::Clip, true)
         .style(ArkUINodeAttributeType::BorderRadius, edge_all(radius::MD))
         .style(ArkUINodeAttributeType::Padding, size_style.padding.to_vec())
 }
 
-fn button_shell(
-    content: Element,
+fn button_shell<Message: 'static>(
+    content: Element<Message>,
     size_style: ButtonSizeStyle,
     variant_style: ButtonVariantStyle,
-) -> Element {
+) -> Element<Message> {
     let mut shell = arkit::row_component()
         .height(size_style.height)
         .align_items_center()
@@ -305,6 +322,15 @@ fn button_shell(
             color_all(variant_style.border_color),
         )
         .background_color(variant_style.background)
+        .patch_attr(
+            ArkUINodeAttributeType::BorderWidth,
+            edge_all(variant_style.border_width),
+        )
+        .patch_attr(
+            ArkUINodeAttributeType::BorderColor,
+            color_all(variant_style.border_color),
+        )
+        .patch_background_color(variant_style.background)
         .children(vec![content]);
 
     if let Some(width) = size_style.width {
@@ -397,19 +423,19 @@ fn variant_style(variant: ButtonVariant) -> ButtonVariantStyle {
 fn pressed_style(variant: ButtonVariant) -> Option<ButtonInteractionStyle> {
     match variant {
         ButtonVariant::Default => Some(ButtonInteractionStyle {
-            background: alpha_blend(color::PRIMARY, color::BACKGROUND, 0.9),
+            background: color::PRIMARY,
             foreground: color::PRIMARY_FOREGROUND,
             border_width: 0.0,
             border_color: TRANSPARENT,
-            opacity: 1.0,
+            opacity: 0.9,
             text_decoration: TEXT_DECORATION_NONE,
         }),
         ButtonVariant::Secondary => Some(ButtonInteractionStyle {
-            background: alpha_blend(color::SECONDARY, color::BACKGROUND, 0.8),
+            background: color::SECONDARY,
             foreground: color::SECONDARY_FOREGROUND,
             border_width: 0.0,
             border_color: TRANSPARENT,
-            opacity: 1.0,
+            opacity: 0.9,
             text_decoration: TEXT_DECORATION_NONE,
         }),
         ButtonVariant::Outline => Some(ButtonInteractionStyle {
@@ -429,11 +455,11 @@ fn pressed_style(variant: ButtonVariant) -> Option<ButtonInteractionStyle> {
             text_decoration: TEXT_DECORATION_NONE,
         }),
         ButtonVariant::Destructive => Some(ButtonInteractionStyle {
-            background: alpha_blend(color::DESTRUCTIVE, color::BACKGROUND, 0.9),
+            background: color::DESTRUCTIVE,
             foreground: WHITE,
             border_width: 0.0,
             border_color: TRANSPARENT,
-            opacity: 1.0,
+            opacity: 0.9,
             text_decoration: TEXT_DECORATION_NONE,
         }),
         ButtonVariant::Link => Some(ButtonInteractionStyle {
@@ -458,14 +484,14 @@ fn interaction_style(style: ButtonVariantStyle, opacity: f32) -> ButtonInteracti
     }
 }
 
-fn finalize_button(
-    mut button: ButtonElement,
+fn finalize_button<Message: Send + 'static>(
+    mut button: ButtonElement<Message>,
     _size_style: ButtonSizeStyle,
     variant_style: ButtonVariantStyle,
     pressed_style: Option<ButtonInteractionStyle>,
     disabled: bool,
     render_mode: ButtonRenderMode,
-) -> ButtonElement {
+) -> ButtonElement<Message> {
     let runtime_node = Rc::new(RefCell::new(None::<RuntimeButtonNode>));
     let runtime_shell = Rc::new(RefCell::new(None::<RuntimeShellNode>));
     let capture_node = runtime_node.clone();
@@ -589,12 +615,12 @@ fn finalize_button(
     button.patch_attr(ArkUINodeAttributeType::Height, _size_style.height)
 }
 
-fn button_content_row(
+fn button_content_row<Message: 'static>(
     label: Option<String>,
     icon_name: Option<String>,
     foreground: u32,
     icon_size: f32,
-) -> Element {
+) -> Element<Message> {
     let mut children = Vec::new();
 
     if let Some(icon_name) = icon_name {
@@ -602,12 +628,12 @@ fn button_content_row(
             lucide::icon(icon_name)
                 .size(icon_size)
                 .color(foreground)
-                .render(),
+                .render::<Message, arkit::Theme>(),
         );
     }
 
     if let Some(label) = label {
-        let text = arkit::text(label)
+        let text = arkit::text::<Message, arkit::Theme>(label)
             .font_size(typography::SM)
             .style(ArkUINodeAttributeType::FontColor, foreground)
             .style(ArkUINodeAttributeType::FontWeight, FONT_WEIGHT_MEDIUM)
@@ -703,26 +729,18 @@ fn apply_shell_interaction_style(node: &RuntimeShellNode, style: ButtonInteracti
     let _ = node.opacity(style.opacity);
 }
 
-fn alpha_blend(foreground: u32, background: u32, alpha: f32) -> u32 {
-    let alpha = alpha.clamp(0.0, 1.0);
-    let [_, fg_r, fg_g, fg_b] = foreground.to_be_bytes();
-    let [_, bg_r, bg_g, bg_b] = background.to_be_bytes();
-
-    let mix = |fg: u8, bg: u8| -> u8 {
-        ((fg as f32 * alpha) + (bg as f32 * (1.0 - alpha))).round() as u8
-    };
-
-    u32::from_be_bytes([0xFF, mix(fg_r, bg_r), mix(fg_g, bg_g), mix(fg_b, bg_b)])
-}
-
-fn subtle_button_shadow(element: ButtonElement) -> ButtonElement {
+fn subtle_button_shadow<Message, AppTheme>(
+    element: ButtonElement<Message, AppTheme>,
+) -> ButtonElement<Message, AppTheme> {
     element.patch_attr(
         ArkUINodeAttributeType::Shadow,
         vec![SHADOW_OUTER_DEFAULT_SM],
     )
 }
 
-fn clear_button_shadow(element: ButtonElement) -> ButtonElement {
+fn clear_button_shadow<Message, AppTheme>(
+    element: ButtonElement<Message, AppTheme>,
+) -> ButtonElement<Message, AppTheme> {
     element.patch_attr(ArkUINodeAttributeType::Shadow, vec![0_i32])
 }
 

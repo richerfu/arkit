@@ -35,14 +35,14 @@ struct AlertTone {
     icon_color: u32,
 }
 
-pub fn alert_root(
+pub fn alert_root<Message: 'static>(
     icon_name: impl Into<String>,
     variant: AlertVariant,
-    children: Vec<Element>,
-) -> Element {
+    children: Vec<Element<Message>>,
+) -> Element<Message> {
     let tone = alert_tone(variant);
 
-    arkit::stack_component()
+    arkit::stack_component::<Message, arkit::Theme>()
         .percent_width(1.0)
         .style(
             ArkUINodeAttributeType::BorderRadius,
@@ -60,7 +60,7 @@ pub fn alert_root(
         .style(ArkUINodeAttributeType::BorderColor, vec![color::BORDER])
         .background_color(color::CARD)
         .children(vec![
-            arkit::row_component()
+            arkit::row_component::<Message, arkit::Theme>()
                 .width(ALERT_ICON_SIZE)
                 .height(ALERT_ICON_SIZE)
                 .style(
@@ -70,9 +70,9 @@ pub fn alert_root(
                 .children(vec![lucide::icon(icon_name)
                     .size(ALERT_ICON_SIZE)
                     .color(tone.icon_color)
-                    .render()])
+                    .render::<Message, arkit::Theme>()])
                 .into(),
-            arkit::column_component()
+            arkit::column_component::<Message, arkit::Theme>()
                 .percent_width(1.0)
                 .align_items_start()
                 .style(
@@ -90,10 +90,13 @@ pub fn alert_root(
         .into()
 }
 
-pub fn alert_title(content: impl Into<String>, variant: AlertVariant) -> TextElement {
+pub fn alert_title<Message: 'static>(
+    content: impl Into<String>,
+    variant: AlertVariant,
+) -> TextElement<Message> {
     let tone = alert_tone(variant);
 
-    arkit::text(content)
+    arkit::text::<Message, arkit::Theme>(content)
         .font_size(typography::SM)
         .style(ArkUINodeAttributeType::FontWeight, FONT_WEIGHT_MEDIUM)
         .style(ArkUINodeAttributeType::FontColor, tone.title_color)
@@ -119,10 +122,13 @@ pub fn alert_title(content: impl Into<String>, variant: AlertVariant) -> TextEle
         )
 }
 
-pub fn alert_description(content: impl Into<String>, variant: AlertVariant) -> TextElement {
+pub fn alert_description<Message: 'static>(
+    content: impl Into<String>,
+    variant: AlertVariant,
+) -> TextElement<Message> {
     let tone = alert_tone(variant);
 
-    arkit::text(content)
+    arkit::text::<Message, arkit::Theme>(content)
         .font_size(typography::SM)
         .style(ArkUINodeAttributeType::FontColor, tone.description_color)
         .style(
@@ -143,7 +149,10 @@ pub fn alert_description(content: impl Into<String>, variant: AlertVariant) -> T
         )
 }
 
-pub fn alert_list(items: Vec<impl Into<String>>, variant: AlertVariant) -> Element {
+pub fn alert_list<Message: 'static>(
+    items: Vec<impl Into<String>>,
+    variant: AlertVariant,
+) -> Element<Message> {
     let tone = alert_tone(variant);
     let rows = items
         .into_iter()
@@ -164,9 +173,9 @@ pub fn alert_list(items: Vec<impl Into<String>>, variant: AlertVariant) -> Eleme
                 margin_top(row, 2.0).into()
             }
         })
-        .collect::<Vec<_>>();
+        .collect::<Vec<Element<Message>>>();
 
-    arkit::column_component()
+    arkit::column_component::<Message, arkit::Theme>()
         .percent_width(1.0)
         .align_items_start()
         .style(

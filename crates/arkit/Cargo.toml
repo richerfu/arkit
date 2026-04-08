@@ -6,9 +6,15 @@ license.workspace = true
 
 [features]
 default = ["api-22"]
-api-22 = ["arkit_runtime/api-22"]
+api-22 = ["arkit_widget/api-22"]
 
 [dependencies]
+arkit_core.workspace = true
 arkit_derive.workspace = true
+arkit_futures.workspace = true
 arkit_runtime.workspace = true
-arkit_router.workspace = true
+arkit_widget.workspace = true
+napi-ohos = { version = "1.1", features = ["napi8"] }
+napi-derive-ohos = "1.1"
+ohos-arkui-binding = { workspace = true, default-features = false, features = ["napi"] }
+openharmony-ability.workspace = true

@@ -9,15 +9,15 @@ fn color_all(value: u32) -> Vec<u32> {
     vec![value, value, value, value]
 }
 
-fn toggle_surface(
-    element: ButtonElement,
+fn toggle_surface<Message>(
+    element: ButtonElement<Message>,
     active: bool,
     inactive_background: u32,
     border_width: [f32; 4],
     border_color: u32,
     border_radius: [f32; 4],
     shadow: bool,
-) -> ButtonElement {
+) -> ButtonElement<Message> {
     let element = element
         .style(ArkUINodeAttributeType::Clip, true)
         .style(ArkUINodeAttributeType::BorderStyle, 0_i32)
@@ -42,14 +42,14 @@ fn toggle_surface(
     }
 }
 
-pub fn toggle(
+pub fn toggle<Message: Send + 'static>(
     label: impl Into<String>,
     state: bool,
     on_toggle: impl Fn(bool) + 'static,
-) -> Element {
+) -> Element<Message> {
     let label_text = label.into();
     toggle_surface(
-        normal_button(label_text)
+        normal_button::<Message, arkit::Theme>(label_text)
             .height(40.0)
             .style(ArkUINodeAttributeType::Padding, vec![8.0, 10.0, 8.0, 10.0])
             .font_size(typography::SM)
@@ -77,14 +77,27 @@ pub fn toggle(
     .into()
 }
 
-pub fn toggle_icon(
+pub fn toggle_message<Message>(
+    label: impl Into<String>,
+    state: bool,
+    on_toggle: impl Fn(bool) -> Message + 'static,
+) -> Element<Message>
+where
+    Message: Send + 'static,
+{
+    toggle(label, state, move |value| {
+        dispatch_message(on_toggle(value))
+    })
+}
+
+pub fn toggle_icon<Message: Send + 'static>(
     icon_name: impl Into<String>,
     state: bool,
     on_toggle: impl Fn(bool) + 'static,
-) -> Element {
+) -> Element<Message> {
     let icon = icon_name.into();
     toggle_surface(
-        normal_button_component()
+        normal_button_component::<Message, arkit::Theme>()
             .width(40.0)
             .height(40.0)
             .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
@@ -95,7 +108,7 @@ pub fn toggle_icon(
                 } else {
                     color::FOREGROUND
                 })
-                .render()]),
+                .render::<Message, arkit::Theme>()]),
         state,
         TRANSPARENT,
         [0.0, 0.0, 0.0, 0.0],
@@ -105,4 +118,17 @@ pub fn toggle_icon(
     )
     .on_click(move || on_toggle(!state))
     .into()
+}
+
+pub fn toggle_icon_message<Message>(
+    icon_name: impl Into<String>,
+    state: bool,
+    on_toggle: impl Fn(bool) -> Message + 'static,
+) -> Element<Message>
+where
+    Message: Send + 'static,
+{
+    toggle_icon(icon_name, state, move |value| {
+        dispatch_message(on_toggle(value))
+    })
 }
