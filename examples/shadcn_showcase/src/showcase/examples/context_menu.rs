@@ -54,8 +54,6 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                             shadcn::context_menu_separator(),
                             shadcn::context_menu_item_destructive("Delete"),
                         ],
-                        ctx.context_submenu_open,
-                        Message::SetContextSubmenuOpen,
                     ),
                     shadcn::context_menu_separator(),
                     shadcn::context_menu_checkbox_item(

@@ -28,8 +28,6 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                             shadcn::dropdown_separator(),
                             shadcn::dropdown_item("More..."),
                         ],
-                        ctx.dropdown_submenu_open,
-                        Message::SetDropdownSubmenuOpen,
                     ),
                     shadcn::dropdown_item_with_shortcut("New Team", "⌘+T"),
                     shadcn::dropdown_separator(),

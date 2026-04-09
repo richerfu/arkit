@@ -278,6 +278,7 @@ fn button_host<Message, AppTheme>(
         .style(ArkUINodeAttributeType::Clip, true)
         .style(ArkUINodeAttributeType::BorderStyle, 0_i32)
         .style(ArkUINodeAttributeType::BorderRadius, edge_all(radius::MD))
+        .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
         .height(size_style.height)
         .style(ArkUINodeAttributeType::BorderWidth, edge_all(0.0))
         .style(ArkUINodeAttributeType::BorderColor, color_all(TRANSPARENT))
@@ -375,6 +376,7 @@ fn size_style(size: ButtonSize) -> ButtonSizeStyle {
 
 fn variant_style(variant: ButtonVariant) -> ButtonVariantStyle {
     match variant {
+        // bg-primary, shadow-sm
         ButtonVariant::Default => ButtonVariantStyle {
             background: color::PRIMARY,
             foreground: color::PRIMARY_FOREGROUND,
@@ -382,6 +384,7 @@ fn variant_style(variant: ButtonVariant) -> ButtonVariantStyle {
             border_color: TRANSPARENT,
             shadow: true,
         },
+        // bg-secondary, shadow-sm
         ButtonVariant::Secondary => ButtonVariantStyle {
             background: color::SECONDARY,
             foreground: color::SECONDARY_FOREGROUND,
@@ -389,6 +392,7 @@ fn variant_style(variant: ButtonVariant) -> ButtonVariantStyle {
             border_color: TRANSPARENT,
             shadow: true,
         },
+        // border-border bg-background, shadow-sm
         ButtonVariant::Outline => ButtonVariantStyle {
             background: color::BACKGROUND,
             foreground: color::FOREGROUND,
@@ -396,6 +400,7 @@ fn variant_style(variant: ButtonVariant) -> ButtonVariantStyle {
             border_color: color::BORDER,
             shadow: true,
         },
+        // no bg, no shadow
         ButtonVariant::Ghost => ButtonVariantStyle {
             background: TRANSPARENT,
             foreground: color::FOREGROUND,
@@ -403,6 +408,7 @@ fn variant_style(variant: ButtonVariant) -> ButtonVariantStyle {
             border_color: TRANSPARENT,
             shadow: false,
         },
+        // bg-destructive, shadow-sm
         ButtonVariant::Destructive => ButtonVariantStyle {
             background: color::DESTRUCTIVE,
             foreground: WHITE,
@@ -410,6 +416,7 @@ fn variant_style(variant: ButtonVariant) -> ButtonVariantStyle {
             border_color: TRANSPARENT,
             shadow: true,
         },
+        // no bg, no shadow
         ButtonVariant::Link => ButtonVariantStyle {
             background: TRANSPARENT,
             foreground: color::PRIMARY,
@@ -420,24 +427,36 @@ fn variant_style(variant: ButtonVariant) -> ButtonVariantStyle {
     }
 }
 
+/// Approximate color/90 by blending with alpha on white background.
+fn color_alpha(color: u32, alpha_percent: u32) -> u32 {
+    let a = ((alpha_percent * 255) / 100) as u32;
+    let r = (color >> 16) & 0xFF;
+    let g = (color >> 8) & 0xFF;
+    let b = color & 0xFF;
+    (a << 24) | (r << 16) | (g << 8) | b
+}
+
 fn pressed_style(variant: ButtonVariant) -> Option<ButtonInteractionStyle> {
     match variant {
+        // active:bg-primary/90
         ButtonVariant::Default => Some(ButtonInteractionStyle {
-            background: color::PRIMARY,
+            background: color_alpha(color::PRIMARY, 90),
             foreground: color::PRIMARY_FOREGROUND,
             border_width: 0.0,
             border_color: TRANSPARENT,
-            opacity: 0.9,
+            opacity: 1.0,
             text_decoration: TEXT_DECORATION_NONE,
         }),
+        // active:bg-secondary/80
         ButtonVariant::Secondary => Some(ButtonInteractionStyle {
-            background: color::SECONDARY,
+            background: color_alpha(color::SECONDARY, 80),
             foreground: color::SECONDARY_FOREGROUND,
             border_width: 0.0,
             border_color: TRANSPARENT,
-            opacity: 0.9,
+            opacity: 1.0,
             text_decoration: TEXT_DECORATION_NONE,
         }),
+        // active:bg-accent, group-active:text-accent-foreground
         ButtonVariant::Outline => Some(ButtonInteractionStyle {
             background: color::ACCENT,
             foreground: color::ACCENT_FOREGROUND,
@@ -446,6 +465,7 @@ fn pressed_style(variant: ButtonVariant) -> Option<ButtonInteractionStyle> {
             opacity: 1.0,
             text_decoration: TEXT_DECORATION_NONE,
         }),
+        // active:bg-accent, group-active:text-accent-foreground
         ButtonVariant::Ghost => Some(ButtonInteractionStyle {
             background: color::ACCENT,
             foreground: color::ACCENT_FOREGROUND,
@@ -454,14 +474,16 @@ fn pressed_style(variant: ButtonVariant) -> Option<ButtonInteractionStyle> {
             opacity: 1.0,
             text_decoration: TEXT_DECORATION_NONE,
         }),
+        // active:bg-destructive/90
         ButtonVariant::Destructive => Some(ButtonInteractionStyle {
-            background: color::DESTRUCTIVE,
+            background: color_alpha(color::DESTRUCTIVE, 90),
             foreground: WHITE,
             border_width: 0.0,
             border_color: TRANSPARENT,
-            opacity: 0.9,
+            opacity: 1.0,
             text_decoration: TEXT_DECORATION_NONE,
         }),
+        // group-active:underline
         ButtonVariant::Link => Some(ButtonInteractionStyle {
             background: TRANSPARENT,
             foreground: color::PRIMARY,
@@ -494,7 +516,6 @@ fn finalize_button<Message: Send + 'static>(
 ) -> ButtonElement<Message> {
     let runtime_node = Rc::new(RefCell::new(None::<RuntimeButtonNode>));
     let runtime_shell = Rc::new(RefCell::new(None::<RuntimeShellNode>));
-    let capture_node = runtime_node.clone();
     let normal_style = ButtonInteractionStyle {
         text_decoration: TEXT_DECORATION_NONE,
         ..interaction_style(variant_style, if disabled { 0.5 } else { 1.0 })
@@ -510,12 +531,23 @@ fn finalize_button<Message: Send + 'static>(
         ButtonRenderMode::Shell => transparent_style(if disabled { 0.5 } else { 1.0 }),
     };
 
-    button = button.native(move |node| {
-        let runtime = RuntimeButtonNode(node.borrow_mut().clone());
-        apply_interaction_style(&runtime, host_style);
-        capture_node.replace(Some(runtime));
-        Ok(())
-    });
+    {
+        let capture_node = runtime_node.clone();
+        let capture_shell = runtime_shell.clone();
+        button = button.with_patch(move |node| {
+            let runtime = RuntimeButtonNode(node.clone());
+            apply_interaction_style(&runtime, host_style);
+            capture_node.replace(Some(runtime));
+            if matches!(render_mode, ButtonRenderMode::Shell) {
+                if let Some(shell) = node.children().first() {
+                    let shell_runtime = RuntimeShellNode(shell.borrow().clone());
+                    apply_shell_interaction_style(&shell_runtime, normal_style);
+                    capture_shell.replace(Some(shell_runtime));
+                }
+            }
+            Ok(())
+        });
+    }
 
     if matches!(render_mode, ButtonRenderMode::Host) {
         button = button
@@ -527,30 +559,7 @@ fn finalize_button<Message: Send + 'static>(
                 ArkUINodeAttributeType::BorderColor,
                 color_all(variant_style.border_color),
             );
-    } else {
-        let attach_button = runtime_node.clone();
-        let attach_shell = runtime_shell.clone();
-        button =
-            button.on_event_no_param(arkit::prelude::NodeEventType::EventOnAttach, move || {
-                let button_binding = attach_button.borrow();
-                let Some(node) = button_binding.as_ref() else {
-                    return;
-                };
-                let Some(shell) = node.0.children().first() else {
-                    return;
-                };
-                let runtime = RuntimeShellNode(shell.borrow().clone());
-                apply_shell_interaction_style(&runtime, normal_style);
-                attach_shell.replace(Some(runtime));
-            });
     }
-
-    let detach_node = runtime_node.clone();
-    let detach_shell = runtime_shell.clone();
-    button = button.on_event_no_param(arkit::prelude::NodeEventType::EventOnDetach, move || {
-        detach_node.borrow_mut().take();
-        detach_shell.borrow_mut().take();
-    });
 
     if !disabled {
         if let Some(pressed_style) = pressed_style {

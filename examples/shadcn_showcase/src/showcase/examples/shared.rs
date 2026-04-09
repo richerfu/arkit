@@ -20,9 +20,7 @@ pub(crate) struct DemoContext {
     pub query: String,
     pub toggle_state: bool,
     pub context_menu_open: bool,
-    pub context_submenu_open: bool,
     pub dropdown_menu_open: bool,
-    pub dropdown_submenu_open: bool,
     pub popover_open: bool,
     pub tooltip_open: bool,
     pub select_open: bool,
@@ -34,6 +32,7 @@ pub(crate) struct DemoContext {
     pub checkbox_second: bool,
     pub checkbox_card: bool,
     pub toggle_group_values: Vec<String>,
+    pub menubar_active: Option<usize>,
 }
 
 fn showcase_horizontal_padding(value: f32) -> f32 {

@@ -11,7 +11,9 @@ use arkit_runtime::{
     },
     Program, SubscriptionHandle,
 };
-use arkit_widget::{mount, patch, Element, MountedNode, Renderer};
+use arkit_widget::{
+    begin_render_pass, end_render_pass, mount, patch, Element, MountedNode, Renderer,
+};
 use napi_ohos::{Error, Result};
 use ohos_arkui_binding::common::handle::ArkUIHandle;
 use ohos_arkui_binding::common::node::ArkUINode;
@@ -201,8 +203,13 @@ where
     }
 
     fn render(&self) -> Element<P::Message, P::Theme> {
-        let state = self.state.borrow();
-        self.program.view(&state, window::Id::MAIN)
+        begin_render_pass();
+        let element = {
+            let state = self.state.borrow();
+            self.program.view(&state, window::Id::MAIN)
+        };
+        end_render_pass();
+        element
     }
 
     fn enqueue(&self, message: P::Message) -> bool {

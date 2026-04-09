@@ -41,26 +41,11 @@ fn nav_title_text(title: impl Into<String>, home: bool) -> Element {
 }
 
 fn plain_back_button() -> Element {
-    arkit::row_component()
+    shadcn::icon_button_with_variant("chevron-left", shadcn::ButtonVariant::Ghost)
         .width(36.0)
         .height(36.0)
-        .align_items_center()
-        .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
-        .style(
-            ArkUINodeAttributeType::BorderRadius,
-            vec![
-                shadcn::theme::radius::MD,
-                shadcn::theme::radius::MD,
-                shadcn::theme::radius::MD,
-                shadcn::theme::radius::MD,
-            ],
-        )
+        .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
         .on_press(Message::Back)
-        .children(vec![lucide::icon("chevron-left")
-            .size(20.0)
-            .stroke_width(2.0)
-            .color(shadcn::theme::color::FOREGROUND)
-            .render()])
         .into()
 }
 

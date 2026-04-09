@@ -92,6 +92,7 @@ dependencies = [
  "arkit_runtime",
  "ohos-arkui-binding 0.1.0",
  "ohos-arkui-sys 0.0.1",
+ "ohos-display-binding 0.0.1",
  "ohos-hilog-binding",
 ]
 

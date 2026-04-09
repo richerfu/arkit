@@ -4,24 +4,26 @@ pub use arkit_core::advanced;
 pub use arkit_core::theme;
 pub use arkit_core::{window, Horizontal, Length, Padding, Settings, Size, Theme, Vertical};
 pub use arkit_derive::entry;
-pub use arkit_widget::Renderer;
-pub use ohos::{
-    mount_application, mount_entry, napi_derive_ohos, napi_ohos, ohos_arkui_binding,
-    openharmony_ability, ApplicationRuntime, EntryPoint, MountedEntryHandle,
-};
 pub use arkit_runtime::{Application, Preset, Program, Subscription, SubscriptionHandle, Task};
+pub use arkit_widget::Renderer;
 pub use arkit_widget::{
     button, button_component, calendar_picker, calendar_picker_component, checkbox,
-    checkbox_component, column, column_component, container, date_picker, date_picker_component,
-    image, image_component, progress, progress_component, radio, radio_component, row,
+    checkbox_component, column, column_component, compose_registered_overlays, container,
+    date_picker, date_picker_component, floating_overlay, floating_overlay_with_builder, image,
+    image_component, modal_overlay, progress, progress_component, radio, radio_component, row,
     row_component, scroll, scroll_component, slider, slider_component, stack, stack_component,
     swiper, swiper_component, text, text_area, text_area_component, text_component, text_input,
     text_input_component, toggle, toggle_component, ArkEvent, ArkUINodeAttributeItem,
     ArkUINodeAttributeType, ButtonElement, CalendarPickerElement, CheckboxElement,
-    ContainerElement, DatePickerElement, Element, LayoutFrame, LayoutSize, LifecycleEvent,
+    ContainerElement, DatePickerElement, Element, FloatingAlign, FloatingOverlaySpec, FloatingSide,
+    LayoutFrame, LayoutSize, LifecycleEvent, ModalOverlaySpec, ModalPresentation,
     NativeOverlayPlacement, Node, NodeCustomEvent, NodeCustomEventType, NodeEventType,
-    ProgressElement, RadioElement, RowElement, ScrollElement, SliderElement, SwiperElement,
-    TextAreaElement, TextElement, TextInputElement, ToggleElement,
+    OverlayDismissMode, OverlayStrategy, ProgressElement, RadioElement, RowElement, ScrollElement,
+    SliderElement, SwiperElement, TextAreaElement, TextElement, TextInputElement, ToggleElement,
+};
+pub use ohos::{
+    mount_application, mount_entry, napi_derive_ohos, napi_ohos, ohos_arkui_binding,
+    openharmony_ability, ApplicationRuntime, EntryPoint, MountedEntryHandle,
 };
 
 pub fn application<State, Message, Boot, Update, View>(
@@ -69,9 +71,11 @@ pub mod prelude {
     pub use crate::widget::*;
     pub use crate::{
         application, entry, run, window, ArkEvent, ArkUINodeAttributeItem, ArkUINodeAttributeType,
-        Element, Horizontal, Length, LifecycleEvent, NodeCustomEvent, NodeCustomEventType,
-        NodeEventType, Padding, Program, Renderer, Settings, Size, Subscription,
-        SubscriptionHandle, Task, Theme, Vertical,
+        Element, FloatingAlign, FloatingOverlaySpec, FloatingSide, Horizontal, LayoutFrame,
+        LayoutSize, Length, LifecycleEvent, ModalOverlaySpec, ModalPresentation,
+        NativeOverlayPlacement, NodeCustomEvent, NodeCustomEventType, NodeEventType,
+        OverlayDismissMode, OverlayStrategy, Padding, Program, Renderer, Settings, Size,
+        Subscription, SubscriptionHandle, Task, Theme, Vertical,
     };
 }
 

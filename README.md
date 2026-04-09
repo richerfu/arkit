@@ -30,6 +30,7 @@ dedicated crates and are re-exported here.
 - `Task<Message>` / `Subscription<Message>`: message-driven side effects
 - `NavigationStack<T>`: explicit application-state navigation for example apps
 - `#[component]`: a no-op marker for reusable view helpers; it does not create hidden state
+- `floating_overlay` / `modal_overlay`: shared detached overlay primitives for popups, menus, dialogs, sheets, and drawers
 
 ## Shadcn Component Crate
 
@@ -61,6 +62,12 @@ For full style/attribute coverage, use the `Node` builder methods:
 - `Node::on_event(NodeEventType, ...)` for all node events
 - `Node::on_custom_event(NodeCustomEventType, ...)` for all custom events
 - `Node::native(|native| { ... })` for direct ArkUI node access
+
+For detached layers, `arkit::prelude::*` also exports:
+
+- `FloatingOverlaySpec`, `FloatingSide`, `FloatingAlign`
+- `ModalOverlaySpec`, `ModalPresentation`
+- `OverlayDismissMode`, `OverlayStrategy`
 
 ## Example
 

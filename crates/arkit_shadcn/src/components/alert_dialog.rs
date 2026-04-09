@@ -43,21 +43,6 @@ pub fn alert_dialog_with_message<Message: 'static>(
     .into()
 }
 
-pub fn alert_dialog_modal(
-    open: bool,
-    on_open_change: impl Fn(bool) + 'static,
-    title: impl Into<String>,
-    description: impl Into<String>,
-    actions: Vec<Element>,
-) -> Element {
-    let dismiss = Rc::new(move || on_open_change(false));
-    super::dialog::modal_overlay(
-        open,
-        alert_dialog(title, description, actions),
-        Some(dismiss),
-    )
-}
-
 pub fn alert_dialog_modal_message<Message>(
     open: bool,
     on_open_change: impl Fn(bool) -> Message + 'static,

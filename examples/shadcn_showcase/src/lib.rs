@@ -28,9 +28,7 @@ enum Message {
     SetQuery(String),
     SetToggleState(bool),
     SetContextMenuOpen(bool),
-    SetContextSubmenuOpen(bool),
     SetDropdownMenuOpen(bool),
-    SetDropdownSubmenuOpen(bool),
     SetPopoverOpen(bool),
     SetTooltipOpen(bool),
     SetSelectOpen(bool),
@@ -42,6 +40,7 @@ enum Message {
     SetCheckboxSecond(bool),
     SetCheckboxCard(bool),
     SetToggleGroupValues(Vec<String>),
+    SetMenubarActive(Option<usize>),
 }
 
 #[derive(Debug, Clone)]
@@ -55,9 +54,7 @@ struct ShowcaseState {
     query: String,
     toggle_state: bool,
     context_menu_open: bool,
-    context_submenu_open: bool,
     dropdown_menu_open: bool,
-    dropdown_submenu_open: bool,
     popover_open: bool,
     tooltip_open: bool,
     select_open: bool,
@@ -69,6 +66,7 @@ struct ShowcaseState {
     checkbox_second: bool,
     checkbox_card: bool,
     toggle_group_values: Vec<String>,
+    menubar_active: Option<usize>,
 }
 
 impl Default for ShowcaseState {
@@ -83,9 +81,7 @@ impl Default for ShowcaseState {
             query: String::new(),
             toggle_state: false,
             context_menu_open: false,
-            context_submenu_open: false,
             dropdown_menu_open: false,
-            dropdown_submenu_open: false,
             popover_open: false,
             tooltip_open: false,
             select_open: false,
@@ -97,6 +93,7 @@ impl Default for ShowcaseState {
             checkbox_second: false,
             checkbox_card: false,
             toggle_group_values: vec![String::from("bold")],
+            menubar_active: None,
         }
     }
 }
@@ -115,9 +112,7 @@ impl ShowcaseState {
             query: self.query.clone(),
             toggle_state: self.toggle_state,
             context_menu_open: self.context_menu_open,
-            context_submenu_open: self.context_submenu_open,
             dropdown_menu_open: self.dropdown_menu_open,
-            dropdown_submenu_open: self.dropdown_submenu_open,
             popover_open: self.popover_open,
             tooltip_open: self.tooltip_open,
             select_open: self.select_open,
@@ -129,6 +124,7 @@ impl ShowcaseState {
             checkbox_second: self.checkbox_second,
             checkbox_card: self.checkbox_card,
             toggle_group_values: self.toggle_group_values.clone(),
+            menubar_active: self.menubar_active,
         }
     }
 
@@ -140,9 +136,7 @@ impl ShowcaseState {
         self.query.clear();
         self.toggle_state = false;
         self.context_menu_open = false;
-        self.context_submenu_open = false;
         self.dropdown_menu_open = false;
-        self.dropdown_submenu_open = false;
         self.popover_open = false;
         self.tooltip_open = false;
         self.select_open = false;
@@ -154,6 +148,7 @@ impl ShowcaseState {
         self.checkbox_second = false;
         self.checkbox_card = false;
         self.toggle_group_values = vec![String::from("bold")];
+        self.menubar_active = None;
     }
 }
 
@@ -174,20 +169,8 @@ fn update(state: &mut ShowcaseState, message: Message) -> Task<Message> {
         Message::SetSelectChoice(value) => state.select_choice = value,
         Message::SetQuery(value) => state.query = value,
         Message::SetToggleState(value) => state.toggle_state = value,
-        Message::SetContextMenuOpen(value) => {
-            state.context_menu_open = value;
-            if !value {
-                state.context_submenu_open = false;
-            }
-        }
-        Message::SetContextSubmenuOpen(value) => state.context_submenu_open = value,
-        Message::SetDropdownMenuOpen(value) => {
-            state.dropdown_menu_open = value;
-            if !value {
-                state.dropdown_submenu_open = false;
-            }
-        }
-        Message::SetDropdownSubmenuOpen(value) => state.dropdown_submenu_open = value,
+        Message::SetContextMenuOpen(value) => state.context_menu_open = value,
+        Message::SetDropdownMenuOpen(value) => state.dropdown_menu_open = value,
         Message::SetPopoverOpen(value) => state.popover_open = value,
         Message::SetTooltipOpen(value) => state.tooltip_open = value,
         Message::SetSelectOpen(value) => state.select_open = value,
@@ -199,6 +182,7 @@ fn update(state: &mut ShowcaseState, message: Message) -> Task<Message> {
         Message::SetCheckboxSecond(value) => state.checkbox_second = value,
         Message::SetCheckboxCard(value) => state.checkbox_card = value,
         Message::SetToggleGroupValues(value) => state.toggle_group_values = value,
+        Message::SetMenubarActive(value) => state.menubar_active = value,
     }
 
     Task::none()

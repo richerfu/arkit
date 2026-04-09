@@ -1,5 +1,3 @@
-use std::any::{Any, TypeId};
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Length {
     Shrink,
@@ -272,7 +270,7 @@ pub mod layout {
 
 pub mod advanced {
     use super::{clipboard, event, layout, mouse, theme, Element, Length, Size, Theme};
-    use std::any::{Any, TypeId};
+    use std::any::Any;
 
     pub mod widget {
         use std::any::{Any, TypeId};
@@ -327,6 +325,14 @@ pub mod advanced {
                 }
             }
 
+            pub fn with(tag: Tag, state: State, children: Vec<Tree>) -> Self {
+                Self {
+                    tag,
+                    state,
+                    children,
+                }
+            }
+
             pub fn tag(&self) -> Tag {
                 self.tag
             }
@@ -337,6 +343,14 @@ pub mod advanced {
 
             pub fn children(&self) -> &[Tree] {
                 &self.children
+            }
+
+            pub fn children_mut(&mut self) -> &mut Vec<Tree> {
+                &mut self.children
+            }
+
+            pub fn child_mut(&mut self, index: usize) -> Option<&mut Tree> {
+                self.children.get_mut(index)
             }
 
             pub fn replace_children(&mut self, children: Vec<Tree>) {
@@ -391,17 +405,33 @@ pub mod advanced {
         ) {
         }
 
-        fn overlay<'a>(
-            &'a mut self,
-            _tree: &'a mut widget::Tree,
-            _layout: layout::Layout<'a>,
+        fn body(
+            &self,
+            _tree: &mut widget::Tree,
             _renderer: &Renderer,
-        ) -> Option<Element<'a, Message, AppTheme, Renderer>> {
+        ) -> Option<Element<'static, Message, AppTheme, Renderer>> {
             None
         }
 
+        fn overlay(
+            &self,
+            _tree: &mut widget::Tree,
+            _renderer: &Renderer,
+        ) -> Option<Element<'static, Message, AppTheme, Renderer>> {
+            None
+        }
+
+        fn as_any(&self) -> &dyn Any;
+
         #[doc(hidden)]
         fn into_any(self: Box<Self>) -> Box<dyn Any>;
+    }
+
+    pub fn tree_of<Message: 'static, AppTheme: 'static, Renderer: 'static>(
+        element: &Element<'static, Message, AppTheme, Renderer>,
+    ) -> widget::Tree {
+        let widget = element.as_widget();
+        widget::Tree::with(widget.tag(), widget.state(), widget.children())
     }
 
     pub struct Shell<'a, Message> {

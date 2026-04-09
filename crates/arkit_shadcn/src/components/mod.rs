@@ -119,7 +119,11 @@ pub use hover_card::{
 pub use input::*;
 pub use input_otp::*;
 pub use label::*;
-pub use menubar::*;
+pub use menubar::{
+    menubar, menubar_item, menubar_item_active, menubar_menu,
+    menubar_message as menubar_with_menus, MenubarEntry, MenubarMenuSpec,
+};
+pub use menu_common::MenuEntry;
 pub use navigation_menu::*;
 pub use pagination::*;
 pub use popover::{
@@ -268,8 +272,8 @@ pub(crate) fn rounded_menubar_surface<Message>(
     element: RowElement<Message>,
 ) -> RowElement<Message> {
     element
-        .style(ArkUINodeAttributeType::Padding, vec![4.0, 4.0, 4.0, 4.0])
-        .height(40.0)
+        .style(ArkUINodeAttributeType::Padding, vec![3.0, 3.0, 3.0, 3.0])
+        .height(36.0)
         .align_items_center()
         .style(
             ArkUINodeAttributeType::BorderRadius,

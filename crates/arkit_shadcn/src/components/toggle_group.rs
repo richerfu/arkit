@@ -1,7 +1,8 @@
 use super::*;
-use arkit::ohos_arkui_binding::types::alignment::Alignment;
-use arkit::ohos_arkui_binding::types::text_alignment::TextAlignment;
 use arkit_icon as lucide;
+
+const TRANSPARENT: u32 = 0x00000000;
+const FLEX_ALIGN_CENTER: i32 = 2;
 
 fn toggle_group_border(index: usize) -> [f32; 4] {
     [1.0, 1.0, 1.0, if index == 0 { 1.0 } else { 0.0 }]
@@ -27,28 +28,40 @@ fn toggle_group_shell<Message: 'static>(children: Vec<Element<Message>>) -> Elem
     .into()
 }
 
-fn toggle_group_item_surface<Message>(
-    element: ButtonElement<Message>,
+fn toggle_group_item<Message: 'static>(
+    content: Element<Message>,
     active: bool,
-    border_width: [f32; 4],
-    border_radius: [f32; 4],
-) -> ButtonElement<Message> {
-    element
+    index: usize,
+    total: usize,
+    width: Option<f32>,
+    height: f32,
+    padding: [f32; 4],
+) -> RowElement<Message> {
+    let border_width = toggle_group_border(index);
+    let border_radius = toggle_group_radius(index, total);
+
+    let mut item = arkit::row_component::<Message, arkit::Theme>()
+        .align_items_center()
+        .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
         .style(ArkUINodeAttributeType::Clip, true)
         .style(ArkUINodeAttributeType::BorderStyle, 0_i32)
-        .style(ArkUINodeAttributeType::AlignSelf, 1_i32)
         .style(ArkUINodeAttributeType::BorderRadius, border_radius.to_vec())
         .style(ArkUINodeAttributeType::BorderWidth, border_width.to_vec())
-        .style(ArkUINodeAttributeType::BorderColor, vec![color::INPUT])
         .style(
-            ArkUINodeAttributeType::Alignment,
-            i32::from(Alignment::Center),
+            ArkUINodeAttributeType::BorderColor,
+            vec![color::INPUT, color::INPUT, color::INPUT, color::INPUT],
         )
-        .patch_background_color(if active {
-            color::ACCENT
-        } else {
-            color::BACKGROUND
-        })
+        .style(ArkUINodeAttributeType::Padding, padding.to_vec())
+        .background_color(if active { color::ACCENT } else { TRANSPARENT })
+        .patch_background_color(if active { color::ACCENT } else { TRANSPARENT })
+        .height(height)
+        .children(vec![content]);
+
+    if let Some(w) = width {
+        item = item.width(w);
+    }
+
+    item
 }
 
 pub fn toggle_group(
@@ -67,27 +80,25 @@ pub fn toggle_group(
             let active = selected == text;
             let on_select = on_select.clone();
 
-            toggle_group_item_surface(
-                normal_button(text.clone())
-                    .height(40.0)
-                    .style(ArkUINodeAttributeType::Padding, vec![8.0, 10.0, 8.0, 10.0])
+            toggle_group_item(
+                arkit::text(text.clone())
                     .font_size(typography::SM)
                     .style(ArkUINodeAttributeType::FontWeight, 4_i32)
                     .style(
-                        ArkUINodeAttributeType::TextAlign,
-                        i32::from(TextAlignment::Center),
-                    )
-                    .patch_attr(
                         ArkUINodeAttributeType::FontColor,
                         if active {
                             color::ACCENT_FOREGROUND
                         } else {
                             color::FOREGROUND
                         },
-                    ),
+                    )
+                    .into(),
                 active,
-                toggle_group_border(index),
-                toggle_group_radius(index, total),
+                index,
+                total,
+                None,
+                40.0,
+                [8.0, 10.0, 8.0, 10.0],
             )
             .on_click(move || on_select(text.clone()))
             .into()
@@ -126,22 +137,21 @@ pub fn toggle_group_icons(
             let active = selected == icon_name;
             let on_select = on_select.clone();
 
-            toggle_group_item_surface(
-                normal_button_component()
-                    .width(40.0)
-                    .height(40.0)
-                    .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
-                    .children(vec![lucide::icon(icon_name.clone())
-                        .size(16.0)
-                        .color(if active {
-                            color::ACCENT_FOREGROUND
-                        } else {
-                            color::FOREGROUND
-                        })
-                        .render()]),
+            toggle_group_item(
+                lucide::icon(icon_name.clone())
+                    .size(16.0)
+                    .color(if active {
+                        color::ACCENT_FOREGROUND
+                    } else {
+                        color::FOREGROUND
+                    })
+                    .render(),
                 active,
-                toggle_group_border(index),
-                toggle_group_radius(index, total),
+                index,
+                total,
+                Some(40.0),
+                40.0,
+                [0.0, 0.0, 0.0, 0.0],
             )
             .on_click(move || on_select(icon_name.clone()))
             .into()
@@ -180,27 +190,25 @@ pub fn toggle_group_multi(
             let on_change = on_change.clone();
             let selected_values = selected.clone();
 
-            toggle_group_item_surface(
-                normal_button(text.clone())
-                    .height(40.0)
-                    .style(ArkUINodeAttributeType::Padding, vec![8.0, 10.0, 8.0, 10.0])
+            toggle_group_item(
+                arkit::text(text.clone())
                     .font_size(typography::SM)
                     .style(ArkUINodeAttributeType::FontWeight, 4_i32)
                     .style(
-                        ArkUINodeAttributeType::TextAlign,
-                        i32::from(TextAlignment::Center),
-                    )
-                    .patch_attr(
                         ArkUINodeAttributeType::FontColor,
                         if active {
                             color::ACCENT_FOREGROUND
                         } else {
                             color::FOREGROUND
                         },
-                    ),
+                    )
+                    .into(),
                 active,
-                toggle_group_border(index),
-                toggle_group_radius(index, total),
+                index,
+                total,
+                None,
+                40.0,
+                [8.0, 10.0, 8.0, 10.0],
             )
             .on_click(move || {
                 let mut next = selected_values.clone();
@@ -247,22 +255,21 @@ pub fn toggle_group_icons_multi<Message: Send + 'static>(
             let on_change = on_change.clone();
             let selected_values = selected.clone();
 
-            toggle_group_item_surface(
-                normal_button_component::<Message, arkit::Theme>()
-                    .width(40.0)
-                    .height(40.0)
-                    .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
-                    .children(vec![lucide::icon(icon_name.clone())
-                        .size(16.0)
-                        .color(if active {
-                            color::ACCENT_FOREGROUND
-                        } else {
-                            color::FOREGROUND
-                        })
-                        .render::<Message, arkit::Theme>()]),
+            toggle_group_item(
+                lucide::icon(icon_name.clone())
+                    .size(16.0)
+                    .color(if active {
+                        color::ACCENT_FOREGROUND
+                    } else {
+                        color::FOREGROUND
+                    })
+                    .render::<Message, arkit::Theme>(),
                 active,
-                toggle_group_border(index),
-                toggle_group_radius(index, total),
+                index,
+                total,
+                Some(40.0),
+                40.0,
+                [0.0, 0.0, 0.0, 0.0],
             )
             .on_click(move || {
                 let mut next = selected_values.clone();
