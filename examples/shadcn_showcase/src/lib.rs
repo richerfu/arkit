@@ -1,5 +1,6 @@
 use arkit::entry;
 use arkit::{application, Element as ArkElement, Task};
+use std::ffi::CString;
 
 mod showcase;
 
@@ -20,6 +21,7 @@ enum Route {
 enum Message {
     Navigate(Route),
     Back,
+    ButtonPreviewPressed(String),
     SetHomeSearch(String),
     SetActiveTab(usize),
     SetPage(i32),
@@ -47,6 +49,7 @@ enum Message {
 struct ShowcaseState {
     route: Route,
     home_search: String,
+    button_preview_feedback: Option<String>,
     active_tab: usize,
     page: i32,
     radio_choice: String,
@@ -74,6 +77,7 @@ impl Default for ShowcaseState {
         Self {
             route: Route::Home,
             home_search: String::new(),
+            button_preview_feedback: None,
             active_tab: 0,
             page: 1,
             radio_choice: String::from("Default"),
@@ -107,6 +111,7 @@ impl ShowcaseState {
         DemoContext {
             active_tab: self.active_tab,
             page: self.page,
+            button_preview_feedback: self.button_preview_feedback.clone(),
             radio_choice: self.radio_choice.clone(),
             select_choice: self.select_choice.clone(),
             query: self.query.clone(),
@@ -131,6 +136,7 @@ impl ShowcaseState {
     fn reset_component_demo_state(&mut self) {
         self.active_tab = 0;
         self.page = 1;
+        self.button_preview_feedback = None;
         self.radio_choice = String::from("Default");
         self.select_choice = String::from("Apple");
         self.query.clear();
@@ -161,6 +167,24 @@ fn update(state: &mut ShowcaseState, message: Message) -> Task<Message> {
         Message::Back => {
             state.reset_component_demo_state();
             state.route = Route::Home;
+        }
+        Message::ButtonPreviewPressed(label) => {
+            state.button_preview_feedback =
+                Some(format!("Last action: button preview pressed: {label}"));
+            if let (Ok(tag), Ok(content)) = (
+                CString::new("shadcn_showcase"),
+                CString::new(format!("button preview pressed: {label}")),
+            ) {
+                unsafe {
+                    ohos_hilogs_sys::OH_LOG_Print(
+                        ohos_hilogs_sys::LogType_LOG_APP,
+                        ohos_hilogs_sys::LogLevel_LOG_INFO,
+                        ohos_hilogs_sys::LOG_DOMAIN,
+                        tag.as_ptr(),
+                        content.as_ptr(),
+                    );
+                }
+            }
         }
         Message::SetHomeSearch(value) => state.home_search = value,
         Message::SetActiveTab(value) => state.active_tab = value,

@@ -949,11 +949,31 @@ where
         .percent_height(1.0)
         .background_color(spec.backdrop_color);
 
-    if spec.dismiss_on_backdrop {
-        if let Some(dismiss) = on_dismiss {
-            backdrop = backdrop.on_click(move || dismiss());
+    let backdrop_dismiss = on_dismiss.clone();
+    backdrop = backdrop.on_event(NodeEventType::TouchEvent, move |event| {
+        let Some(input_event) = event.input_event() else {
+            return;
+        };
+        let _ = input_event.pointer_set_stop_propagation(true);
+        if !matches!(input_event.action, UIInputAction::Up | UIInputAction::Cancel) {
+            return;
         }
-    }
+        if spec.dismiss_on_backdrop {
+            if let Some(dismiss) = backdrop_dismiss.as_ref() {
+                dismiss();
+            }
+        }
+    });
+
+    let panel = stack_component::<Message, AppTheme>()
+        .style(ArkUINodeAttributeType::Clip, false)
+        .on_event(NodeEventType::TouchEvent, move |event| {
+            if let Some(input_event) = event.input_event() {
+                let _ = input_event.pointer_set_stop_propagation(true);
+            }
+        })
+        .child(panel)
+        .into();
 
     let overlay_panel = match spec.presentation {
         ModalPresentation::CenteredDialog => column_component::<Message, AppTheme>()

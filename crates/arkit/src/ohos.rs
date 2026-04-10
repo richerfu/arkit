@@ -12,7 +12,8 @@ use arkit_runtime::{
     Program, SubscriptionHandle,
 };
 use arkit_widget::{
-    begin_render_pass, end_render_pass, mount, patch, Element, MountedNode, Renderer,
+    begin_render_pass, end_render_pass, mount, patch, realize_attached_mount, Element,
+    MountedNode, Renderer,
 };
 use napi_ohos::{Error, Result};
 use ohos_arkui_binding::common::handle::ArkUIHandle;
@@ -90,12 +91,13 @@ where
     }
 
     fn mount_root(&self, tree: Element<Message, AppTheme>) -> Result<()> {
-        let (node, mounted) = map_arkui_result(mount(tree))?;
+        let (mut node, mut mounted) = map_arkui_result(mount(tree))?;
         if let Some(previous) = self.mounted.borrow_mut().take() {
             let _ = map_arkui_result(self.root.borrow_mut().unmount());
             previous.mounted.cleanup_recursive();
         }
         map_arkui_result(self.root.borrow_mut().mount(node.clone()))?;
+        map_arkui_result(realize_attached_mount(&mut node, &mut mounted))?;
         self.mounted
             .borrow_mut()
             .replace(MountedRoot { node, mounted });

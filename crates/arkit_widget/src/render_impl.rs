@@ -1,14 +1,16 @@
 use std::any::{type_name, Any, TypeId};
 use std::cell::RefCell;
 use std::mem::{align_of, size_of, ManuallyDrop};
+use std::os::raw::c_void;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::rc::Rc;
 
 use crate::{Alignment, LayoutFrame, LayoutSize};
 use arkit_core::{advanced, Horizontal, Length, Padding, Size, Vertical};
 use ohos_arkui_binding::api::node_custom_event::NodeCustomEvent;
+use ohos_arkui_binding::arkui_input_binding::{self, ArkUIErrorCode};
 use ohos_arkui_binding::common::attribute::ArkUINodeAttributeItem;
-use ohos_arkui_binding::common::error::ArkUIResult;
+use ohos_arkui_binding::common::error::{ArkUIError, ArkUIResult};
 use ohos_arkui_binding::common::node::ArkUINode;
 use ohos_arkui_binding::component::attribute::{
     ArkUIAttributeBasic, ArkUICommonAttribute, ArkUIEvent, ArkUIGesture,
@@ -26,6 +28,7 @@ use ohos_arkui_binding::types::advanced::{
 use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
 use ohos_arkui_binding::types::event::NodeEventType;
 use ohos_arkui_binding::types::gesture_event::GestureEventAction;
+use ohos_arkui_sys::{OH_ArkUI_AddSupportedUIStates, OH_ArkUI_RemoveSupportedUIStates};
 
 pub use ohos_arkui_binding::common::attribute::ArkUINodeAttributeItem as AttributeValue;
 pub use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType as Attribute;
@@ -38,8 +41,10 @@ pub struct Renderer;
 
 type Cleanup = Box<dyn FnOnce()>;
 type MountEffect = Box<dyn FnOnce(&mut ArkUINode) -> ArkUIResult<Option<Cleanup>> + 'static>;
+type AttachEffect = Box<dyn FnOnce(&mut ArkUINode) -> ArkUIResult<Option<Cleanup>> + 'static>;
 type PatchEffect = Box<dyn FnOnce(&mut ArkUINode) -> ArkUIResult<()> + 'static>;
 type EventCallback = Rc<dyn Fn(&ArkEvent)>;
+type UiStateCallback = Rc<dyn Fn(&mut ArkUINode, i32)>;
 
 const DEFAULT_LONG_PRESS_DURATION_MS: i32 = 500;
 const FLEX_ALIGN_START: i32 = 1;
@@ -75,6 +80,25 @@ struct LongPressHandlerSpec {
 
 struct LongPressCallbackContext {
     callback: Rc<dyn Fn()>,
+}
+
+struct SupportedUiStatesCallbackContext {
+    callback: Rc<RefCell<UiStateCallback>>,
+    node: ArkUINode,
+}
+
+unsafe extern "C" fn supported_ui_states_callback_trampoline(
+    current_states: i32,
+    user_data: *mut c_void,
+) {
+    if user_data.is_null() {
+        return;
+    }
+
+    let callback = unsafe { &*(user_data as *mut SupportedUiStatesCallbackContext) };
+    let handler = callback.callback.borrow().clone();
+    let mut node = callback.node.clone();
+    handler(&mut node, current_states);
 }
 
 fn panic_payload_message(payload: &(dyn Any + Send)) -> String {
@@ -140,10 +164,14 @@ struct MountedRenderNode {
     attrs: Vec<ArkUINodeAttributeType>,
     events: Vec<NodeEventType>,
     mount_effect_count: usize,
+    attach_effect_count: usize,
     patch_effect_count: usize,
     has_long_press: bool,
     long_press_cleanup: Option<Cleanup>,
     cleanups: Vec<Cleanup>,
+    pending_patch_attrs: Vec<(ArkUINodeAttributeType, ArkUINodeAttributeItem)>,
+    pending_attach_effects: Vec<AttachEffect>,
+    pending_patch_effects: Vec<PatchEffect>,
     children: Vec<MountedRenderNode>,
 }
 
@@ -172,10 +200,14 @@ impl MountedRenderNode {
         attrs: Vec<ArkUINodeAttributeType>,
         events: Vec<NodeEventType>,
         mount_effect_count: usize,
+        attach_effect_count: usize,
         patch_effect_count: usize,
         has_long_press: bool,
         long_press_cleanup: Option<Cleanup>,
         cleanups: Vec<Cleanup>,
+        pending_patch_attrs: Vec<(ArkUINodeAttributeType, ArkUINodeAttributeItem)>,
+        pending_attach_effects: Vec<AttachEffect>,
+        pending_patch_effects: Vec<PatchEffect>,
         children: Vec<MountedRenderNode>,
     ) -> Self {
         Self {
@@ -184,10 +216,14 @@ impl MountedRenderNode {
             attrs,
             events,
             mount_effect_count,
+            attach_effect_count,
             patch_effect_count,
             has_long_press,
             long_press_cleanup,
             cleanups,
+            pending_patch_attrs,
+            pending_attach_effects,
+            pending_patch_effects,
             children,
         }
     }
@@ -211,6 +247,7 @@ pub struct Node<Message, AppTheme = arkit_core::Theme> {
     event_handlers: Vec<EventHandlerSpec>,
     long_press_handler: Option<LongPressHandlerSpec>,
     mount_effects: Vec<MountEffect>,
+    attach_effects: Vec<AttachEffect>,
     patch_effects: Vec<PatchEffect>,
     children: Vec<Element<Message, AppTheme>>,
 }
@@ -225,6 +262,7 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
             event_handlers: Vec::new(),
             long_press_handler: None,
             mount_effects: Vec::new(),
+            attach_effects: Vec::new(),
             patch_effects: Vec::new(),
             children: Vec::new(),
         }
@@ -645,20 +683,72 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
         self.with(effect)
     }
 
-    /// Run a callback on mount and on every subsequent patch.
-    /// Use this to capture a live reference to the underlying native node that
-    /// stays valid across re-renders.
+    /// Run a callback after the node is attached to the render tree and on
+    /// every subsequent patch. Use this to capture a live reference to the
+    /// underlying native node that stays valid across re-renders.
     pub fn with_patch(
         mut self,
         effect: impl Fn(&mut ArkUINode) -> ArkUIResult<()> + 'static,
     ) -> Self {
         let shared = Rc::new(effect);
-        let mount_shared = shared.clone();
-        self.mount_effects.push(Box::new(move |node| {
-            mount_shared(node)?;
-            Ok(None)
-        }));
         self.patch_effects.push(Box::new(move |node| shared(node)));
+        self
+    }
+
+    pub fn on_supported_ui_states(
+        mut self,
+        ui_states: i32,
+        exclude_inner: bool,
+        callback: impl Fn(&mut ArkUINode, i32) + 'static,
+    ) -> Self {
+        let callback = Rc::new(callback) as UiStateCallback;
+        let callback_state = Rc::new(RefCell::new(callback.clone()));
+        let mount_callback_state = callback_state.clone();
+
+        self.attach_effects.push(Box::new(move |node| {
+            let callback_state = mount_callback_state.clone();
+            let context = Box::into_raw(Box::new(SupportedUiStatesCallbackContext {
+                callback: callback_state,
+                node: node.clone(),
+            }));
+            let status = unsafe {
+                OH_ArkUI_AddSupportedUIStates(
+                    node.raw_handle(),
+                    ui_states,
+                    Some(supported_ui_states_callback_trampoline),
+                    exclude_inner,
+                    context.cast(),
+                )
+            } as u32;
+            let result = if status
+                == arkui_input_binding::sys::ArkUI_ErrorCode_ARKUI_ERROR_CODE_NO_ERROR
+            {
+                Ok(())
+            } else {
+                Err(ArkUIError::new(ArkUIErrorCode::from(status), ""))
+            };
+
+            if let Err(error) = result {
+                unsafe {
+                    drop(Box::from_raw(context));
+                }
+                return Err(error);
+            }
+
+            let node_handle = node.clone();
+            Ok(Some(Box::new(move || {
+                unsafe {
+                    let _ = OH_ArkUI_RemoveSupportedUIStates(node_handle.raw_handle(), ui_states);
+                    drop(Box::from_raw(context));
+                }
+            }) as Cleanup))
+        }));
+
+        self.patch_effects.push(Box::new(move |_node| {
+            callback_state.replace(callback);
+            Ok(())
+        }));
+
         self
     }
 
@@ -1276,6 +1366,7 @@ where
         event_handlers,
         long_press_handler,
         mount_effects,
+        attach_effects,
         patch_effects,
         children,
     } = node;
@@ -1300,6 +1391,7 @@ where
             event_handlers,
             long_press_handler,
             mount_effects,
+            attach_effects,
             patch_effects,
             children: compiled_children,
         }
@@ -1441,6 +1533,19 @@ fn attr_types(
     attrs.iter().map(|(attr, _)| *attr).collect()
 }
 
+fn desired_attr_types(
+    init_attrs: &[(ArkUINodeAttributeType, ArkUINodeAttributeItem)],
+    patch_attrs: &[(ArkUINodeAttributeType, ArkUINodeAttributeItem)],
+) -> Vec<ArkUINodeAttributeType> {
+    let mut attrs = Vec::new();
+    for (attr, _) in init_attrs.iter().chain(patch_attrs.iter()) {
+        if !attrs.contains(attr) {
+            attrs.push(*attr);
+        }
+    }
+    attrs
+}
+
 fn reset_stale_attrs(
     node: &mut ArkUINode,
     previous: &[ArkUINodeAttributeType],
@@ -1476,6 +1581,7 @@ fn event_types(handlers: &[EventHandlerSpec]) -> Vec<NodeEventType> {
 struct NodeSignature {
     events: Vec<NodeEventType>,
     mount_effect_count: usize,
+    attach_effect_count: usize,
     patch_effect_count: usize,
     has_long_press: bool,
 }
@@ -1484,6 +1590,7 @@ fn node_signature<Message, AppTheme>(node: &Node<Message, AppTheme>) -> NodeSign
     NodeSignature {
         events: event_types(&node.event_handlers),
         mount_effect_count: node.mount_effects.len(),
+        attach_effect_count: node.attach_effects.len(),
         patch_effect_count: node.patch_effects.len(),
         has_long_press: node.long_press_handler.is_some(),
     }
@@ -1493,6 +1600,7 @@ fn mounted_signature(mounted: &MountedRenderNode) -> NodeSignature {
     NodeSignature {
         events: mounted.events.clone(),
         mount_effect_count: mounted.mount_effect_count,
+        attach_effect_count: mounted.attach_effect_count,
         patch_effect_count: mounted.patch_effect_count,
         has_long_press: mounted.has_long_press,
     }
@@ -1553,6 +1661,37 @@ fn attach_child(parent: &mut ArkUINode, child: ArkUINode) -> ArkUIResult<()> {
     runtime.add_child(child)
 }
 
+fn realize_attached_node(
+    node: &mut ArkUINode,
+    mounted: &mut MountedRenderNode,
+) -> ArkUIResult<()> {
+    if !mounted.pending_patch_attrs.is_empty() {
+        apply_attr_list(node, std::mem::take(&mut mounted.pending_patch_attrs));
+    }
+
+    for effect in std::mem::take(&mut mounted.pending_attach_effects) {
+        match effect(node)? {
+            Some(cleanup) => mounted.cleanups.push(cleanup),
+            None => {}
+        }
+    }
+
+    for effect in std::mem::take(&mut mounted.pending_patch_effects) {
+        effect(node)?;
+    }
+
+    for (child_handle, child_mounted) in node
+        .children()
+        .iter()
+        .zip(mounted.children.iter_mut())
+    {
+        let mut child_node = child_handle.borrow_mut();
+        realize_attached_node(&mut child_node, child_mounted)?;
+    }
+
+    Ok(())
+}
+
 fn mount_node<Message, AppTheme>(
     element: Element<Message, AppTheme>,
 ) -> ArkUIResult<(ArkUINode, MountedRenderNode)>
@@ -1568,17 +1707,20 @@ where
         event_handlers,
         long_press_handler,
         mount_effects,
+        attach_effects,
         patch_effects,
         children,
     } = into_node(element);
 
     let mut node = create_node(kind)?;
-    let attrs = desired_attrs(init_attrs, patch_attrs);
-    let attr_keys = attr_types(&attrs);
+    let init_attr_keys = attr_types(&init_attrs);
+    let pending_patch_attrs = desired_attrs(Vec::new(), patch_attrs);
+    let final_attr_keys = desired_attr_types(&init_attrs, &pending_patch_attrs);
     let mount_effect_count = mount_effects.len();
+    let attach_effect_count = attach_effects.len();
     let patch_effect_count = patch_effects.len();
     let has_long_press = long_press_handler.is_some();
-    apply_attr_list(&mut node, attrs);
+    apply_attr_list(&mut node, init_attrs);
 
     let mut cleanups = Vec::new();
     for effect in mount_effects {
@@ -1591,10 +1733,6 @@ where
                 return Err(error);
             }
         }
-    }
-
-    for effect in patch_effects {
-        effect(&mut node)?;
     }
 
     apply_event_handlers(&mut node, &event_handlers);
@@ -1616,13 +1754,21 @@ where
         MountedRenderNode::new(
             node_type_id(kind),
             key,
-            attr_keys,
+            if pending_patch_attrs.is_empty() && patch_effect_count == 0 {
+                init_attr_keys
+            } else {
+                final_attr_keys
+            },
             events,
             mount_effect_count,
+            attach_effect_count,
             patch_effect_count,
             has_long_press,
             long_press_cleanup,
             cleanups,
+            pending_patch_attrs,
+            attach_effects,
+            patch_effects,
             mounted_children,
         ),
     ))
@@ -1645,6 +1791,7 @@ where
         event_handlers,
         long_press_handler,
         mount_effects: _,
+        attach_effects: _,
         patch_effects,
         children,
     } = into_node(element);
@@ -1742,8 +1889,12 @@ where
 
     if prefix == old_len {
         for child in next_nodes {
-            let (child_node, child_meta) = mount_node(child.into())?;
+            let (child_node, mut child_meta) = mount_node(child.into())?;
             attach_child(parent, child_node)?;
+            if let Some(child_handle) = parent.children().last() {
+                let mut child_node = child_handle.borrow_mut();
+                realize_attached_node(&mut child_node, &mut child_meta)?;
+            }
             mounted_children.push(child_meta);
         }
         return Ok(());
@@ -1765,8 +1916,12 @@ where
     }
 
     for child in next_nodes {
-        let (child_node, child_meta) = mount_node(child.into())?;
+        let (child_node, mut child_meta) = mount_node(child.into())?;
         attach_child(parent, child_node)?;
+        if let Some(child_handle) = parent.children().last() {
+            let mut child_node = child_handle.borrow_mut();
+            realize_attached_node(&mut child_node, &mut child_meta)?;
+        }
         mounted_children.push(child_meta);
     }
 
@@ -1801,6 +1956,10 @@ where
     let root = compose_compiled_overlays(compiled);
     let (node, render) = mount_node(root)?;
     Ok((node, MountedNode::new(tree, render)))
+}
+
+pub fn realize_attached_mount(node: &mut ArkUINode, mounted: &mut MountedNode) -> ArkUIResult<()> {
+    realize_attached_node(node, mounted.render_mut())
 }
 
 pub fn patch<Message, AppTheme>(

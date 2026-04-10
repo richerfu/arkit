@@ -1,8 +1,10 @@
 use super::*;
-use arkit_icon as lucide;
+use super::toggle::{
+    toggle_content_row, toggle_default_size, toggle_icon_size, toggle_surface,
+    toggle_visual_style, ToggleSizeStyle, ToggleVariant,
+};
 
-const TRANSPARENT: u32 = 0x00000000;
-const FLEX_ALIGN_CENTER: i32 = 2;
+const TOGGLE_GROUP_VARIANT: ToggleVariant = ToggleVariant::Outline;
 
 fn toggle_group_border(index: usize) -> [f32; 4] {
     [1.0, 1.0, 1.0, if index == 0 { 1.0 } else { 0.0 }]
@@ -11,7 +13,7 @@ fn toggle_group_border(index: usize) -> [f32; 4] {
 fn toggle_group_radius(index: usize, total: usize) -> [f32; 4] {
     let left_radius = if index == 0 { radius::MD } else { 0.0 };
     let right_radius = if index + 1 == total { radius::MD } else { 0.0 };
-    [left_radius, right_radius, right_radius, left_radius]
+    [left_radius, right_radius, left_radius, right_radius]
 }
 
 fn toggle_group_shell<Message: 'static>(children: Vec<Element<Message>>) -> Element<Message> {
@@ -33,35 +35,20 @@ fn toggle_group_item<Message: 'static>(
     active: bool,
     index: usize,
     total: usize,
-    width: Option<f32>,
-    height: f32,
-    padding: [f32; 4],
-) -> RowElement<Message> {
+    size_style: ToggleSizeStyle,
+) -> ButtonElement<Message> {
     let border_width = toggle_group_border(index);
     let border_radius = toggle_group_radius(index, total);
 
-    let mut item = arkit::row_component::<Message, arkit::Theme>()
-        .align_items_center()
-        .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
-        .style(ArkUINodeAttributeType::Clip, true)
-        .style(ArkUINodeAttributeType::BorderStyle, 0_i32)
-        .style(ArkUINodeAttributeType::BorderRadius, border_radius.to_vec())
-        .style(ArkUINodeAttributeType::BorderWidth, border_width.to_vec())
-        .style(
-            ArkUINodeAttributeType::BorderColor,
-            vec![color::INPUT, color::INPUT, color::INPUT, color::INPUT],
-        )
-        .style(ArkUINodeAttributeType::Padding, padding.to_vec())
-        .background_color(if active { color::ACCENT } else { TRANSPARENT })
-        .patch_background_color(if active { color::ACCENT } else { TRANSPARENT })
-        .height(height)
-        .children(vec![content]);
-
-    if let Some(w) = width {
-        item = item.width(w);
-    }
-
-    item
+    toggle_surface(
+        content,
+        active,
+        TOGGLE_GROUP_VARIANT,
+        size_style,
+        border_width,
+        border_radius,
+        Some(false),
+    )
 }
 
 pub fn toggle_group(
@@ -79,26 +66,15 @@ pub fn toggle_group(
             let text = item.clone();
             let active = selected == text;
             let on_select = on_select.clone();
+            let size_style = toggle_default_size();
+            let visual = toggle_visual_style(TOGGLE_GROUP_VARIANT, active);
 
             toggle_group_item(
-                arkit::text(text.clone())
-                    .font_size(typography::SM)
-                    .style(ArkUINodeAttributeType::FontWeight, 4_i32)
-                    .style(
-                        ArkUINodeAttributeType::FontColor,
-                        if active {
-                            color::ACCENT_FOREGROUND
-                        } else {
-                            color::FOREGROUND
-                        },
-                    )
-                    .into(),
+                toggle_content_row(Some(text.clone()), None, visual.foreground, size_style.icon_size),
                 active,
                 index,
                 total,
-                None,
-                40.0,
-                [8.0, 10.0, 8.0, 10.0],
+                size_style,
             )
             .on_click(move || on_select(text.clone()))
             .into()
@@ -136,22 +112,20 @@ pub fn toggle_group_icons(
             let icon_name = item.clone();
             let active = selected == icon_name;
             let on_select = on_select.clone();
+            let size_style = toggle_icon_size();
+            let visual = toggle_visual_style(TOGGLE_GROUP_VARIANT, active);
 
             toggle_group_item(
-                lucide::icon(icon_name.clone())
-                    .size(16.0)
-                    .color(if active {
-                        color::ACCENT_FOREGROUND
-                    } else {
-                        color::FOREGROUND
-                    })
-                    .render(),
+                toggle_content_row(
+                    None,
+                    Some(icon_name.clone()),
+                    visual.foreground,
+                    size_style.icon_size,
+                ),
                 active,
                 index,
                 total,
-                Some(40.0),
-                40.0,
-                [0.0, 0.0, 0.0, 0.0],
+                size_style,
             )
             .on_click(move || on_select(icon_name.clone()))
             .into()
@@ -189,26 +163,15 @@ pub fn toggle_group_multi(
             let active = selected.contains(&text);
             let on_change = on_change.clone();
             let selected_values = selected.clone();
+            let size_style = toggle_default_size();
+            let visual = toggle_visual_style(TOGGLE_GROUP_VARIANT, active);
 
             toggle_group_item(
-                arkit::text(text.clone())
-                    .font_size(typography::SM)
-                    .style(ArkUINodeAttributeType::FontWeight, 4_i32)
-                    .style(
-                        ArkUINodeAttributeType::FontColor,
-                        if active {
-                            color::ACCENT_FOREGROUND
-                        } else {
-                            color::FOREGROUND
-                        },
-                    )
-                    .into(),
+                toggle_content_row(Some(text.clone()), None, visual.foreground, size_style.icon_size),
                 active,
                 index,
                 total,
-                None,
-                40.0,
-                [8.0, 10.0, 8.0, 10.0],
+                size_style,
             )
             .on_click(move || {
                 let mut next = selected_values.clone();
@@ -254,22 +217,20 @@ pub fn toggle_group_icons_multi<Message: Send + 'static>(
             let active = selected.contains(&icon_name);
             let on_change = on_change.clone();
             let selected_values = selected.clone();
+            let size_style = toggle_icon_size();
+            let visual = toggle_visual_style(TOGGLE_GROUP_VARIANT, active);
 
             toggle_group_item(
-                lucide::icon(icon_name.clone())
-                    .size(16.0)
-                    .color(if active {
-                        color::ACCENT_FOREGROUND
-                    } else {
-                        color::FOREGROUND
-                    })
-                    .render::<Message, arkit::Theme>(),
+                toggle_content_row(
+                    None,
+                    Some(icon_name.clone()),
+                    visual.foreground,
+                    size_style.icon_size,
+                ),
                 active,
                 index,
                 total,
-                Some(40.0),
-                40.0,
-                [0.0, 0.0, 0.0, 0.0],
+                size_style,
             )
             .on_click(move || {
                 let mut next = selected_values.clone();

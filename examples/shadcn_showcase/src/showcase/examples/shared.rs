@@ -15,6 +15,7 @@ const SKY_500: u32 = 0xFF0EA5E9;
 pub(crate) struct DemoContext {
     pub active_tab: usize,
     pub page: i32,
+    pub button_preview_feedback: Option<String>,
     pub radio_choice: String,
     pub select_choice: String,
     pub query: String,
@@ -292,24 +293,40 @@ pub(crate) fn carousel_frame_fn(
 }
 
 fn button_preview(variant: &str) -> Element {
+    let preview_press = || Message::ButtonPreviewPressed(variant.to_string());
     match variant {
-        "Destructive" => shadcn::button("Destructive", shadcn::ButtonVariant::Destructive).into(),
-        "Ghost" => shadcn::button("Ghost", shadcn::ButtonVariant::Ghost).into(),
-        "Link" => shadcn::button("Link", shadcn::ButtonVariant::Link).into(),
+        "Destructive" => shadcn::button("Destructive", shadcn::ButtonVariant::Destructive)
+            .on_press(preview_press())
+            .into(),
+        "Ghost" => shadcn::button("Ghost", shadcn::ButtonVariant::Ghost)
+            .on_press(preview_press())
+            .into(),
+        "Link" => shadcn::button("Link", shadcn::ButtonVariant::Link)
+            .on_press(preview_press())
+            .into(),
         "Loading" => {
             shadcn::button_with_icon("Please wait", "loader", shadcn::ButtonVariant::Default)
                 .style(ArkUINodeAttributeType::Opacity, 0.5_f32)
                 .style(ArkUINodeAttributeType::Enabled, false)
                 .into()
         }
-        "Outline" => shadcn::button("Outline", shadcn::ButtonVariant::Outline).into(),
-        "Secondary" => shadcn::button("Secondary", shadcn::ButtonVariant::Secondary).into(),
+        "Outline" => shadcn::button("Outline", shadcn::ButtonVariant::Outline)
+            .on_press(preview_press())
+            .into(),
+        "Secondary" => shadcn::button("Secondary", shadcn::ButtonVariant::Secondary)
+            .on_press(preview_press())
+            .into(),
         "With Icon" => {
             shadcn::button_with_icon("Login with Email", "mail", shadcn::ButtonVariant::Default)
+                .on_press(preview_press())
                 .into()
         }
-        "Icon" => shadcn::icon_button("chevron-right").into(),
-        _ => shadcn::button("Button", shadcn::ButtonVariant::Default).into(),
+        "Icon" => shadcn::icon_button("chevron-right")
+            .on_press(preview_press())
+            .into(),
+        _ => shadcn::button("Button", shadcn::ButtonVariant::Default)
+            .on_press(preview_press())
+            .into(),
     }
 }
 
