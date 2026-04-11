@@ -1,0 +1,13 @@
+[package]
+name = "arkit_runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = ["api-22"]
+api-22 = []
+
+[dependencies]
+arkit_core.workspace = true
+arkit_futures.workspace = true

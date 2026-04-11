@@ -7,14 +7,16 @@ use arkit::ohos_arkui_binding::animate::options::Animation;
 use arkit::ohos_arkui_binding::animate::transition::{
     RotationOptions, ScaleOptions, TransitionEffect, TranslationOptions,
 };
-use arkit::ohos_arkui_binding::common::error::ArkUIResult;
+use arkit::ohos_arkui_binding::arkui_input_binding::ArkUIErrorCode;
+use arkit::ohos_arkui_binding::common::error::{ArkUIError, ArkUIResult};
 use arkit::ohos_arkui_binding::common::node::ArkUINode;
 use arkit::ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
 use arkit::ohos_arkui_binding::types::animation_finish_type::AnimationFinishCallbackType;
 use arkit::ohos_arkui_binding::types::animation_mode::AnimationMode;
 use arkit::ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
 use arkit::ohos_arkui_binding::types::curve::Curve;
-use arkit::{queue_after_mount, queue_ui_loop, ComponentElement};
+use arkit::Node;
+use arkit_widget::queue_ui_loop;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Motion {
@@ -136,7 +138,7 @@ impl ManagedTransition {
     }
 
     pub fn asymmetric(mut appear: Self, mut disappear: Self) -> ArkUIResult<Self> {
-        let effect = TransitionEffect::asymmetric(appear.effect(), disappear.effect())?;
+        let effect = TransitionEffect::asymmetric(appear.effect()?, disappear.effect()?)?;
         let mut animations = Vec::new();
         animations.append(&mut appear.animations);
         animations.append(&mut disappear.animations);
@@ -157,10 +159,13 @@ impl ManagedTransition {
         })
     }
 
-    fn effect(&self) -> &TransitionEffect {
-        self.effect
-            .as_ref()
-            .expect("managed transition effect should exist while attached")
+    fn effect(&self) -> ArkUIResult<&TransitionEffect> {
+        self.effect.as_ref().ok_or_else(|| {
+            ArkUIError::new(
+                ArkUIErrorCode::ParamInvalid,
+                "managed transition effect was detached before use",
+            )
+        })
     }
 }
 
@@ -177,10 +182,7 @@ fn log_animation_error(message: impl AsRef<str>) {
     ohos_hilog_binding::error(message.as_ref());
 }
 
-pub trait MotionExt<T>
-where
-    T: ArkUICommonAttribute + 'static,
-{
+pub trait MotionExt: Sized {
     fn with_mount_motion(
         self,
         motion: Motion,
@@ -197,10 +199,7 @@ where
     ) -> Self;
 }
 
-impl<T> MotionExt<T> for ComponentElement<T>
-where
-    T: ArkUICommonAttribute + 'static,
-{
+impl<Message: 'static, AppTheme: 'static> MotionExt for Node<Message, AppTheme> {
     fn with_mount_motion(
         self,
         motion: Motion,
@@ -222,8 +221,8 @@ where
         let on_finish = Rc::new(on_finish);
 
         self.native_with_cleanup(move |node| {
-            initial(node.borrow_mut())?;
-            let animated_node = Rc::new(RefCell::new(node.borrow_mut().clone()));
+            initial(node)?;
+            let animated_node = Rc::new(RefCell::new(node.clone()));
             let animation_slot = Rc::new(RefCell::new(None::<Animation>));
             let is_active = Rc::new(Cell::new(true));
             let queued_node = animated_node.clone();
@@ -232,7 +231,7 @@ where
             let queued_target = target.clone();
             let queued_finish = on_finish.clone();
 
-            queue_after_mount(move || {
+            queue_ui_loop(move || {
                 if !queued_active.get() {
                     return;
                 }
@@ -288,10 +287,7 @@ where
     }
 }
 
-pub trait TransitionExt<T>
-where
-    T: ArkUICommonAttribute + 'static,
-{
+pub trait TransitionExt: Sized {
     fn with_transition_attr(
         self,
         attr: ArkUINodeAttributeType,
@@ -307,17 +303,14 @@ where
     fn with_translate_transition(self, transition: ManagedTransition) -> Self;
 }
 
-impl<T> TransitionExt<T> for ComponentElement<T>
-where
-    T: ArkUICommonAttribute + 'static,
-{
+impl<Message: 'static, AppTheme: 'static> TransitionExt for Node<Message, AppTheme> {
     fn with_transition_attr(
         self,
         attr: ArkUINodeAttributeType,
         transition: ManagedTransition,
     ) -> Self {
         self.native_with_cleanup(move |node| {
-            node.set_attribute(attr, transition.effect().into())?;
+            node.set_attribute(attr, transition.effect()?.into())?;
             Ok(move || drop(transition))
         })
     }

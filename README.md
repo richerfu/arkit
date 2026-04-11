@@ -1,30 +1,36 @@
 # arkit
 
-`arkit` is a workspace-based ArkUI framework built on top of local `ohos-native-bindings` and integrated with `openharmony-ability`.
+`arkit` is an ArkUI framework for OpenHarmony built on local `ohos-native-bindings`
+and integrated with `openharmony-ability`.
+
+The public model now follows `iced`:
+
+- application state lives in `State`
+- all side effects flow through `Task<Message>` and `Subscription<Message>`
+- `view(&State) -> Element` is a pure render function
+- widgets use builder-style APIs and theme/style catalogs
+
+`arkit` itself is the facade crate. Runtime and widget implementation live in
+dedicated crates and are re-exported here.
 
 ## Workspace Layout
 
-- `crates/arkit`: core runtime, component DSL, `signal` state model
+- `crates/arkit`: facade / re-export crate
+- `crates/arkit_widget`: ArkUI widget tree, renderer, node diff, and widget builders
+- `crates/arkit_runtime`: renderer-agnostic application/runtime shell, task/subscription wiring
 - `crates/arkit_derive`: `#[entry]` and `#[component]` macros
 - `crates/arkit_shadcn`: shadcn-style component crate (built on `arkit`)
-- `examples/counter`: sample entry crate for OpenHarmony integration
+- `examples/counter`: minimal smoke example for OpenHarmony integration
+- `examples/shadcn_showcase`: shadcn / react-native-reusables showcase example
 
 ## Key APIs
 
 - `#[entry]`: defines the OpenHarmony entry function and generates `init/render/destroy`
-- `#[component]`: marks reusable component functions
-- `use_signal(...)`: Dioxus-style state declaration
-- `use_route()`: read current route in component render
-- `use_router()`: get router handle for push/replace/back navigation
-- `use_lifecycle(...)`: subscribe app lifecycle events (`WindowCreate`, `Resume`, ...)
-- `use_component_lifecycle(...)`: subscribe component mount/unmount
-
-## Router Crate
-
-- `crates/arkit_router`: route registration + stack navigation + params/query extraction
-- registration: `register("/home")`, `register_named("detail", "/detail/:id")`
-- navigation: `push("/detail/42?tab=profile")`, `replace(...)`, `back()`, `reset(...)`
-- route read: `use_route()` / `use_route_param("id")` / `use_route_query("tab")`
+- `application(boot, update, view)`: iced-style application builder
+- `Task<Message>` / `Subscription<Message>`: message-driven side effects
+- `NavigationStack<T>`: explicit application-state navigation for example apps
+- `#[component]`: a no-op marker for reusable view helpers; it does not create hidden state
+- `floating_overlay` / `modal_overlay`: shared detached overlay primitives for popups, menus, dialogs, sheets, and drawers
 
 ## Shadcn Component Crate
 
@@ -43,40 +49,59 @@ Use `arkit_shadcn::prelude::*` to import the full set.
 
 ## View Layer (All Components)
 
-`arkit::prelude::*` now exposes all ArkUI API-22 component constructors in view style:
+`arkit::prelude::*` exposes the ArkUI-backed widget constructors in builder style:
 
-- layout/list: `column_component`, `row_component`, `stack_component`, `list_component`, `grid_component`, ...
-- input/content: `text_component`, `text_input_component`, `button_component`, `slider_component`, `checkbox_component`, ...
-- media/others: `image_component`, `xcomponent_component`, `embedded_component_component`, ...
+- layout: `column_component`, `row_component`, `stack_component`, `scroll_component`
+- input/content: `text_component`, `text_input_component`, `button_component`, `slider_component`, `checkbox_component`
+- media/others: `image_component`, `calendar_picker_component`, `date_picker_component`, `swiper_component`
 
-For full style/attribute coverage, use:
+For full style/attribute coverage, use the `Node` builder methods:
 
-- `ComponentElement::attr(ArkUINodeAttributeType, ArkUINodeAttributeItem)`
-- `ComponentElement::style(...)` (alias of `attr`)
-- `ComponentElement::on_event(NodeEventType, ...)` for all node events
-- `ComponentElement::on_custom_event(NodeCustomEventType, ...)` for all custom events
-- `ComponentElement::native(|native| { ... })` for any native ArkUI API call
+- `Node::attr(ArkUINodeAttributeType, ArkUINodeAttributeItem)`
+- `Node::style(...)` (alias of `attr`)
+- `Node::on_event(NodeEventType, ...)` for all node events
+- `Node::on_custom_event(NodeCustomEventType, ...)` for all custom events
+- `Node::native(|native| { ... })` for direct ArkUI node access
+
+For detached layers, `arkit::prelude::*` also exports:
+
+- `FloatingOverlaySpec`, `FloatingSide`, `FloatingAlign`
+- `ModalOverlaySpec`, `ModalPresentation`
+- `OverlayDismissMode`, `OverlayStrategy`
 
 ## Example
 
 ```rust
 use arkit::prelude::*;
+use arkit::{application, Task};
 
-#[component]
-fn app_view() -> Element {
-    let count = use_signal(|| 0);
-    let inc = count.clone();
+#[derive(Clone, Debug)]
+enum Message {
+    Increment,
+}
 
+#[derive(Default)]
+struct State {
+    count: i32,
+}
+
+fn update(state: &mut State, message: Message) -> Task<Message> {
+    match message {
+        Message::Increment => state.count += 1,
+    }
+
+    Task::none()
+}
+
+fn view(state: &State) -> Element {
     column(vec![
-        text(format!("count = {}", count.get())).into(),
-        button("+1")
-            .on_click(move || inc.update(|value| *value += 1))
-            .into(),
+        text(format!("count = {}", state.count)).into(),
+        button("+1").on_press(Message::Increment).into(),
     ])
 }
 
 #[entry]
-fn app() -> Element {
-    app_view()
+fn app() -> impl arkit::EntryPoint {
+    application(State::default, update, view)
 }
 ```

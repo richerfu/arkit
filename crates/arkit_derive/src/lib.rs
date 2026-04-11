@@ -2,11 +2,18 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, ItemFn};
 
-#[proc_macro_attribute]
-pub fn component(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    item
-}
-
+/// Mark a function as the application entry point.
+///
+/// Generates OpenHarmony NAPI bindings (init / render / destroy lifecycle)
+/// that call the entry function. The entry function must take no arguments
+/// and return `Element`.
+///
+/// ## How it works (for IDE / rust-analyzer)
+///
+/// The generated NAPI module is `pub` (with `#[doc(hidden)]`), so its
+/// `render()` function is reachable from the crate root. Since `render()`
+/// calls the user's entry function, rust-analyzer can trace the entire
+/// call chain — no `#[allow(dead_code)]` needed.
 #[proc_macro_attribute]
 pub fn entry(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemFn);
@@ -34,7 +41,8 @@ pub fn entry(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let expanded = quote! {
         #input
 
-        mod __arkit_entry_mod {
+        #[doc(hidden)]
+        pub mod __arkit_entry_mod {
             use super::*;
             use std::cell::RefCell;
             use std::sync::LazyLock;
@@ -43,7 +51,7 @@ pub fn entry(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 LazyLock::new(::arkit::openharmony_ability::OpenHarmonyApp::new);
 
             thread_local! {
-                static RUNTIME: RefCell<Option<::arkit::Runtime>> = RefCell::new(None);
+                static RUNTIME: RefCell<Option<Box<dyn ::arkit::MountedEntryHandle>>> = RefCell::new(None);
             }
 
             #[::arkit::napi_derive_ohos::napi]
@@ -79,11 +87,11 @@ pub fn entry(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
                 RUNTIME.with(|state| -> ::arkit::napi_ohos::Result<()> {
                     let mut runtime_state = state.borrow_mut();
-                    if let Some(runtime) = runtime_state.as_ref() {
-                        runtime.render()?;
+                    if runtime_state.is_some() {
+                        // Already mounted — the OHOS entrypoint only mounts once.
                         Ok(())
                     } else {
-                        let runtime = ::arkit::Runtime::new(slot, (*APP).clone(), || #fn_name().into())?;
+                        let runtime = ::arkit::mount_entry(slot, (*APP).clone(), #fn_name())?;
                         runtime_state.replace(runtime);
                         Ok(())
                     }

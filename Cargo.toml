@@ -1,10 +1,14 @@
 [workspace]
 members = [
     "crates/arkit",
+    "crates/arkit_core",
     "crates/arkit_animation",
     "crates/arkit_derive",
+    "crates/arkit_futures",
     "crates/arkit_icon",
     "crates/arkit_router",
+    "crates/arkit_runtime",
+    "crates/arkit_widget",
     "crates/arkit_shadcn",
     "examples/*",
 ]
@@ -17,10 +21,14 @@ license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
 arkit = { path = "crates/arkit" }
+arkit_core = { path = "crates/arkit_core" }
 arkit_animation = { path = "crates/arkit_animation" }
 arkit_derive = { path = "crates/arkit_derive" }
+arkit_futures = { path = "crates/arkit_futures" }
 arkit_icon = { path = "crates/arkit_icon" }
 arkit_router = { path = "crates/arkit_router" }
+arkit_runtime = { path = "crates/arkit_runtime" }
+arkit_widget = { path = "crates/arkit_widget" }
 arkit_shadcn = { path = "crates/arkit_shadcn" }
 rust-embed = { version = "8.11.0", features = ["debug-embed"] }
 

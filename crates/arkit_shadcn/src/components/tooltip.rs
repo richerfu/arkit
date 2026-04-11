@@ -1,42 +1,47 @@
+use super::floating_layer::floating_panel;
 use super::*;
-use arkit::{component, use_signal};
+use std::rc::Rc;
 
-#[component]
-pub fn tooltip(trigger_label: impl Into<String>, content: impl Into<String>) -> Element {
-    let trigger_label = trigger_label.into();
+pub fn tooltip<Message: 'static>(
+    trigger: Element<Message>,
+    content: impl Into<String> + 'static,
+    open: bool,
+    on_open_change: impl Fn(bool) + 'static,
+) -> Element<Message> {
     let content = content.into();
-    let open = use_signal(|| false);
-    let toggle = open.clone();
+    let dismiss = { Rc::new(move || on_open_change(false)) };
 
-    arkit::column_component()
-        .align_items_center()
-        .children(vec![
-            if open.get() {
-                arkit::row_component()
-                    .style(ArkUINodeAttributeType::Padding, vec![8.0, 12.0, 8.0, 12.0])
-                    .style(
-                        ArkUINodeAttributeType::BorderRadius,
-                        vec![radius::MD, radius::MD, radius::MD, radius::MD],
-                    )
-                    .background_color(color::PRIMARY)
-                    .children(vec![arkit::text(content)
-                        .font_size(typography::XS)
-                        .style(ArkUINodeAttributeType::FontColor, color::PRIMARY_FOREGROUND)
-                        .style(ArkUINodeAttributeType::TextLineHeight, 16.0)
-                        .into()])
-                    .into()
-            } else {
-                arkit::row_component().height(0.0).into()
-            },
-            arkit::row_component()
-                .style(
-                    ArkUINodeAttributeType::Margin,
-                    vec![if open.get() { spacing::XXS } else { 0.0 }, 0.0, 0.0, 0.0],
-                )
-                .children(vec![button(trigger_label, ButtonVariant::Outline)
-                    .on_click(move || toggle.update(|value| *value = !*value))
-                    .into()])
-                .into(),
-        ])
-        .into()
+    floating_panel(
+        trigger,
+        arkit::row_component::<Message, arkit::Theme>()
+            .style(ArkUINodeAttributeType::Padding, vec![8.0, 12.0, 8.0, 12.0])
+            .style(
+                ArkUINodeAttributeType::BorderRadius,
+                vec![radius::MD, radius::MD, radius::MD, radius::MD],
+            )
+            .background_color(color::PRIMARY)
+            .children(vec![arkit::text::<Message, arkit::Theme>(content)
+                .font_size(typography::XS)
+                .style(ArkUINodeAttributeType::FontColor, color::PRIMARY_FOREGROUND)
+                .style(ArkUINodeAttributeType::TextLineHeight, 16.0)
+                .into()])
+            .into(),
+        open,
+        super::floating_layer::FloatingSide::Top,
+        Some(dismiss),
+    )
+}
+
+pub fn tooltip_message<Message>(
+    trigger: Element<Message>,
+    content: impl Into<String> + 'static,
+    open: bool,
+    on_open_change: impl Fn(bool) -> Message + 'static,
+) -> Element<Message>
+where
+    Message: Send + 'static,
+{
+    tooltip(trigger, content, open, move |value| {
+        dispatch_message(on_open_change(value))
+    })
 }

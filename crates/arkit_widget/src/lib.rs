@@ -1,0 +1,111 @@
+#[cfg(not(feature = "api-22"))]
+compile_error!("arkit_widget requires feature `api-22` as the baseline");
+
+mod internal;
+mod overlay;
+mod render_impl;
+
+pub use arkit_core::advanced;
+pub use arkit_core::theme;
+pub use arkit_core::{Horizontal, Length, Padding, Settings, Size, Theme, Vertical};
+pub use internal::*;
+pub use ohos_arkui_binding::api::node_custom_event::NodeCustomEvent;
+pub use ohos_arkui_binding::event::inner_event::Event as ArkEvent;
+pub use ohos_arkui_binding::types::advanced::NodeCustomEventType;
+pub use ohos_arkui_binding::types::alignment::Alignment;
+pub use ohos_arkui_binding::types::direction::Direction;
+pub use ohos_arkui_binding::types::event::NodeEventType;
+pub use overlay::{
+    anchored_overlay, compose_registered_overlays, floating_overlay, floating_overlay_with_builder,
+    floating_overlay_with_builder_and_surfaces, floating_overlay_with_surfaces, modal_overlay,
+    native_overlay, FloatingAlign, FloatingOverlaySpec, FloatingSide, FloatingSurfaceRegistry,
+    LayoutFrame, LayoutSize, ModalOverlaySpec, ModalPresentation, NativeOverlayPlacement,
+    OverlayDismissMode, OverlayStrategy,
+};
+pub use render_impl::{
+    button, button_component, calendar_picker, calendar_picker_component, checkbox,
+    checkbox_component, column, column_component, container, date_picker, date_picker_component,
+    image, image_component, mount, observe_layout_frame as observe_layout_frame_impl,
+    observe_layout_size as observe_layout_size_impl, patch, progress, progress_component,
+    radio, radio_component, realize_attached_mount, row, row_component, scroll,
+    scroll_component, slider, slider_component, stack, stack_component, swiper,
+    swiper_component, text, text_area, text_area_component, text_component, text_input,
+    text_input_component, toggle, toggle_component, Attribute as ArkUINodeAttributeType,
+    AttributeValue as ArkUINodeAttributeItem, Element, MountedNode, Node, Renderer,
+};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LifecycleEvent {
+    Mount,
+    Unmount,
+}
+
+pub type ButtonElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
+pub type CalendarPickerElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
+pub type CheckboxElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
+pub type ContainerElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
+pub type DatePickerElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
+pub type ProgressElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
+pub type RadioElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
+pub type RowElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
+pub type ScrollElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
+pub type SliderElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
+pub type SwiperElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
+pub type TextAreaElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
+pub type TextElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
+pub type TextInputElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
+pub type ToggleElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
+
+pub fn observe_layout_size<Message, AppTheme>(
+    element: Element<Message, AppTheme>,
+    on_change: impl Fn(LayoutSize) + 'static,
+) -> Element<Message, AppTheme>
+where
+    Message: 'static,
+    AppTheme: 'static,
+{
+    observe_layout_size_impl(element, on_change)
+}
+
+pub fn observe_layout_frame<Message, AppTheme>(
+    element: Element<Message, AppTheme>,
+    on_change: impl Fn(LayoutFrame) + 'static,
+) -> Element<Message, AppTheme>
+where
+    Message: 'static,
+    AppTheme: 'static,
+{
+    observe_layout_frame_impl(element, true, on_change)
+}
+
+pub fn observe_layout_frame_enabled<Message, AppTheme>(
+    element: Element<Message, AppTheme>,
+    enabled: bool,
+    on_change: impl Fn(LayoutFrame) + 'static,
+) -> Element<Message, AppTheme>
+where
+    Message: 'static,
+    AppTheme: 'static,
+{
+    observe_layout_frame_impl(element, enabled, on_change)
+}
+
+pub fn on_cleanup(cleanup: impl FnOnce() + 'static) {
+    internal::on_cleanup(cleanup);
+}
+
+pub mod prelude {
+    pub use crate::{
+        advanced, button, button_component, calendar_picker, calendar_picker_component, checkbox,
+        checkbox_component, column, column_component, container, date_picker,
+        date_picker_component, image, image_component, progress, progress_component, radio,
+        radio_component, realize_attached_mount, row, row_component, scroll, scroll_component,
+        slider, slider_component, stack, stack_component, swiper, swiper_component, text,
+        text_area, text_area_component, text_component, text_input, text_input_component, toggle,
+        toggle_component, ArkEvent, ArkUINodeAttributeItem, ArkUINodeAttributeType, Element,
+        FloatingAlign, FloatingOverlaySpec, FloatingSide, Horizontal, LayoutFrame, LayoutSize,
+        Length, LifecycleEvent, ModalOverlaySpec, ModalPresentation, NativeOverlayPlacement,
+        NodeCustomEvent, NodeCustomEventType, NodeEventType, OverlayDismissMode, OverlayStrategy,
+        Padding, Size, Theme, Vertical,
+    };
+}

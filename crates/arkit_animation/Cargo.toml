@@ -6,4 +6,5 @@ license.workspace = true
 
 [dependencies]
 arkit.workspace = true
+arkit_widget.workspace = true
 ohos-hilog-binding.workspace = true

@@ -7,4 +7,5 @@ license.workspace = true
 [dependencies]
 arkit.workspace = true
 ohos-display-binding.workspace = true
+ohos-hilog-binding.workspace = true
 rust-embed.workspace = true
