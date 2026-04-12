@@ -1,3 +1,4 @@
+use arkit::ohos_arkui_binding::arkui_input_binding::UIInputAction;
 use arkit::prelude::ArkUINodeAttributeType;
 use arkit::{
     BorderStyle, ButtonElement, ButtonType, CalendarPickerElement, DatePickerElement, Element,
@@ -12,6 +13,22 @@ use crate::styles::{
 };
 use crate::theme::{color, radius, spacing, typography};
 use std::rc::Rc;
+
+pub(crate) fn touch_activate<Message: 'static, AppTheme: 'static>(
+    row: RowElement<Message, AppTheme>,
+    on_activate: impl Fn() + 'static,
+) -> RowElement<Message, AppTheme> {
+    row.on_event(arkit::prelude::NodeEventType::TouchEvent, move |event| {
+        let Some(input_event) = event.input_event() else {
+            return;
+        };
+        let _ = input_event.pointer_set_stop_propagation(true);
+
+        if matches!(input_event.action, UIInputAction::Up) {
+            on_activate();
+        }
+    })
+}
 
 mod accordion;
 mod alert;

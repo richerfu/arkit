@@ -2045,6 +2045,7 @@ where
                     ArkUINodeAttributeType::Alignment,
                     i32::from(Alignment::TopStart),
                 )
+                .attr(ArkUINodeAttributeType::ZIndex, 10_000_i32)
                 .children(compiled.overlays)
                 .into(),
         );

@@ -3,6 +3,8 @@ use super::*;
 use arkit_icon as lucide;
 use std::rc::Rc;
 
+const SELECT_PANEL_FALLBACK_WIDTH: f32 = 180.0;
+
 pub fn select<Message: 'static>(
     options: Vec<String>,
     selected: impl Into<String>,
@@ -14,46 +16,48 @@ pub fn select<Message: 'static>(
     let on_select = Rc::new(on_select);
     let on_open_change = Rc::new(on_open_change);
 
-    let trigger = shadow_sm(crate::styles::rounded(
-        crate::styles::border(
-            arkit::row_component::<Message, arkit::Theme>()
-                .height(40.0)
-                .percent_width(1.0)
-                .background_color(color::BACKGROUND)
-                .foreground_color(color::FOREGROUND)
-                .padding([8.0, spacing::MD, 8.0, spacing::MD])
-                .align_items_center()
-                .justify_content(JustifyContent::SpaceBetween)
-                .children(vec![
-                    {
-                        let has_value = !selected.is_empty();
-                        let label = if has_value {
-                            selected.clone()
-                        } else {
-                            String::from("Select a fruit")
-                        };
-                        arkit::text::<Message, arkit::Theme>(label)
-                            .font_size(typography::SM)
-                            .font_color(if has_value {
-                                color::FOREGROUND
+    let trigger = touch_activate(
+        shadow_sm(crate::styles::rounded(
+            crate::styles::border(
+                arkit::row_component::<Message, arkit::Theme>()
+                    .height(40.0)
+                    .percent_width(1.0)
+                    .background_color(color::BACKGROUND)
+                    .foreground_color(color::FOREGROUND)
+                    .padding([8.0, spacing::MD, 8.0, spacing::MD])
+                    .align_items_center()
+                    .justify_content(JustifyContent::SpaceBetween)
+                    .children(vec![
+                        {
+                            let has_value = !selected.is_empty();
+                            let label = if has_value {
+                                selected.clone()
                             } else {
-                                color::MUTED_FOREGROUND
-                            })
-                            .line_height(20.0)
-                            .into()
-                    },
-                    lucide::icon("chevron-down")
-                        .size(16.0)
-                        .color(color::MUTED_FOREGROUND)
-                        .render(),
-                ]),
-        ),
-        radius::MD,
-    ))
-    .on_click({
-        let on_open_change = on_open_change.clone();
-        move || on_open_change(!open)
-    })
+                                String::from("Select a fruit")
+                            };
+                            arkit::text::<Message, arkit::Theme>(label)
+                                .font_size(typography::SM)
+                                .font_color(if has_value {
+                                    color::FOREGROUND
+                                } else {
+                                    color::MUTED_FOREGROUND
+                                })
+                                .line_height(20.0)
+                                .into()
+                        },
+                        lucide::icon("chevron-down")
+                            .size(16.0)
+                            .color(color::MUTED_FOREGROUND)
+                            .render(),
+                    ]),
+            ),
+            radius::MD,
+        )),
+        {
+            let on_open_change = on_open_change.clone();
+            move || on_open_change(!open)
+        },
+    )
     .into();
 
     let panel_builder: Rc<dyn Fn(Option<f32>) -> Element<Message>> = Rc::new({
@@ -74,41 +78,43 @@ pub fn select<Message: 'static>(
                     let active = sel == opt;
                     let opt_click = opt.clone();
 
-                    arkit::row_component::<Message, arkit::Theme>()
-                        .percent_width(1.0)
-                        .height(36.0)
-                        .align_items_center()
-                        .justify_content(JustifyContent::SpaceBetween)
-                        .padding([8.0, spacing::SM, 8.0, spacing::SM])
-                        .border_radius([radius::SM, radius::SM, radius::SM, radius::SM])
-                        .background_color(if active { color::ACCENT } else { 0x00000000 })
-                        .on_click(move || {
+                    touch_activate(
+                        arkit::row_component::<Message, arkit::Theme>()
+                            .percent_width(1.0)
+                            .height(36.0)
+                            .align_items_center()
+                            .justify_content(JustifyContent::SpaceBetween)
+                            .padding([8.0, spacing::SM, 8.0, spacing::SM])
+                            .border_radius([radius::SM, radius::SM, radius::SM, radius::SM])
+                            .background_color(if active { color::ACCENT } else { 0x00000000 })
+                            .children(vec![
+                                arkit::text::<Message, arkit::Theme>(opt.clone())
+                                    .font_size(typography::SM)
+                                    .font_color(if active {
+                                        color::ACCENT_FOREGROUND
+                                    } else {
+                                        color::FOREGROUND
+                                    })
+                                    .line_height(20.0)
+                                    .into(),
+                                if active {
+                                    lucide::icon("check")
+                                        .size(16.0)
+                                        .color(color::MUTED_FOREGROUND)
+                                        .render::<Message, arkit::Theme>()
+                                } else {
+                                    arkit::row_component::<Message, arkit::Theme>()
+                                        .width(16.0)
+                                        .height(16.0)
+                                        .into()
+                                },
+                            ]),
+                        move || {
                             on_select(opt_click.clone());
                             on_open_change(false);
-                        })
-                        .children(vec![
-                            arkit::text::<Message, arkit::Theme>(opt.clone())
-                                .font_size(typography::SM)
-                                .font_color(if active {
-                                    color::ACCENT_FOREGROUND
-                                } else {
-                                    color::FOREGROUND
-                                })
-                                .line_height(20.0)
-                                .into(),
-                            if active {
-                                lucide::icon("check")
-                                    .size(16.0)
-                                    .color(color::MUTED_FOREGROUND)
-                                    .render::<Message, arkit::Theme>()
-                            } else {
-                                arkit::row_component::<Message, arkit::Theme>()
-                                    .width(16.0)
-                                    .height(16.0)
-                                    .into()
-                            },
-                        ])
-                        .into()
+                        },
+                    )
+                    .into()
                 })
                 .collect::<Vec<_>>();
 
@@ -141,11 +147,7 @@ pub fn select<Message: 'static>(
                     list,
                 ]);
 
-            if let Some(width) = trigger_width {
-                panel = panel.width(width);
-            } else {
-                panel = panel.percent_width(1.0);
-            }
+            panel = panel.width(trigger_width.unwrap_or(SELECT_PANEL_FALLBACK_WIDTH));
 
             panel_surface(panel).into()
         }
