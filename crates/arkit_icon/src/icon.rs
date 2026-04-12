@@ -101,6 +101,20 @@ pub fn try_icon<Message: 'static, AppTheme: 'static>(
     icon(name).try_render()
 }
 
+pub fn icon_node<Message: 'static, AppTheme: 'static>(
+    name: impl Into<String>,
+    size: f32,
+    color: u32,
+) -> Result<arkit::Node<Message, AppTheme>, IconError> {
+    let spec = IconSpec {
+        name: normalize_icon_name(&name.into()),
+        size: size.max(1.0),
+        color,
+        stroke_width: DEFAULT_STROKE_WIDTH,
+    };
+    build_icon_node(&spec, true)
+}
+
 impl IconElement {
     pub fn name(&self) -> &str {
         &self.spec.name
@@ -145,6 +159,13 @@ fn build_icon_element<Message: 'static, AppTheme: 'static>(
     spec: &IconSpec,
     allow_fallback: bool,
 ) -> Result<Element<Message, AppTheme>, IconError> {
+    Ok(build_icon_node(spec, allow_fallback)?.into())
+}
+
+fn build_icon_node<Message: 'static, AppTheme: 'static>(
+    spec: &IconSpec,
+    allow_fallback: bool,
+) -> Result<arkit::Node<Message, AppTheme>, IconError> {
     let svg = match rendered_icon_svg(spec) {
         Ok(payload) => payload,
         Err(_error) if allow_fallback => missing_icon_svg(spec),
@@ -162,10 +183,9 @@ fn build_icon_element<Message: 'static, AppTheme: 'static>(
             )?;
             Ok(move || drop(native))
         })
-        .style(ArkUINodeAttributeType::ImageAlt, alt)
+        .attr(ArkUINodeAttributeType::ImageAlt, alt)
         .width(size)
-        .height(size)
-        .into())
+        .height(size))
 }
 
 fn icon_to_arkui_error(error: IconError) -> ArkUIError {

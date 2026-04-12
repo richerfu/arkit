@@ -10,7 +10,8 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
         .percent_height(1.0)
         .children(vec![
             component_canvas(
-                shadcn::button("Open Dialog", shadcn::ButtonVariant::Outline)
+                shadcn::button("Open Dialog")
+                    .theme(shadcn::ButtonVariant::Outline)
                     .on_press(Message::SetToggleState(!ctx.toggle_state))
                     .into(),
                 true,
@@ -51,11 +52,13 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                         16.0,
                     ),
                     shadcn::dialog_footer(vec![
-                        shadcn::button("Cancel", shadcn::ButtonVariant::Outline)
+                        shadcn::button("Cancel")
+                            .theme(shadcn::ButtonVariant::Outline)
                             .percent_width(1.0)
                             .on_press(Message::SetToggleState(false))
                             .into(),
-                        shadcn::button("Save changes", shadcn::ButtonVariant::Default)
+                        shadcn::button("Save changes")
+                            .theme(shadcn::ButtonVariant::Default)
                             .percent_width(1.0)
                             .into(),
                     ]),

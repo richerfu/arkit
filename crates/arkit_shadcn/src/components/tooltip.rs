@@ -14,16 +14,13 @@ pub fn tooltip<Message: 'static>(
     floating_panel(
         trigger,
         arkit::row_component::<Message, arkit::Theme>()
-            .style(ArkUINodeAttributeType::Padding, vec![8.0, 12.0, 8.0, 12.0])
-            .style(
-                ArkUINodeAttributeType::BorderRadius,
-                vec![radius::MD, radius::MD, radius::MD, radius::MD],
-            )
+            .padding([8.0, 12.0, 8.0, 12.0])
+            .border_radius([radius::MD, radius::MD, radius::MD, radius::MD])
             .background_color(color::PRIMARY)
             .children(vec![arkit::text::<Message, arkit::Theme>(content)
                 .font_size(typography::XS)
-                .style(ArkUINodeAttributeType::FontColor, color::PRIMARY_FOREGROUND)
-                .style(ArkUINodeAttributeType::TextLineHeight, 16.0)
+                .font_color(color::PRIMARY_FOREGROUND)
+                .line_height(16.0)
                 .into()])
             .into(),
         open,

@@ -21,10 +21,7 @@ pub fn card_header<Message: 'static>(
             .children(vec![
                 card_title(title),
                 arkit::row_component::<Message, arkit::Theme>()
-                    .style(
-                        ArkUINodeAttributeType::Margin,
-                        vec![spacing::XS, 0.0, 0.0, 0.0],
-                    )
+                    .margin_top(spacing::XS)
                     .children(vec![card_description(description)])
                     .into(),
             ])
@@ -35,10 +32,10 @@ pub fn card_header<Message: 'static>(
 pub fn card_title<Message: 'static>(content: impl Into<String>) -> Element<Message> {
     arkit::text::<Message, arkit::Theme>(content)
         .font_size(typography::MD)
-        .style(ArkUINodeAttributeType::FontWeight, 5_i32)
-        .style(ArkUINodeAttributeType::FontColor, color::FOREGROUND)
-        .style(ArkUINodeAttributeType::TextLineHeight, 16.0)
-        .style(ArkUINodeAttributeType::TextLetterSpacing, -0.2_f32)
+        .font_weight(FontWeight::W600)
+        .font_color(color::FOREGROUND)
+        .line_height(16.0)
+        .text_letter_spacing(-0.2_f32)
         .into()
 }
 

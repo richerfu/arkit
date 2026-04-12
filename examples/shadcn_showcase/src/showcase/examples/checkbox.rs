@@ -30,11 +30,8 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                                 Message::SetCheckboxSecond,
                             ),
                             arkit::row_component()
-                                .style(
-                                    ArkUINodeAttributeType::Margin,
-                                    vec![0.0, 0.0, 0.0, 12.0],
-                                )
-                                .style(ArkUINodeAttributeType::LayoutWeight, 1.0_f32)
+                                .margin([0.0, 0.0, 0.0, 12.0])
+                                .layout_weight(1.0_f32)
                                 .children(vec![v_stack(
                                     vec![
                                         shadcn::label("Accept terms and conditions").into(),
@@ -53,37 +50,28 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                         .children(vec![
                             shadcn::disabled_checkbox("", false),
                             arkit::row_component()
-                                .style(
-                                    ArkUINodeAttributeType::Margin,
-                                    vec![0.0, 0.0, 0.0, 12.0],
-                                )
+                                .margin([0.0, 0.0, 0.0, 12.0])
                                 .children(vec![shadcn::label("Enable notifications")
-                                    .style(ArkUINodeAttributeType::Opacity, 0.5_f32)
+                                    .opacity(0.5_f32)
                                     .into()])
                                 .into(),
                         ])
                         .into(),
                     arkit::column_component()
                         .percent_width(1.0)
-                        .style(ArkUINodeAttributeType::Padding, vec![12.0, 12.0, 12.0, 12.0])
-                        .style(ArkUINodeAttributeType::BorderWidth, vec![1.0, 1.0, 1.0, 1.0])
-                        .style(
-                            ArkUINodeAttributeType::BorderColor,
-                            vec![if ctx.checkbox_card {
+                        .padding([12.0, 12.0, 12.0, 12.0])
+                        .border_width([1.0, 1.0, 1.0, 1.0])
+                        .border_color(if ctx.checkbox_card {
                                 0xFF2563EB
                             } else {
                                 shadcn::theme::color::BORDER
-                            }],
-                        )
-                        .style(
-                            ArkUINodeAttributeType::BorderRadius,
-                            vec![
+                            })
+                        .border_radius([
                                 shadcn::theme::radius::LG,
                                 shadcn::theme::radius::LG,
                                 shadcn::theme::radius::LG,
                                 shadcn::theme::radius::LG,
-                            ],
-                        )
+                            ])
                         .background_color(if ctx.checkbox_card {
                             0xFFEFF6FF
                         } else {
@@ -100,29 +88,17 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                                     0xFF2563EB,
                                 ),
                                 arkit::row_component()
-                                    .style(
-                                        ArkUINodeAttributeType::Margin,
-                                        vec![0.0, 0.0, 0.0, 12.0],
-                                    )
-                                    .style(ArkUINodeAttributeType::LayoutWeight, 1.0_f32)
+                                    .margin([0.0, 0.0, 0.0, 12.0])
+                                    .layout_weight(1.0_f32)
                                 .children(vec![arkit::column_component()
                                         .percent_width(1.0)
                                         .align_items_start()
                                         .children(vec![
                                             arkit::text("Enable notifications")
                                                 .font_size(shadcn::theme::typography::SM)
-                                                .style(
-                                                    ArkUINodeAttributeType::FontWeight,
-                                                    4_i32,
-                                                )
-                                                .style(
-                                                    ArkUINodeAttributeType::FontColor,
-                                                    shadcn::theme::color::FOREGROUND,
-                                                )
-                                                .style(
-                                                    ArkUINodeAttributeType::TextLineHeight,
-                                                    14.0,
-                                                )
+                                                .font_weight(FontWeight::W500,)
+                                                .font_color(shadcn::theme::color::FOREGROUND,)
+                                                .line_height(14.0,)
                                                 .into(),
                                             shadcn::text_variant(
                                                 "You can enable or disable notifications at any time.",

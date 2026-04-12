@@ -8,16 +8,12 @@ pub fn breadcrumb(items: Vec<String>) -> Element {
             children.push(
                 arkit::text("/")
                     .font_size(typography::SM)
-                    .style(ArkUINodeAttributeType::FontColor, color::MUTED_FOREGROUND)
+                    .font_color(color::MUTED_FOREGROUND)
                     .into(),
             );
         }
         if index + 1 == total {
-            children.push(
-                body_text_regular(item)
-                    .style(ArkUINodeAttributeType::FontColor, color::FOREGROUND)
-                    .into(),
-            );
+            children.push(body_text_regular(item).font_color(color::FOREGROUND).into());
         } else {
             children.push(muted_text(item).into());
         }

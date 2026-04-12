@@ -26,11 +26,12 @@ pub(crate) fn dialog_panel<Message: Send + 'static>(
     content: Vec<Element<Message>>,
     on_close: Option<Rc<dyn Fn()>>,
 ) -> Element<Message> {
-    let close_button = icon_button_with_variant::<Message>("x", ButtonVariant::Ghost)
+    let close_button = icon_button::<Message>("x")
+        .theme(ButtonVariant::Ghost)
         .width(28.0)
         .height(28.0)
-        .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
-        .style(ArkUINodeAttributeType::Opacity, 0.7_f32)
+        .padding(arkit::Padding::ZERO)
+        .opacity(0.7_f32)
         .on_click(move || {
             if let Some(close) = on_close.as_ref() {
                 close();
@@ -41,24 +42,15 @@ pub(crate) fn dialog_panel<Message: Send + 'static>(
         arkit::column_component::<Message, arkit::Theme>()
             .percent_width(1.0)
             .max_width_constraint(DIALOG_MAX_WIDTH)
-            .style(
-                ArkUINodeAttributeType::Padding,
-                vec![spacing::XXL, spacing::XXL, spacing::XXL, spacing::XXL],
-            )
-            .style(
-                ArkUINodeAttributeType::BorderRadius,
-                vec![radius::LG, radius::LG, radius::LG, radius::LG],
-            )
-            .style(
-                ArkUINodeAttributeType::BorderWidth,
-                vec![1.0, 1.0, 1.0, 1.0],
-            )
-            .style(ArkUINodeAttributeType::BorderColor, vec![color::BORDER])
+            .padding([spacing::XXL, spacing::XXL, spacing::XXL, spacing::XXL])
+            .border_radius([radius::LG, radius::LG, radius::LG, radius::LG])
+            .border_width([1.0, 1.0, 1.0, 1.0])
+            .border_color(color::BORDER)
             .background_color(color::BACKGROUND)
             .children(vec![
                 arkit::row_component::<Message, arkit::Theme>()
                     .percent_width(1.0)
-                    .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_END)
+                    .justify_content_end()
                     .children(vec![close_button.into()])
                     .into(),
                 arkit::column_component::<Message, arkit::Theme>()
@@ -115,10 +107,7 @@ pub fn dialog_footer<Message: 'static>(actions: Vec<Element<Message>>) -> Elemen
                     } else {
                         arkit::row_component::<Message, arkit::Theme>()
                             .percent_width(1.0)
-                            .style(
-                                ArkUINodeAttributeType::Margin,
-                                vec![spacing::SM, 0.0, 0.0, 0.0],
-                            )
+                            .margin([spacing::SM, 0.0, 0.0, 0.0])
                             .children(vec![child])
                             .into()
                     }
@@ -136,17 +125,17 @@ pub fn dialog_header<Message: 'static>(
     let description = description.into();
     let mut children = vec![arkit::text::<Message, arkit::Theme>(title)
         .font_size(typography::LG)
-        .style(ArkUINodeAttributeType::FontWeight, 5_i32)
-        .style(ArkUINodeAttributeType::FontColor, color::FOREGROUND)
-        .style(ArkUINodeAttributeType::TextLineHeight, 18.0)
+        .font_weight(FontWeight::W600)
+        .font_color(color::FOREGROUND)
+        .line_height(18.0)
         .into()];
     if !description.is_empty() {
         children.push(
             margin_top(
                 arkit::text::<Message, arkit::Theme>(description)
                     .font_size(typography::SM)
-                    .style(ArkUINodeAttributeType::FontColor, color::MUTED_FOREGROUND)
-                    .style(ArkUINodeAttributeType::TextLineHeight, 20.0),
+                    .font_color(color::MUTED_FOREGROUND)
+                    .line_height(20.0),
                 spacing::SM,
             )
             .into(),

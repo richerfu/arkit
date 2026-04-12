@@ -3,12 +3,6 @@ use arkit::ohos_arkui_binding::types::alignment::Alignment;
 use arkit_icon as lucide;
 
 pub(crate) const TOGGLE_TRANSPARENT: u32 = 0x00000000;
-const FONT_WEIGHT_MEDIUM: i32 = 4;
-const FLEX_ALIGN_CENTER: i32 = 2;
-
-pub(crate) fn color_all(value: u32) -> Vec<u32> {
-    vec![value, value, value, value]
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ToggleVariant {
@@ -103,9 +97,9 @@ pub(crate) fn toggle_content_row<Message: 'static>(
     if let Some(label) = label {
         let text = arkit::text::<Message, arkit::Theme>(label)
             .font_size(typography::SM)
-            .style(ArkUINodeAttributeType::FontColor, foreground)
-            .style(ArkUINodeAttributeType::FontWeight, FONT_WEIGHT_MEDIUM)
-            .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
+            .font_color(foreground)
+            .font_weight(FontWeight::W500)
+            .line_height(20.0)
             .into();
 
         if children.is_empty() {
@@ -113,7 +107,7 @@ pub(crate) fn toggle_content_row<Message: 'static>(
         } else {
             children.push(
                 arkit::row_component::<Message, arkit::Theme>()
-                    .style(ArkUINodeAttributeType::Margin, vec![0.0, 0.0, 0.0, 8.0])
+                    .margin([0.0, 0.0, 0.0, 8.0])
                     .children(vec![text])
                     .into(),
             );
@@ -122,7 +116,7 @@ pub(crate) fn toggle_content_row<Message: 'static>(
 
     arkit::row_component::<Message, arkit::Theme>()
         .align_items_center()
-        .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
+        .justify_content_center()
         .children(children)
         .into()
 }
@@ -138,27 +132,15 @@ pub(crate) fn toggle_surface<Message>(
 ) -> ButtonElement<Message> {
     let visual = toggle_visual_style(variant, active);
     let mut element = normal_button_component::<Message, arkit::Theme>()
-        .style(ArkUINodeAttributeType::Clip, true)
-        .style(ArkUINodeAttributeType::BorderStyle, 0_i32)
-        .style(ArkUINodeAttributeType::AlignSelf, 1_i32)
-        .style(ArkUINodeAttributeType::BorderRadius, border_radius.to_vec())
-        .style(ArkUINodeAttributeType::BorderWidth, border_width.to_vec())
-        .style(
-            ArkUINodeAttributeType::BorderColor,
-            color_all(visual.border_color),
-        )
-        .style(
-            ArkUINodeAttributeType::Alignment,
-            i32::from(Alignment::Center),
-        )
-        .style(ArkUINodeAttributeType::Padding, size_style.padding.to_vec())
+        .clip(true)
+        .border_style(BorderStyle::Solid)
+        .align_self(ItemAlignment::Start)
+        .border_radius(border_radius)
+        .border_width(border_width)
+        .border_color_all(visual.border_color)
+        .alignment(Alignment::Center)
+        .padding(size_style.padding)
         .background_color(visual.background)
-        .patch_background_color(visual.background)
-        .patch_attr(ArkUINodeAttributeType::BorderWidth, border_width.to_vec())
-        .patch_attr(
-            ArkUINodeAttributeType::BorderColor,
-            color_all(visual.border_color),
-        )
         .height(size_style.height)
         .children(vec![content]);
 

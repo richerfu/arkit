@@ -42,11 +42,9 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                             ],
                             24.0,
                         )]),
-                        shadcn::card_footer(vec![shadcn::button(
-                            "Submit feedback",
-                            shadcn::ButtonVariant::Default,
-                        )
-                        .into()]),
+                        shadcn::card_footer(vec![shadcn::button("Submit feedback")
+                            .theme(shadcn::ButtonVariant::Default)
+                            .into()]),
                     ]),
                     shadcn::card(vec![
                         shadcn::card_header(
@@ -75,11 +73,9 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                             ],
                             24.0,
                         )]),
-                        shadcn::card_footer(vec![shadcn::button(
-                            "Submit survey",
-                            shadcn::ButtonVariant::Default,
-                        )
-                        .into()]),
+                        shadcn::card_footer(vec![shadcn::button("Submit survey")
+                            .theme(shadcn::ButtonVariant::Default)
+                            .into()]),
                     ]),
                 ],
             ),

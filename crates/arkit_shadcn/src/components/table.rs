@@ -3,22 +3,19 @@ use super::*;
 pub fn table<Message: 'static>(headers: Vec<String>, rows: Vec<Vec<String>>) -> Element<Message> {
     let header_row = arkit::row_component::<Message, arkit::Theme>()
         .percent_width(1.0)
-        .style(
-            ArkUINodeAttributeType::BorderWidth,
-            vec![0.0, 0.0, 1.0, 0.0],
-        )
-        .style(ArkUINodeAttributeType::BorderColor, vec![color::BORDER])
+        .border_width([0.0, 0.0, 1.0, 0.0])
+        .border_color(color::BORDER)
         .children(
             headers
                 .into_iter()
                 .map(|header| {
                     arkit::row_component::<Message, arkit::Theme>()
-                        .style(ArkUINodeAttributeType::LayoutWeight, 1.0_f32)
+                        .layout_weight(1.0_f32)
                         .height(40.0)
                         .align_items_center()
-                        .style(ArkUINodeAttributeType::Padding, vec![0.0, 8.0, 0.0, 8.0])
+                        .padding([0.0, 8.0, 0.0, 8.0])
                         .children(vec![body_text(header)
-                            .style(ArkUINodeAttributeType::FontColor, color::MUTED_FOREGROUND)
+                            .font_color(color::MUTED_FOREGROUND)
                             .into()])
                         .into()
                 })
@@ -34,26 +31,23 @@ pub fn table<Message: 'static>(headers: Vec<String>, rows: Vec<Vec<String>>) -> 
             arkit::row_component::<Message, arkit::Theme>()
                 .percent_width(1.0)
                 .align_items_center()
-                .style(
-                    ArkUINodeAttributeType::BorderWidth,
-                    if index + 1 == total_rows {
-                        vec![0.0, 0.0, 0.0, 0.0]
-                    } else {
-                        vec![0.0, 0.0, 1.0, 0.0]
-                    },
-                )
-                .style(ArkUINodeAttributeType::BorderColor, vec![color::BORDER])
+                .border_width(if index + 1 == total_rows {
+                    [0.0, 0.0, 0.0, 0.0]
+                } else {
+                    [0.0, 0.0, 1.0, 0.0]
+                })
+                .border_color(color::BORDER)
                 .children(
                     row.into_iter()
                         .map(|cell| {
                             arkit::row_component::<Message, arkit::Theme>()
-                                .style(ArkUINodeAttributeType::LayoutWeight, 1.0_f32)
+                                .layout_weight(1.0_f32)
                                 .align_items_center()
-                                .style(ArkUINodeAttributeType::Padding, vec![8.0, 8.0, 8.0, 8.0])
+                                .padding([8.0, 8.0, 8.0, 8.0])
                                 .children(vec![arkit::text::<Message, arkit::Theme>(cell)
                                     .font_size(typography::SM)
-                                    .style(ArkUINodeAttributeType::FontColor, color::FOREGROUND)
-                                    .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
+                                    .font_color(color::FOREGROUND)
+                                    .line_height(20.0)
                                     .into()])
                                 .into()
                         })
@@ -66,15 +60,9 @@ pub fn table<Message: 'static>(headers: Vec<String>, rows: Vec<Vec<String>>) -> 
     rounded_table_surface(
         arkit::column_component::<Message, arkit::Theme>()
             .percent_width(1.0)
-            .style(
-                ArkUINodeAttributeType::BorderWidth,
-                vec![1.0, 1.0, 1.0, 1.0],
-            )
-            .style(ArkUINodeAttributeType::BorderColor, vec![color::BORDER])
-            .style(
-                ArkUINodeAttributeType::BorderRadius,
-                vec![radius::SM, radius::SM, radius::SM, radius::SM],
-            )
+            .border_width([1.0, 1.0, 1.0, 1.0])
+            .border_color(color::BORDER)
+            .border_radius([radius::SM, radius::SM, radius::SM, radius::SM])
             .background_color(color::CARD)
             .children(
                 std::iter::once(header_row)

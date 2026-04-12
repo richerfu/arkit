@@ -33,26 +33,23 @@ fn view(state: &AppState) -> Element<Message> {
         .percent_width(1.0)
         .percent_height(1.0)
         .align_items_center()
-        .style(ArkUINodeAttributeType::ColumnJustifyContent, 2_i32)
-        .style(
-            ArkUINodeAttributeType::Padding,
-            vec![24.0, 24.0, 24.0, 24.0],
-        )
+        .justify_content_center()
+        .padding(24.0)
         .children(vec![
             text("arkit counter")
                 .font_size(28.0)
-                .style(ArkUINodeAttributeType::FontWeight, 5_i32)
-                .style(ArkUINodeAttributeType::TextLineHeight, 32.0)
+                .font_weight(FontWeight::W600)
+                .line_height(32.0)
                 .into(),
             row_component()
-                .style(ArkUINodeAttributeType::Margin, vec![12.0, 0.0, 0.0, 0.0])
+                .margin_top(12.0)
                 .children(vec![text(format!("value = {}", state.value))
                     .font_size(18.0)
-                    .style(ArkUINodeAttributeType::TextLineHeight, 24.0)
+                    .line_height(24.0)
                     .into()])
                 .into(),
             row_component()
-                .style(ArkUINodeAttributeType::Margin, vec![20.0, 0.0, 0.0, 0.0])
+                .margin_top(20.0)
                 .align_items_center()
                 .children(vec![
                     button("decrement")
@@ -60,7 +57,7 @@ fn view(state: &AppState) -> Element<Message> {
                         .on_press(Message::Decrement)
                         .into(),
                     row_component()
-                        .style(ArkUINodeAttributeType::Margin, vec![0.0, 0.0, 0.0, 12.0])
+                        .margin_left(12.0)
                         .children(vec![button("increment")
                             .padding([8.0, 12.0, 8.0, 12.0])
                             .on_press(Message::Increment)

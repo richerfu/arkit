@@ -1,6 +1,4 @@
-use super::menu_common::{
-    menu_popup, MenuEntry, MenuStyle,
-};
+use super::menu_common::{menu_popup, MenuEntry, MenuStyle};
 use super::*;
 use std::rc::Rc;
 
@@ -16,10 +14,7 @@ pub struct MenubarMenuSpec {
     pub items: Vec<MenubarEntry>,
 }
 
-pub fn menubar_menu(
-    title: impl Into<String>,
-    items: Vec<MenubarEntry>,
-) -> MenubarMenuSpec {
+pub fn menubar_menu(title: impl Into<String>, items: Vec<MenubarEntry>) -> MenubarMenuSpec {
     MenubarMenuSpec {
         title: title.into(),
         items,
@@ -33,30 +28,19 @@ fn menubar_trigger_surface<Message: 'static>(
     arkit::row_component::<Message, arkit::Theme>()
         .height(28.0)
         .align_items_center()
-        .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
-        .style(
-            ArkUINodeAttributeType::Padding,
-            vec![6.0, spacing::MD, 6.0, spacing::MD],
-        )
-        .style(
-            ArkUINodeAttributeType::BorderRadius,
-            vec![radius::SM, radius::SM, radius::SM, radius::SM],
-        )
+        .justify_content_center()
+        .padding([6.0, spacing::MD, 6.0, spacing::MD])
+        .border_radius([radius::SM, radius::SM, radius::SM, radius::SM])
         .background_color(if active {
-            color::ACCENT
-        } else {
-            MENUBAR_ITEM_TRANSPARENT
-        })
-        .patch_background_color(if active {
             color::ACCENT
         } else {
             MENUBAR_ITEM_TRANSPARENT
         })
         .children(vec![arkit::text::<Message, arkit::Theme>(title)
             .font_size(typography::SM)
-            .style(ArkUINodeAttributeType::FontWeight, 4_i32)
-            .style(ArkUINodeAttributeType::FontColor, color::FOREGROUND)
-            .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
+            .font_weight(FontWeight::W500)
+            .font_color(color::FOREGROUND)
+            .line_height(20.0)
             .into()])
         .into()
 }
@@ -69,9 +53,8 @@ pub fn menubar_message<Message>(
 where
     Message: Send + 'static,
 {
-    let on_active_change = Rc::new(move |value: Option<usize>| {
-        dispatch_message(on_active_change(value))
-    });
+    let on_active_change =
+        Rc::new(move |value: Option<usize>| dispatch_message(on_active_change(value)));
 
     let items: Vec<Element<Message>> = menus
         .into_iter()
@@ -80,22 +63,22 @@ where
             let is_active = active == Some(index);
             let on_open = on_active_change.clone();
             let on_close = on_active_change.clone();
-            let trigger = menubar_trigger_surface::<Message>(spec.title, is_active)
-                .into();
+            let trigger = menubar_trigger_surface::<Message>(spec.title, is_active).into();
 
-            let trigger_with_click: Element<Message> = arkit::row_component::<Message, arkit::Theme>()
-                .on_click({
-                    let on_open = on_open.clone();
-                    move || {
-                        if is_active {
-                            on_open(None);
-                        } else {
-                            on_open(Some(index));
+            let trigger_with_click: Element<Message> =
+                arkit::row_component::<Message, arkit::Theme>()
+                    .on_click({
+                        let on_open = on_open.clone();
+                        move || {
+                            if is_active {
+                                on_open(None);
+                            } else {
+                                on_open(Some(index));
+                            }
                         }
-                    }
-                })
-                .children(vec![trigger])
-                .into();
+                    })
+                    .children(vec![trigger])
+                    .into();
 
             menu_popup(
                 trigger_with_click,

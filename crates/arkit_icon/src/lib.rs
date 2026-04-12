@@ -3,6 +3,6 @@ mod icon;
 
 pub use embed::{has_icon, icon_names};
 pub use icon::{
-    icon, try_icon, IconElement, IconError, DEFAULT_ICON_COLOR, DEFAULT_ICON_SIZE,
+    icon, icon_node, try_icon, IconElement, IconError, DEFAULT_ICON_COLOR, DEFAULT_ICON_SIZE,
     DEFAULT_STROKE_WIDTH,
 };

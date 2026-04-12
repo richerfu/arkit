@@ -19,29 +19,20 @@ fn checkbox_indicator<Message: 'static>(checked: bool, style: CheckboxStyle) -> 
             .width(CHECKBOX_SIZE)
             .height(CHECKBOX_SIZE)
             .align_items_center()
-            .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
-            .style(
-                ArkUINodeAttributeType::BorderRadius,
-                vec![radius::SM, radius::SM, radius::SM, radius::SM],
-            )
-            .style(
-                ArkUINodeAttributeType::BorderWidth,
-                vec![
-                    CHECKBOX_BORDER_WIDTH,
-                    CHECKBOX_BORDER_WIDTH,
-                    CHECKBOX_BORDER_WIDTH,
-                    CHECKBOX_BORDER_WIDTH,
-                ],
-            )
-            .style(
-                ArkUINodeAttributeType::BorderColor,
-                vec![if checked {
-                    style.checked_color
-                } else {
-                    color::INPUT
-                }],
-            )
-            .style(ArkUINodeAttributeType::Clip, true)
+            .justify_content_center()
+            .border_radius([radius::SM, radius::SM, radius::SM, radius::SM])
+            .border_width([
+                CHECKBOX_BORDER_WIDTH,
+                CHECKBOX_BORDER_WIDTH,
+                CHECKBOX_BORDER_WIDTH,
+                CHECKBOX_BORDER_WIDTH,
+            ])
+            .border_color(if checked {
+                style.checked_color
+            } else {
+                color::INPUT
+            })
+            .clip(true)
             .background_color(if checked {
                 style.checked_color
             } else {
@@ -72,10 +63,7 @@ fn checkbox_impl<Message: 'static>(
         children.push(
             arkit::row_component::<Message, arkit::Theme>()
                 .align_items_center()
-                .style(
-                    ArkUINodeAttributeType::Margin,
-                    vec![0.0, 0.0, 0.0, spacing::SM],
-                )
+                .margin([0.0, 0.0, 0.0, spacing::SM])
                 .children(vec![label(label_text).into()])
                 .into(),
         );
@@ -92,7 +80,7 @@ fn checkbox_impl<Message: 'static>(
     }
 
     if style.disabled {
-        root = root.style(ArkUINodeAttributeType::Opacity, 0.5_f32);
+        root = root.opacity(0.5_f32);
     }
 
     root.into()

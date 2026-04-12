@@ -6,12 +6,11 @@ license.workspace = true
 
 [features]
 default = ["api-22"]
-api-22 = ["ohos-arkui-binding/api-22", "ohos-arkui-sys/api-22"]
+api-22 = ["ohos-arkui-binding/api-22"]
 
 [dependencies]
 arkit_core.workspace = true
 arkit_runtime.workspace = true
 ohos-arkui-binding = { workspace = true, default-features = false, features = ["napi"] }
-ohos-arkui-sys = { path = "/Users/ranger/Desktop/project/ohos-rs/ohos-native-bindings/sys/ohos-arkui-sys", features = ["api-22"] }
 ohos-display-binding.workspace = true
 ohos-hilog-binding.workspace = true

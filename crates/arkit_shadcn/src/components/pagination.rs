@@ -19,9 +19,10 @@ where
     page_numbers.sort_unstable();
     page_numbers.dedup();
 
-    let mut items: Vec<Element<Message>> = vec![button("Prev", ButtonVariant::Ghost)
+    let mut items: Vec<Element<Message>> = vec![button("Prev")
+        .theme(ButtonVariant::Ghost)
         .height(36.0)
-        .style(ArkUINodeAttributeType::Padding, vec![0.0, 10.0, 0.0, 10.0])
+        .padding([10.0, 0.0])
         .on_press((on_page_change.as_ref())((current - 1).max(1)))
         .into()];
 
@@ -37,9 +38,10 @@ where
     }
 
     items.push(
-        button("Next", ButtonVariant::Ghost)
+        button("Next")
+            .theme(ButtonVariant::Ghost)
             .height(36.0)
-            .style(ArkUINodeAttributeType::Padding, vec![0.0, 10.0, 0.0, 10.0])
+            .padding([10.0, 0.0])
             .on_press((on_page_change.as_ref())((current + 1).min(total_pages)))
             .into(),
     );
@@ -64,10 +66,11 @@ where
     } else {
         ButtonVariant::Ghost
     };
-    button(page_num.to_string(), variant)
+    button(page_num.to_string())
+        .theme(variant)
         .width(36.0)
         .height(36.0)
-        .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
+        .padding(arkit::Padding::ZERO)
         .on_press((on_page_change.as_ref())(page_num))
         .into()
 }
@@ -77,11 +80,11 @@ fn pagination_ellipsis<Message: 'static>() -> Element<Message> {
         .width(36.0)
         .height(36.0)
         .align_items_center()
-        .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
+        .justify_content_center()
         .children(vec![arkit::text::<Message, arkit::Theme>("...")
             .font_size(typography::SM)
-            .style(ArkUINodeAttributeType::FontColor, color::MUTED_FOREGROUND)
-            .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
+            .font_color(color::MUTED_FOREGROUND)
+            .line_height(20.0)
             .into()])
         .into()
 }

@@ -16,5 +16,5 @@ pub fn sidebar_item(title: impl Into<String>, active: bool) -> Element {
     } else {
         ButtonVariant::Ghost
     };
-    button(title, variant).into()
+    button(title).theme(variant).into()
 }

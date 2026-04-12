@@ -7,7 +7,8 @@ use arkit_shadcn as shadcn;
 pub(crate) fn render(ctx: DemoContext) -> Element {
     component_canvas(
         shadcn::tooltip(
-            shadcn::button("Press", shadcn::ButtonVariant::Outline)
+            shadcn::button("Press")
+                .theme(shadcn::ButtonVariant::Outline)
                 .on_press(Message::SetTooltipOpen(!ctx.tooltip_open))
                 .into(),
             "Add to library",

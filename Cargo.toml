@@ -40,6 +40,13 @@ proc-macro2 = "1.0"
 openharmony-ability = { git = "https://github.com/harmony-contrib/openharmony-ability.git" }
 openharmony-ability-derive = { git = "https://github.com/harmony-contrib/openharmony-ability.git" }
 
-ohos-arkui-binding = { path = "/Users/ranger/Desktop/project/ohos-rs/ohos-native-bindings/crates/arkui" }
-ohos-display-binding = { path = "/Users/ranger/Desktop/project/ohos-rs/ohos-native-bindings/crates/display" }
-ohos-hilog-binding = { path = "/Users/ranger/Desktop/project/ohos-rs/ohos-native-bindings/crates/hilog" }
+ohos-arkui-binding = { path = "../ohos-native-bindings/crates/arkui", default-features = false }
+ohos-display-binding = { path = "../ohos-native-bindings/crates/display" }
+ohos-hilog-binding = { path = "../ohos-native-bindings/crates/hilog" }
+
+[patch.crates-io]
+ohos-arkui-binding = { path = "../ohos-native-bindings/crates/arkui" }
+ohos-display-binding = { path = "../ohos-native-bindings/crates/display" }
+ohos-ime-binding = { path = "../ohos-native-bindings/crates/ime" }
+ohos-resource-manager-binding = { path = "../ohos-native-bindings/crates/resource_manager" }
+ohos-xcomponent-binding = { path = "../ohos-native-bindings/crates/xcomponent" }

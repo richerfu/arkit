@@ -23,25 +23,17 @@ pub fn chart(values: Vec<f32>) -> Element {
                         arkit::row_component()
                             .percent_width(1.0)
                             .align_items_center()
-                            .style(
-                                ArkUINodeAttributeType::RowJustifyContent,
-                                FLEX_ALIGN_SPACE_BETWEEN,
-                            )
+                            .justify_content(JustifyContent::SpaceBetween)
                             .children(vec![
                                 muted_text(format!("Series {}", index + 1)).into(),
                                 body_text_regular(format!("{percent:.0}%")).into(),
                             ])
                             .into(),
                         arkit::row_component()
-                            .style(
-                                ArkUINodeAttributeType::Margin,
-                                vec![spacing::XXS, 0.0, 0.0, 0.0],
-                            )
+                            .margin([spacing::XXS, 0.0, 0.0, 0.0])
                             .children(vec![rounded_progress(
-                                arkit::progress_component()
-                                    .style(ArkUINodeAttributeType::ProgressValue, percent)
-                                    .style(ArkUINodeAttributeType::ProgressTotal, 100.0)
-                                    .style(ArkUINodeAttributeType::ProgressColor, tone)
+                                arkit::progress(percent, 100.0)
+                                    .progress_color(tone)
                                     .height(8.0),
                             )
                             .into()])

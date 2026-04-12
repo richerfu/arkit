@@ -23,15 +23,9 @@ where
                 .height(40.0)
                 .percent_width(1.0)
                 .background_color(color::BACKGROUND)
-                .style(
-                    ArkUINodeAttributeType::Padding,
-                    vec![8.0, spacing::MD, 8.0, spacing::MD],
-                )
+                .padding([8.0, spacing::MD, 8.0, spacing::MD])
                 .align_items_center()
-                .style(
-                    ArkUINodeAttributeType::RowJustifyContent,
-                    FLEX_ALIGN_SPACE_BETWEEN,
-                )
+                .justify_content(JustifyContent::SpaceBetween)
                 .children(vec![
                     arkit::row_component::<Message, arkit::Theme>()
                         .align_items_center()
@@ -41,10 +35,7 @@ where
                                 .color(color::MUTED_FOREGROUND)
                                 .render::<Message, arkit::Theme>(),
                             arkit::row_component::<Message, arkit::Theme>()
-                                .style(
-                                    ArkUINodeAttributeType::Margin,
-                                    vec![0.0, 0.0, 0.0, spacing::SM],
-                                )
+                                .margin([0.0, 0.0, 0.0, spacing::SM])
                                 .children(vec![arkit::text::<Message, arkit::Theme>(
                                     if selected.is_empty() {
                                         String::from("Search an option")
@@ -53,15 +44,12 @@ where
                                     },
                                 )
                                 .font_size(typography::SM)
-                                .style(
-                                    ArkUINodeAttributeType::FontColor,
-                                    if selected.is_empty() {
-                                        color::MUTED_FOREGROUND
-                                    } else {
-                                        color::FOREGROUND
-                                    },
-                                )
-                                .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
+                                .font_color(if selected.is_empty() {
+                                    color::MUTED_FOREGROUND
+                                } else {
+                                    color::FOREGROUND
+                                })
+                                .line_height(20.0)
                                 .into()])
                                 .into(),
                         ])
@@ -98,18 +86,9 @@ where
                         .percent_width(1.0)
                         .height(36.0)
                         .align_items_center()
-                        .style(
-                            ArkUINodeAttributeType::RowJustifyContent,
-                            FLEX_ALIGN_SPACE_BETWEEN,
-                        )
-                        .style(
-                            ArkUINodeAttributeType::Padding,
-                            vec![8.0, spacing::SM, 8.0, spacing::SM],
-                        )
-                        .style(
-                            ArkUINodeAttributeType::BorderRadius,
-                            vec![radius::SM, radius::SM, radius::SM, radius::SM],
-                        )
+                        .justify_content(JustifyContent::SpaceBetween)
+                        .padding([8.0, spacing::SM, 8.0, spacing::SM])
+                        .border_radius([radius::SM, radius::SM, radius::SM, radius::SM])
                         .background_color(if active { color::ACCENT } else { 0x00000000 })
                         .on_click(move || {
                             on_select(option_value.clone());
@@ -118,15 +97,12 @@ where
                         .children(vec![
                             arkit::text::<Message, arkit::Theme>(option.clone())
                                 .font_size(typography::SM)
-                                .style(
-                                    ArkUINodeAttributeType::FontColor,
-                                    if active {
-                                        color::ACCENT_FOREGROUND
-                                    } else {
-                                        color::FOREGROUND
-                                    },
-                                )
-                                .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
+                                .font_color(if active {
+                                    color::ACCENT_FOREGROUND
+                                } else {
+                                    color::FOREGROUND
+                                })
+                                .line_height(20.0)
                                 .into(),
                             if active {
                                 lucide::icon("check")
@@ -146,22 +122,16 @@ where
 
             let mut panel = arkit::column_component::<Message, arkit::Theme>().children(vec![
                 arkit::row_component::<Message, arkit::Theme>()
-                    .style(
-                        ArkUINodeAttributeType::Padding,
-                        vec![8.0, spacing::SM, 8.0, spacing::SM],
-                    )
+                    .padding([8.0, spacing::SM, 8.0, spacing::SM])
                     .children(vec![arkit::text::<Message, arkit::Theme>("Suggestions")
                         .font_size(typography::XS)
-                        .style(ArkUINodeAttributeType::FontColor, color::MUTED_FOREGROUND)
-                        .style(ArkUINodeAttributeType::TextLineHeight, 16.0)
+                        .font_color(color::MUTED_FOREGROUND)
+                        .line_height(16.0)
                         .into()])
                     .into(),
                 arkit::column_component::<Message, arkit::Theme>()
                     .percent_width(1.0)
-                    .style(
-                        ArkUINodeAttributeType::Padding,
-                        vec![spacing::XXS, spacing::XXS, spacing::XXS, spacing::XXS],
-                    )
+                    .padding([spacing::XXS, spacing::XXS, spacing::XXS, spacing::XXS])
                     .children(items)
                     .into(),
             ]);

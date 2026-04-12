@@ -8,7 +8,8 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
     top_center_canvas(
         fixed_width(
             shadcn::dropdown_menu(
-                shadcn::button("Open", shadcn::ButtonVariant::Outline)
+                shadcn::button("Open")
+                    .theme(shadcn::ButtonVariant::Outline)
                     .on_press(Message::SetDropdownMenuOpen(!ctx.dropdown_menu_open))
                     .into(),
                 vec![

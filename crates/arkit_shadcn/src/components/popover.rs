@@ -49,10 +49,7 @@ pub fn popover_with_width<Message: 'static>(
             arkit::column_component::<Message, arkit::Theme>()
                 .width(width)
                 .align_items_start()
-                .style(
-                    ArkUINodeAttributeType::Padding,
-                    vec![spacing::LG, spacing::LG, spacing::LG, spacing::LG],
-                )
+                .padding([spacing::LG, spacing::LG, spacing::LG, spacing::LG])
                 .children(vec![stack(content, spacing::LG)]),
         )
         .into(),

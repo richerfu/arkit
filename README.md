@@ -47,6 +47,17 @@ dedicated crates and are re-exported here.
 
 Use `arkit_shadcn::prelude::*` to import the full set.
 
+Button styling follows the widget builder style:
+
+```rust
+button("Save")
+    .theme(ButtonVariant::Default)
+    .size(ButtonSize::Sm)
+    .margin_top(8.0)
+```
+
+Call regular `Node` builder methods after shadcn helpers to override wrapper defaults.
+
 ## View Layer (All Components)
 
 `arkit::prelude::*` exposes the ArkUI-backed widget constructors in builder style:
@@ -58,7 +69,7 @@ Use `arkit_shadcn::prelude::*` to import the full set.
 For full style/attribute coverage, use the `Node` builder methods:
 
 - `Node::attr(ArkUINodeAttributeType, ArkUINodeAttributeItem)`
-- `Node::style(...)` (alias of `attr`)
+- enum attributes use typed values, for example `text_align(TextAlignment::Start)` and `font_weight(FontWeight::W600)`
 - `Node::on_event(NodeEventType, ...)` for all node events
 - `Node::on_custom_event(NodeCustomEventType, ...)` for all custom events
 - `Node::native(|native| { ... })` for direct ArkUI node access

@@ -33,10 +33,12 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                 )]),
                 shadcn::card_footer(vec![v_stack(
                     vec![
-                        shadcn::button("Subscribe", shadcn::ButtonVariant::Default)
+                        shadcn::button("Subscribe")
+                            .theme(shadcn::ButtonVariant::Default)
                             .percent_width(1.0)
                             .into(),
-                        shadcn::button("Later", shadcn::ButtonVariant::Outline)
+                        shadcn::button("Later")
+                            .theme(shadcn::ButtonVariant::Outline)
                             .percent_width(1.0)
                             .into(),
                     ],

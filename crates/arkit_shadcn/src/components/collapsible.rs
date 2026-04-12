@@ -11,10 +11,7 @@ pub fn collapsible<Message: Send + 'static>(
     let rest: Vec<Element<Message>> = items
         .map(|child| {
             arkit::row_component::<Message, arkit::Theme>()
-                .style(
-                    ArkUINodeAttributeType::Margin,
-                    vec![spacing::SM, 0.0, 0.0, 0.0],
-                )
+                .margin([spacing::SM, 0.0, 0.0, 0.0])
                 .children(vec![child])
                 .into()
         })
@@ -23,24 +20,19 @@ pub fn collapsible<Message: Send + 'static>(
     let mut children: Vec<Element<Message>> = vec![arkit::row_component::<Message, arkit::Theme>()
         .percent_width(1.0)
         .align_items_center()
-        .style(
-            ArkUINodeAttributeType::RowJustifyContent,
-            FLEX_ALIGN_SPACE_BETWEEN,
-        )
-        .style(
-            ArkUINodeAttributeType::Padding,
-            vec![0.0, spacing::LG, 0.0, spacing::LG],
-        )
+        .justify_content(JustifyContent::SpaceBetween)
+        .padding([0.0, spacing::LG, 0.0, spacing::LG])
         .on_click(move || on_open_change(!open))
         .children(vec![
             body_text(title)
-                .style(ArkUINodeAttributeType::FontWeight, 5_i32)
-                .style(ArkUINodeAttributeType::FontColor, color::FOREGROUND)
+                .font_weight(FontWeight::W600)
+                .font_color(color::FOREGROUND)
                 .into(),
-            icon_button_with_variant("chevrons-up-down", ButtonVariant::Ghost)
+            icon_button("chevrons-up-down")
+                .theme(ButtonVariant::Ghost)
                 .width(32.0)
                 .height(32.0)
-                .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
+                .padding(arkit::Padding::ZERO)
                 .into(),
         ])
         .into()];
@@ -48,10 +40,7 @@ pub fn collapsible<Message: Send + 'static>(
     if let Some(first) = first {
         children.push(
             arkit::row_component::<Message, arkit::Theme>()
-                .style(
-                    ArkUINodeAttributeType::Margin,
-                    vec![spacing::SM, 0.0, 0.0, 0.0],
-                )
+                .margin([spacing::SM, 0.0, 0.0, 0.0])
                 .children(vec![first])
                 .into(),
         );

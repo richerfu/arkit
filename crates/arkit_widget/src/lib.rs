@@ -11,10 +11,11 @@ pub use arkit_core::{Horizontal, Length, Padding, Settings, Size, Theme, Vertica
 pub use internal::*;
 pub use ohos_arkui_binding::api::node_custom_event::NodeCustomEvent;
 pub use ohos_arkui_binding::event::inner_event::Event as ArkEvent;
-pub use ohos_arkui_binding::types::advanced::NodeCustomEventType;
+pub use ohos_arkui_binding::types::advanced::{FontWeight, NodeCustomEventType, ShadowStyle};
 pub use ohos_arkui_binding::types::alignment::Alignment;
 pub use ohos_arkui_binding::types::direction::Direction;
 pub use ohos_arkui_binding::types::event::NodeEventType;
+pub use ohos_arkui_binding::types::text_alignment::TextAlignment;
 pub use overlay::{
     anchored_overlay, compose_registered_overlays, floating_overlay, floating_overlay_with_builder,
     floating_overlay_with_builder_and_surfaces, floating_overlay_with_surfaces, modal_overlay,
@@ -26,12 +27,14 @@ pub use render_impl::{
     button, button_component, calendar_picker, calendar_picker_component, checkbox,
     checkbox_component, column, column_component, container, date_picker, date_picker_component,
     image, image_component, mount, observe_layout_frame as observe_layout_frame_impl,
-    observe_layout_size as observe_layout_size_impl, patch, progress, progress_component,
-    radio, radio_component, realize_attached_mount, row, row_component, scroll,
-    scroll_component, slider, slider_component, stack, stack_component, swiper,
-    swiper_component, text, text_area, text_area_component, text_component, text_input,
-    text_input_component, toggle, toggle_component, Attribute as ArkUINodeAttributeType,
-    AttributeValue as ArkUINodeAttributeItem, Element, MountedNode, Node, Renderer,
+    observe_layout_size as observe_layout_size_impl, patch, progress, progress_component, radio,
+    radio_component, realize_attached_mount, row, row_component, scroll, scroll_component, slider,
+    slider_component, stack, stack_component, swiper, swiper_component, text, text_area,
+    text_area_component, text_component, text_input, text_input_component, toggle,
+    toggle_component, Attribute as ArkUINodeAttributeType,
+    AttributeValue as ArkUINodeAttributeItem, BorderStyle, ButtonType, Element, FontStyle,
+    HitTestBehavior, ItemAlignment, JustifyContent, MountedNode, Node, ObjectFit, Renderer,
+    UiState, Visibility,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -102,10 +105,12 @@ pub mod prelude {
         radio_component, realize_attached_mount, row, row_component, scroll, scroll_component,
         slider, slider_component, stack, stack_component, swiper, swiper_component, text,
         text_area, text_area_component, text_component, text_input, text_input_component, toggle,
-        toggle_component, ArkEvent, ArkUINodeAttributeItem, ArkUINodeAttributeType, Element,
-        FloatingAlign, FloatingOverlaySpec, FloatingSide, Horizontal, LayoutFrame, LayoutSize,
-        Length, LifecycleEvent, ModalOverlaySpec, ModalPresentation, NativeOverlayPlacement,
-        NodeCustomEvent, NodeCustomEventType, NodeEventType, OverlayDismissMode, OverlayStrategy,
-        Padding, Size, Theme, Vertical,
+        toggle_component, ArkEvent, ArkUINodeAttributeItem, ArkUINodeAttributeType, BorderStyle,
+        ButtonType, Element, FloatingAlign, FloatingOverlaySpec, FloatingSide, FontStyle,
+        FontWeight, HitTestBehavior, Horizontal, ItemAlignment, JustifyContent, LayoutFrame,
+        LayoutSize, Length, LifecycleEvent, ModalOverlaySpec, ModalPresentation,
+        NativeOverlayPlacement, NodeCustomEvent, NodeCustomEventType, NodeEventType, ObjectFit,
+        OverlayDismissMode, OverlayStrategy, Padding, ShadowStyle, Size, TextAlignment, Theme,
+        UiState, Vertical, Visibility,
     };
 }

@@ -12,8 +12,8 @@ use arkit_runtime::{
     Program, SubscriptionHandle,
 };
 use arkit_widget::{
-    begin_render_pass, end_render_pass, mount, patch, realize_attached_mount, Element,
-    MountedNode, Renderer,
+    begin_render_pass, end_render_pass, mount, patch, realize_attached_mount, Element, MountedNode,
+    Renderer,
 };
 use napi_ohos::{Error, Result};
 use ohos_arkui_binding::common::handle::ArkUIHandle;

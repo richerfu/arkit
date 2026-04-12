@@ -1,5 +1,5 @@
 use super::*;
-use arkit::ohos_arkui_binding::types::text_alignment::TextAlignment;
+use arkit::TextAlignment;
 use arkit_icon as lucide;
 
 const ALERT_BORDER_WIDTH: f32 = 1.0;
@@ -20,7 +20,6 @@ const ALERT_TITLE_LINE_HEIGHT: f32 = 14.0;
 // Tailwind `leading-relaxed` for `text-sm`: 14 * 1.625 = 22.75
 const ALERT_DESCRIPTION_LINE_HEIGHT: f32 = 22.75;
 const ALERT_LIST_LINE_HEIGHT: f32 = 20.0;
-const FONT_WEIGHT_MEDIUM: i32 = 4;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AlertVariant {
@@ -44,29 +43,20 @@ pub fn alert_root<Message: 'static>(
 
     arkit::stack_component::<Message, arkit::Theme>()
         .percent_width(1.0)
-        .style(
-            ArkUINodeAttributeType::BorderRadius,
-            vec![radius::LG, radius::LG, radius::LG, radius::LG],
-        )
-        .style(
-            ArkUINodeAttributeType::BorderWidth,
-            vec![
-                ALERT_BORDER_WIDTH,
-                ALERT_BORDER_WIDTH,
-                ALERT_BORDER_WIDTH,
-                ALERT_BORDER_WIDTH,
-            ],
-        )
-        .style(ArkUINodeAttributeType::BorderColor, vec![color::BORDER])
+        .border_radius([radius::LG, radius::LG, radius::LG, radius::LG])
+        .border_width([
+            ALERT_BORDER_WIDTH,
+            ALERT_BORDER_WIDTH,
+            ALERT_BORDER_WIDTH,
+            ALERT_BORDER_WIDTH,
+        ])
+        .border_color(color::BORDER)
         .background_color(color::CARD)
         .children(vec![
             arkit::row_component::<Message, arkit::Theme>()
                 .width(ALERT_ICON_SIZE)
                 .height(ALERT_ICON_SIZE)
-                .style(
-                    ArkUINodeAttributeType::Position,
-                    vec![ALERT_ICON_LEFT, ALERT_ICON_TOP],
-                )
+                .position(ALERT_ICON_LEFT, ALERT_ICON_TOP)
                 .children(vec![lucide::icon(icon_name)
                     .size(ALERT_ICON_SIZE)
                     .color(tone.icon_color)
@@ -75,15 +65,12 @@ pub fn alert_root<Message: 'static>(
             arkit::column_component::<Message, arkit::Theme>()
                 .percent_width(1.0)
                 .align_items_start()
-                .style(
-                    ArkUINodeAttributeType::Padding,
-                    vec![
-                        ALERT_PADDING_TOP,
-                        ALERT_PADDING_RIGHT,
-                        ALERT_PADDING_BOTTOM,
-                        ALERT_PADDING_LEFT,
-                    ],
-                )
+                .padding([
+                    ALERT_PADDING_TOP,
+                    ALERT_PADDING_RIGHT,
+                    ALERT_PADDING_BOTTOM,
+                    ALERT_PADDING_LEFT,
+                ])
                 .children(children)
                 .into(),
         ])
@@ -98,28 +85,13 @@ pub fn alert_title<Message: 'static>(
 
     arkit::text::<Message, arkit::Theme>(content)
         .font_size(typography::SM)
-        .style(ArkUINodeAttributeType::FontWeight, FONT_WEIGHT_MEDIUM)
-        .style(ArkUINodeAttributeType::FontColor, tone.title_color)
-        .style(
-            ArkUINodeAttributeType::TextLineHeight,
-            ALERT_TITLE_LINE_HEIGHT,
-        )
-        .style(
-            ArkUINodeAttributeType::TextLetterSpacing,
-            ALERT_TRACKING_TIGHT,
-        )
-        .style(
-            ArkUINodeAttributeType::TextAlign,
-            i32::from(TextAlignment::Start),
-        )
-        .style(
-            ArkUINodeAttributeType::Margin,
-            vec![0.0, 0.0, ALERT_TITLE_BOTTOM, ALERT_CONTENT_OFFSET],
-        )
-        .style(
-            ArkUINodeAttributeType::Padding,
-            vec![0.0, 0.0, 0.0, ALERT_CONTENT_LEFT],
-        )
+        .font_weight(FontWeight::W500)
+        .font_color(tone.title_color)
+        .line_height(ALERT_TITLE_LINE_HEIGHT)
+        .text_letter_spacing(ALERT_TRACKING_TIGHT)
+        .text_align(TextAlignment::Start)
+        .margin([0.0, 0.0, ALERT_TITLE_BOTTOM, ALERT_CONTENT_OFFSET])
+        .padding([0.0, 0.0, 0.0, ALERT_CONTENT_LEFT])
 }
 
 pub fn alert_description<Message: 'static>(
@@ -130,23 +102,11 @@ pub fn alert_description<Message: 'static>(
 
     arkit::text::<Message, arkit::Theme>(content)
         .font_size(typography::SM)
-        .style(ArkUINodeAttributeType::FontColor, tone.description_color)
-        .style(
-            ArkUINodeAttributeType::TextLineHeight,
-            ALERT_DESCRIPTION_LINE_HEIGHT,
-        )
-        .style(
-            ArkUINodeAttributeType::TextAlign,
-            i32::from(TextAlignment::Start),
-        )
-        .style(
-            ArkUINodeAttributeType::Margin,
-            vec![0.0, 0.0, 0.0, ALERT_CONTENT_OFFSET],
-        )
-        .style(
-            ArkUINodeAttributeType::Padding,
-            vec![0.0, 0.0, ALERT_DESCRIPTION_BOTTOM, ALERT_CONTENT_LEFT],
-        )
+        .font_color(tone.description_color)
+        .line_height(ALERT_DESCRIPTION_LINE_HEIGHT)
+        .text_align(TextAlignment::Start)
+        .margin([0.0, 0.0, 0.0, ALERT_CONTENT_OFFSET])
+        .padding([0.0, 0.0, ALERT_DESCRIPTION_BOTTOM, ALERT_CONTENT_LEFT])
 }
 
 pub fn alert_list<Message: 'static>(
@@ -161,11 +121,8 @@ pub fn alert_list<Message: 'static>(
             let text = format!("\u{2022} {}", item.into());
             let row = arkit::text(text)
                 .font_size(typography::SM)
-                .style(ArkUINodeAttributeType::FontColor, tone.title_color)
-                .style(
-                    ArkUINodeAttributeType::TextLineHeight,
-                    ALERT_LIST_LINE_HEIGHT,
-                );
+                .font_color(tone.title_color)
+                .line_height(ALERT_LIST_LINE_HEIGHT);
 
             if index == 0 {
                 row.into()
@@ -178,14 +135,8 @@ pub fn alert_list<Message: 'static>(
     arkit::column_component::<Message, arkit::Theme>()
         .percent_width(1.0)
         .align_items_start()
-        .style(
-            ArkUINodeAttributeType::Margin,
-            vec![0.0, 0.0, 0.0, ALERT_CONTENT_OFFSET],
-        )
-        .style(
-            ArkUINodeAttributeType::Padding,
-            vec![0.0, 0.0, ALERT_LIST_BOTTOM, ALERT_CONTENT_LEFT],
-        )
+        .margin([0.0, 0.0, 0.0, ALERT_CONTENT_OFFSET])
+        .padding([0.0, 0.0, ALERT_LIST_BOTTOM, ALERT_CONTENT_LEFT])
         .children(rows)
         .into()
 }

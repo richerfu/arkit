@@ -1,12 +1,12 @@
 use arkit::entry;
 use arkit::{application, Element as ArkElement, Task};
-use std::ffi::CString;
 
 mod showcase;
 
 pub(crate) mod prelude {
     pub(crate) type Element = arkit::Element<crate::Message>;
     pub(crate) use arkit::prelude::*;
+    pub(crate) use arkit_shadcn::ButtonStyleExt;
 }
 
 use showcase::{catalog_home, component_page, DemoContext};
@@ -171,20 +171,7 @@ fn update(state: &mut ShowcaseState, message: Message) -> Task<Message> {
         Message::ButtonPreviewPressed(label) => {
             state.button_preview_feedback =
                 Some(format!("Last action: button preview pressed: {label}"));
-            if let (Ok(tag), Ok(content)) = (
-                CString::new("shadcn_showcase"),
-                CString::new(format!("button preview pressed: {label}")),
-            ) {
-                unsafe {
-                    ohos_hilogs_sys::OH_LOG_Print(
-                        ohos_hilogs_sys::LogType_LOG_APP,
-                        ohos_hilogs_sys::LogLevel_LOG_INFO,
-                        ohos_hilogs_sys::LOG_DOMAIN,
-                        tag.as_ptr(),
-                        content.as_ptr(),
-                    );
-                }
-            }
+            ohos_hilog_binding::info(format!("button preview pressed: {label}"));
         }
         Message::SetHomeSearch(value) => state.home_search = value,
         Message::SetActiveTab(value) => state.active_tab = value,

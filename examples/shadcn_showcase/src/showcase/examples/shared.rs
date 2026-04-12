@@ -2,9 +2,7 @@ use crate::prelude::*;
 use arkit_icon as lucide;
 use arkit_shadcn as shadcn;
 
-use super::super::layout::{
-    component_canvas_with, fixed_width, h_stack, v_stack, FLEX_ALIGN_CENTER, FLEX_ALIGN_END,
-};
+use super::super::layout::{component_canvas_with, fixed_width, h_stack, v_stack};
 use crate::Message;
 
 const EMERALD_500: u32 = 0xFF10B981;
@@ -82,35 +80,20 @@ fn carousel_nav_surface(child: Element, disabled: bool) -> Element {
     arkit::row_component()
         .width(40.0)
         .height(40.0)
-        .style(
-            ArkUINodeAttributeType::BorderRadius,
-            vec![radius, radius, radius, radius],
-        )
-        .style(ArkUINodeAttributeType::Shadow, vec![1_i32])
-        .style(
-            ArkUINodeAttributeType::Opacity,
-            if disabled { 0.5_f32 } else { 1.0_f32 },
-        )
+        .border_radius([radius, radius, radius, radius])
+        .shadow(ShadowStyle::OuterDefaultSm)
+        .opacity(if disabled { 0.5_f32 } else { 1.0_f32 })
         .children(vec![arkit::row_component()
             .width(40.0)
             .height(40.0)
             .align_items_center()
-            .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
+            .justify_content_center()
             .background_color(shadcn::theme::color::BACKGROUND)
-            .style(ArkUINodeAttributeType::BorderStyle, 0_i32)
-            .style(
-                ArkUINodeAttributeType::BorderWidth,
-                vec![1.0, 1.0, 1.0, 1.0],
-            )
-            .style(
-                ArkUINodeAttributeType::BorderColor,
-                vec![shadcn::theme::color::BORDER],
-            )
-            .style(
-                ArkUINodeAttributeType::BorderRadius,
-                vec![radius, radius, radius, radius],
-            )
-            .style(ArkUINodeAttributeType::Clip, true)
+            .border_style(BorderStyle::Solid)
+            .border_width([1.0, 1.0, 1.0, 1.0])
+            .border_color(shadcn::theme::color::BORDER)
+            .border_radius([radius, radius, radius, radius])
+            .clip(true)
             .children(vec![child])
             .into()])
         .into()
@@ -126,35 +109,39 @@ pub(crate) fn carousel_frame(
 
     let prev_disabled = current == 1;
     let prev_button = if prev_disabled {
-        shadcn::icon_button_with_variant("chevron-left", shadcn::ButtonVariant::Ghost)
+        shadcn::icon_button("chevron-left")
+            .theme(shadcn::ButtonVariant::Ghost)
             .key(format!("carousel-prev:{current}:disabled"))
             .width(40.0)
             .height(40.0)
-            .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
-            .style(ArkUINodeAttributeType::Enabled, false)
+            .padding(arkit::Padding::ZERO)
+            .disabled(true)
     } else {
-        shadcn::icon_button_with_variant("chevron-left", shadcn::ButtonVariant::Ghost)
+        shadcn::icon_button("chevron-left")
+            .theme(shadcn::ButtonVariant::Ghost)
             .key(format!("carousel-prev:{current}:enabled"))
             .width(40.0)
             .height(40.0)
-            .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
+            .padding(arkit::Padding::ZERO)
             .on_press(Message::SetPage((current - 1).max(1)))
     };
 
     let next_disabled = current == count;
     let next_button = if next_disabled {
-        shadcn::icon_button_with_variant("chevron-right", shadcn::ButtonVariant::Ghost)
+        shadcn::icon_button("chevron-right")
+            .theme(shadcn::ButtonVariant::Ghost)
             .key(format!("carousel-next:{current}:disabled"))
             .width(40.0)
             .height(40.0)
-            .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
-            .style(ArkUINodeAttributeType::Enabled, false)
+            .padding(arkit::Padding::ZERO)
+            .disabled(true)
     } else {
-        shadcn::icon_button_with_variant("chevron-right", shadcn::ButtonVariant::Ghost)
+        shadcn::icon_button("chevron-right")
+            .theme(shadcn::ButtonVariant::Ghost)
             .key(format!("carousel-next:{current}:enabled"))
             .width(40.0)
             .height(40.0)
-            .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
+            .padding(arkit::Padding::ZERO)
             .on_press(Message::SetPage((current + 1).min(count)))
     };
 
@@ -162,31 +149,25 @@ pub(crate) fn carousel_frame(
         .percent_width(1.0)
         .percent_height(1.0)
         .align_items_center()
-        .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
+        .justify_content_center()
         .children(vec![preview]);
 
     if !remove_bottom_safe_area {
-        preview_area = preview_area.style(
-            ArkUINodeAttributeType::Padding,
-            vec![0.0, 0.0, 48.0 + shadcn::theme::spacing::LG, 0.0],
-        );
+        preview_area = preview_area.padding([0.0, 0.0, 48.0 + shadcn::theme::spacing::LG, 0.0]);
     }
 
     let nav_bar = arkit::column_component()
         .percent_width(1.0)
         .percent_height(1.0)
-        .style(ArkUINodeAttributeType::ColumnJustifyContent, FLEX_ALIGN_END)
+        .justify_content_end()
         .align_items_center()
         .children(vec![arkit::row_component()
             .percent_width(1.0)
             .height(48.0)
-            .style(
-                ArkUINodeAttributeType::Margin,
-                vec![0.0, 0.0, shadcn::theme::spacing::LG, 0.0],
-            )
-            .style(ArkUINodeAttributeType::Padding, vec![0.0, 16.0, 0.0, 16.0])
+            .margin([0.0, 0.0, shadcn::theme::spacing::LG, 0.0])
+            .padding([0.0, 16.0, 0.0, 16.0])
             .align_items_center()
-            .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
+            .justify_content_center()
             .children(vec![h_stack(
                 vec![
                     carousel_nav_surface(prev_button.into(), prev_disabled),
@@ -216,62 +197,60 @@ pub(crate) fn carousel_frame_fn(
         .percent_width(1.0)
         .percent_height(1.0)
         .align_items_center()
-        .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
+        .justify_content_center()
         .children(vec![render_preview(current)]);
 
     if !remove_bottom_safe_area {
-        preview_area = preview_area.style(
-            ArkUINodeAttributeType::Padding,
-            vec![0.0, 0.0, 48.0 + shadcn::theme::spacing::LG, 0.0],
-        );
+        preview_area = preview_area.padding([0.0, 0.0, 48.0 + shadcn::theme::spacing::LG, 0.0]);
     }
 
     let nav_bar = arkit::column_component()
         .percent_width(1.0)
         .percent_height(1.0)
-        .style(ArkUINodeAttributeType::ColumnJustifyContent, FLEX_ALIGN_END)
+        .justify_content_end()
         .align_items_center()
         .children(vec![arkit::row_component()
             .percent_width(1.0)
             .height(48.0)
-            .style(
-                ArkUINodeAttributeType::Margin,
-                vec![0.0, 0.0, shadcn::theme::spacing::LG, 0.0],
-            )
-            .style(ArkUINodeAttributeType::Padding, vec![0.0, 16.0, 0.0, 16.0])
+            .margin([0.0, 0.0, shadcn::theme::spacing::LG, 0.0])
+            .padding([0.0, 16.0, 0.0, 16.0])
             .align_items_center()
-            .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
+            .justify_content_center()
             .children(vec![{
                 let prev_disabled = current == 1;
                 let next_disabled = current == count;
                 let prev_button = if prev_disabled {
-                    shadcn::icon_button_with_variant("chevron-left", shadcn::ButtonVariant::Ghost)
+                    shadcn::icon_button("chevron-left")
+                        .theme(shadcn::ButtonVariant::Ghost)
                         .key(format!("carousel-prev:{current}:disabled"))
                         .width(40.0)
                         .height(40.0)
-                        .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
-                        .style(ArkUINodeAttributeType::Enabled, false)
+                        .padding(arkit::Padding::ZERO)
+                        .disabled(true)
                 } else {
-                    shadcn::icon_button_with_variant("chevron-left", shadcn::ButtonVariant::Ghost)
+                    shadcn::icon_button("chevron-left")
+                        .theme(shadcn::ButtonVariant::Ghost)
                         .key(format!("carousel-prev:{current}:enabled"))
                         .width(40.0)
                         .height(40.0)
-                        .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
+                        .padding(arkit::Padding::ZERO)
                         .on_press(Message::SetPage((current - 1).max(1)))
                 };
                 let next_button = if next_disabled {
-                    shadcn::icon_button_with_variant("chevron-right", shadcn::ButtonVariant::Ghost)
+                    shadcn::icon_button("chevron-right")
+                        .theme(shadcn::ButtonVariant::Ghost)
                         .key(format!("carousel-next:{current}:disabled"))
                         .width(40.0)
                         .height(40.0)
-                        .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
-                        .style(ArkUINodeAttributeType::Enabled, false)
+                        .padding(arkit::Padding::ZERO)
+                        .disabled(true)
                 } else {
-                    shadcn::icon_button_with_variant("chevron-right", shadcn::ButtonVariant::Ghost)
+                    shadcn::icon_button("chevron-right")
+                        .theme(shadcn::ButtonVariant::Ghost)
                         .key(format!("carousel-next:{current}:enabled"))
                         .width(40.0)
                         .height(40.0)
-                        .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
+                        .padding(arkit::Padding::ZERO)
                         .on_press(Message::SetPage((current + 1).min(count)))
                 };
                 h_stack(
@@ -295,36 +274,40 @@ pub(crate) fn carousel_frame_fn(
 fn button_preview(variant: &str) -> Element {
     let preview_press = || Message::ButtonPreviewPressed(variant.to_string());
     match variant {
-        "Destructive" => shadcn::button("Destructive", shadcn::ButtonVariant::Destructive)
+        "Destructive" => shadcn::button("Destructive")
+            .theme(shadcn::ButtonVariant::Destructive)
             .on_press(preview_press())
             .into(),
-        "Ghost" => shadcn::button("Ghost", shadcn::ButtonVariant::Ghost)
+        "Ghost" => shadcn::button("Ghost")
+            .theme(shadcn::ButtonVariant::Ghost)
             .on_press(preview_press())
             .into(),
-        "Link" => shadcn::button("Link", shadcn::ButtonVariant::Link)
+        "Link" => shadcn::button("Link")
+            .theme(shadcn::ButtonVariant::Link)
             .on_press(preview_press())
             .into(),
-        "Loading" => {
-            shadcn::button_with_icon("Please wait", "loader", shadcn::ButtonVariant::Default)
-                .style(ArkUINodeAttributeType::Opacity, 0.5_f32)
-                .style(ArkUINodeAttributeType::Enabled, false)
-                .into()
-        }
-        "Outline" => shadcn::button("Outline", shadcn::ButtonVariant::Outline)
+        "Loading" => shadcn::button_with_icon("Please wait", "loader")
+            .theme(shadcn::ButtonVariant::Default)
+            .disabled(true)
+            .into(),
+        "Outline" => shadcn::button("Outline")
+            .theme(shadcn::ButtonVariant::Outline)
             .on_press(preview_press())
             .into(),
-        "Secondary" => shadcn::button("Secondary", shadcn::ButtonVariant::Secondary)
+        "Secondary" => shadcn::button("Secondary")
+            .theme(shadcn::ButtonVariant::Secondary)
             .on_press(preview_press())
             .into(),
-        "With Icon" => {
-            shadcn::button_with_icon("Login with Email", "mail", shadcn::ButtonVariant::Default)
-                .on_press(preview_press())
-                .into()
-        }
+        "With Icon" => shadcn::button_with_icon("Login with Email", "mail")
+            .theme(shadcn::ButtonVariant::Default)
+            .on_press(preview_press())
+            .into(),
         "Icon" => shadcn::icon_button("chevron-right")
+            .theme(shadcn::ButtonVariant::Outline)
             .on_press(preview_press())
             .into(),
-        _ => shadcn::button("Button", shadcn::ButtonVariant::Default)
+        _ => shadcn::button("Button")
+            .theme(shadcn::ButtonVariant::Default)
             .on_press(preview_press())
             .into(),
     }
@@ -366,29 +349,20 @@ fn icon_tile(name: &str, icon: Element) -> Element {
                 .width(48.0)
                 .height(48.0)
                 .align_items_center()
-                .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
-                .style(
-                    ArkUINodeAttributeType::BorderRadius,
-                    vec![
-                        shadcn::theme::radius::MD,
-                        shadcn::theme::radius::MD,
-                        shadcn::theme::radius::MD,
-                        shadcn::theme::radius::MD,
-                    ],
-                )
-                .style(
-                    ArkUINodeAttributeType::BorderWidth,
-                    vec![1.0, 1.0, 1.0, 1.0],
-                )
-                .style(
-                    ArkUINodeAttributeType::BorderColor,
-                    vec![shadcn::theme::color::BORDER],
-                )
+                .justify_content_center()
+                .border_radius([
+                    shadcn::theme::radius::MD,
+                    shadcn::theme::radius::MD,
+                    shadcn::theme::radius::MD,
+                    shadcn::theme::radius::MD,
+                ])
+                .border_width([1.0, 1.0, 1.0, 1.0])
+                .border_color(shadcn::theme::color::BORDER)
                 .background_color(shadcn::theme::color::BACKGROUND)
                 .children(vec![icon])
                 .into(),
             arkit::row_component()
-                .style(ArkUINodeAttributeType::Margin, vec![8.0, 0.0, 0.0, 0.0])
+                .margin([8.0, 0.0, 0.0, 0.0])
                 .children(vec![shadcn::text_with_variant(
                     name,
                     shadcn::TextVariant::Small,
@@ -596,10 +570,7 @@ pub(crate) fn text_carousel(page: i32) -> Element {
                     .percent_height(1.0)
                     .children(vec![arkit::column_component()
                         .percent_width(1.0)
-                        .style(
-                            ArkUINodeAttributeType::Padding,
-                            vec![24.0, 24.0, 72.0, 24.0],
-                        )
+                        .padding([24.0, 24.0, 72.0, 24.0])
                         .children(vec![content])
                         .into()])
                     .into(),
@@ -610,30 +581,27 @@ pub(crate) fn text_carousel(page: i32) -> Element {
             fn colored_body(content: impl Into<String>, color: u32) -> Element {
                 arkit::text(content)
                     .font_size(shadcn::theme::typography::MD)
-                    .style(ArkUINodeAttributeType::FontColor, color)
-                    .style(ArkUINodeAttributeType::TextLineHeight, 24.0)
+                    .font_color(color)
+                    .line_height(24.0)
                     .into()
             }
 
             fn code_chip(content: impl Into<String>, color: u32) -> Element {
                 arkit::row_component()
                     .background_color(shadcn::theme::color::MUTED)
-                    .style(
-                        ArkUINodeAttributeType::BorderRadius,
-                        vec![
-                            shadcn::theme::radius::SM,
-                            shadcn::theme::radius::SM,
-                            shadcn::theme::radius::SM,
-                            shadcn::theme::radius::SM,
-                        ],
-                    )
-                    .style(ArkUINodeAttributeType::Padding, vec![3.0, 5.0, 3.0, 5.0])
+                    .border_radius([
+                        shadcn::theme::radius::SM,
+                        shadcn::theme::radius::SM,
+                        shadcn::theme::radius::SM,
+                        shadcn::theme::radius::SM,
+                    ])
+                    .padding([3.0, 5.0, 3.0, 5.0])
                     .children(vec![arkit::text(content)
                         .font_size(shadcn::theme::typography::SM)
-                        .style(ArkUINodeAttributeType::FontFamily, "monospace")
-                        .style(ArkUINodeAttributeType::FontWeight, 5_i32)
-                        .style(ArkUINodeAttributeType::FontColor, color)
-                        .style(ArkUINodeAttributeType::TextLineHeight, 18.0)
+                        .font_family("monospace")
+                        .font_weight(FontWeight::W600)
+                        .font_color(color)
+                        .line_height(18.0)
                         .into()])
                     .into()
             }
@@ -650,10 +618,7 @@ pub(crate) fn text_carousel(page: i32) -> Element {
                                     child
                                 } else {
                                     arkit::row_component()
-                                        .style(
-                                            ArkUINodeAttributeType::Margin,
-                                            vec![gap, 0.0, 0.0, 0.0],
-                                        )
+                                        .margin([gap, 0.0, 0.0, 0.0])
                                         .children(vec![child])
                                         .into()
                                 }

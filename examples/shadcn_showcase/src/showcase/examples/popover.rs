@@ -14,11 +14,8 @@ fn form_row(label_text: &str, value: Element) -> Element {
                 .children(vec![shadcn::label(label_text).into()])
                 .into(),
             arkit::row_component()
-                .style(
-                    ArkUINodeAttributeType::Margin,
-                    vec![0.0, 0.0, 0.0, shadcn::theme::spacing::LG],
-                )
-                .style(ArkUINodeAttributeType::LayoutWeight, 1.0_f32)
+                .margin([0.0, 0.0, 0.0, shadcn::theme::spacing::LG])
+                .layout_weight(1.0_f32)
                 .children(vec![value])
                 .into(),
         ])
@@ -29,7 +26,8 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
     component_canvas(
         fixed_width(
             shadcn::popover_with_width(
-                shadcn::button("Open popover", shadcn::ButtonVariant::Outline)
+                shadcn::button("Open popover")
+                    .theme(shadcn::ButtonVariant::Outline)
                     .on_press(Message::SetPopoverOpen(!ctx.popover_open))
                     .into(),
                 vec![
@@ -37,12 +35,9 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                         vec![
                             arkit::text("Dimensions")
                                 .font_size(shadcn::theme::typography::MD)
-                                .style(ArkUINodeAttributeType::FontWeight, 4_i32)
-                                .style(
-                                    ArkUINodeAttributeType::FontColor,
-                                    shadcn::theme::color::FOREGROUND,
-                                )
-                                .style(ArkUINodeAttributeType::TextLineHeight, 16.0)
+                                .font_weight(FontWeight::W500)
+                                .font_color(shadcn::theme::color::FOREGROUND)
+                                .line_height(16.0)
                                 .into(),
                             shadcn::text_with_variant(
                                 "Set the dimensions for the layer.",

@@ -32,7 +32,7 @@ pub(crate) fn catalog_home(search: String) -> Element {
         nav_bar("Showcase", false),
         arkit::scroll_component()
             .width(Length::Fill)
-            .style(ArkUINodeAttributeType::LayoutWeight, 1.0_f32)
+            .layout_weight(1.0_f32)
             .background_color(shadcn::theme::color::BACKGROUND)
             .children(vec![max_width(
                 arkit::column_component()

@@ -11,14 +11,11 @@ pub fn skeleton<Message: 'static>(width: f32, height: f32) -> Element<Message> {
         .width(width)
         .height(height)
         .background_color(color::ACCENT)
-        .style(
-            ArkUINodeAttributeType::BorderRadius,
-            vec![
-                skeleton_radius,
-                skeleton_radius,
-                skeleton_radius,
-                skeleton_radius,
-            ],
-        )
+        .border_radius([
+            skeleton_radius,
+            skeleton_radius,
+            skeleton_radius,
+            skeleton_radius,
+        ])
         .into()
 }

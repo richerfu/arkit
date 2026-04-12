@@ -22,57 +22,36 @@ where
                     arkit::stack_component::<Message, arkit::Theme>()
                         .percent_width(1.0)
                         .max_width_constraint(DRAWER_MAX_WIDTH)
-                        .style(
-                            ArkUINodeAttributeType::Padding,
-                            vec![spacing::LG, spacing::XXL, spacing::XXL, spacing::XXL],
-                        )
-                        .style(
-                            ArkUINodeAttributeType::BorderRadius,
-                            vec![radius::LG, radius::LG, 0.0, 0.0],
-                        )
-                        .style(
-                            ArkUINodeAttributeType::BorderWidth,
-                            vec![1.0, 0.0, 0.0, 0.0],
-                        )
-                        .style(ArkUINodeAttributeType::BorderColor, vec![color::BORDER])
+                        .padding([spacing::LG, spacing::XXL, spacing::XXL, spacing::XXL])
+                        .border_radius([radius::LG, radius::LG, 0.0, 0.0])
+                        .border_width([1.0, 0.0, 0.0, 0.0])
+                        .border_color(color::BORDER)
                         .background_color(color::BACKGROUND)
                         .children(vec![arkit::column_component::<Message, arkit::Theme>()
                             .percent_width(1.0)
                             .children(vec![
                                 arkit::row_component::<Message, arkit::Theme>()
                                     .percent_width(1.0)
-                                    .style(
-                                        ArkUINodeAttributeType::RowJustifyContent,
-                                        FLEX_ALIGN_CENTER,
-                                    )
+                                    .justify_content(JustifyContent::Center)
                                     .children(vec![arkit::row_component::<Message, arkit::Theme>()
                                         .width(40.0)
                                         .height(4.0)
-                                        .style(
-                                            ArkUINodeAttributeType::BorderRadius,
-                                            vec![
-                                                radius::FULL,
-                                                radius::FULL,
-                                                radius::FULL,
-                                                radius::FULL,
-                                            ],
-                                        )
+                                        .border_radius([
+                                            radius::FULL,
+                                            radius::FULL,
+                                            radius::FULL,
+                                            radius::FULL,
+                                        ])
                                         .background_color(color::MUTED_FOREGROUND)
-                                        .style(ArkUINodeAttributeType::Opacity, 0.4_f32)
+                                        .opacity(0.4_f32)
                                         .into()])
                                     .into(),
                                 arkit::column_component::<Message, arkit::Theme>()
-                                    .style(
-                                        ArkUINodeAttributeType::Margin,
-                                        vec![spacing::LG, 0.0, 0.0, 0.0],
-                                    )
+                                    .margin([spacing::LG, 0.0, 0.0, 0.0])
                                     .children(vec![super::dialog::dialog_header(title, "")])
                                     .into(),
                                 arkit::column_component::<Message, arkit::Theme>()
-                                    .style(
-                                        ArkUINodeAttributeType::Margin,
-                                        vec![spacing::LG, 0.0, 0.0, 0.0],
-                                    )
+                                    .margin([spacing::LG, 0.0, 0.0, 0.0])
                                     .children(vec![stack(content, spacing::LG)])
                                     .into(),
                             ])

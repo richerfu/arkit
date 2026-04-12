@@ -7,24 +7,15 @@ use arkit_shadcn as shadcn;
 fn repo_row(name: &str) -> Element {
     arkit::row_component()
         .percent_width(1.0)
-        .style(ArkUINodeAttributeType::Padding, vec![8.0, 16.0, 8.0, 16.0])
-        .style(
-            ArkUINodeAttributeType::BorderWidth,
-            vec![1.0, 1.0, 1.0, 1.0],
-        )
-        .style(
-            ArkUINodeAttributeType::BorderColor,
-            vec![shadcn::theme::color::BORDER],
-        )
-        .style(
-            ArkUINodeAttributeType::BorderRadius,
-            vec![
-                shadcn::theme::radius::MD,
-                shadcn::theme::radius::MD,
-                shadcn::theme::radius::MD,
-                shadcn::theme::radius::MD,
-            ],
-        )
+        .padding([8.0, 16.0, 8.0, 16.0])
+        .border_width([1.0, 1.0, 1.0, 1.0])
+        .border_color(shadcn::theme::color::BORDER)
+        .border_radius([
+            shadcn::theme::radius::MD,
+            shadcn::theme::radius::MD,
+            shadcn::theme::radius::MD,
+            shadcn::theme::radius::MD,
+        ])
         .children(vec![shadcn::text_sm(name)])
         .into()
 }

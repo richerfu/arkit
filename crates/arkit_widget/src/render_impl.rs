@@ -1,16 +1,14 @@
 use std::any::{type_name, Any, TypeId};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::mem::{align_of, size_of, ManuallyDrop};
-use std::os::raw::c_void;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::rc::Rc;
 
 use crate::{Alignment, LayoutFrame, LayoutSize};
 use arkit_core::{advanced, Horizontal, Length, Padding, Size, Vertical};
 use ohos_arkui_binding::api::node_custom_event::NodeCustomEvent;
-use ohos_arkui_binding::arkui_input_binding::{self, ArkUIErrorCode};
-use ohos_arkui_binding::common::attribute::ArkUINodeAttributeItem;
-use ohos_arkui_binding::common::error::{ArkUIError, ArkUIResult};
+use ohos_arkui_binding::common::attribute::{ArkUINodeAttributeItem, ArkUINodeAttributeNumber};
+use ohos_arkui_binding::common::error::ArkUIResult;
 use ohos_arkui_binding::common::node::ArkUINode;
 use ohos_arkui_binding::component::attribute::{
     ArkUIAttributeBasic, ArkUICommonAttribute, ArkUIEvent, ArkUIGesture,
@@ -23,12 +21,12 @@ use ohos_arkui_binding::event::inner_event::Event as ArkEvent;
 use ohos_arkui_binding::gesture::gesture_data::GestureEventData;
 use ohos_arkui_binding::gesture::inner_gesture::Gesture;
 use ohos_arkui_binding::types::advanced::{
-    HorizontalAlignment, NodeCustomEventType, VerticalAlignment,
+    FontWeight, HorizontalAlignment, NodeCustomEventType, ShadowStyle, VerticalAlignment,
 };
 use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
 use ohos_arkui_binding::types::event::NodeEventType;
 use ohos_arkui_binding::types::gesture_event::GestureEventAction;
-use ohos_arkui_sys::{OH_ArkUI_AddSupportedUIStates, OH_ArkUI_RemoveSupportedUIStates};
+use ohos_arkui_binding::types::text_alignment::TextAlignment;
 
 pub use ohos_arkui_binding::common::attribute::ArkUINodeAttributeItem as AttributeValue;
 pub use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType as Attribute;
@@ -44,12 +42,257 @@ type MountEffect = Box<dyn FnOnce(&mut ArkUINode) -> ArkUIResult<Option<Cleanup>
 type AttachEffect = Box<dyn FnOnce(&mut ArkUINode) -> ArkUIResult<Option<Cleanup>> + 'static>;
 type PatchEffect = Box<dyn FnOnce(&mut ArkUINode) -> ArkUIResult<()> + 'static>;
 type EventCallback = Rc<dyn Fn(&ArkEvent)>;
-type UiStateCallback = Rc<dyn Fn(&mut ArkUINode, i32)>;
+type UiStateCallback = Rc<dyn Fn(&mut ArkUINode, UiState)>;
 
 const DEFAULT_LONG_PRESS_DURATION_MS: i32 = 500;
-const FLEX_ALIGN_START: i32 = 1;
-const FLEX_ALIGN_CENTER: i32 = 2;
-const FLEX_ALIGN_END: i32 = 3;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FontStyle {
+    Normal,
+    Italic,
+}
+
+impl From<FontStyle> for i32 {
+    fn from(value: FontStyle) -> Self {
+        match value {
+            FontStyle::Normal => 0,
+            FontStyle::Italic => 1,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BorderStyle {
+    Solid,
+    Dashed,
+    Dotted,
+}
+
+impl From<BorderStyle> for i32 {
+    fn from(value: BorderStyle) -> Self {
+        match value {
+            BorderStyle::Solid => 0,
+            BorderStyle::Dashed => 1,
+            BorderStyle::Dotted => 2,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ItemAlignment {
+    Auto,
+    Start,
+    Center,
+    End,
+    Stretch,
+    Baseline,
+}
+
+impl From<ItemAlignment> for i32 {
+    fn from(value: ItemAlignment) -> Self {
+        match value {
+            ItemAlignment::Auto => 0,
+            ItemAlignment::Start => 1,
+            ItemAlignment::Center => 2,
+            ItemAlignment::End => 3,
+            ItemAlignment::Stretch => 4,
+            ItemAlignment::Baseline => 5,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Visibility {
+    Visible,
+    Hidden,
+    None,
+}
+
+impl From<Visibility> for i32 {
+    fn from(value: Visibility) -> Self {
+        match value {
+            Visibility::Visible => 0,
+            Visibility::Hidden => 1,
+            Visibility::None => 2,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HitTestBehavior {
+    Default,
+    Block,
+    Transparent,
+    None,
+    BlockHierarchy,
+    BlockDescendants,
+}
+
+impl From<HitTestBehavior> for i32 {
+    fn from(value: HitTestBehavior) -> Self {
+        match value {
+            HitTestBehavior::Default => 0,
+            HitTestBehavior::Block => 1,
+            HitTestBehavior::Transparent => 2,
+            HitTestBehavior::None => 3,
+            HitTestBehavior::BlockHierarchy => 4,
+            HitTestBehavior::BlockDescendants => 5,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ButtonType {
+    Normal,
+    Capsule,
+    Circle,
+    RoundedRectangle,
+}
+
+impl From<ButtonType> for i32 {
+    fn from(value: ButtonType) -> Self {
+        match value {
+            ButtonType::Normal => 0,
+            ButtonType::Capsule => 1,
+            ButtonType::Circle => 2,
+            ButtonType::RoundedRectangle => 8,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UiState(i32);
+
+impl UiState {
+    pub const NORMAL: Self = Self(0);
+    pub const PRESSED: Self = Self(1);
+    pub const FOCUSED: Self = Self(2);
+    pub const DISABLED: Self = Self(4);
+    pub const SELECTED: Self = Self(8);
+
+    pub const fn from_bits(bits: i32) -> Self {
+        Self(bits)
+    }
+
+    pub const fn bits(self) -> i32 {
+        self.0
+    }
+
+    pub const fn contains(self, state: Self) -> bool {
+        self.0 & state.0 == state.0
+    }
+}
+
+impl std::ops::BitOr for UiState {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl From<UiState> for i32 {
+    fn from(value: UiState) -> Self {
+        value.bits()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ObjectFit {
+    Contain,
+    Cover,
+    Auto,
+    Fill,
+    ScaleDown,
+    None,
+    NoneAndAlignTopStart,
+    NoneAndAlignTop,
+    NoneAndAlignTopEnd,
+    NoneAndAlignStart,
+    NoneAndAlignCenter,
+    NoneAndAlignEnd,
+    NoneAndAlignBottomStart,
+    NoneAndAlignBottom,
+    NoneAndAlignBottomEnd,
+    NoneMatrix,
+}
+
+impl From<ObjectFit> for i32 {
+    fn from(value: ObjectFit) -> Self {
+        match value {
+            ObjectFit::Contain => 0,
+            ObjectFit::Cover => 1,
+            ObjectFit::Auto => 2,
+            ObjectFit::Fill => 3,
+            ObjectFit::ScaleDown => 4,
+            ObjectFit::None => 5,
+            ObjectFit::NoneAndAlignTopStart => 6,
+            ObjectFit::NoneAndAlignTop => 7,
+            ObjectFit::NoneAndAlignTopEnd => 8,
+            ObjectFit::NoneAndAlignStart => 9,
+            ObjectFit::NoneAndAlignCenter => 10,
+            ObjectFit::NoneAndAlignEnd => 11,
+            ObjectFit::NoneAndAlignBottomStart => 12,
+            ObjectFit::NoneAndAlignBottom => 13,
+            ObjectFit::NoneAndAlignBottomEnd => 14,
+            ObjectFit::NoneMatrix => 15,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JustifyContent {
+    Start,
+    Center,
+    End,
+    SpaceBetween,
+    SpaceAround,
+    SpaceEvenly,
+}
+
+impl From<JustifyContent> for i32 {
+    fn from(value: JustifyContent) -> Self {
+        match value {
+            JustifyContent::Start => 1,
+            JustifyContent::Center => 2,
+            JustifyContent::End => 3,
+            JustifyContent::SpaceBetween => 6,
+            JustifyContent::SpaceAround => 7,
+            JustifyContent::SpaceEvenly => 8,
+        }
+    }
+}
+
+fn font_weight_value(value: FontWeight) -> i32 {
+    match value {
+        FontWeight::W100 => 0,
+        FontWeight::W200 => 1,
+        FontWeight::W300 => 2,
+        FontWeight::W400 => 3,
+        FontWeight::W500 => 4,
+        FontWeight::W600 => 5,
+        FontWeight::W700 => 6,
+        FontWeight::W800 => 7,
+        FontWeight::W900 => 8,
+        FontWeight::Bold => 9,
+        FontWeight::Normal => 10,
+        FontWeight::Bolder => 11,
+        FontWeight::Lighter => 12,
+        FontWeight::Medium => 13,
+        FontWeight::Regular => 14,
+    }
+}
+
+fn shadow_style_value(value: ShadowStyle) -> i32 {
+    match value {
+        ShadowStyle::OuterDefaultXs => 0,
+        ShadowStyle::OuterDefaultSm => 1,
+        ShadowStyle::OuterDefaultMd => 2,
+        ShadowStyle::OuterDefaultLg => 3,
+        ShadowStyle::OuterFloatingSm => 4,
+        ShadowStyle::OuterFloatingMd => 5,
+    }
+}
 
 struct RuntimeNode<'a>(&'a mut ArkUINode);
 
@@ -80,25 +323,6 @@ struct LongPressHandlerSpec {
 
 struct LongPressCallbackContext {
     callback: Rc<dyn Fn()>,
-}
-
-struct SupportedUiStatesCallbackContext {
-    callback: Rc<RefCell<UiStateCallback>>,
-    node: ArkUINode,
-}
-
-unsafe extern "C" fn supported_ui_states_callback_trampoline(
-    current_states: i32,
-    user_data: *mut c_void,
-) {
-    if user_data.is_null() {
-        return;
-    }
-
-    let callback = unsafe { &*(user_data as *mut SupportedUiStatesCallbackContext) };
-    let handler = callback.callback.borrow().clone();
-    let mut node = callback.node.clone();
-    handler(&mut node, current_states);
 }
 
 fn panic_payload_message(payload: &(dyn Any + Send)) -> String {
@@ -239,6 +463,23 @@ impl MountedRenderNode {
     }
 }
 
+fn padding_edges(value: Padding) -> Vec<f32> {
+    vec![value.top, value.right, value.bottom, value.left]
+}
+
+fn clone_attr_value(value: &ArkUINodeAttributeItem) -> ArkUINodeAttributeItem {
+    match value {
+        ArkUINodeAttributeItem::NumberValue(values) => {
+            ArkUINodeAttributeItem::NumberValue(values.clone())
+        }
+        ArkUINodeAttributeItem::String(value) => ArkUINodeAttributeItem::String(value.clone()),
+        ArkUINodeAttributeItem::Object(value) => ArkUINodeAttributeItem::Object(*value),
+        ArkUINodeAttributeItem::Composite(value) => {
+            ArkUINodeAttributeItem::Composite(value.clone())
+        }
+    }
+}
+
 pub struct Node<Message, AppTheme = arkit_core::Theme> {
     kind: NodeKind,
     key: Option<String>,
@@ -283,6 +524,51 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
         self
     }
 
+    pub fn map_descendants(self, mut map: impl FnMut(Self) -> Self) -> Self
+    where
+        Message: 'static,
+        AppTheme: 'static,
+    {
+        self.map_descendants_with(&mut map)
+    }
+
+    fn map_descendants_with(self, map: &mut impl FnMut(Self) -> Self) -> Self
+    where
+        Message: 'static,
+        AppTheme: 'static,
+    {
+        let Self {
+            kind,
+            key,
+            init_attrs,
+            patch_attrs,
+            event_handlers,
+            long_press_handler,
+            mount_effects,
+            attach_effects,
+            patch_effects,
+            children,
+        } = self;
+
+        let children = children
+            .into_iter()
+            .map(|child| into_node(child).map_descendants_with(map).into())
+            .collect();
+
+        map(Self {
+            kind,
+            key,
+            init_attrs,
+            patch_attrs,
+            event_handlers,
+            long_press_handler,
+            mount_effects,
+            attach_effects,
+            patch_effects,
+            children,
+        })
+    }
+
     pub fn attr(
         mut self,
         attr: ArkUINodeAttributeType,
@@ -290,14 +576,6 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
     ) -> Self {
         self.init_attrs.push((attr, value.into()));
         self
-    }
-
-    pub fn style(
-        self,
-        attr: ArkUINodeAttributeType,
-        value: impl Into<ArkUINodeAttributeItem>,
-    ) -> Self {
-        self.attr(attr, value)
     }
 
     pub fn patch_attr(
@@ -309,22 +587,60 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
         self
     }
 
+    fn builder_attr(
+        mut self,
+        attr: ArkUINodeAttributeType,
+        value: impl Into<ArkUINodeAttributeItem>,
+    ) -> Self {
+        let value = value.into();
+        self.init_attrs.push((attr, clone_attr_value(&value)));
+        self.patch_attrs.push((attr, value));
+        self
+    }
+
+    pub fn attr_string(&self, attr: ArkUINodeAttributeType) -> Option<&str> {
+        self.attr_value(attr).and_then(|value| match value {
+            ArkUINodeAttributeItem::String(value) => Some(value.as_str()),
+            ArkUINodeAttributeItem::NumberValue(_)
+            | ArkUINodeAttributeItem::Object(_)
+            | ArkUINodeAttributeItem::Composite(_) => None,
+        })
+    }
+
+    pub fn attr_f32(&self, attr: ArkUINodeAttributeType) -> Option<f32> {
+        self.attr_value(attr).and_then(|value| match value {
+            ArkUINodeAttributeItem::NumberValue(values) => {
+                values.first().map(|value| match value {
+                    ArkUINodeAttributeNumber::Float(value) => *value,
+                    ArkUINodeAttributeNumber::Int(value) => *value as f32,
+                    ArkUINodeAttributeNumber::Uint(value) => *value as f32,
+                })
+            }
+            ArkUINodeAttributeItem::String(_)
+            | ArkUINodeAttributeItem::Object(_)
+            | ArkUINodeAttributeItem::Composite(_) => None,
+        })
+    }
+
+    fn attr_value(&self, attr: ArkUINodeAttributeType) -> Option<&ArkUINodeAttributeItem> {
+        self.patch_attrs
+            .iter()
+            .rev()
+            .chain(self.init_attrs.iter().rev())
+            .find_map(|(current_attr, value)| (*current_attr == attr).then_some(value))
+    }
+
     pub fn width(mut self, value: impl Into<Length>) -> Self {
         match value.into() {
             Length::Shrink => {}
             Length::Fill => {
-                self.init_attrs
-                    .push((ArkUINodeAttributeType::WidthPercent, 1.0_f32.into()));
+                self = self.builder_attr(ArkUINodeAttributeType::WidthPercent, 1.0_f32);
             }
             Length::FillPortion(portion) => {
-                self.init_attrs.push((
-                    ArkUINodeAttributeType::LayoutWeight,
-                    f32::from(portion).into(),
-                ));
+                self = self.builder_attr(ArkUINodeAttributeType::LayoutWeight, f32::from(portion));
             }
             Length::Fixed(value) => {
-                self.init_attrs
-                    .push((ArkUINodeAttributeType::Width, value.into()));
+                self = self.builder_attr(ArkUINodeAttributeType::Width, value);
             }
         }
         self
@@ -334,77 +650,50 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
         match value.into() {
             Length::Shrink => {}
             Length::Fill => {
-                self.init_attrs
-                    .push((ArkUINodeAttributeType::HeightPercent, 1.0_f32.into()));
+                self = self.builder_attr(ArkUINodeAttributeType::HeightPercent, 1.0_f32);
             }
             Length::FillPortion(portion) => {
-                self.init_attrs.push((
-                    ArkUINodeAttributeType::LayoutWeight,
-                    f32::from(portion).into(),
-                ));
+                self = self.builder_attr(ArkUINodeAttributeType::LayoutWeight, f32::from(portion));
             }
             Length::Fixed(value) => {
-                self.init_attrs
-                    .push((ArkUINodeAttributeType::Height, value.into()));
+                self = self.builder_attr(ArkUINodeAttributeType::Height, value);
             }
         }
         self
     }
 
-    pub fn percent_width(mut self, value: f32) -> Self {
-        self.init_attrs
-            .push((ArkUINodeAttributeType::WidthPercent, value.into()));
-        self
+    pub fn percent_width(self, value: f32) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::WidthPercent, value)
     }
 
-    pub fn percent_height(mut self, value: f32) -> Self {
-        self.init_attrs
-            .push((ArkUINodeAttributeType::HeightPercent, value.into()));
-        self
+    pub fn percent_height(self, value: f32) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::HeightPercent, value)
     }
 
-    pub fn max_width_constraint(mut self, value: f32) -> Self {
-        self.init_attrs.push((
+    pub fn max_width_constraint(self, value: f32) -> Self {
+        self.builder_attr(
             ArkUINodeAttributeType::ConstraintSize,
-            vec![0.0_f32, value, 0.0_f32, 100_000.0_f32].into(),
-        ));
-        self
+            vec![0.0_f32, value, 0.0_f32, 100_000.0_f32],
+        )
     }
 
     pub fn constraint_size(
-        mut self,
+        self,
         min_width: f32,
         max_width: f32,
         min_height: f32,
         max_height: f32,
     ) -> Self {
         let value = vec![min_width, max_width, min_height, max_height];
-        self.init_attrs
-            .push((ArkUINodeAttributeType::ConstraintSize, value.clone().into()));
-        self.patch_attrs
-            .push((ArkUINodeAttributeType::ConstraintSize, value.into()));
-        self
+        self.builder_attr(ArkUINodeAttributeType::ConstraintSize, value)
     }
 
-    pub fn background_color(mut self, value: u32) -> Self {
-        self.init_attrs
-            .push((ArkUINodeAttributeType::BackgroundColor, value.into()));
-        self
+    pub fn background_color(self, value: u32) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::BackgroundColor, value)
     }
 
-    pub fn patch_background_color(mut self, value: u32) -> Self {
-        self.patch_attrs
-            .push((ArkUINodeAttributeType::BackgroundColor, value.into()));
-        self
-    }
-
-    pub fn padding(mut self, value: impl Into<Padding>) -> Self {
-        let padding = value.into();
-        self.init_attrs.push((
-            ArkUINodeAttributeType::Padding,
-            vec![padding.top, padding.right, padding.bottom, padding.left].into(),
-        ));
-        self
+    pub fn padding(self, value: impl Into<Padding>) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::Padding, padding_edges(value.into()))
     }
 
     pub fn padding_x(self, value: f32) -> Self {
@@ -415,42 +704,230 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
         self.padding(Padding::symmetric(0.0, value))
     }
 
-    pub fn font_size(mut self, value: f32) -> Self {
-        self.init_attrs
-            .push((ArkUINodeAttributeType::FontSize, value.into()));
-        self
+    pub fn margin(self, value: impl Into<Padding>) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::Margin, padding_edges(value.into()))
     }
 
-    pub fn line_height(mut self, value: f32) -> Self {
-        self.init_attrs
-            .push((ArkUINodeAttributeType::TextLineHeight, value.into()));
-        self.patch_attrs
-            .push((ArkUINodeAttributeType::TextLineHeight, value.into()));
-        self
+    pub fn margin_x(self, value: f32) -> Self {
+        self.margin(Padding::symmetric(value, 0.0))
     }
 
-    pub fn patch_font_size(mut self, value: f32) -> Self {
-        self.patch_attrs
-            .push((ArkUINodeAttributeType::FontSize, value.into()));
-        self
+    pub fn margin_y(self, value: f32) -> Self {
+        self.margin(Padding::symmetric(0.0, value))
     }
 
-    pub fn enabled(mut self, value: bool) -> Self {
-        self.init_attrs
-            .push((ArkUINodeAttributeType::Enabled, value.into()));
-        self
+    pub fn margin_top(self, value: f32) -> Self {
+        self.margin(Padding {
+            top: value,
+            ..Padding::ZERO
+        })
     }
 
-    pub fn opacity(mut self, value: f32) -> Self {
-        self.init_attrs
-            .push((ArkUINodeAttributeType::Opacity, value.into()));
-        self
+    pub fn margin_right(self, value: f32) -> Self {
+        self.margin(Padding {
+            right: value,
+            ..Padding::ZERO
+        })
     }
 
-    pub fn clip(mut self, value: bool) -> Self {
-        self.init_attrs
-            .push((ArkUINodeAttributeType::Clip, value.into()));
-        self
+    pub fn margin_bottom(self, value: f32) -> Self {
+        self.margin(Padding {
+            bottom: value,
+            ..Padding::ZERO
+        })
+    }
+
+    pub fn margin_left(self, value: f32) -> Self {
+        self.margin(Padding {
+            left: value,
+            ..Padding::ZERO
+        })
+    }
+
+    pub fn foreground_color(self, value: u32) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::ForegroundColor, value)
+    }
+
+    pub fn font_color(self, value: u32) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::FontColor, value)
+    }
+
+    pub fn font_weight(self, value: FontWeight) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::FontWeight, font_weight_value(value))
+    }
+
+    pub fn font_family(self, value: impl Into<String>) -> Self {
+        let value = value.into();
+        self.builder_attr(ArkUINodeAttributeType::FontFamily, value)
+    }
+
+    pub fn font_style(self, value: FontStyle) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::FontStyle, i32::from(value))
+    }
+
+    pub fn font_size(self, value: f32) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::FontSize, value)
+    }
+
+    pub fn line_height(self, value: f32) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::TextLineHeight, value)
+    }
+
+    pub fn text_align(self, value: TextAlignment) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::TextAlign, i32::from(value))
+    }
+
+    pub fn text_letter_spacing(self, value: f32) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::TextLetterSpacing, value)
+    }
+
+    pub fn text_decoration(self, value: impl Into<ArkUINodeAttributeItem>) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::TextDecoration, value)
+    }
+
+    pub fn enabled(self, value: bool) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::Enabled, value)
+    }
+
+    pub fn opacity(self, value: f32) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::Opacity, value)
+    }
+
+    pub fn clip(self, value: bool) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::Clip, value)
+    }
+
+    pub fn focusable(self, value: bool) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::Focusable, value)
+    }
+
+    pub fn focus_on_touch(self, value: bool) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::FocusOnTouch, value)
+    }
+
+    pub fn border_radius(self, value: impl Into<Padding>) -> Self {
+        self.builder_attr(
+            ArkUINodeAttributeType::BorderRadius,
+            padding_edges(value.into()),
+        )
+    }
+
+    pub fn border_width(self, value: impl Into<Padding>) -> Self {
+        self.builder_attr(
+            ArkUINodeAttributeType::BorderWidth,
+            padding_edges(value.into()),
+        )
+    }
+
+    pub fn border_color(self, value: u32) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::BorderColor, vec![value])
+    }
+
+    pub fn border_color_all(self, value: u32) -> Self {
+        self.builder_attr(
+            ArkUINodeAttributeType::BorderColor,
+            vec![value, value, value, value],
+        )
+    }
+
+    pub fn border_style(self, value: BorderStyle) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::BorderStyle, i32::from(value))
+    }
+
+    pub fn shadow(self, value: ShadowStyle) -> Self {
+        self.builder_attr(
+            ArkUINodeAttributeType::Shadow,
+            vec![shadow_style_value(value)],
+        )
+    }
+
+    pub fn clear_shadow(self) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::Shadow, vec![0_i32])
+    }
+
+    pub fn alignment(self, value: Alignment) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::Alignment, i32::from(value))
+    }
+
+    pub fn align_self(self, value: ItemAlignment) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::AlignSelf, i32::from(value))
+    }
+
+    pub fn layout_weight(self, value: f32) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::LayoutWeight, value)
+    }
+
+    pub fn visibility(self, value: Visibility) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::Visibility, i32::from(value))
+    }
+
+    pub fn hit_test_behavior(self, value: HitTestBehavior) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::HitTestBehavior, i32::from(value))
+    }
+
+    pub fn button_type(self, value: ButtonType) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::ButtonType, i32::from(value))
+    }
+
+    pub fn color_blend(self, value: u32) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::ColorBlend, value)
+    }
+
+    pub fn position(self, x: f32, y: f32) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::Position, vec![x, y])
+    }
+
+    pub fn z_index(self, value: i32) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::ZIndex, value)
+    }
+
+    pub fn aspect_ratio(self, value: f32) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::AspectRatio, value)
+    }
+
+    pub fn image_object_fit(self, value: ObjectFit) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::ImageObjectFit, i32::from(value))
+    }
+
+    pub fn progress_color(self, value: u32) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::ProgressColor, value)
+    }
+
+    pub fn toggle_selected_color(self, value: u32) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::ToggleSelectedColor, value)
+    }
+
+    pub fn toggle_unselected_color(self, value: u32) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::ToggleUnselectedColor, value)
+    }
+
+    pub fn toggle_switch_point_color(self, value: u32) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::ToggleSwitchPointColor, value)
+    }
+
+    pub fn justify_content(self, value: JustifyContent) -> Self {
+        let value = i32::from(value);
+        match self.kind {
+            NodeKind::Column => self
+                .attr(ArkUINodeAttributeType::ColumnJustifyContent, value)
+                .patch_attr(ArkUINodeAttributeType::ColumnJustifyContent, value),
+            NodeKind::Row => self
+                .attr(ArkUINodeAttributeType::RowJustifyContent, value)
+                .patch_attr(ArkUINodeAttributeType::RowJustifyContent, value),
+            _ => self,
+        }
+    }
+
+    pub fn justify_content_start(self) -> Self {
+        self.justify_content(JustifyContent::Start)
+    }
+
+    pub fn justify_content_center(self) -> Self {
+        self.justify_content(JustifyContent::Center)
+    }
+
+    pub fn justify_content_end(self) -> Self {
+        self.justify_content(JustifyContent::End)
     }
 
     pub fn align_x(self, alignment: Horizontal) -> Self {
@@ -473,11 +950,11 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
             },
             NodeKind::Column => {
                 let justify = match alignment {
-                    Vertical::Top => FLEX_ALIGN_START,
-                    Vertical::Center => FLEX_ALIGN_CENTER,
-                    Vertical::Bottom => FLEX_ALIGN_END,
+                    Vertical::Top => JustifyContent::Start,
+                    Vertical::Center => JustifyContent::Center,
+                    Vertical::Bottom => JustifyContent::End,
                 };
-                self.style(ArkUINodeAttributeType::ColumnJustifyContent, justify)
+                self.justify_content(justify)
             }
             _ => self,
         }
@@ -486,7 +963,7 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
     pub fn align_items_start(self) -> Self {
         match self.kind {
             NodeKind::Column => self
-                .style(
+                .attr(
                     ArkUINodeAttributeType::ColumnAlignItems,
                     HorizontalAlignment::Start as i32,
                 )
@@ -501,7 +978,7 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
     pub fn align_items_center(self) -> Self {
         match self.kind {
             NodeKind::Column => self
-                .style(
+                .attr(
                     ArkUINodeAttributeType::ColumnAlignItems,
                     HorizontalAlignment::Center as i32,
                 )
@@ -510,7 +987,7 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
                     HorizontalAlignment::Center as i32,
                 ),
             NodeKind::Row => self
-                .style(
+                .attr(
                     ArkUINodeAttributeType::RowAlignItems,
                     VerticalAlignment::Center as i32,
                 )
@@ -525,7 +1002,7 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
     pub fn align_items_end(self) -> Self {
         match self.kind {
             NodeKind::Column => self
-                .style(
+                .attr(
                     ArkUINodeAttributeType::ColumnAlignItems,
                     HorizontalAlignment::End as i32,
                 )
@@ -540,7 +1017,7 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
     pub fn align_items_top(self) -> Self {
         match self.kind {
             NodeKind::Row => self
-                .style(
+                .attr(
                     ArkUINodeAttributeType::RowAlignItems,
                     VerticalAlignment::Top as i32,
                 )
@@ -555,7 +1032,7 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
     pub fn align_items_bottom(self) -> Self {
         match self.kind {
             NodeKind::Row => self
-                .style(
+                .attr(
                     ArkUINodeAttributeType::RowAlignItems,
                     VerticalAlignment::Bottom as i32,
                 )
@@ -569,13 +1046,13 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
 
     pub fn label(self, label: impl Into<String>) -> Self {
         let label = label.into();
-        self.style(ArkUINodeAttributeType::ButtonLabel, label.clone())
+        self.attr(ArkUINodeAttributeType::ButtonLabel, label.clone())
             .patch_attr(ArkUINodeAttributeType::ButtonLabel, label)
     }
 
     pub fn content(self, content: impl Into<String>) -> Self {
         let content = content.into();
-        self.style(ArkUINodeAttributeType::TextContent, content.clone())
+        self.attr(ArkUINodeAttributeType::TextContent, content.clone())
             .patch_attr(ArkUINodeAttributeType::TextContent, content)
     }
 
@@ -583,10 +1060,10 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
         let value = value.into();
         match self.kind {
             NodeKind::TextInput => self
-                .style(ArkUINodeAttributeType::TextInputText, value.clone())
+                .attr(ArkUINodeAttributeType::TextInputText, value.clone())
                 .patch_attr(ArkUINodeAttributeType::TextInputText, value),
             NodeKind::TextArea => self
-                .style(ArkUINodeAttributeType::TextAreaText, value.clone())
+                .attr(ArkUINodeAttributeType::TextAreaText, value.clone())
                 .patch_attr(ArkUINodeAttributeType::TextAreaText, value),
             _ => self,
         }
@@ -596,10 +1073,10 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
         let value = value.into();
         match self.kind {
             NodeKind::TextInput => self
-                .style(ArkUINodeAttributeType::TextInputPlaceholder, value.clone())
+                .attr(ArkUINodeAttributeType::TextInputPlaceholder, value.clone())
                 .patch_attr(ArkUINodeAttributeType::TextInputPlaceholder, value),
             NodeKind::TextArea => self
-                .style(ArkUINodeAttributeType::TextAreaPlaceholder, value.clone())
+                .attr(ArkUINodeAttributeType::TextAreaPlaceholder, value.clone())
                 .patch_attr(ArkUINodeAttributeType::TextAreaPlaceholder, value),
             _ => self,
         }
@@ -608,10 +1085,10 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
     pub fn placeholder_color(self, value: u32) -> Self {
         match self.kind {
             NodeKind::TextInput => self
-                .style(ArkUINodeAttributeType::TextInputPlaceholderColor, value)
+                .attr(ArkUINodeAttributeType::TextInputPlaceholderColor, value)
                 .patch_attr(ArkUINodeAttributeType::TextInputPlaceholderColor, value),
             NodeKind::TextArea => self
-                .style(ArkUINodeAttributeType::TextAreaPlaceholderColor, value)
+                .attr(ArkUINodeAttributeType::TextAreaPlaceholderColor, value)
                 .patch_attr(ArkUINodeAttributeType::TextAreaPlaceholderColor, value),
             _ => self,
         }
@@ -620,13 +1097,13 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
     pub fn checked(self, value: bool) -> Self {
         match self.kind {
             NodeKind::Checkbox => self
-                .style(ArkUINodeAttributeType::CheckboxSelect, value)
+                .attr(ArkUINodeAttributeType::CheckboxSelect, value)
                 .patch_attr(ArkUINodeAttributeType::CheckboxSelect, value),
             NodeKind::Toggle => self
-                .style(ArkUINodeAttributeType::ToggleValue, value)
+                .attr(ArkUINodeAttributeType::ToggleValue, value)
                 .patch_attr(ArkUINodeAttributeType::ToggleValue, value),
             NodeKind::Radio => self
-                .style(ArkUINodeAttributeType::RadioChecked, value)
+                .attr(ArkUINodeAttributeType::RadioChecked, value)
                 .patch_attr(ArkUINodeAttributeType::RadioChecked, value),
             _ => self,
         }
@@ -635,20 +1112,12 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
     pub fn range(mut self, min: f32, max: f32) -> Self {
         match self.kind {
             NodeKind::Slider => {
-                self.init_attrs
-                    .push((ArkUINodeAttributeType::SliderMinValue, min.into()));
-                self.init_attrs
-                    .push((ArkUINodeAttributeType::SliderMaxValue, max.into()));
-                self.patch_attrs
-                    .push((ArkUINodeAttributeType::SliderMinValue, min.into()));
-                self.patch_attrs
-                    .push((ArkUINodeAttributeType::SliderMaxValue, max.into()));
+                self = self
+                    .builder_attr(ArkUINodeAttributeType::SliderMinValue, min)
+                    .builder_attr(ArkUINodeAttributeType::SliderMaxValue, max);
             }
             NodeKind::Progress => {
-                self.init_attrs
-                    .push((ArkUINodeAttributeType::ProgressTotal, max.into()));
-                self.patch_attrs
-                    .push((ArkUINodeAttributeType::ProgressTotal, max.into()));
+                self = self.builder_attr(ArkUINodeAttributeType::ProgressTotal, max);
             }
             _ => {}
         }
@@ -695,60 +1164,66 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
         self
     }
 
-    pub fn on_supported_ui_states(
+    pub fn with_next_frame(
         mut self,
-        ui_states: i32,
-        exclude_inner: bool,
-        callback: impl Fn(&mut ArkUINode, i32) + 'static,
+        effect: impl Fn(&mut ArkUINode) -> ArkUIResult<()> + 'static,
     ) -> Self {
-        let callback = Rc::new(callback) as UiStateCallback;
-        let callback_state = Rc::new(RefCell::new(callback.clone()));
-        let mount_callback_state = callback_state.clone();
-
+        let shared = Rc::new(effect);
         self.attach_effects.push(Box::new(move |node| {
-            let callback_state = mount_callback_state.clone();
-            let context = Box::into_raw(Box::new(SupportedUiStatesCallbackContext {
-                callback: callback_state,
-                node: node.clone(),
-            }));
-            let status = unsafe {
-                OH_ArkUI_AddSupportedUIStates(
-                    node.raw_handle(),
-                    ui_states,
-                    Some(supported_ui_states_callback_trampoline),
-                    exclude_inner,
-                    context.cast(),
-                )
-            } as u32;
-            let result = if status
-                == arkui_input_binding::sys::ArkUI_ErrorCode_ARKUI_ERROR_CODE_NO_ERROR
-            {
-                Ok(())
-            } else {
-                Err(ArkUIError::new(ArkUIErrorCode::from(status), ""))
-            };
-
-            if let Err(error) = result {
-                unsafe {
-                    drop(Box::from_raw(context));
+            let alive = Rc::new(Cell::new(true));
+            let callback_alive = alive.clone();
+            let callback_effect = shared.clone();
+            let callback_node = node.clone();
+            node.post_frame_callback(move |_timestamp, _frame| {
+                if !callback_alive.get() {
+                    return;
                 }
-                return Err(error);
-            }
+                let mut node = callback_node.clone();
+                let effect = callback_effect.clone();
+                run_guarded_ui_callback(
+                    "renderer error: next-frame callback panicked",
+                    move || {
+                        if let Err(error) = effect(&mut node) {
+                            ohos_hilog_binding::error(format!(
+                                "renderer error: next-frame callback failed: {error}"
+                            ));
+                        }
+                    },
+                );
+            })?;
 
-            let node_handle = node.clone();
-            Ok(Some(Box::new(move || {
-                unsafe {
-                    let _ = OH_ArkUI_RemoveSupportedUIStates(node_handle.raw_handle(), ui_states);
-                    drop(Box::from_raw(context));
+            Ok(Some(Box::new(move || alive.set(false)) as Cleanup))
+        }));
+        self
+    }
+
+    pub fn with_next_idle(
+        mut self,
+        effect: impl Fn(&mut ArkUINode) -> ArkUIResult<()> + 'static,
+    ) -> Self {
+        let shared = Rc::new(effect);
+        self.attach_effects.push(Box::new(move |node| {
+            let alive = Rc::new(Cell::new(true));
+            let callback_alive = alive.clone();
+            let callback_effect = shared.clone();
+            let callback_node = node.clone();
+            node.post_idle_callback(move |_time_left, _frame| {
+                if !callback_alive.get() {
+                    return;
                 }
-            }) as Cleanup))
-        }));
+                let mut node = callback_node.clone();
+                let effect = callback_effect.clone();
+                run_guarded_ui_callback("renderer error: next-idle callback panicked", move || {
+                    if let Err(error) = effect(&mut node) {
+                        ohos_hilog_binding::error(format!(
+                            "renderer error: next-idle callback failed: {error}"
+                        ));
+                    }
+                });
+            })?;
 
-        self.patch_effects.push(Box::new(move |_node| {
-            callback_state.replace(callback);
-            Ok(())
+            Ok(Some(Box::new(move || alive.set(false)) as Cleanup))
         }));
-
         self
     }
 
@@ -798,6 +1273,44 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
             event_type,
             callback: Rc::new(move |_| callback()),
         });
+        self
+    }
+
+    pub fn on_supported_ui_states(
+        mut self,
+        ui_states: UiState,
+        exclude_inner: bool,
+        callback: impl Fn(&mut ArkUINode, UiState) + 'static,
+    ) -> Self {
+        let callback = Rc::new(callback) as UiStateCallback;
+        let callback_state = Rc::new(RefCell::new(callback.clone()));
+        let mount_callback_state = callback_state.clone();
+        let ui_state_bits = ui_states.bits();
+
+        self.attach_effects.push(Box::new(move |node| {
+            let callback_state = mount_callback_state.clone();
+            let callback_node = node.clone();
+            node.add_supported_ui_states(
+                ui_state_bits,
+                move |current_states| {
+                    let current = UiState::from_bits(current_states);
+                    let handler = callback_state.borrow().clone();
+                    let mut node = callback_node.clone();
+                    handler(&mut node, current);
+                },
+                exclude_inner,
+            )?;
+
+            let node_handle = node.clone();
+            Ok(Some(Box::new(move || {
+                let _ = node_handle.remove_supported_ui_states(ui_state_bits);
+            }) as Cleanup))
+        }));
+
+        self.patch_effects.push(Box::new(move |_node| {
+            callback_state.replace(callback);
+            Ok(())
+        }));
         self
     }
 
@@ -1031,7 +1544,7 @@ pub fn slider_component<Message, AppTheme>() -> Node<Message, AppTheme> {
 
 pub fn slider<Message, AppTheme>(value: f32, min: f32, max: f32) -> Node<Message, AppTheme> {
     slider_component()
-        .style(ArkUINodeAttributeType::SliderValue, value)
+        .attr(ArkUINodeAttributeType::SliderValue, value)
         .patch_attr(ArkUINodeAttributeType::SliderValue, value)
         .range(min, max)
 }
@@ -1042,7 +1555,7 @@ pub fn progress_component<Message, AppTheme>() -> Node<Message, AppTheme> {
 
 pub fn progress<Message, AppTheme>(value: f32, total: f32) -> Node<Message, AppTheme> {
     progress_component()
-        .style(ArkUINodeAttributeType::ProgressValue, value)
+        .attr(ArkUINodeAttributeType::ProgressValue, value)
         .patch_attr(ArkUINodeAttributeType::ProgressValue, value)
         .range(0.0, total)
 }
@@ -1054,7 +1567,7 @@ pub fn image_component<Message, AppTheme>() -> Node<Message, AppTheme> {
 pub fn image<Message, AppTheme>(src: impl Into<String>) -> Node<Message, AppTheme> {
     let src = src.into();
     image_component()
-        .style(ArkUINodeAttributeType::ImageSrc, src.clone())
+        .attr(ArkUINodeAttributeType::ImageSrc, src.clone())
         .patch_attr(ArkUINodeAttributeType::ImageSrc, src)
 }
 
@@ -1468,9 +1981,9 @@ where
             stack_component::<Message, AppTheme>()
                 .percent_width(1.0)
                 .percent_height(1.0)
-                .style(ArkUINodeAttributeType::Clip, false)
-                .style(ArkUINodeAttributeType::HitTestBehavior, 2_i32)
-                .style(
+                .attr(ArkUINodeAttributeType::Clip, false)
+                .hit_test_behavior(HitTestBehavior::Transparent)
+                .attr(
                     ArkUINodeAttributeType::Alignment,
                     i32::from(Alignment::TopStart),
                 )
@@ -1482,8 +1995,8 @@ where
     stack_component::<Message, AppTheme>()
         .percent_width(1.0)
         .percent_height(1.0)
-        .style(ArkUINodeAttributeType::Clip, false)
-        .style(
+        .attr(ArkUINodeAttributeType::Clip, false)
+        .attr(
             ArkUINodeAttributeType::Alignment,
             i32::from(Alignment::TopStart),
         )
@@ -1561,10 +2074,30 @@ fn reset_stale_attrs(
 
 fn apply_event_handlers(node: &mut ArkUINode, handlers: &[EventHandlerSpec]) {
     let mut runtime = RuntimeNode(node);
-    for handler in handlers {
-        let callback = handler.callback.clone();
-        runtime.on_event(handler.event_type, move |event| callback(event));
+    for (event_type, callbacks) in grouped_event_handlers(handlers) {
+        runtime.on_event(event_type, move |event| {
+            for callback in &callbacks {
+                callback(event);
+            }
+        });
     }
+}
+
+fn grouped_event_handlers(
+    handlers: &[EventHandlerSpec],
+) -> Vec<(NodeEventType, Vec<EventCallback>)> {
+    let mut groups = Vec::<(NodeEventType, Vec<EventCallback>)>::new();
+    for handler in handlers {
+        if let Some((_, callbacks)) = groups
+            .iter_mut()
+            .find(|(event_type, _)| *event_type == handler.event_type)
+        {
+            callbacks.push(handler.callback.clone());
+        } else {
+            groups.push((handler.event_type, vec![handler.callback.clone()]));
+        }
+    }
+    groups
 }
 
 fn event_types(handlers: &[EventHandlerSpec]) -> Vec<NodeEventType> {
@@ -1661,10 +2194,7 @@ fn attach_child(parent: &mut ArkUINode, child: ArkUINode) -> ArkUIResult<()> {
     runtime.add_child(child)
 }
 
-fn realize_attached_node(
-    node: &mut ArkUINode,
-    mounted: &mut MountedRenderNode,
-) -> ArkUIResult<()> {
+fn realize_attached_node(node: &mut ArkUINode, mounted: &mut MountedRenderNode) -> ArkUIResult<()> {
     if !mounted.pending_patch_attrs.is_empty() {
         apply_attr_list(node, std::mem::take(&mut mounted.pending_patch_attrs));
     }
@@ -1680,11 +2210,7 @@ fn realize_attached_node(
         effect(node)?;
     }
 
-    for (child_handle, child_mounted) in node
-        .children()
-        .iter()
-        .zip(mounted.children.iter_mut())
-    {
+    for (child_handle, child_mounted) in node.children().iter().zip(mounted.children.iter_mut()) {
         let mut child_node = child_handle.borrow_mut();
         realize_attached_node(&mut child_node, child_mounted)?;
     }

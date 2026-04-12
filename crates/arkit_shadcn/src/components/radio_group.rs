@@ -11,28 +11,19 @@ fn radio_indicator<Message: 'static>(checked: bool) -> Element<Message> {
             .width(RADIO_SIZE)
             .height(RADIO_SIZE)
             .align_items_center()
-            .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
-            .style(
-                ArkUINodeAttributeType::BorderRadius,
-                vec![radius::FULL, radius::FULL, radius::FULL, radius::FULL],
-            )
-            .style(
-                ArkUINodeAttributeType::BorderWidth,
-                vec![
-                    RADIO_BORDER_WIDTH,
-                    RADIO_BORDER_WIDTH,
-                    RADIO_BORDER_WIDTH,
-                    RADIO_BORDER_WIDTH,
-                ],
-            )
-            .style(
-                ArkUINodeAttributeType::BorderColor,
-                vec![if checked {
-                    color::PRIMARY
-                } else {
-                    color::INPUT
-                }],
-            )
+            .justify_content_center()
+            .border_radius([radius::FULL, radius::FULL, radius::FULL, radius::FULL])
+            .border_width([
+                RADIO_BORDER_WIDTH,
+                RADIO_BORDER_WIDTH,
+                RADIO_BORDER_WIDTH,
+                RADIO_BORDER_WIDTH,
+            ])
+            .border_color(if checked {
+                color::PRIMARY
+            } else {
+                color::INPUT
+            })
             .background_color(color::BACKGROUND),
     );
 
@@ -40,10 +31,7 @@ fn radio_indicator<Message: 'static>(checked: bool) -> Element<Message> {
         indicator = indicator.children(vec![arkit::row_component::<Message, arkit::Theme>()
             .width(RADIO_DOT_SIZE)
             .height(RADIO_DOT_SIZE)
-            .style(
-                ArkUINodeAttributeType::BorderRadius,
-                vec![radius::FULL, radius::FULL, radius::FULL, radius::FULL],
-            )
+            .border_radius([radius::FULL, radius::FULL, radius::FULL, radius::FULL])
             .background_color(color::PRIMARY)
             .into()]);
     }
@@ -72,10 +60,7 @@ fn radio_group_impl<Message: 'static>(
                 .children(vec![
                     radio_indicator::<Message>(selected_value == option),
                     arkit::row_component::<Message, arkit::Theme>()
-                        .style(
-                            ArkUINodeAttributeType::Margin,
-                            vec![0.0, 0.0, 0.0, spacing::MD],
-                        )
+                        .margin([0.0, 0.0, 0.0, spacing::MD])
                         .children(vec![label::<Message>(option).into()])
                         .into(),
                 ]);

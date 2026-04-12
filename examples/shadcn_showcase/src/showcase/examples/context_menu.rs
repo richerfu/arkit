@@ -12,26 +12,17 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                     .width(300.0)
                     .height(150.0)
                     .align_items_center()
-                    .style(ArkUINodeAttributeType::ColumnJustifyContent, 2_i32)
-                    .style(
-                        ArkUINodeAttributeType::BorderWidth,
-                        vec![1.0, 1.0, 1.0, 1.0],
-                    )
-                    .style(
-                        ArkUINodeAttributeType::BorderColor,
-                        vec![shadcn::theme::color::BORDER],
-                    )
-                    .style(
-                        ArkUINodeAttributeType::BorderRadius,
-                        vec![
-                            shadcn::theme::radius::MD,
-                            shadcn::theme::radius::MD,
-                            shadcn::theme::radius::MD,
-                            shadcn::theme::radius::MD,
-                        ],
-                    )
-                    .style(ArkUINodeAttributeType::BorderStyle, 1_i32)
-                    .style(ArkUINodeAttributeType::Clip, true)
+                    .justify_content(JustifyContent::Center)
+                    .border_width([1.0, 1.0, 1.0, 1.0])
+                    .border_color(shadcn::theme::color::BORDER)
+                    .border_radius([
+                        shadcn::theme::radius::MD,
+                        shadcn::theme::radius::MD,
+                        shadcn::theme::radius::MD,
+                        shadcn::theme::radius::MD,
+                    ])
+                    .border_style(BorderStyle::Dashed)
+                    .clip(true)
                     .on_long_press_message(Message::SetContextMenuOpen(true))
                     .children(vec![shadcn::text_sm("Long press here")])
                     .into(),

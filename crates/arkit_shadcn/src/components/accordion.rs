@@ -104,7 +104,7 @@ fn accordion_chevron<Message: 'static>(is_open: bool) -> Element<Message> {
         .width(ACCORDION_ICON_SIZE)
         .height(ACCORDION_ICON_SIZE)
         .align_items_center()
-        .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
+        .justify_content_center()
         .native(move |node| {
             node.set_transform_center(vec![0.0, 0.0, 0.0, 0.5, 0.5, 0.0])?;
             node.set_rotate(vec![0.0, 0.0, 1.0, angle, 0.0])?;
@@ -133,21 +133,15 @@ fn accordion_content_panel<Message: 'static>(
         arkit::column_component::<Message, arkit::Theme>()
             .percent_width(1.0)
             .align_items_start()
-            .style(
-                ArkUINodeAttributeType::Padding,
-                vec![0.0, 0.0, spacing::LG, 0.0],
-            )
+            .padding([0.0, 0.0, spacing::LG, 0.0])
             .children(content)
             .into()
     } else {
         arkit::column_component::<Message, arkit::Theme>()
             .percent_width(1.0)
             .height(0.0)
-            .style(ArkUINodeAttributeType::Opacity, 0.0_f32)
-            .style(
-                ArkUINodeAttributeType::HitTestBehavior,
-                HIT_TEST_TRANSPARENT,
-            )
+            .opacity(0.0_f32)
+            .hit_test_behavior(HitTestBehavior::Transparent)
             .into()
     }
 }
@@ -165,48 +159,34 @@ where
     let mut trigger_row = arkit::row_component::<Message, arkit::Theme>()
         .percent_width(1.0)
         .align_items_top()
-        .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_START)
-        .style(
-            ArkUINodeAttributeType::Padding,
-            vec![spacing::LG, 0.0, spacing::LG, 0.0],
-        )
-        .style(
-            ArkUINodeAttributeType::BorderRadius,
-            vec![
-                ACCORDION_TRIGGER_RADIUS,
-                ACCORDION_TRIGGER_RADIUS,
-                ACCORDION_TRIGGER_RADIUS,
-                ACCORDION_TRIGGER_RADIUS,
-            ],
-        )
+        .justify_content_start()
+        .padding([spacing::LG, 0.0, spacing::LG, 0.0])
+        .border_radius([
+            ACCORDION_TRIGGER_RADIUS,
+            ACCORDION_TRIGGER_RADIUS,
+            ACCORDION_TRIGGER_RADIUS,
+            ACCORDION_TRIGGER_RADIUS,
+        ])
         .children(vec![
             arkit::column_component::<Message, arkit::Theme>()
-                .style(ArkUINodeAttributeType::LayoutWeight, 1.0_f32)
+                .layout_weight(1.0_f32)
                 .align_items_start()
-                .style(
-                    ArkUINodeAttributeType::Margin,
-                    vec![0.0, ACCORDION_TRIGGER_GAP, 0.0, 0.0],
-                )
+                .margin([0.0, ACCORDION_TRIGGER_GAP, 0.0, 0.0])
                 .children(vec![trigger])
                 .into(),
             accordion_chevron::<Message>(is_open),
         ]);
 
     if disabled {
-        trigger_row = trigger_row
-            .style(ArkUINodeAttributeType::Enabled, false)
-            .style(ArkUINodeAttributeType::Opacity, 0.5_f32);
+        trigger_row = trigger_row.enabled(false).opacity(0.5_f32);
     } else {
         trigger_row = trigger_row.on_click(move || on_toggle());
     }
 
     arkit::column_component::<Message, arkit::Theme>()
         .percent_width(1.0)
-        .style(
-            ArkUINodeAttributeType::BorderWidth,
-            vec![0.0, 0.0, 1.0, 0.0],
-        )
-        .style(ArkUINodeAttributeType::BorderColor, vec![color::BORDER])
+        .border_width([0.0, 0.0, 1.0, 0.0])
+        .border_color(color::BORDER)
         .children(vec![
             trigger_row.into(),
             accordion_content_panel(content, is_open),

@@ -13,10 +13,7 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
             .children(vec![
                 shadcn::checkbox("", checked, Message::SetToggleState),
                 arkit::row_component()
-                    .style(
-                        ArkUINodeAttributeType::Margin,
-                        vec![0.0, 0.0, 0.0, shadcn::theme::spacing::SM],
-                    )
+                    .margin([0.0, 0.0, 0.0, shadcn::theme::spacing::SM])
                     .children(vec![shadcn::label("Accept terms and conditions").into()])
                     .into(),
             ])

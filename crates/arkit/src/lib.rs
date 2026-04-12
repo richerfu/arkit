@@ -14,12 +14,14 @@ pub use arkit_widget::{
     row_component, scroll, scroll_component, slider, slider_component, stack, stack_component,
     swiper, swiper_component, text, text_area, text_area_component, text_component, text_input,
     text_input_component, toggle, toggle_component, ArkEvent, ArkUINodeAttributeItem,
-    ArkUINodeAttributeType, ButtonElement, CalendarPickerElement, CheckboxElement,
-    ContainerElement, DatePickerElement, Element, FloatingAlign, FloatingOverlaySpec, FloatingSide,
-    LayoutFrame, LayoutSize, LifecycleEvent, ModalOverlaySpec, ModalPresentation,
-    NativeOverlayPlacement, Node, NodeCustomEvent, NodeCustomEventType, NodeEventType,
+    ArkUINodeAttributeType, BorderStyle, ButtonElement, ButtonType, CalendarPickerElement,
+    CheckboxElement, ContainerElement, DatePickerElement, Element, FloatingAlign,
+    FloatingOverlaySpec, FloatingSide, FontStyle, FontWeight, HitTestBehavior, ItemAlignment,
+    JustifyContent, LayoutFrame, LayoutSize, LifecycleEvent, ModalOverlaySpec, ModalPresentation,
+    NativeOverlayPlacement, Node, NodeCustomEvent, NodeCustomEventType, NodeEventType, ObjectFit,
     OverlayDismissMode, OverlayStrategy, ProgressElement, RadioElement, RowElement, ScrollElement,
-    SliderElement, SwiperElement, TextAreaElement, TextElement, TextInputElement, ToggleElement,
+    ShadowStyle, SliderElement, SwiperElement, TextAlignment, TextAreaElement, TextElement,
+    TextInputElement, ToggleElement, UiState, Visibility,
 };
 pub use ohos::{
     mount_application, mount_entry, napi_derive_ohos, napi_ohos, ohos_arkui_binding,
@@ -71,11 +73,13 @@ pub mod prelude {
     pub use crate::widget::*;
     pub use crate::{
         application, entry, run, window, ArkEvent, ArkUINodeAttributeItem, ArkUINodeAttributeType,
-        Element, FloatingAlign, FloatingOverlaySpec, FloatingSide, Horizontal, LayoutFrame,
-        LayoutSize, Length, LifecycleEvent, ModalOverlaySpec, ModalPresentation,
-        NativeOverlayPlacement, NodeCustomEvent, NodeCustomEventType, NodeEventType,
-        OverlayDismissMode, OverlayStrategy, Padding, Program, Renderer, Settings, Size,
-        Subscription, SubscriptionHandle, Task, Theme, Vertical,
+        BorderStyle, ButtonType, Element, FloatingAlign, FloatingOverlaySpec, FloatingSide,
+        FontStyle, FontWeight, HitTestBehavior, Horizontal, ItemAlignment, JustifyContent,
+        LayoutFrame, LayoutSize, Length, LifecycleEvent, ModalOverlaySpec, ModalPresentation,
+        NativeOverlayPlacement, NodeCustomEvent, NodeCustomEventType, NodeEventType, ObjectFit,
+        OverlayDismissMode, OverlayStrategy, Padding, Program, Renderer, Settings, ShadowStyle,
+        Size, Subscription, SubscriptionHandle, Task, TextAlignment, Theme, UiState, Vertical,
+        Visibility,
     };
 }
 

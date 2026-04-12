@@ -4,10 +4,6 @@ use arkit_shadcn as shadcn;
 
 use crate::{Message, Route};
 
-pub(crate) const FLEX_ALIGN_CENTER: i32 = 2;
-pub(crate) const FLEX_ALIGN_END: i32 = 3;
-pub(crate) const FLEX_ALIGN_SPACE_BETWEEN: i32 = 6;
-pub(crate) const FLEX_ALIGN_START: i32 = 1;
 const HOME_HEADER_HEIGHT: f32 = 80.0;
 const DETAIL_HEADER_HEIGHT: f32 = 48.0;
 const TRACKING_TIGHT: f32 = -0.35;
@@ -19,32 +15,30 @@ fn empty_box(width: f32, height: f32) -> Element {
 fn nav_title_text(title: impl Into<String>, home: bool) -> Element {
     let title = title.into();
     let mut text = arkit::text(title)
-        .style(
-            ArkUINodeAttributeType::FontColor,
-            shadcn::theme::color::FOREGROUND,
-        )
-        .style(ArkUINodeAttributeType::TextLetterSpacing, TRACKING_TIGHT);
+        .font_color(shadcn::theme::color::FOREGROUND)
+        .text_letter_spacing(TRACKING_TIGHT);
 
     if home {
         text = text
             .font_size(34.0)
-            .style(ArkUINodeAttributeType::FontWeight, 6_i32)
-            .style(ArkUINodeAttributeType::TextLineHeight, 40.0);
+            .font_weight(FontWeight::W700)
+            .line_height(40.0);
     } else {
         text = text
             .font_size(17.0)
-            .style(ArkUINodeAttributeType::FontWeight, 4_i32)
-            .style(ArkUINodeAttributeType::TextLineHeight, 22.0);
+            .font_weight(FontWeight::W500)
+            .line_height(22.0);
     }
 
     text.into()
 }
 
 fn plain_back_button() -> Element {
-    shadcn::icon_button_with_variant("chevron-left", shadcn::ButtonVariant::Ghost)
+    shadcn::icon_button("chevron-left")
+        .theme(shadcn::ButtonVariant::Ghost)
         .width(36.0)
         .height(36.0)
-        .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
+        .padding(arkit::Padding::ZERO)
         .on_press(Message::Back)
         .into()
 }
@@ -56,7 +50,7 @@ fn constrained_width(child: Element, width: f32) -> Element {
         .children(vec![arkit::row_component()
             .percent_width(1.0)
             .max_width_constraint(width)
-            .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
+            .justify_content_center()
             .children(vec![child])
             .into()])
         .into()
@@ -69,14 +63,11 @@ fn showcase_horizontal_padding(value: f32) -> f32 {
 fn canvas_row(content: Element, center_x: bool) -> Element {
     arkit::row_component()
         .percent_width(1.0)
-        .style(
-            ArkUINodeAttributeType::RowJustifyContent,
-            if center_x {
-                FLEX_ALIGN_CENTER
-            } else {
-                FLEX_ALIGN_START
-            },
-        )
+        .justify_content(if center_x {
+            JustifyContent::Center
+        } else {
+            JustifyContent::Start
+        })
         .children(vec![content])
         .into()
 }
@@ -103,7 +94,7 @@ pub(crate) fn v_stack(children: Vec<Element>, gap: f32) -> Element {
                     } else {
                         arkit::row_component()
                             .percent_width(1.0)
-                            .style(ArkUINodeAttributeType::Margin, vec![gap, 0.0, 0.0, 0.0])
+                            .margin([gap, 0.0, 0.0, 0.0])
                             .children(vec![child])
                             .into()
                     }
@@ -125,7 +116,7 @@ pub(crate) fn h_stack(children: Vec<Element>, gap: f32) -> Element {
                         child
                     } else {
                         arkit::row_component()
-                            .style(ArkUINodeAttributeType::Margin, vec![0.0, 0.0, 0.0, gap])
+                            .margin([0.0, 0.0, 0.0, gap])
                             .children(vec![child])
                             .into()
                     }
@@ -139,19 +130,16 @@ pub(crate) fn h_stack(children: Vec<Element>, gap: f32) -> Element {
 pub(crate) fn page_scroll(children: Vec<Element>) -> Element {
     arkit::scroll_component()
         .percent_width(1.0)
-        .style(ArkUINodeAttributeType::LayoutWeight, 1.0_f32)
+        .layout_weight(1.0_f32)
         .background_color(shadcn::theme::color::SURFACE)
         .children(vec![arkit::column_component()
             .percent_width(1.0)
-            .style(
-                ArkUINodeAttributeType::Padding,
-                vec![
-                    0.0,
-                    shadcn::theme::spacing::LG,
-                    shadcn::theme::spacing::XXL,
-                    shadcn::theme::spacing::LG,
-                ],
-            )
+            .padding([
+                0.0,
+                shadcn::theme::spacing::LG,
+                shadcn::theme::spacing::XXL,
+                shadcn::theme::spacing::LG,
+            ])
             .children(vec![v_stack(children, shadcn::theme::spacing::LG)])
             .into()])
         .into()
@@ -189,27 +177,21 @@ pub(crate) fn component_canvas_with(
 
     arkit::scroll_component()
         .percent_width(1.0)
-        .style(ArkUINodeAttributeType::LayoutWeight, 1.0_f32)
+        .layout_weight(1.0_f32)
         .background_color(shadcn::theme::color::SURFACE)
         .children(vec![container
-            .style(
-                ArkUINodeAttributeType::Padding,
-                vec![
-                    padding[0],
-                    padding[1],
-                    padding[2] + shadcn::theme::spacing::XXL,
-                    padding[3],
-                ],
-            )
+            .padding([
+                padding[0],
+                padding[1],
+                padding[2] + shadcn::theme::spacing::XXL,
+                padding[3],
+            ])
             .align_items_start()
-            .style(
-                ArkUINodeAttributeType::ColumnJustifyContent,
-                if center_y {
-                    FLEX_ALIGN_CENTER
-                } else {
-                    FLEX_ALIGN_START
-                },
-            )
+            .justify_content(if center_y {
+                JustifyContent::Center
+            } else {
+                JustifyContent::Start
+            })
             .children(vec![canvas_row(content, center_x)])
             .into()])
         .into()
@@ -223,24 +205,21 @@ pub(crate) fn nav_bar(title: impl Into<String>, back: bool) -> Element {
             .percent_width(1.0)
             .height(HOME_HEADER_HEIGHT)
             .background_color(shadcn::theme::color::BACKGROUND)
-            .style(
-                ArkUINodeAttributeType::Padding,
-                vec![
-                    18.0,
-                    shadcn::theme::spacing::LG,
-                    6.0,
-                    shadcn::theme::spacing::LG,
-                ],
-            )
+            .padding([
+                18.0,
+                shadcn::theme::spacing::LG,
+                6.0,
+                shadcn::theme::spacing::LG,
+            ])
             .align_items_bottom()
             .children(vec![nav_title_text(title, true)])
             .into();
     }
 
     let left = arkit::row_component()
-        .style(ArkUINodeAttributeType::LayoutWeight, 1.0_f32)
+        .layout_weight(1.0_f32)
         .align_items_center()
-        .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_START)
+        .justify_content_start()
         .children(vec![
             if back {
                 plain_back_button()
@@ -248,7 +227,7 @@ pub(crate) fn nav_bar(title: impl Into<String>, back: bool) -> Element {
                 empty_box(36.0, 36.0)
             },
             arkit::row_component()
-                .style(ArkUINodeAttributeType::Margin, vec![0.0, 0.0, 0.0, 8.0])
+                .margin([0.0, 0.0, 0.0, 8.0])
                 .children(vec![nav_title_text(title, false)])
                 .into(),
         ])
@@ -258,15 +237,12 @@ pub(crate) fn nav_bar(title: impl Into<String>, back: bool) -> Element {
         .percent_width(1.0)
         .height(DETAIL_HEADER_HEIGHT)
         .background_color(shadcn::theme::color::BACKGROUND)
-        .style(
-            ArkUINodeAttributeType::Padding,
-            vec![
-                4.0,
-                shadcn::theme::spacing::LG,
-                4.0,
-                shadcn::theme::spacing::LG,
-            ],
-        )
+        .padding([
+            4.0,
+            shadcn::theme::spacing::LG,
+            4.0,
+            shadcn::theme::spacing::LG,
+        ])
         .align_items_center()
         .children(vec![left])
         .into()
@@ -275,12 +251,12 @@ pub(crate) fn nav_bar(title: impl Into<String>, back: bool) -> Element {
 pub(crate) fn component_list_cell(slug: &str, title: &str, first: bool, last: bool) -> Element {
     let slug = slug.to_string();
     let border_width = if last {
-        vec![1.0, 1.0, 1.0, 1.0]
+        [1.0, 1.0, 1.0, 1.0]
     } else {
-        vec![1.0, 1.0, 0.0, 1.0]
+        [1.0, 1.0, 0.0, 1.0]
     };
     let radius = shadcn::theme::radius::LG;
-    let border_radius = vec![
+    let border_radius = [
         if first { radius } else { 0.0 },
         if first { radius } else { 0.0 },
         if last { radius } else { 0.0 },
@@ -291,31 +267,19 @@ pub(crate) fn component_list_cell(slug: &str, title: &str, first: bool, last: bo
         .percent_width(1.0)
         .height(44.0)
         .align_items_center()
-        .style(
-            ArkUINodeAttributeType::RowJustifyContent,
-            FLEX_ALIGN_SPACE_BETWEEN,
-        )
-        .style(
-            ArkUINodeAttributeType::Padding,
-            vec![12.0, 16.0, 12.0, 14.0],
-        )
-        .style(ArkUINodeAttributeType::BorderWidth, border_width)
-        .style(
-            ArkUINodeAttributeType::BorderColor,
-            vec![shadcn::theme::color::BORDER],
-        )
-        .style(ArkUINodeAttributeType::BorderRadius, border_radius)
+        .justify_content(JustifyContent::SpaceBetween)
+        .padding([12.0, 16.0, 12.0, 14.0])
+        .border_width(border_width)
+        .border_color(shadcn::theme::color::BORDER)
+        .border_radius(border_radius)
         .background_color(shadcn::theme::color::CARD)
         .on_press(Message::Navigate(Route::Component { slug }))
         .children(vec![
             arkit::text(title)
                 .font_size(shadcn::theme::typography::MD)
-                .style(
-                    ArkUINodeAttributeType::FontColor,
-                    shadcn::theme::color::FOREGROUND,
-                )
-                .style(ArkUINodeAttributeType::FontWeight, 3_i32)
-                .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
+                .font_color(shadcn::theme::color::FOREGROUND)
+                .font_weight(FontWeight::W400)
+                .line_height(20.0)
                 .into(),
             lucide::icon("chevron-right")
                 .size(16.0)

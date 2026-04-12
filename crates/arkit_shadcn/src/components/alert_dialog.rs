@@ -18,19 +18,10 @@ pub fn alert_dialog_with_message<Message: 'static>(
         arkit::column_component::<Message, arkit::Theme>()
             .percent_width(1.0)
             .max_width_constraint(super::dialog::DIALOG_MAX_WIDTH)
-            .style(
-                ArkUINodeAttributeType::Padding,
-                vec![spacing::XXL, spacing::XXL, spacing::XXL, spacing::XXL],
-            )
-            .style(
-                ArkUINodeAttributeType::BorderRadius,
-                vec![radius::LG, radius::LG, radius::LG, radius::LG],
-            )
-            .style(
-                ArkUINodeAttributeType::BorderWidth,
-                vec![1.0, 1.0, 1.0, 1.0],
-            )
-            .style(ArkUINodeAttributeType::BorderColor, vec![color::BORDER])
+            .padding([spacing::XXL, spacing::XXL, spacing::XXL, spacing::XXL])
+            .border_radius([radius::LG, radius::LG, radius::LG, radius::LG])
+            .border_width([1.0, 1.0, 1.0, 1.0])
+            .border_color(color::BORDER)
             .background_color(color::BACKGROUND)
             .children(vec![stack(
                 vec![

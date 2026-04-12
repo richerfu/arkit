@@ -16,31 +16,31 @@ pub enum BadgeVariant {
     Outline,
 }
 
-fn badge_style(variant: BadgeVariant) -> (u32, u32, Vec<f32>, Vec<u32>) {
+fn badge_style(variant: BadgeVariant) -> (u32, u32, [f32; 4], u32) {
     match variant {
         BadgeVariant::Default => (
             color::PRIMARY,
             color::PRIMARY_FOREGROUND,
-            vec![1.0, 1.0, 1.0, 1.0],
-            vec![0x00000000],
+            [1.0, 1.0, 1.0, 1.0],
+            0x00000000,
         ),
         BadgeVariant::Secondary => (
             color::SECONDARY,
             color::SECONDARY_FOREGROUND,
-            vec![1.0, 1.0, 1.0, 1.0],
-            vec![0x00000000],
+            [1.0, 1.0, 1.0, 1.0],
+            0x00000000,
         ),
         BadgeVariant::Destructive => (
             color::DESTRUCTIVE,
             color::DESTRUCTIVE_FOREGROUND,
-            vec![1.0, 1.0, 1.0, 1.0],
-            vec![0x00000000],
+            [1.0, 1.0, 1.0, 1.0],
+            0x00000000,
         ),
         BadgeVariant::Outline => (
             color::BACKGROUND,
             color::FOREGROUND,
-            vec![1.0, 1.0, 1.0, 1.0],
-            vec![color::BORDER],
+            [1.0, 1.0, 1.0, 1.0],
+            color::BORDER,
         ),
     }
 }
@@ -51,43 +51,34 @@ fn badge_label_text<Message: 'static>(
 ) -> Element<Message> {
     arkit::text::<Message, arkit::Theme>(content)
         .font_size(typography::XS)
-        .style(ArkUINodeAttributeType::FontWeight, 4_i32)
-        .style(ArkUINodeAttributeType::FontColor, foreground)
-        .style(
-            ArkUINodeAttributeType::TextLineHeight,
-            BADGE_TEXT_LINE_HEIGHT,
-        )
+        .font_weight(FontWeight::W500)
+        .font_color(foreground)
+        .line_height(BADGE_TEXT_LINE_HEIGHT)
         .into()
 }
 
 fn badge_shell<Message: 'static>(
     background: u32,
-    border_width: Vec<f32>,
-    border_color: Vec<u32>,
+    border_width: [f32; 4],
+    border_color: u32,
     horizontal_padding: f32,
     children: Vec<Element<Message>>,
 ) -> Element<Message> {
     arkit::row_component::<Message, arkit::Theme>()
         .constraint_size(0.0, 100000.0, BADGE_MIN_HEIGHT, 100000.0)
-        .style(
-            ArkUINodeAttributeType::BorderRadius,
-            vec![BADGE_RADIUS, BADGE_RADIUS, BADGE_RADIUS, BADGE_RADIUS],
-        )
-        .style(ArkUINodeAttributeType::BackgroundColor, background)
-        .style(ArkUINodeAttributeType::BorderWidth, border_width)
-        .style(ArkUINodeAttributeType::BorderColor, border_color)
-        .style(ArkUINodeAttributeType::Clip, true)
+        .border_radius([BADGE_RADIUS, BADGE_RADIUS, BADGE_RADIUS, BADGE_RADIUS])
+        .background_color(background)
+        .border_width(border_width)
+        .border_color(border_color)
+        .clip(true)
         .align_items_center()
-        .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
-        .style(
-            ArkUINodeAttributeType::Padding,
-            vec![
-                BADGE_VERTICAL_PADDING,
-                horizontal_padding,
-                BADGE_VERTICAL_PADDING,
-                horizontal_padding,
-            ],
-        )
+        .justify_content_center()
+        .padding([
+            BADGE_VERTICAL_PADDING,
+            horizontal_padding,
+            BADGE_VERTICAL_PADDING,
+            horizontal_padding,
+        ])
         .children(children)
         .into()
 }
@@ -127,10 +118,7 @@ pub fn badge_with_icon<Message: 'static>(
                 .color(foreground)
                 .render::<Message, arkit::Theme>(),
             arkit::row_component::<Message, arkit::Theme>()
-                .style(
-                    ArkUINodeAttributeType::Margin,
-                    vec![0.0, 0.0, 0.0, BADGE_ICON_GAP],
-                )
+                .margin([0.0, 0.0, 0.0, BADGE_ICON_GAP])
                 .children(vec![badge_label_text(label, foreground)])
                 .into(),
         ],
@@ -145,8 +133,8 @@ pub fn badge_with_icon_colors<Message: 'static>(
 ) -> Element<Message> {
     badge_shell(
         background,
-        vec![1.0, 1.0, 1.0, 1.0],
-        vec![0x00000000],
+        [1.0, 1.0, 1.0, 1.0],
+        0x00000000,
         spacing::SM,
         vec![
             lucide::icon(icon_name.into())
@@ -154,10 +142,7 @@ pub fn badge_with_icon_colors<Message: 'static>(
                 .color(foreground)
                 .render::<Message, arkit::Theme>(),
             arkit::row_component::<Message, arkit::Theme>()
-                .style(
-                    ArkUINodeAttributeType::Margin,
-                    vec![0.0, 0.0, 0.0, BADGE_ICON_GAP],
-                )
+                .margin([0.0, 0.0, 0.0, BADGE_ICON_GAP])
                 .children(vec![badge_label_text(label, foreground)])
                 .into(),
         ],
@@ -171,25 +156,19 @@ pub fn pill_badge_with_variant<Message: 'static>(
     let (background, foreground, border_width, border_color) = badge_style(variant);
     arkit::row_component::<Message, arkit::Theme>()
         .constraint_size(20.0, 100000.0, BADGE_MIN_HEIGHT, 100000.0)
-        .style(
-            ArkUINodeAttributeType::BorderRadius,
-            vec![radius::FULL, radius::FULL, radius::FULL, radius::FULL],
-        )
-        .style(ArkUINodeAttributeType::BackgroundColor, background)
-        .style(ArkUINodeAttributeType::BorderWidth, border_width)
-        .style(ArkUINodeAttributeType::BorderColor, border_color)
-        .style(ArkUINodeAttributeType::Clip, true)
+        .border_radius([radius::FULL, radius::FULL, radius::FULL, radius::FULL])
+        .background_color(background)
+        .border_width(border_width)
+        .border_color(border_color)
+        .clip(true)
         .align_items_center()
-        .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
-        .style(
-            ArkUINodeAttributeType::Padding,
-            vec![
-                BADGE_VERTICAL_PADDING,
-                spacing::XXS,
-                BADGE_VERTICAL_PADDING,
-                spacing::XXS,
-            ],
-        )
+        .justify_content_center()
+        .padding([
+            BADGE_VERTICAL_PADDING,
+            spacing::XXS,
+            BADGE_VERTICAL_PADDING,
+            spacing::XXS,
+        ])
         .children(vec![badge_label_text(label, foreground)])
         .into()
 }

@@ -6,7 +6,7 @@ use arkit::advanced;
 use arkit::ohos_arkui_binding::arkui_input_binding::UIInputAction;
 use arkit::ohos_arkui_binding::common::node::ArkUINode;
 use arkit::ohos_arkui_binding::component::attribute::{ArkUIAttributeBasic, ArkUICommonAttribute};
-use arkit::ohos_arkui_binding::types::text_alignment::TextAlignment;
+use arkit::TextAlignment;
 use arkit_icon as lucide;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -161,7 +161,9 @@ fn menu_branch_is_open(open_path: &[usize], branch_path: &[usize]) -> bool {
 fn toggle_menu_branch(state: &Rc<RefCell<MenuInteractionState>>, branch_path: &[usize]) {
     let mut state = state.borrow_mut();
     if menu_branch_is_open(&state.open_path, branch_path) {
-        state.open_path.truncate(branch_path.len().saturating_sub(1));
+        state
+            .open_path
+            .truncate(branch_path.len().saturating_sub(1));
     } else {
         state.open_path.clear();
         state.open_path.extend_from_slice(branch_path);
@@ -290,10 +292,7 @@ impl<Message: 'static> advanced::Widget<Message, arkit::Theme, arkit::Renderer>
         let title = self.title.clone();
         let submenu_path = self.path.clone();
         let submenu_open = self.context.root_open
-            && menu_branch_is_open(
-                &self.context.interaction.borrow().open_path,
-                &submenu_path,
-            );
+            && menu_branch_is_open(&self.context.interaction.borrow().open_path, &submenu_path);
         let toggle_state = self.context.interaction.clone();
         let toggle_path = submenu_path.clone();
 
@@ -319,20 +318,13 @@ impl<Message: 'static> advanced::Widget<Message, arkit::Theme, arkit::Renderer>
                 path: submenu_path,
                 style: self.context.style.clone(),
             };
-            let sub_items =
-                render_menu_entries::<Message>(self.items.clone(), submenu_context);
+            let sub_items = render_menu_entries::<Message>(self.items.clone(), submenu_context);
 
             let sub_content = arkit::column_component::<Message, arkit::Theme>()
                 .percent_width(1.0)
                 .align_items_start()
-                .style(
-                    ArkUINodeAttributeType::Padding,
-                    vec![spacing::XXS, spacing::XXS, spacing::XXS, spacing::XXS],
-                )
-                .style(
-                    ArkUINodeAttributeType::BorderRadius,
-                    vec![radius::SM, radius::SM, radius::SM, radius::SM],
-                )
+                .padding([spacing::XXS, spacing::XXS, spacing::XXS, spacing::XXS])
+                .border_radius([radius::SM, radius::SM, radius::SM, radius::SM])
                 .background_color(color::ACCENT)
                 .children(sub_items);
 
@@ -372,8 +364,6 @@ pub(crate) fn menu_popup<Message: 'static>(
         style,
     })
 }
-
-
 
 fn render_menu_entries<Message: 'static>(
     entries: Vec<MenuEntry>,
@@ -423,7 +413,7 @@ fn render_action_entry<Message: 'static>(
         } else {
             color::POPOVER_FOREGROUND
         },
-        3_i32,
+        FontWeight::W400,
     )));
     if let Some(shortcut) = entry.shortcut {
         children.push(shortcut_text(shortcut));
@@ -472,7 +462,11 @@ fn render_checkbox_entry<Message: 'static>(
             } else {
                 None
             }),
-            fill_slot(item_text(entry.title, color::POPOVER_FOREGROUND, 3_i32)),
+            fill_slot(item_text(
+                entry.title,
+                color::POPOVER_FOREGROUND,
+                FontWeight::W400,
+            )),
         ],
         false,
         MenuInteractionVariant::Default,
@@ -498,17 +492,18 @@ fn render_radio_entry<Message: 'static>(
                     arkit::row_component()
                         .width(8.0)
                         .height(8.0)
-                        .style(
-                            ArkUINodeAttributeType::BorderRadius,
-                            vec![radius::FULL, radius::FULL, radius::FULL, radius::FULL],
-                        )
+                        .border_radius([radius::FULL, radius::FULL, radius::FULL, radius::FULL])
                         .background_color(color::FOREGROUND)
                         .into(),
                 )
             } else {
                 None
             }),
-            fill_slot(item_text(entry.title, color::POPOVER_FOREGROUND, 3_i32)),
+            fill_slot(item_text(
+                entry.title,
+                color::POPOVER_FOREGROUND,
+                FontWeight::W400,
+            )),
         ],
         false,
         MenuInteractionVariant::Default,
@@ -525,7 +520,11 @@ fn render_label_entry<Message: 'static>(entry: MenuLabelEntry) -> Element<Messag
     if entry.inset {
         children.push(leading_slot(None));
     }
-    children.push(fill_slot(item_text(entry.title, color::FOREGROUND, 4_i32)));
+    children.push(fill_slot(item_text(
+        entry.title,
+        color::FOREGROUND,
+        FontWeight::W500,
+    )));
     menu_row(children, false).into()
 }
 
@@ -542,7 +541,7 @@ fn submenu_trigger_row<Message: 'static>(
     children.push(fill_slot(item_text(
         title,
         color::POPOVER_FOREGROUND,
-        3_i32,
+        FontWeight::W400,
     )));
     children.push(
         lucide::icon(if active { "chevron-up" } else { "chevron-down" })
@@ -635,20 +634,11 @@ pub(crate) fn menu_content_with_width<Message: 'static>(
         arkit::column_component::<Message, arkit::Theme>()
             .width(width)
             .align_items_start()
-            .style(
-                ArkUINodeAttributeType::Padding,
-                vec![spacing::XXS, spacing::XXS, spacing::XXS, spacing::XXS],
-            )
-            .style(
-                ArkUINodeAttributeType::BorderRadius,
-                vec![radius::LG, radius::LG, radius::LG, radius::LG],
-            )
-            .style(
-                ArkUINodeAttributeType::BorderWidth,
-                vec![1.0, 1.0, 1.0, 1.0],
-            )
-            .style(ArkUINodeAttributeType::BorderColor, vec![color::BORDER])
-            .style(ArkUINodeAttributeType::Clip, true)
+            .padding([spacing::XXS, spacing::XXS, spacing::XXS, spacing::XXS])
+            .border_radius([radius::LG, radius::LG, radius::LG, radius::LG])
+            .border_width([1.0, 1.0, 1.0, 1.0])
+            .border_color(color::BORDER)
+            .clip(true)
             .background_color(color::POPOVER)
             .children(items),
     )
@@ -658,30 +648,24 @@ pub(crate) fn menu_content_with_width<Message: 'static>(
 pub(crate) fn item_text<Message: 'static>(
     content: impl Into<String>,
     color_value: u32,
-    weight: i32,
+    weight: FontWeight,
 ) -> Element<Message> {
     arkit::text::<Message, arkit::Theme>(content)
         .font_size(typography::SM)
-        .style(ArkUINodeAttributeType::FontColor, color_value)
-        .style(ArkUINodeAttributeType::FontWeight, weight)
-        .style(ArkUINodeAttributeType::TextLineHeight, 20.0)
-        .style(
-            ArkUINodeAttributeType::TextAlign,
-            i32::from(TextAlignment::Start),
-        )
+        .font_color(color_value)
+        .font_weight(weight)
+        .line_height(20.0)
+        .text_align(TextAlignment::Start)
         .into()
 }
 
 pub(crate) fn shortcut_text<Message: 'static>(content: impl Into<String>) -> Element<Message> {
     arkit::text::<Message, arkit::Theme>(content)
         .font_size(typography::XS)
-        .style(ArkUINodeAttributeType::FontColor, color::MUTED_FOREGROUND)
-        .style(ArkUINodeAttributeType::TextLineHeight, 16.0)
-        .style(ArkUINodeAttributeType::TextLetterSpacing, 1.2_f32)
-        .style(
-            ArkUINodeAttributeType::TextAlign,
-            i32::from(TextAlignment::Start),
-        )
+        .font_color(color::MUTED_FOREGROUND)
+        .line_height(16.0)
+        .text_letter_spacing(1.2_f32)
+        .text_align(TextAlignment::Start)
         .into()
 }
 
@@ -690,21 +674,21 @@ pub(crate) fn leading_slot<Message: 'static>(child: Option<Element<Message>>) ->
         .width(16.0)
         .height(16.0)
         .align_items_center()
-        .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER);
+        .justify_content_center();
 
     if let Some(child) = child {
         slot = slot.children(vec![child]);
     }
 
     arkit::row_component::<Message, arkit::Theme>()
-        .style(ArkUINodeAttributeType::Margin, vec![0.0, 8.0, 0.0, 0.0])
+        .margin([0.0, 8.0, 0.0, 0.0])
         .children(vec![slot.into()])
         .into()
 }
 
 pub(crate) fn fill_slot<Message: 'static>(child: Element<Message>) -> Element<Message> {
     arkit::row_component::<Message, arkit::Theme>()
-        .style(ArkUINodeAttributeType::LayoutWeight, 1.0_f32)
+        .layout_weight(1.0_f32)
         .children(vec![child])
         .into()
 }
@@ -717,17 +701,14 @@ pub(crate) fn menu_row<Message: 'static>(
         .percent_width(1.0)
         .height(32.0)
         .align_items_center()
-        .style(ArkUINodeAttributeType::Padding, vec![6.0, 8.0, 6.0, 8.0])
-        .style(
-            ArkUINodeAttributeType::BorderRadius,
-            vec![radius::SM, radius::SM, radius::SM, radius::SM],
-        )
-        .style(ArkUINodeAttributeType::Clip, true)
+        .padding([6.0, 8.0, 6.0, 8.0])
+        .border_radius([radius::SM, radius::SM, radius::SM, radius::SM])
+        .clip(true)
         .background_color(TRANSPARENT)
         .children(children);
 
     if disabled {
-        row = row.style(ArkUINodeAttributeType::Opacity, 0.5_f32);
+        row = row.opacity(0.5_f32);
     }
 
     row
@@ -737,7 +718,7 @@ pub(crate) fn menu_separator<Message: 'static>() -> Element<Message> {
     arkit::row_component::<Message, arkit::Theme>()
         .height(1.0)
         .percent_width(1.0)
-        .style(ArkUINodeAttributeType::Margin, vec![4.0, 0.0, 4.0, 0.0])
+        .margin([4.0, 0.0, 4.0, 0.0])
         .background_color(color::BORDER)
         .into()
 }
@@ -760,11 +741,6 @@ pub(crate) fn interactive_menu_row<Message: 'static>(
     let capture_node = runtime_node.clone();
     let row = menu_row(children, disabled)
         .background_color(if active.unwrap_or(false) {
-            menu_row_pressed_background(variant)
-        } else {
-            TRANSPARENT
-        })
-        .patch_background_color(if active.unwrap_or(false) {
             menu_row_pressed_background(variant)
         } else {
             TRANSPARENT

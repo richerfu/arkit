@@ -1,8 +1,8 @@
-use super::*;
 use super::toggle::{
-    toggle_content_row, toggle_default_size, toggle_icon_size, toggle_surface,
-    toggle_visual_style, ToggleSizeStyle, ToggleVariant,
+    toggle_content_row, toggle_default_size, toggle_icon_size, toggle_surface, toggle_visual_style,
+    ToggleSizeStyle, ToggleVariant,
 };
+use super::*;
 
 const TOGGLE_GROUP_VARIANT: ToggleVariant = ToggleVariant::Outline;
 
@@ -20,11 +20,8 @@ fn toggle_group_shell<Message: 'static>(children: Vec<Element<Message>>) -> Elem
     shadow_sm(
         arkit::row_component::<Message, arkit::Theme>()
             .align_items_center()
-            .style(ArkUINodeAttributeType::Clip, true)
-            .style(
-                ArkUINodeAttributeType::BorderRadius,
-                vec![radius::MD, radius::MD, radius::MD, radius::MD],
-            )
+            .clip(true)
+            .border_radius([radius::MD, radius::MD, radius::MD, radius::MD])
             .children(children),
     )
     .into()
@@ -70,7 +67,12 @@ pub fn toggle_group(
             let visual = toggle_visual_style(TOGGLE_GROUP_VARIANT, active);
 
             toggle_group_item(
-                toggle_content_row(Some(text.clone()), None, visual.foreground, size_style.icon_size),
+                toggle_content_row(
+                    Some(text.clone()),
+                    None,
+                    visual.foreground,
+                    size_style.icon_size,
+                ),
                 active,
                 index,
                 total,
@@ -167,7 +169,12 @@ pub fn toggle_group_multi(
             let visual = toggle_visual_style(TOGGLE_GROUP_VARIANT, active);
 
             toggle_group_item(
-                toggle_content_row(Some(text.clone()), None, visual.foreground, size_style.icon_size),
+                toggle_content_row(
+                    Some(text.clone()),
+                    None,
+                    visual.foreground,
+                    size_style.icon_size,
+                ),
                 active,
                 index,
                 total,

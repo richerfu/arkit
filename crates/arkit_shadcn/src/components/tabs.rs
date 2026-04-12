@@ -12,10 +12,7 @@ pub fn tabs<Message: 'static>(
         .children(vec![
             tabs_list(tab_labels, active, Rc::new(on_change)),
             arkit::row_component::<Message, arkit::Theme>()
-                .style(
-                    ArkUINodeAttributeType::Margin,
-                    vec![spacing::SM, 0.0, 0.0, 0.0],
-                )
+                .margin([spacing::SM, 0.0, 0.0, 0.0])
                 .children(vec![tabs_content(panels, active)])
                 .into(),
         ])
@@ -53,25 +50,19 @@ fn tabs_list<Message: 'static>(
             arkit::row_component::<Message, arkit::Theme>()
                 .height(35.0)
                 .align_items_center()
-                .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_CENTER)
+                .justify_content_center()
                 .padding([spacing::XXS, spacing::SM, spacing::XXS, spacing::SM])
-                .style(
-                    ArkUINodeAttributeType::BorderRadius,
-                    vec![radius::MD, radius::MD, radius::MD, radius::MD],
-                )
-                .style(
-                    ArkUINodeAttributeType::BorderWidth,
-                    vec![1.0, 1.0, 1.0, 1.0],
-                )
-                .style(ArkUINodeAttributeType::BorderColor, vec![0x00000000])
-                .patch_background_color(if is_active {
+                .border_radius([radius::MD, radius::MD, radius::MD, radius::MD])
+                .border_width([1.0, 1.0, 1.0, 1.0])
+                .border_color(0x00000000)
+                .background_color(if is_active {
                     color::BACKGROUND
                 } else {
                     0x00000000
                 })
                 .on_click(move || on_change(index))
                 .children(vec![body_text::<Message>(label)
-                    .style(ArkUINodeAttributeType::FontColor, color::FOREGROUND)
+                    .font_color(color::FOREGROUND)
                     .into()])
                 .into()
         })
@@ -96,10 +87,11 @@ fn tabs_content<Message: 'static>(
             let is_active = active == index;
             arkit::column_component::<Message, arkit::Theme>()
                 .width(arkit::Length::Fill)
-                .style(
-                    ArkUINodeAttributeType::Visibility,
-                    if is_active { 0_i32 } else { 2_i32 },
-                )
+                .visibility(if is_active {
+                    Visibility::Visible
+                } else {
+                    Visibility::None
+                })
                 .children(vec![panel])
                 .into()
         })

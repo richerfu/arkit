@@ -1,8 +1,9 @@
 use arkit::prelude::ArkUINodeAttributeType;
 use arkit::{
-    ButtonElement, CalendarPickerElement, DatePickerElement, Element, Node, ProgressElement,
+    BorderStyle, ButtonElement, ButtonType, CalendarPickerElement, DatePickerElement, Element,
+    FontStyle, FontWeight, HitTestBehavior, ItemAlignment, JustifyContent, Node, ProgressElement,
     RowElement, ScrollElement, SliderElement, SwiperElement, TextAreaElement, TextElement,
-    TextInputElement, ToggleElement,
+    TextInputElement, ToggleElement, Visibility,
 };
 
 use crate::styles::{
@@ -119,11 +120,11 @@ pub use hover_card::{
 pub use input::*;
 pub use input_otp::*;
 pub use label::*;
+pub use menu_common::MenuEntry;
 pub use menubar::{
     menubar, menubar_item, menubar_item_active, menubar_menu,
     menubar_message as menubar_with_menus, MenubarEntry, MenubarMenuSpec,
 };
-pub use menu_common::MenuEntry;
 pub use navigation_menu::*;
 pub use pagination::*;
 pub use popover::{
@@ -153,13 +154,6 @@ pub use toggle_group::{
 };
 pub use tooltip::tooltip_message as tooltip;
 
-pub(crate) const FLEX_ALIGN_CENTER: i32 = 2;
-pub(crate) const FLEX_ALIGN_END: i32 = 3;
-pub(crate) const FLEX_ALIGN_SPACE_BETWEEN: i32 = 6;
-pub(crate) const FLEX_ALIGN_START: i32 = 1;
-pub(crate) const HIT_TEST_TRANSPARENT: i32 = 2;
-pub(crate) const VISIBILITY_HIDDEN: i32 = 2;
-
 pub(crate) fn dispatch_message<Message>(message: Message)
 where
     Message: Send + 'static,
@@ -181,18 +175,17 @@ pub(crate) fn visibility_gate<Message, AppTheme>(
     open: bool,
 ) -> Node<Message, AppTheme> {
     element
-        .style(
-            ArkUINodeAttributeType::Visibility,
-            if open { 0_i32 } else { VISIBILITY_HIDDEN },
-        )
-        .style(
-            ArkUINodeAttributeType::Opacity,
-            if open { 1.0_f32 } else { 0.0_f32 },
-        )
-        .style(
-            ArkUINodeAttributeType::HitTestBehavior,
-            if open { 0_i32 } else { HIT_TEST_TRANSPARENT },
-        )
+        .visibility(if open {
+            Visibility::Visible
+        } else {
+            Visibility::None
+        })
+        .opacity(if open { 1.0_f32 } else { 0.0_f32 })
+        .hit_test_behavior(if open {
+            HitTestBehavior::Default
+        } else {
+            HitTestBehavior::Transparent
+        })
 }
 
 pub(crate) fn stack<Message: 'static>(
@@ -238,7 +231,7 @@ pub(crate) fn inline<Message: 'static>(
                 child
             } else {
                 arkit::row_component::<Message, arkit::Theme>()
-                    .style(ArkUINodeAttributeType::Margin, vec![0.0, 0.0, 0.0, gap])
+                    .margin_left(gap)
                     .children(vec![child])
                     .into()
             }
@@ -250,40 +243,26 @@ pub(crate) fn rounded_progress<Message>(
     element: ProgressElement<Message>,
 ) -> ProgressElement<Message> {
     element
-        .style(ArkUINodeAttributeType::BorderRadius, vec![radius::FULL])
-        .style(
-            ArkUINodeAttributeType::BackgroundColor,
-            color::PRIMARY_TRACK,
-        )
+        .border_radius(radius::FULL)
+        .background_color(color::PRIMARY_TRACK)
 }
 
 pub(crate) fn rounded_table_surface<Message, AppTheme>(
     element: Node<Message, AppTheme>,
 ) -> Node<Message, AppTheme> {
-    element
-        .style(
-            ArkUINodeAttributeType::BorderRadius,
-            vec![radius::SM, radius::SM, radius::SM, radius::SM],
-        )
-        .style(ArkUINodeAttributeType::Clip, true)
+    element.border_radius(radius::SM).clip(true)
 }
 
 pub(crate) fn rounded_menubar_surface<Message>(
     element: RowElement<Message>,
 ) -> RowElement<Message> {
     element
-        .style(ArkUINodeAttributeType::Padding, vec![3.0, 3.0, 3.0, 3.0])
+        .padding(3.0)
         .height(36.0)
         .align_items_center()
-        .style(
-            ArkUINodeAttributeType::BorderRadius,
-            vec![radius::MD, radius::MD, radius::MD, radius::MD],
-        )
-        .style(
-            ArkUINodeAttributeType::BorderWidth,
-            vec![1.0, 1.0, 1.0, 1.0],
-        )
-        .style(ArkUINodeAttributeType::BorderColor, vec![color::BORDER])
+        .border_radius(radius::MD)
+        .border_width(1.0)
+        .border_color(color::BORDER)
         .background_color(color::BACKGROUND)
 }
 
@@ -291,12 +270,9 @@ pub(crate) fn rounded_tabs_list_surface<Message>(
     element: RowElement<Message>,
 ) -> RowElement<Message> {
     element
-        .style(ArkUINodeAttributeType::Padding, vec![3.0, 3.0, 3.0, 3.0])
+        .padding(3.0)
         .height(36.0)
         .align_items_center()
-        .style(
-            ArkUINodeAttributeType::BorderRadius,
-            vec![radius::LG, radius::LG, radius::LG, radius::LG],
-        )
+        .border_radius(radius::LG)
         .background_color(color::MUTED)
 }

@@ -22,19 +22,10 @@ where
                     arkit::stack_component::<Message, arkit::Theme>()
                         .width(SHEET_WIDTH)
                         .percent_height(1.0)
-                        .style(
-                            ArkUINodeAttributeType::Padding,
-                            vec![spacing::XXL, spacing::XXL, spacing::XXL, spacing::XXL],
-                        )
-                        .style(
-                            ArkUINodeAttributeType::BorderRadius,
-                            vec![0.0, 0.0, radius::LG, radius::LG],
-                        )
-                        .style(
-                            ArkUINodeAttributeType::BorderWidth,
-                            vec![0.0, 0.0, 0.0, 1.0],
-                        )
-                        .style(ArkUINodeAttributeType::BorderColor, vec![color::BORDER])
+                        .padding([spacing::XXL, spacing::XXL, spacing::XXL, spacing::XXL])
+                        .border_radius([0.0, 0.0, radius::LG, radius::LG])
+                        .border_width([0.0, 0.0, 0.0, 1.0])
+                        .border_color(color::BORDER)
                         .background_color(color::BACKGROUND)
                         .children(vec![
                             arkit::column_component::<Message, arkit::Theme>()
@@ -50,21 +41,19 @@ where
                                 .into(),
                             arkit::row_component::<Message, arkit::Theme>()
                                 .percent_width(1.0)
-                                .style(ArkUINodeAttributeType::Position, vec![0.0, 0.0])
-                                .style(ArkUINodeAttributeType::RowJustifyContent, FLEX_ALIGN_END)
-                                .children(vec![icon_button_with_variant::<Message>(
-                                    "x",
-                                    ButtonVariant::Ghost,
-                                )
-                                .width(28.0)
-                                .height(28.0)
-                                .style(ArkUINodeAttributeType::Padding, vec![0.0, 0.0, 0.0, 0.0])
-                                .style(ArkUINodeAttributeType::Opacity, 0.7_f32)
-                                .on_click({
-                                    let dismiss = dismiss.clone();
-                                    move || dismiss()
-                                })
-                                .into()])
+                                .position(0.0, 0.0)
+                                .justify_content_end()
+                                .children(vec![icon_button::<Message>("x")
+                                    .theme(ButtonVariant::Ghost)
+                                    .width(28.0)
+                                    .height(28.0)
+                                    .padding(arkit::Padding::ZERO)
+                                    .opacity(0.7_f32)
+                                    .on_click({
+                                        let dismiss = dismiss.clone();
+                                        move || dismiss()
+                                    })
+                                    .into()])
                                 .into(),
                         ]),
                 )

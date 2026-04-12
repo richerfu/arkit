@@ -8,7 +8,7 @@ use crate::render_impl::{
 };
 use crate::{
     column_component, row_component, stack_component, Alignment, ArkUINodeAttributeItem,
-    ArkUINodeAttributeType, Direction, Element, NodeEventType,
+    ArkUINodeAttributeType, Direction, Element, HitTestBehavior, NodeEventType,
 };
 use ohos_arkui_binding::arkui_input_binding::UIInputAction;
 use ohos_arkui_binding::common::node::ArkUINode;
@@ -17,7 +17,6 @@ use ohos_display_binding::default_display_virtual_pixel_ratio;
 
 const FLOATING_LAYOUT_EPSILON: f32 = 0.5;
 const FLOATING_HIDDEN_POSITION_VP: f32 = -10_000.0;
-const HIT_TEST_TRANSPARENT: i32 = 2;
 const TRANSPARENT: u32 = 0x00000000;
 const WRAP_CONTENT_POLICY: i32 = 1;
 
@@ -602,16 +601,20 @@ fn apply_floating_position(state: &FloatingState) {
         };
         let _ = column.set_attribute(ArkUINodeAttributeType::Position, position);
         let _ = column.opacity(if ready { 1.0 } else { 0.0 });
-        let _ = column.set_hit_test_behavior(if ready { 0_i32 } else { HIT_TEST_TRANSPARENT });
+        let _ = column.set_hit_test_behavior(i32::from(if ready {
+            HitTestBehavior::Default
+        } else {
+            HitTestBehavior::Transparent
+        }));
     }
 
     if let Some(stack) = state.nodes.backdrop_stack.borrow().as_ref() {
         let backdrop_active = ready && matches!(spec.dismiss_mode, OverlayDismissMode::Backdrop);
-        let _ = stack.set_hit_test_behavior(if backdrop_active {
-            0_i32
+        let _ = stack.set_hit_test_behavior(i32::from(if backdrop_active {
+            HitTestBehavior::Default
         } else {
-            HIT_TEST_TRANSPARENT
-        });
+            HitTestBehavior::Transparent
+        }));
     }
 
     for handle in state.surface_handles.iter() {
@@ -627,11 +630,8 @@ where
     row_component::<Message, AppTheme>()
         .width(0.0)
         .height(0.0)
-        .style(
-            ArkUINodeAttributeType::HitTestBehavior,
-            HIT_TEST_TRANSPARENT,
-        )
-        .style(ArkUINodeAttributeType::Opacity, 0.0_f32)
+        .hit_test_behavior(HitTestBehavior::Transparent)
+        .attr(ArkUINodeAttributeType::Opacity, 0.0_f32)
         .into()
 }
 
@@ -663,10 +663,7 @@ where
                 .percent_width(1.0)
                 .percent_height(1.0)
                 .background_color(TRANSPARENT)
-                .style(
-                    ArkUINodeAttributeType::HitTestBehavior,
-                    HIT_TEST_TRANSPARENT,
-                )
+                .hit_test_behavior(HitTestBehavior::Transparent)
                 .with_patch(move |node| {
                     backdrop_node.replace(Some(node.borrow_mut().clone()));
                     backdrop_sync();
@@ -700,10 +697,12 @@ where
                             dismiss();
                         }
                         if let Some(node) = click_backdrop.borrow().as_ref() {
-                            let _ = node.set_hit_test_behavior(HIT_TEST_TRANSPARENT);
+                            let _ =
+                                node.set_hit_test_behavior(i32::from(HitTestBehavior::Transparent));
                         }
                         if let Some(node) = click_position.borrow().as_ref() {
-                            let _ = node.set_hit_test_behavior(HIT_TEST_TRANSPARENT);
+                            let _ =
+                                node.set_hit_test_behavior(i32::from(HitTestBehavior::Transparent));
                             let _ = node.opacity(0.0);
                         }
                     }
@@ -729,24 +728,21 @@ where
 
     children.push(
         column_component::<Message, AppTheme>()
-            .style(
+            .attr(
                 ArkUINodeAttributeType::WidthLayoutpolicy,
                 WRAP_CONTENT_POLICY,
             )
-            .style(
+            .attr(
                 ArkUINodeAttributeType::HeightLayoutpolicy,
                 WRAP_CONTENT_POLICY,
             )
-            .style(
+            .attr(
                 ArkUINodeAttributeType::Position,
                 vec![FLOATING_HIDDEN_POSITION_VP, FLOATING_HIDDEN_POSITION_VP],
             )
-            .style(ArkUINodeAttributeType::Opacity, 0.0_f32)
-            .style(
-                ArkUINodeAttributeType::HitTestBehavior,
-                HIT_TEST_TRANSPARENT,
-            )
-            .style(ArkUINodeAttributeType::ZIndex, 1_i32)
+            .attr(ArkUINodeAttributeType::Opacity, 0.0_f32)
+            .hit_test_behavior(HitTestBehavior::Transparent)
+            .attr(ArkUINodeAttributeType::ZIndex, 1_i32)
             .with_patch({
                 let state = state.clone();
                 move |node| {
@@ -755,51 +751,46 @@ where
                     Ok(())
                 }
             })
-            .children(vec![
-                stack_component::<Message, AppTheme>()
-                    .style(
-                        ArkUINodeAttributeType::WidthLayoutpolicy,
-                        WRAP_CONTENT_POLICY,
-                    )
-                    .style(
-                        ArkUINodeAttributeType::HeightLayoutpolicy,
-                        WRAP_CONTENT_POLICY,
-                    )
-                    .style(ArkUINodeAttributeType::Clip, false)
-                    .with_patch({
-                        let node_ref = panel_size_node_ref.clone();
-                        let on_change = panel_size_on_change.clone();
-                        move |node| {
-                            let runtime = node.borrow_mut().clone();
-                            if let Some(size) = read_layout_size(&runtime) {
+            .children(vec![stack_component::<Message, AppTheme>()
+                .attr(
+                    ArkUINodeAttributeType::WidthLayoutpolicy,
+                    WRAP_CONTENT_POLICY,
+                )
+                .attr(
+                    ArkUINodeAttributeType::HeightLayoutpolicy,
+                    WRAP_CONTENT_POLICY,
+                )
+                .attr(ArkUINodeAttributeType::Clip, false)
+                .with_patch({
+                    let node_ref = panel_size_node_ref.clone();
+                    let on_change = panel_size_on_change.clone();
+                    move |node| {
+                        let runtime = node.borrow_mut().clone();
+                        if let Some(size) = read_layout_size(&runtime) {
+                            on_change(size);
+                        }
+                        node_ref.replace(Some(runtime));
+                        Ok(())
+                    }
+                })
+                .on_event_no_param(NodeEventType::EventOnAreaChange, {
+                    let node_ref = panel_size_node_ref;
+                    let on_change = panel_size_on_change;
+                    move || {
+                        if let Some(node) = node_ref.borrow().as_ref() {
+                            if let Some(size) = read_layout_size(node) {
                                 on_change(size);
                             }
-                            node_ref.replace(Some(runtime));
-                            Ok(())
                         }
-                    })
-                    .on_event_no_param(
-                        NodeEventType::EventOnAreaChange,
-                        {
-                            let node_ref = panel_size_node_ref;
-                            let on_change = panel_size_on_change;
-                            move || {
-                                if let Some(node) = node_ref.borrow().as_ref() {
-                                    if let Some(size) = read_layout_size(node) {
-                                        on_change(size);
-                                    }
-                                }
-                            }
-                        },
-                    )
-                    .on_event(NodeEventType::TouchEvent, move |event| {
-                        if let Some(input_event) = event.input_event() {
-                            let _ = input_event.pointer_set_stop_propagation(true);
-                        }
-                    })
-                    .child(panel)
-                    .into(),
-            ])
+                    }
+                })
+                .on_event(NodeEventType::TouchEvent, move |event| {
+                    if let Some(input_event) = event.input_event() {
+                        let _ = input_event.pointer_set_stop_propagation(true);
+                    }
+                })
+                .child(panel)
+                .into()])
             .into(),
     );
 
@@ -815,12 +806,9 @@ where
     stack_component::<Message, AppTheme>()
         .percent_width(1.0)
         .percent_height(1.0)
-        .style(ArkUINodeAttributeType::Clip, false)
-        .style(
-            ArkUINodeAttributeType::HitTestBehavior,
-            HIT_TEST_TRANSPARENT,
-        )
-        .style(
+        .attr(ArkUINodeAttributeType::Clip, false)
+        .hit_test_behavior(HitTestBehavior::Transparent)
+        .attr(
             ArkUINodeAttributeType::Alignment,
             i32::from(Alignment::TopStart),
         )
@@ -955,7 +943,10 @@ where
             return;
         };
         let _ = input_event.pointer_set_stop_propagation(true);
-        if !matches!(input_event.action, UIInputAction::Up | UIInputAction::Cancel) {
+        if !matches!(
+            input_event.action,
+            UIInputAction::Up | UIInputAction::Cancel
+        ) {
             return;
         }
         if spec.dismiss_on_backdrop {
@@ -966,7 +957,7 @@ where
     });
 
     let panel = stack_component::<Message, AppTheme>()
-        .style(ArkUINodeAttributeType::Clip, false)
+        .attr(ArkUINodeAttributeType::Clip, false)
         .on_event(NodeEventType::TouchEvent, move |event| {
             if let Some(input_event) = event.input_event() {
                 let _ = input_event.pointer_set_stop_propagation(true);
@@ -979,9 +970,9 @@ where
         ModalPresentation::CenteredDialog => column_component::<Message, AppTheme>()
             .percent_width(1.0)
             .percent_height(1.0)
-            .style(ArkUINodeAttributeType::ColumnJustifyContent, 2_i32)
+            .justify_content_center()
             .align_items_center()
-            .style(
+            .attr(
                 ArkUINodeAttributeType::Padding,
                 vec![
                     spec.viewport_inset,
@@ -995,8 +986,8 @@ where
         ModalPresentation::RightSheet => row_component::<Message, AppTheme>()
             .percent_width(1.0)
             .percent_height(1.0)
-            .style(ArkUINodeAttributeType::RowJustifyContent, 3_i32)
-            .style(
+            .justify_content_end()
+            .attr(
                 ArkUINodeAttributeType::Padding,
                 vec![
                     spec.viewport_inset,
@@ -1013,8 +1004,8 @@ where
         ModalPresentation::BottomDrawer => column_component::<Message, AppTheme>()
             .percent_width(1.0)
             .percent_height(1.0)
-            .style(ArkUINodeAttributeType::ColumnJustifyContent, 3_i32)
-            .style(
+            .justify_content_end()
+            .attr(
                 ArkUINodeAttributeType::Padding,
                 vec![
                     spec.viewport_inset,
@@ -1030,8 +1021,8 @@ where
     stack_component::<Message, AppTheme>()
         .percent_width(1.0)
         .percent_height(1.0)
-        .style(ArkUINodeAttributeType::Clip, false)
-        .style(
+        .attr(ArkUINodeAttributeType::Clip, false)
+        .attr(
             ArkUINodeAttributeType::Alignment,
             i32::from(Alignment::TopStart),
         )
