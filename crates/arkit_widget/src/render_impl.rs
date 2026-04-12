@@ -41,6 +41,8 @@ type Cleanup = Box<dyn FnOnce()>;
 type MountEffect = Box<dyn FnOnce(&mut ArkUINode) -> ArkUIResult<Option<Cleanup>> + 'static>;
 type AttachEffect = Box<dyn FnOnce(&mut ArkUINode) -> ArkUIResult<Option<Cleanup>> + 'static>;
 type PatchEffect = Box<dyn FnOnce(&mut ArkUINode) -> ArkUIResult<()> + 'static>;
+type ExitEffect =
+    Box<dyn FnOnce(&mut ArkUINode, Cleanup) -> ArkUIResult<Option<Cleanup>> + 'static>;
 type EventCallback = Rc<dyn Fn(&ArkEvent)>;
 type UiStateCallback = Rc<dyn Fn(&mut ArkUINode, UiState)>;
 
@@ -393,10 +395,19 @@ struct MountedRenderNode {
     has_long_press: bool,
     long_press_cleanup: Option<Cleanup>,
     cleanups: Vec<Cleanup>,
+    exit_effect: Option<ExitEffect>,
+    exiting_children: Rc<RefCell<Vec<PendingExit>>>,
     pending_patch_attrs: Vec<(ArkUINodeAttributeType, ArkUINodeAttributeItem)>,
     pending_attach_effects: Vec<AttachEffect>,
     pending_patch_effects: Vec<PatchEffect>,
     children: Vec<MountedRenderNode>,
+}
+
+struct PendingExit {
+    raw_handle: usize,
+    alive: Rc<Cell<bool>>,
+    mounted: Rc<RefCell<Option<MountedRenderNode>>>,
+    effect_cleanup: Rc<RefCell<Option<Cleanup>>>,
 }
 
 impl MountedNode {
@@ -429,6 +440,7 @@ impl MountedRenderNode {
         has_long_press: bool,
         long_press_cleanup: Option<Cleanup>,
         cleanups: Vec<Cleanup>,
+        exit_effect: Option<ExitEffect>,
         pending_patch_attrs: Vec<(ArkUINodeAttributeType, ArkUINodeAttributeItem)>,
         pending_attach_effects: Vec<AttachEffect>,
         pending_patch_effects: Vec<PatchEffect>,
@@ -445,6 +457,8 @@ impl MountedRenderNode {
             has_long_press,
             long_press_cleanup,
             cleanups,
+            exit_effect,
+            exiting_children: Rc::new(RefCell::new(Vec::new())),
             pending_patch_attrs,
             pending_attach_effects,
             pending_patch_effects,
@@ -455,6 +469,20 @@ impl MountedRenderNode {
     fn cleanup_recursive(self) {
         for child in self.children {
             child.cleanup_recursive();
+        }
+        let pending_exits = self
+            .exiting_children
+            .borrow_mut()
+            .drain(..)
+            .collect::<Vec<_>>();
+        for exit in pending_exits {
+            exit.alive.set(false);
+            if let Some(cleanup) = exit.effect_cleanup.borrow_mut().take() {
+                cleanup();
+            }
+            if let Some(mounted) = exit.mounted.borrow_mut().take() {
+                mounted.cleanup_recursive();
+            }
         }
         if let Some(cleanup) = self.long_press_cleanup {
             cleanup();
@@ -490,6 +518,7 @@ pub struct Node<Message, AppTheme = arkit_core::Theme> {
     mount_effects: Vec<MountEffect>,
     attach_effects: Vec<AttachEffect>,
     patch_effects: Vec<PatchEffect>,
+    exit_effect: Option<ExitEffect>,
     children: Vec<Element<Message, AppTheme>>,
 }
 
@@ -505,6 +534,7 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
             mount_effects: Vec::new(),
             attach_effects: Vec::new(),
             patch_effects: Vec::new(),
+            exit_effect: None,
             children: Vec::new(),
         }
     }
@@ -547,6 +577,7 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
             mount_effects,
             attach_effects,
             patch_effects,
+            exit_effect,
             children,
         } = self;
 
@@ -565,6 +596,7 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
             mount_effects,
             attach_effects,
             patch_effects,
+            exit_effect,
             children,
         })
     }
@@ -1144,6 +1176,30 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
     {
         self.mount_effects.push(Box::new(move |node| {
             effect(node).map(|cleanup| Some(Box::new(cleanup) as Cleanup))
+        }));
+        self
+    }
+
+    pub fn with_exit(
+        mut self,
+        effect: impl FnOnce(&mut ArkUINode, Cleanup) -> ArkUIResult<()> + 'static,
+    ) -> Self {
+        self.exit_effect = Some(Box::new(move |node, finish| {
+            effect(node, finish)?;
+            Ok(None)
+        }));
+        self
+    }
+
+    pub fn with_exit_cleanup<C>(
+        mut self,
+        effect: impl FnOnce(&mut ArkUINode, Cleanup) -> ArkUIResult<C> + 'static,
+    ) -> Self
+    where
+        C: FnOnce() + 'static,
+    {
+        self.exit_effect = Some(Box::new(move |node, finish| {
+            effect(node, finish).map(|cleanup| Some(Box::new(cleanup) as Cleanup))
         }));
         self
     }
@@ -1881,6 +1937,7 @@ where
         mount_effects,
         attach_effects,
         patch_effects,
+        exit_effect,
         children,
     } = node;
 
@@ -1906,6 +1963,7 @@ where
             mount_effects,
             attach_effects,
             patch_effects,
+            exit_effect,
             children: compiled_children,
         }
         .into(),
@@ -2194,6 +2252,144 @@ fn attach_child(parent: &mut ArkUINode, child: ArkUINode) -> ArkUIResult<()> {
     runtime.add_child(child)
 }
 
+fn insert_child(parent: &mut ArkUINode, child: ArkUINode, index: usize) -> ArkUIResult<()> {
+    let mut runtime = RuntimeNode(parent);
+    runtime.insert_child(child, index)
+}
+
+fn attach_child_at(parent: &mut ArkUINode, child: ArkUINode, index: usize) -> ArkUIResult<()> {
+    if index == parent.children().len() {
+        attach_child(parent, child)
+    } else {
+        insert_child(parent, child, index)
+    }
+}
+
+fn remove_child_by_raw(
+    parent: &mut ArkUINode,
+    raw_handle: usize,
+) -> ArkUIResult<Option<Rc<RefCell<ArkUINode>>>> {
+    let index = parent
+        .children()
+        .iter()
+        .position(|child| child.borrow().raw_handle() as usize == raw_handle);
+
+    match index {
+        Some(index) => parent.remove_child(index),
+        None => Ok(None),
+    }
+}
+
+fn complete_exiting_child(
+    mut parent: ArkUINode,
+    raw_handle: usize,
+    mounted: Rc<RefCell<Option<MountedRenderNode>>>,
+    pending_exits: Rc<RefCell<Vec<PendingExit>>>,
+    alive: Rc<Cell<bool>>,
+) {
+    if !alive.replace(false) {
+        return;
+    }
+
+    pending_exits
+        .borrow_mut()
+        .retain(|exit| exit.raw_handle != raw_handle);
+
+    match remove_child_by_raw(&mut parent, raw_handle) {
+        Ok(Some(removed)) => {
+            let mut removed = removed.borrow().clone();
+            let _ = removed.dispose();
+        }
+        Ok(None) => {}
+        Err(error) => {
+            ohos_hilog_binding::error(format!(
+                "renderer error: failed to remove exiting child: {error}"
+            ));
+        }
+    }
+
+    if let Some(mounted) = mounted.borrow_mut().take() {
+        mounted.cleanup_recursive();
+    }
+}
+
+fn remove_or_exit_child(
+    parent: &mut ArkUINode,
+    index: usize,
+    mut mounted: MountedRenderNode,
+    pending_exits: Rc<RefCell<Vec<PendingExit>>>,
+) -> ArkUIResult<()> {
+    let Some(exit_effect) = mounted.exit_effect.take() else {
+        let removed = parent.remove_child(index)?;
+        if let Some(removed) = removed {
+            let mut removed = removed.borrow().clone();
+            let _ = removed.dispose();
+        }
+        mounted.cleanup_recursive();
+        return Ok(());
+    };
+
+    let Some(child_handle) = parent.children().get(index).cloned() else {
+        mounted.cleanup_recursive();
+        return Ok(());
+    };
+
+    let raw_handle = child_handle.borrow().raw_handle() as usize;
+    let alive = Rc::new(Cell::new(true));
+    let mounted_slot = Rc::new(RefCell::new(Some(mounted)));
+    let effect_cleanup = Rc::new(RefCell::new(None::<Cleanup>));
+
+    pending_exits.borrow_mut().push(PendingExit {
+        raw_handle,
+        alive: alive.clone(),
+        mounted: mounted_slot.clone(),
+        effect_cleanup: effect_cleanup.clone(),
+    });
+
+    let finish_parent = parent.clone();
+    let finish_mounted = mounted_slot.clone();
+    let finish_pending = pending_exits.clone();
+    let finish_alive = alive.clone();
+    let finish = Box::new(move || {
+        complete_exiting_child(
+            finish_parent,
+            raw_handle,
+            finish_mounted,
+            finish_pending,
+            finish_alive,
+        );
+    }) as Cleanup;
+
+    let mut child_node = child_handle.borrow_mut();
+    if let Err(error) = child_node.set_attribute(
+        ArkUINodeAttributeType::HitTestBehavior,
+        i32::from(HitTestBehavior::None).into(),
+    ) {
+        ohos_hilog_binding::error(format!(
+            "renderer error: failed to disable exiting child hit test: {error}"
+        ));
+    }
+
+    match exit_effect(&mut child_node, finish) {
+        Ok(cleanup) => {
+            effect_cleanup.replace(cleanup);
+        }
+        Err(error) => {
+            ohos_hilog_binding::error(format!("renderer error: exit effect failed: {error}"));
+            drop(child_node);
+            complete_exiting_child(
+                parent.clone(),
+                raw_handle,
+                mounted_slot,
+                pending_exits,
+                alive,
+            );
+        }
+    }
+
+    Ok(())
+}
+
 fn realize_attached_node(node: &mut ArkUINode, mounted: &mut MountedRenderNode) -> ArkUIResult<()> {
     if !mounted.pending_patch_attrs.is_empty() {
         apply_attr_list(node, std::mem::take(&mut mounted.pending_patch_attrs));
@@ -2235,6 +2431,7 @@ where
         mount_effects,
         attach_effects,
         patch_effects,
+        exit_effect,
         children,
     } = into_node(element);
 
@@ -2292,6 +2489,7 @@ where
             has_long_press,
             long_press_cleanup,
             cleanups,
+            exit_effect,
             pending_patch_attrs,
             attach_effects,
             patch_effects,
@@ -2319,11 +2517,13 @@ where
         mount_effects: _,
         attach_effects: _,
         patch_effects,
+        exit_effect,
         children,
     } = into_node(element);
 
     mounted.tag = node_type_id(kind);
     mounted.key = key;
+    mounted.exit_effect = exit_effect;
     let attrs = desired_attrs(init_attrs, patch_attrs);
     let next_attr_types = attr_types(&attrs);
     reset_stale_attrs(node, &mounted.attrs, &next_attr_types);
@@ -2346,12 +2546,12 @@ where
         None => None,
     };
 
-    reconcile_children(node, &mut mounted.children, children)
+    reconcile_children(node, mounted, children)
 }
 
 fn reconcile_children<Message, AppTheme>(
     parent: &mut ArkUINode,
-    mounted_children: &mut Vec<MountedRenderNode>,
+    mounted: &mut MountedRenderNode,
     next_children: Vec<Element<Message, AppTheme>>,
 ) -> ArkUIResult<()>
 where
@@ -2378,6 +2578,8 @@ where
     }
 
     let next_len = next_nodes.len();
+    let pending_exits = mounted.exiting_children.clone();
+    let mounted_children = &mut mounted.children;
     let old_len = mounted_children.len();
     let mut prefix = 0;
 
@@ -2408,65 +2610,26 @@ where
         )?;
     }
 
-    let next_nodes = next_nodes;
     if prefix == old_len && prefix == next_len {
         return Ok(());
     }
 
-    if prefix == old_len {
-        for child in next_nodes {
-            let (child_node, mut child_meta) = mount_node(child.into())?;
-            attach_child(parent, child_node)?;
-            if let Some(child_handle) = parent.children().last() {
-                let mut child_node = child_handle.borrow_mut();
-                realize_attached_node(&mut child_node, &mut child_meta)?;
-            }
-            mounted_children.push(child_meta);
-        }
-        return Ok(());
-    }
-
-    if prefix == next_len {
-        rebuild_children_tail(parent, mounted_children, prefix)?;
-        return Ok(());
-    }
-
-    for index in (prefix..old_len).rev() {
-        let removed = parent.remove_child(index)?;
-        if let Some(removed) = removed {
-            let mut removed = removed.borrow().clone();
-            let _ = removed.dispose();
-        }
-        let mounted = mounted_children.remove(index);
-        mounted.cleanup_recursive();
-    }
-
-    for child in next_nodes {
+    for (offset, child) in next_nodes.into_iter().enumerate() {
+        let index = prefix + offset;
         let (child_node, mut child_meta) = mount_node(child.into())?;
-        attach_child(parent, child_node)?;
-        if let Some(child_handle) = parent.children().last() {
+        attach_child_at(parent, child_node, index)?;
+        if let Some(child_handle) = parent.children().get(index) {
             let mut child_node = child_handle.borrow_mut();
             realize_attached_node(&mut child_node, &mut child_meta)?;
         }
-        mounted_children.push(child_meta);
+        mounted_children.insert(index, child_meta);
     }
 
-    Ok(())
-}
-
-fn rebuild_children_tail(
-    parent: &mut ArkUINode,
-    mounted_children: &mut Vec<MountedRenderNode>,
-    start: usize,
-) -> ArkUIResult<()> {
-    while mounted_children.len() > start {
-        let mounted = mounted_children.remove(start);
-        if let Some(node) = parent.remove_child(start)? {
-            let mut node = node.borrow().clone();
-            let _ = node.dispose();
-        }
-        mounted.cleanup_recursive();
+    while mounted_children.len() > next_len {
+        let mounted = mounted_children.remove(next_len);
+        remove_or_exit_child(parent, next_len, mounted, pending_exits.clone())?;
     }
+
     Ok(())
 }
 

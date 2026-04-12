@@ -139,6 +139,14 @@ impl Route {
     }
 }
 
+pub trait StructuredRoute: Clone + Sized {
+    fn definitions() -> Vec<RouteDefinition>;
+
+    fn path(&self) -> String;
+
+    fn from_route(route: &Route) -> Option<Self>;
+}
+
 #[derive(Clone)]
 pub struct Router {
     inner: Rc<RouterInner>,
@@ -228,6 +236,13 @@ impl Router {
             let _ = self.register_definition(definition)?;
         }
         Ok(())
+    }
+
+    pub fn register_structured<R>(&self) -> Result<(), RouteError>
+    where
+        R: StructuredRoute,
+    {
+        self.register_definitions(R::definitions())
     }
 
     pub fn route_definitions(&self) -> Vec<RouteDefinition> {
@@ -366,6 +381,14 @@ impl Router {
             .ok_or(RouteError::UnknownRoute(raw_path))
     }
 
+    pub fn resolve_structured<R>(&self, raw_path: impl Into<String>) -> Result<R, RouteError>
+    where
+        R: StructuredRoute,
+    {
+        let route = self.resolve(raw_path)?;
+        R::from_route(&route).ok_or_else(|| RouteError::UnknownRoute(route.raw().to_string()))
+    }
+
     pub fn current_route(&self) -> Route {
         self.inner
             .stack
@@ -377,6 +400,13 @@ impl Router {
 
     pub fn current_path(&self) -> String {
         self.current_route().path
+    }
+
+    pub fn current_structured<R>(&self) -> Option<R>
+    where
+        R: StructuredRoute,
+    {
+        R::from_route(&self.current_route())
     }
 
     pub fn stack_len(&self) -> usize {
@@ -404,6 +434,13 @@ impl Router {
         Ok(route)
     }
 
+    pub fn push_structured<R>(&self, route: R) -> Result<Route, RouteError>
+    where
+        R: StructuredRoute,
+    {
+        self.push(route.path())
+    }
+
     pub fn replace(&self, raw_path: impl Into<String>) -> Result<Route, RouteError> {
         let raw_path = raw_path.into();
         self.run_guards(&raw_path)?;
@@ -423,6 +460,13 @@ impl Router {
         Ok(route)
     }
 
+    pub fn replace_structured<R>(&self, route: R) -> Result<Route, RouteError>
+    where
+        R: StructuredRoute,
+    {
+        self.replace(route.path())
+    }
+
     pub fn reset(&self, raw_path: impl Into<String>) -> Result<Route, RouteError> {
         let raw_path = raw_path.into();
         self.run_guards(&raw_path)?;
@@ -437,6 +481,13 @@ impl Router {
             RouteTransitionEvent::new(prev, route.clone(), RouteTransitionDirection::Replace),
         );
         Ok(route)
+    }
+
+    pub fn reset_structured<R>(&self, route: R) -> Result<Route, RouteError>
+    where
+        R: StructuredRoute,
+    {
+        self.reset(route.path())
     }
 
     pub fn back(&self) -> bool {
@@ -488,7 +539,30 @@ impl Router {
             name,
             segments,
         });
+        self.refresh_stack_routes();
         Ok(true)
+    }
+
+    fn refresh_stack_routes(&self) {
+        let raws = self
+            .inner
+            .stack
+            .borrow()
+            .iter()
+            .map(|route| route.raw().to_string())
+            .collect::<Vec<_>>();
+
+        let refreshed = raws
+            .into_iter()
+            .map(|raw| self.resolve(raw))
+            .collect::<Vec<_>>();
+
+        let mut stack = self.inner.stack.borrow_mut();
+        for (slot, route) in stack.iter_mut().zip(refreshed) {
+            if let Ok(route) = route {
+                *slot = route;
+            }
+        }
     }
 
     fn notify(&self, route: Route) {
@@ -1106,7 +1180,39 @@ fn resolve_tree(node: &RouteTreeNode, path_segs: &[&str]) -> Option<Vec<RouteSeg
 
 #[cfg(test)]
 mod tests {
-    use super::{RouteDefinition, Router};
+    use super::{Route, RouteDefinition, RouteTransitionDirection, Router, StructuredRoute};
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    enum TestRoute {
+        Home,
+        Detail { id: String },
+    }
+
+    impl StructuredRoute for TestRoute {
+        fn definitions() -> Vec<RouteDefinition> {
+            vec![
+                RouteDefinition::named("home", "/").expect("home route definition"),
+                RouteDefinition::named("detail", "/detail/:id").expect("detail route definition"),
+            ]
+        }
+
+        fn path(&self) -> String {
+            match self {
+                TestRoute::Home => "/".to_string(),
+                TestRoute::Detail { id } => format!("/detail/{id}"),
+            }
+        }
+
+        fn from_route(route: &Route) -> Option<Self> {
+            match route.name()? {
+                "home" => Some(TestRoute::Home),
+                "detail" => Some(TestRoute::Detail {
+                    id: route.param("id")?.to_string(),
+                }),
+                _ => None,
+            }
+        }
+    }
 
     #[test]
     fn match_and_extract_route_params_and_query() {
@@ -1159,6 +1265,47 @@ mod tests {
     }
 
     #[test]
+    fn structured_routes_resolve_and_navigate() {
+        let router = Router::new("/");
+        router
+            .register_structured::<TestRoute>()
+            .expect("register structured routes");
+
+        assert_eq!(
+            router
+                .resolve_structured::<TestRoute>("/detail/7")
+                .expect("resolve typed route"),
+            TestRoute::Detail {
+                id: "7".to_string()
+            }
+        );
+
+        let transition_id = router.subscribe_transition(|event| {
+            assert_eq!(event.from().path(), "/");
+            assert_eq!(event.to().path(), "/detail/9");
+            assert_eq!(event.direction(), RouteTransitionDirection::Forward);
+        });
+
+        router
+            .push_structured(TestRoute::Detail {
+                id: "9".to_string(),
+            })
+            .expect("push typed route");
+        assert_eq!(
+            router.current_structured::<TestRoute>(),
+            Some(TestRoute::Detail {
+                id: "9".to_string()
+            })
+        );
+        assert!(router.unsubscribe_transition(transition_id));
+        assert!(router.back());
+        assert_eq!(
+            router.current_structured::<TestRoute>(),
+            Some(TestRoute::Home)
+        );
+    }
+
+    #[test]
     fn specificity_static_beats_param() {
         let router = Router::new("/");
         // Register param route first, static route second
@@ -1207,7 +1354,7 @@ mod tests {
 
     #[test]
     fn nested_route_tree_basic() {
-        use super::{RouteNode, RouteSegmentMatch};
+        use super::RouteNode;
 
         let router = Router::new("/");
         let tree = RouteNode::new("/")

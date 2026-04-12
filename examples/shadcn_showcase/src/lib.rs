@@ -1,5 +1,16 @@
 use arkit::entry;
+use arkit::ohos_arkui_binding::common::error::ArkUIResult;
+use arkit::ohos_arkui_binding::common::node::ArkUINode;
+use arkit::ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
+use arkit::ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
+use arkit::ohos_arkui_binding::types::curve::Curve;
 use arkit::{application, Element as ArkElement, Task};
+use arkit_animation::{Motion, MotionExt};
+use arkit_router::{
+    Route as RouterRoute, RouteDefinition, RouteTransitionDirection, Router, StructuredRoute,
+};
+use std::cell::Cell;
+use std::rc::Rc;
 
 mod showcase;
 
@@ -11,10 +22,50 @@ pub(crate) mod prelude {
 
 use showcase::{catalog_home, component_page, DemoContext};
 
-#[derive(Debug, Clone)]
+const ROUTE_TRANSITION_DISTANCE: f32 = 28.0;
+const ROUTE_TRANSITION_DURATION_MS: i32 = 180;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Route {
     Home,
     Component { slug: String },
+}
+
+impl Route {
+    fn key(&self) -> String {
+        self.path()
+    }
+
+    fn from_router_route(route: &RouterRoute) -> Option<Self> {
+        <Self as StructuredRoute>::from_route(route)
+    }
+}
+
+impl StructuredRoute for Route {
+    fn definitions() -> Vec<RouteDefinition> {
+        vec![
+            RouteDefinition::named("home", "/").expect("home route definition"),
+            RouteDefinition::named("component", "/components/:slug")
+                .expect("component route definition"),
+        ]
+    }
+
+    fn path(&self) -> String {
+        match self {
+            Route::Home => "/".to_string(),
+            Route::Component { slug } => format!("/components/{slug}"),
+        }
+    }
+
+    fn from_route(route: &RouterRoute) -> Option<Self> {
+        match route.name()? {
+            "home" => Some(Route::Home),
+            "component" => Some(Route::Component {
+                slug: route.param("slug")?.to_string(),
+            }),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -45,9 +96,10 @@ enum Message {
     SetMenubarActive(Option<usize>),
 }
 
-#[derive(Debug, Clone)]
 struct ShowcaseState {
+    router: Router,
     route: Route,
+    route_transition_direction: Rc<Cell<RouteTransitionDirection>>,
     home_search: String,
     button_preview_feedback: Option<String>,
     active_tab: usize,
@@ -74,8 +126,15 @@ struct ShowcaseState {
 
 impl Default for ShowcaseState {
     fn default() -> Self {
+        let router = Router::new("/");
+        router
+            .register_structured::<Route>()
+            .expect("register showcase routes");
+
         Self {
+            router,
             route: Route::Home,
+            route_transition_direction: Rc::new(Cell::new(RouteTransitionDirection::None)),
             home_search: String::new(),
             button_preview_feedback: None,
             active_tab: 0,
@@ -161,12 +220,47 @@ impl ShowcaseState {
 fn update(state: &mut ShowcaseState, message: Message) -> Task<Message> {
     match message {
         Message::Navigate(route) => {
-            state.reset_component_demo_state();
-            state.route = route;
+            if route != state.route {
+                state.reset_component_demo_state();
+                match state.router.push_structured(route.clone()) {
+                    Ok(resolved) => {
+                        state
+                            .route_transition_direction
+                            .set(RouteTransitionDirection::Forward);
+                        state.route = Route::from_router_route(&resolved).unwrap_or(route);
+                    }
+                    Err(error) => {
+                        ohos_hilog_binding::error(format!("navigation failed: {error}"));
+                    }
+                }
+            }
         }
         Message::Back => {
-            state.reset_component_demo_state();
-            state.route = Route::Home;
+            if state.router.can_go_back() {
+                state.reset_component_demo_state();
+                if state.router.back() {
+                    state
+                        .route_transition_direction
+                        .set(RouteTransitionDirection::Backward);
+                    state.route = state
+                        .router
+                        .current_structured::<Route>()
+                        .unwrap_or(Route::Home);
+                }
+            } else if state.route != Route::Home {
+                state.reset_component_demo_state();
+                match state.router.replace_structured(Route::Home) {
+                    Ok(resolved) => {
+                        state
+                            .route_transition_direction
+                            .set(RouteTransitionDirection::Replace);
+                        state.route = Route::from_router_route(&resolved).unwrap_or(Route::Home);
+                    }
+                    Err(error) => {
+                        ohos_hilog_binding::error(format!("navigation failed: {error}"));
+                    }
+                }
+            }
         }
         Message::ButtonPreviewPressed(label) => {
             state.button_preview_feedback =
@@ -199,11 +293,70 @@ fn update(state: &mut ShowcaseState, message: Message) -> Task<Message> {
     Task::none()
 }
 
+fn route_motion() -> Motion {
+    Motion::new()
+        .duration_ms(ROUTE_TRANSITION_DURATION_MS)
+        .curve(Curve::EaseOut)
+}
+
+fn enter_offset(direction: RouteTransitionDirection) -> f32 {
+    match direction {
+        RouteTransitionDirection::Forward => ROUTE_TRANSITION_DISTANCE,
+        RouteTransitionDirection::Backward => -ROUTE_TRANSITION_DISTANCE,
+        RouteTransitionDirection::None | RouteTransitionDirection::Replace => 0.0,
+    }
+}
+
+fn exit_offset(direction: RouteTransitionDirection) -> f32 {
+    match direction {
+        RouteTransitionDirection::Forward => -ROUTE_TRANSITION_DISTANCE,
+        RouteTransitionDirection::Backward => ROUTE_TRANSITION_DISTANCE,
+        RouteTransitionDirection::None | RouteTransitionDirection::Replace => 0.0,
+    }
+}
+
+fn apply_route_frame(node: &mut ArkUINode, offset_x: f32, opacity: f32) -> ArkUIResult<()> {
+    node.set_attribute(ArkUINodeAttributeType::Opacity, opacity.into())?;
+    node.set_attribute(
+        ArkUINodeAttributeType::Translate,
+        vec![offset_x, 0.0, 0.0].into(),
+    )
+}
+
+fn route_page(
+    route: &Route,
+    direction: Rc<Cell<RouteTransitionDirection>>,
+    content: ArkElement<Message>,
+) -> ArkElement<Message> {
+    let enter_direction = direction.clone();
+    let exit_direction = direction;
+
+    arkit::stack_component()
+        .key(route.key())
+        .percent_width(1.0)
+        .percent_height(1.0)
+        .children(vec![content])
+        .with_enter_exit_motion(
+            route_motion(),
+            move |node| apply_route_frame(node, enter_offset(enter_direction.get()), 0.0),
+            move |node| apply_route_frame(node, 0.0, 1.0),
+            route_motion(),
+            move |node| apply_route_frame(node, exit_offset(exit_direction.get()), 0.0),
+        )
+        .into()
+}
+
 fn view(state: &ShowcaseState) -> ArkElement<Message> {
-    match &state.route {
+    let content = match &state.route {
         Route::Home => catalog_home(state.home_search.clone()),
         Route::Component { slug } => component_page(slug.clone(), state.demo_context()),
-    }
+    };
+
+    route_page(
+        &state.route,
+        state.route_transition_direction.clone(),
+        content,
+    )
 }
 
 #[entry]

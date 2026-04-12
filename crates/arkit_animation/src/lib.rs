@@ -197,6 +197,21 @@ pub trait MotionExt: Sized {
         target: impl Fn(&mut ArkUINode) -> ArkUIResult<()> + 'static,
         on_finish: impl Fn() + 'static,
     ) -> Self;
+
+    fn with_exit_motion(
+        self,
+        motion: Motion,
+        target: impl Fn(&mut ArkUINode) -> ArkUIResult<()> + 'static,
+    ) -> Self;
+
+    fn with_enter_exit_motion(
+        self,
+        enter_motion: Motion,
+        enter_initial: impl Fn(&mut ArkUINode) -> ArkUIResult<()> + 'static,
+        enter_target: impl Fn(&mut ArkUINode) -> ArkUIResult<()> + 'static,
+        exit_motion: Motion,
+        exit_target: impl Fn(&mut ArkUINode) -> ArkUIResult<()> + 'static,
+    ) -> Self;
 }
 
 impl<Message: 'static, AppTheme: 'static> MotionExt for Node<Message, AppTheme> {
@@ -284,6 +299,96 @@ impl<Message: 'static, AppTheme: 'static> MotionExt for Node<Message, AppTheme> 
                 is_active.set(false);
             })
         })
+    }
+
+    fn with_exit_motion(
+        self,
+        motion: Motion,
+        target: impl Fn(&mut ArkUINode) -> ArkUIResult<()> + 'static,
+    ) -> Self {
+        let target = Rc::new(target);
+        self.with_exit_cleanup(move |node, finish| {
+            let animated_node = Rc::new(RefCell::new(node.clone()));
+            let animation_slot = Rc::new(RefCell::new(None::<Animation>));
+            let is_active = Rc::new(Cell::new(true));
+            let queued_node = animated_node.clone();
+            let queued_slot = animation_slot.clone();
+            let queued_active = is_active.clone();
+            let queued_target = target.clone();
+            let finish = Rc::new(RefCell::new(Some(finish)));
+            let queued_finish = finish.clone();
+
+            queue_ui_loop(move || {
+                if !queued_active.get() {
+                    return;
+                }
+
+                let animation = motion.build_animation();
+                let update_node = queued_node.clone();
+                let update_target = queued_target.clone();
+                let update_active = queued_active.clone();
+                animation.update(move || {
+                    if !update_active.get() {
+                        return;
+                    }
+                    let mut node = update_node.borrow_mut();
+                    if let Err(error) = update_target(&mut node) {
+                        log_animation_error(format!(
+                            "animation error: failed to apply exit animation update: {error}"
+                        ));
+                    }
+                });
+
+                let finish_slot = queued_slot.clone();
+                let finish_active = queued_active.clone();
+                let finish_callback = queued_finish.clone();
+                animation.finish(AnimationFinishCallbackType::Logically, move || {
+                    let release_slot = finish_slot.clone();
+                    queue_ui_loop(move || {
+                        let _ = release_slot.borrow_mut().take();
+                    });
+                    if finish_active.get() {
+                        if let Some(finish) = finish_callback.borrow_mut().take() {
+                            finish();
+                        }
+                    }
+                });
+
+                if !queued_active.get() {
+                    return;
+                }
+
+                let animation_node = queued_node.borrow().clone();
+                if let Err(error) = animation_node.animate_to(&animation) {
+                    log_animation_error(format!(
+                        "animation error: failed to start exit animation: {error}"
+                    ));
+                    if let Some(finish) = queued_finish.borrow_mut().take() {
+                        finish();
+                    }
+                    return;
+                }
+
+                *queued_slot.borrow_mut() = Some(animation);
+            });
+
+            Ok(move || {
+                is_active.set(false);
+                let _ = animation_slot.borrow_mut().take();
+            })
+        })
+    }
+
+    fn with_enter_exit_motion(
+        self,
+        enter_motion: Motion,
+        enter_initial: impl Fn(&mut ArkUINode) -> ArkUIResult<()> + 'static,
+        enter_target: impl Fn(&mut ArkUINode) -> ArkUIResult<()> + 'static,
+        exit_motion: Motion,
+        exit_target: impl Fn(&mut ArkUINode) -> ArkUIResult<()> + 'static,
+    ) -> Self {
+        self.with_mount_motion(enter_motion, enter_initial, enter_target)
+            .with_exit_motion(exit_motion, exit_target)
     }
 }
 

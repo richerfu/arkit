@@ -720,7 +720,9 @@ name = "shadcn_showcase"
 version = "0.1.0"
 dependencies = [
  "arkit",
+ "arkit_animation",
  "arkit_icon",
+ "arkit_router",
  "arkit_shadcn",
  "napi-build-ohos",
  "napi-derive-ohos",
