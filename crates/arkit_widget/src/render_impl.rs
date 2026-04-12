@@ -6,6 +6,7 @@ use std::rc::Rc;
 
 use crate::{Alignment, LayoutFrame, LayoutSize};
 use arkit_core::{advanced, Horizontal, Length, Padding, Size, Vertical};
+use ohos_arkui_binding::api::attribute_option::ProgressLinearStyleOption;
 use ohos_arkui_binding::api::node_custom_event::NodeCustomEvent;
 use ohos_arkui_binding::common::attribute::{ArkUINodeAttributeItem, ArkUINodeAttributeNumber};
 use ohos_arkui_binding::common::error::ArkUIResult;
@@ -77,6 +78,56 @@ impl From<BorderStyle> for i32 {
             BorderStyle::Dashed => 1,
             BorderStyle::Dotted => 2,
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProgressType {
+    Linear,
+    Ring,
+    Eclipse,
+    ScaleRing,
+    Capsule,
+}
+
+impl From<ProgressType> for i32 {
+    fn from(value: ProgressType) -> Self {
+        match value {
+            ProgressType::Linear => 0,
+            ProgressType::Ring => 1,
+            ProgressType::Eclipse => 2,
+            ProgressType::ScaleRing => 3,
+            ProgressType::Capsule => 4,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ProgressLinearStyle {
+    pub stroke_width: f32,
+    pub stroke_radius: f32,
+    pub scan_effect_enabled: bool,
+    pub smooth_effect_enabled: bool,
+}
+
+impl ProgressLinearStyle {
+    pub fn new(stroke_width: f32, stroke_radius: f32) -> Self {
+        Self {
+            stroke_width,
+            stroke_radius,
+            scan_effect_enabled: false,
+            smooth_effect_enabled: true,
+        }
+    }
+
+    pub fn scan_effect_enabled(mut self, value: bool) -> Self {
+        self.scan_effect_enabled = value;
+        self
+    }
+
+    pub fn smooth_effect_enabled(mut self, value: bool) -> Self {
+        self.smooth_effect_enabled = value;
+        self
     }
 }
 
@@ -294,6 +345,24 @@ fn shadow_style_value(value: ShadowStyle) -> i32 {
         ShadowStyle::OuterFloatingSm => 4,
         ShadowStyle::OuterFloatingMd => 5,
     }
+}
+
+fn apply_progress_linear_style(
+    node: &mut ArkUINode,
+    style: ProgressLinearStyle,
+) -> ArkUIResult<()> {
+    let mut option = ProgressLinearStyleOption::new()?;
+    option.set_stroke_width(style.stroke_width);
+    option.set_stroke_radius(style.stroke_radius);
+    option.set_scan_effect_enabled(style.scan_effect_enabled);
+    option.set_smooth_effect_enabled(style.smooth_effect_enabled);
+
+    let result = RuntimeNode(node).set_attribute(
+        ArkUINodeAttributeType::ProgressLinearStyle,
+        (&option).into(),
+    );
+    option.destroy();
+    result
 }
 
 struct RuntimeNode<'a>(&'a mut ArkUINode);
@@ -923,6 +992,21 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
 
     pub fn progress_color(self, value: u32) -> Self {
         self.builder_attr(ArkUINodeAttributeType::ProgressColor, value)
+    }
+
+    pub fn progress_type(self, value: ProgressType) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::ProgressType, i32::from(value))
+    }
+
+    pub fn progress_linear_style(mut self, value: ProgressLinearStyle) -> Self {
+        self.patch_effects.push(Box::new(move |node| {
+            apply_progress_linear_style(node, value)
+        }));
+        self.mount_effects.push(Box::new(move |node| {
+            apply_progress_linear_style(node, value)?;
+            Ok(None)
+        }));
+        self
     }
 
     pub fn toggle_selected_color(self, value: u32) -> Self {

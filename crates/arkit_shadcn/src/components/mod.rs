@@ -3,8 +3,8 @@ use arkit::prelude::ArkUINodeAttributeType;
 use arkit::{
     BorderStyle, ButtonElement, ButtonType, CalendarPickerElement, DatePickerElement, Element,
     FontStyle, FontWeight, HitTestBehavior, ItemAlignment, JustifyContent, Node, ProgressElement,
-    RowElement, ScrollElement, SliderElement, SwiperElement, TextAreaElement, TextElement,
-    TextInputElement, ToggleElement, Visibility,
+    ProgressLinearStyle, ProgressType, RowElement, ScrollElement, SliderElement, SwiperElement,
+    TextAreaElement, TextElement, TextInputElement, ToggleElement, Visibility,
 };
 
 use crate::styles::{
@@ -260,8 +260,11 @@ pub(crate) fn rounded_progress<Message>(
     element: ProgressElement<Message>,
 ) -> ProgressElement<Message> {
     element
+        .progress_type(ProgressType::Linear)
+        .progress_linear_style(ProgressLinearStyle::new(8.0, 4.0))
         .border_radius(radius::FULL)
-        .background_color(color::PRIMARY_TRACK)
+        .clip(true)
+        .background_color(color::SECONDARY)
 }
 
 pub(crate) fn rounded_table_surface<Message, AppTheme>(

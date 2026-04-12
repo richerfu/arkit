@@ -19,9 +19,10 @@ pub use arkit_widget::{
     FloatingOverlaySpec, FloatingSide, FontStyle, FontWeight, HitTestBehavior, ItemAlignment,
     JustifyContent, LayoutFrame, LayoutSize, LifecycleEvent, ModalOverlaySpec, ModalPresentation,
     NativeOverlayPlacement, Node, NodeCustomEvent, NodeCustomEventType, NodeEventType, ObjectFit,
-    OverlayDismissMode, OverlayStrategy, ProgressElement, RadioElement, RowElement, ScrollElement,
-    ShadowStyle, SliderElement, SwiperElement, TextAlignment, TextAreaElement, TextElement,
-    TextInputElement, ToggleElement, UiState, Visibility,
+    OverlayDismissMode, OverlayStrategy, ProgressElement, ProgressLinearStyle, ProgressType,
+    RadioElement, RowElement, ScrollElement, ShadowStyle, SliderElement, SwiperElement,
+    TextAlignment, TextAreaElement, TextElement, TextInputElement, ToggleElement, UiState,
+    Visibility,
 };
 pub use ohos::{
     mount_application, mount_entry, napi_derive_ohos, napi_ohos, ohos_arkui_binding,
@@ -77,9 +78,9 @@ pub mod prelude {
         FontStyle, FontWeight, HitTestBehavior, Horizontal, ItemAlignment, JustifyContent,
         LayoutFrame, LayoutSize, Length, LifecycleEvent, ModalOverlaySpec, ModalPresentation,
         NativeOverlayPlacement, NodeCustomEvent, NodeCustomEventType, NodeEventType, ObjectFit,
-        OverlayDismissMode, OverlayStrategy, Padding, Program, Renderer, Settings, ShadowStyle,
-        Size, Subscription, SubscriptionHandle, Task, TextAlignment, Theme, UiState, Vertical,
-        Visibility,
+        OverlayDismissMode, OverlayStrategy, Padding, Program, ProgressLinearStyle, ProgressType,
+        Renderer, Settings, ShadowStyle, Size, Subscription, SubscriptionHandle, Task,
+        TextAlignment, Theme, UiState, Vertical, Visibility,
     };
 }
 
