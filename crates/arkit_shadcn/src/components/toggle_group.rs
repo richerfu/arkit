@@ -20,8 +20,8 @@ fn toggle_group_shell<Message: 'static>(children: Vec<Element<Message>>) -> Elem
     shadow_sm(
         arkit::row_component::<Message, arkit::Theme>()
             .align_items_center()
-            .clip(true)
             .border_radius([radius::MD, radius::MD, radius::MD, radius::MD])
+            .clip(true)
             .children(children),
     )
     .into()

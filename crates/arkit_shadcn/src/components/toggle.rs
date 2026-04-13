@@ -1,5 +1,4 @@
 use super::*;
-use arkit::ohos_arkui_binding::types::alignment::Alignment;
 use arkit_icon as lucide;
 
 pub(crate) const TOGGLE_TRANSPARENT: u32 = 0x00000000;
@@ -131,14 +130,15 @@ pub(crate) fn toggle_surface<Message>(
     shadow_override: Option<bool>,
 ) -> ButtonElement<Message> {
     let visual = toggle_visual_style(variant, active);
-    let mut element = normal_button_component::<Message, arkit::Theme>()
+    let mut element = arkit::row_component::<Message, arkit::Theme>()
+        .border_radius(border_radius)
         .clip(true)
         .border_style(BorderStyle::Solid)
         .align_self(ItemAlignment::Start)
-        .border_radius(border_radius)
+        .align_items_center()
+        .justify_content_center()
         .border_width(border_width)
         .border_color_all(visual.border_color)
-        .alignment(Alignment::Center)
         .padding(size_style.padding)
         .background_color(visual.background)
         .height(size_style.height)
