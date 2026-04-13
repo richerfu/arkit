@@ -2711,8 +2711,9 @@ where
     }
 
     while mounted_children.len() > next_len {
-        let mounted = mounted_children.remove(next_len);
-        remove_or_exit_child(parent, next_len, mounted, pending_exits.clone())?;
+        let index = mounted_children.len() - 1;
+        let mounted = mounted_children.remove(index);
+        remove_or_exit_child(parent, index, mounted, pending_exits.clone())?;
     }
 
     Ok(())
