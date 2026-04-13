@@ -34,7 +34,7 @@ pub use render_impl::{
     toggle_component, Attribute as ArkUINodeAttributeType,
     AttributeValue as ArkUINodeAttributeItem, BorderStyle, ButtonType, Element, FontStyle,
     HitTestBehavior, ItemAlignment, JustifyContent, MountedNode, Node, ObjectFit,
-    ProgressLinearStyle, ProgressType, Renderer, UiState, Visibility,
+    ProgressLinearStyle, ProgressType, Renderer, ScrollOffset, ScrollViewport, UiState, Visibility,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -111,6 +111,7 @@ pub mod prelude {
         LayoutSize, Length, LifecycleEvent, ModalOverlaySpec, ModalPresentation,
         NativeOverlayPlacement, NodeCustomEvent, NodeCustomEventType, NodeEventType, ObjectFit,
         OverlayDismissMode, OverlayStrategy, Padding, ProgressLinearStyle, ProgressType,
-        ShadowStyle, Size, TextAlignment, Theme, UiState, Vertical, Visibility,
+        ScrollOffset, ScrollViewport, ShadowStyle, Size, TextAlignment, Theme, UiState, Vertical,
+        Visibility,
     };
 }

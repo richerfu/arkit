@@ -102,6 +102,26 @@ impl From<ProgressType> for i32 {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct ScrollOffset {
+    pub x: f32,
+    pub y: f32,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct ScrollViewport {
+    pub offset: ScrollOffset,
+    pub viewport_size: Size<f32>,
+    pub content_size: Size<f32>,
+}
+
+#[derive(Default)]
+struct ScrollState {
+    offset: ScrollOffset,
+    viewport: Option<ScrollViewport>,
+    node: Option<ArkUINode>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ProgressLinearStyle {
     pub stroke_width: f32,
@@ -365,6 +385,40 @@ fn apply_progress_linear_style(
     result
 }
 
+fn apply_scroll_offset(node: &mut ArkUINode, offset: ScrollOffset) -> ArkUIResult<()> {
+    RuntimeNode(node).set_attribute(
+        ArkUINodeAttributeType::ScrollOffset,
+        vec![
+            ArkUINodeAttributeNumber::Float(offset.x),
+            ArkUINodeAttributeNumber::Float(offset.y),
+            ArkUINodeAttributeNumber::Int(0),
+        ]
+        .into(),
+    )
+}
+
+fn read_scroll_offset(node: &mut ArkUINode) -> Option<ScrollOffset> {
+    let value = RuntimeNode(node)
+        .get_attribute(ArkUINodeAttributeType::ScrollOffset)
+        .ok()?;
+    let ArkUINodeAttributeItem::NumberValue(values) = value else {
+        return None;
+    };
+
+    Some(ScrollOffset {
+        x: attribute_number_as_f32(values.first()?)?,
+        y: attribute_number_as_f32(values.get(1)?)?,
+    })
+}
+
+fn attribute_number_as_f32(value: &ArkUINodeAttributeNumber) -> Option<f32> {
+    match value {
+        ArkUINodeAttributeNumber::Float(value) => Some(*value),
+        ArkUINodeAttributeNumber::Int(value) => Some(*value as f32),
+        ArkUINodeAttributeNumber::Uint(value) => Some(*value as f32),
+    }
+}
+
 struct RuntimeNode<'a>(&'a mut ArkUINode);
 
 impl ArkUIAttributeBasic for RuntimeNode<'_> {
@@ -450,6 +504,7 @@ enum NodeKind {
 
 pub struct MountedNode {
     tree: advanced::widget::Tree,
+    retained_state: StateCache,
     render: MountedRenderNode,
 }
 
@@ -479,13 +534,65 @@ struct PendingExit {
     effect_cleanup: Rc<RefCell<Option<Cleanup>>>,
 }
 
-impl MountedNode {
-    fn new(tree: advanced::widget::Tree, render: MountedRenderNode) -> Self {
-        Self { tree, render }
+#[derive(Default)]
+struct StateCache {
+    entries: Vec<advanced::widget::Tree>,
+}
+
+impl StateCache {
+    fn store(&mut self, mut tree: advanced::widget::Tree) {
+        let Some(key) = tree.persistent_key().map(str::to_string) else {
+            return;
+        };
+        snapshot_tree_state(&mut tree);
+        let tag = tree.tag();
+        self.entries
+            .retain(|entry| !(entry.tag() == tag && entry.persistent_key() == Some(key.as_str())));
+        self.entries.push(tree);
     }
 
-    fn tree_mut(&mut self) -> &mut advanced::widget::Tree {
-        &mut self.tree
+    fn take(
+        &mut self,
+        tag: advanced::widget::Tag,
+        persistent_key: Option<&str>,
+    ) -> Option<advanced::widget::Tree> {
+        let persistent_key = persistent_key?;
+        let index = self
+            .entries
+            .iter()
+            .position(|tree| tree.tag() == tag && tree.persistent_key() == Some(persistent_key))?;
+        Some(self.entries.remove(index))
+    }
+}
+
+fn snapshot_tree_state(tree: &mut advanced::widget::Tree) {
+    if let Some(scroll_state) = tree
+        .state()
+        .downcast_mut::<Rc<RefCell<ScrollState>>>()
+        .cloned()
+    {
+        let offset = scroll_state
+            .borrow()
+            .node
+            .clone()
+            .and_then(|mut node| read_scroll_offset(&mut node));
+        if let Some(offset) = offset {
+            scroll_state.borrow_mut().offset = offset;
+        }
+    }
+
+    for child in tree.children_mut() {
+        snapshot_tree_state(child);
+    }
+}
+
+impl MountedNode {
+    fn new(tree: advanced::widget::Tree, render: MountedRenderNode) -> Self {
+        Self {
+            tree,
+            retained_state: StateCache::default(),
+            render,
+        }
     }
 
     fn render_mut(&mut self) -> &mut MountedRenderNode {
@@ -580,6 +687,7 @@ fn clone_attr_value(value: &ArkUINodeAttributeItem) -> ArkUINodeAttributeItem {
 pub struct Node<Message, AppTheme = arkit_core::Theme> {
     kind: NodeKind,
     key: Option<String>,
+    persistent_key: Option<String>,
     init_attrs: Vec<(ArkUINodeAttributeType, ArkUINodeAttributeItem)>,
     patch_attrs: Vec<(ArkUINodeAttributeType, ArkUINodeAttributeItem)>,
     event_handlers: Vec<EventHandlerSpec>,
@@ -588,6 +696,7 @@ pub struct Node<Message, AppTheme = arkit_core::Theme> {
     attach_effects: Vec<AttachEffect>,
     patch_effects: Vec<PatchEffect>,
     exit_effect: Option<ExitEffect>,
+    state_bound: bool,
     children: Vec<Element<Message, AppTheme>>,
 }
 
@@ -596,6 +705,7 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
         Self {
             kind,
             key: None,
+            persistent_key: None,
             init_attrs: Vec::new(),
             patch_attrs: Vec::new(),
             event_handlers: Vec::new(),
@@ -604,12 +714,18 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
             attach_effects: Vec::new(),
             patch_effects: Vec::new(),
             exit_effect: None,
+            state_bound: false,
             children: Vec::new(),
         }
     }
 
     pub fn key(mut self, key: impl Into<String>) -> Self {
         self.key = Some(key.into());
+        self
+    }
+
+    pub fn persistent_state_key(mut self, key: impl Into<String>) -> Self {
+        self.persistent_key = Some(key.into());
         self
     }
 
@@ -639,6 +755,7 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
         let Self {
             kind,
             key,
+            persistent_key,
             init_attrs,
             patch_attrs,
             event_handlers,
@@ -647,6 +764,7 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
             attach_effects,
             patch_effects,
             exit_effect,
+            state_bound,
             children,
         } = self;
 
@@ -658,6 +776,7 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
         map(Self {
             kind,
             key,
+            persistent_key,
             init_attrs,
             patch_attrs,
             event_handlers,
@@ -666,6 +785,7 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
             attach_effects,
             patch_effects,
             exit_effect,
+            state_bound,
             children,
         })
     }
@@ -1022,6 +1142,19 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
             Ok(None)
         }));
         self
+    }
+
+    pub fn on_scroll_offset(self, callback: impl Fn(ScrollOffset) + 'static) -> Self {
+        if self.kind != NodeKind::Scroll {
+            return self;
+        }
+
+        self.on_event(NodeEventType::ScrollEventOnScroll, move |event| {
+            callback(ScrollOffset {
+                x: event.f32_value(0).unwrap_or_default(),
+                y: event.f32_value(1).unwrap_or_default(),
+            });
+        })
     }
 
     pub fn toggle_selected_color(self, value: u32) -> Self {
@@ -1606,7 +1739,20 @@ impl<Message: 'static, AppTheme: 'static> advanced::Widget<Message, AppTheme, Re
     for Node<Message, AppTheme>
 {
     fn tag(&self) -> advanced::widget::Tag {
-        advanced::widget::Tag::of::<(NodeKind, AppTheme, Message)>()
+        node_widget_tag(self.kind)
+    }
+
+    fn state(&self) -> advanced::widget::State {
+        match self.kind {
+            NodeKind::Scroll => advanced::widget::State::new(Box::new(Rc::new(RefCell::new(
+                ScrollState::default(),
+            )))),
+            _ => advanced::widget::State::none(),
+        }
+    }
+
+    fn persistent_key(&self) -> Option<&str> {
+        self.persistent_key.as_deref()
     }
 
     fn children(&self) -> Vec<advanced::widget::Tree> {
@@ -1621,7 +1767,7 @@ impl<Message: 'static, AppTheme: 'static> advanced::Widget<Message, AppTheme, Re
         Self: 'static,
     {
         tree.set_tag(self.tag());
-        sync_child_trees(&self.children, tree);
+        tree.set_persistent_key(self.persistent_key.clone());
     }
 
     fn size_hint(&self) -> Size<Length> {
@@ -1984,24 +2130,73 @@ fn node_type_id(kind: NodeKind) -> TypeId {
     }
 }
 
+struct ButtonNodeTag;
+struct CalendarPickerNodeTag;
+struct CheckboxNodeTag;
+struct ColumnNodeTag;
+struct DatePickerNodeTag;
+struct ImageNodeTag;
+struct ProgressNodeTag;
+struct RadioNodeTag;
+struct RowNodeTag;
+struct ScrollNodeTag;
+struct SliderNodeTag;
+struct StackNodeTag;
+struct SwiperNodeTag;
+struct TextNodeTag;
+struct TextAreaNodeTag;
+struct TextInputNodeTag;
+struct ToggleNodeTag;
+
+fn node_widget_tag(kind: NodeKind) -> advanced::widget::Tag {
+    match kind {
+        NodeKind::Button => advanced::widget::Tag::of::<ButtonNodeTag>(),
+        NodeKind::CalendarPicker => advanced::widget::Tag::of::<CalendarPickerNodeTag>(),
+        NodeKind::Checkbox => advanced::widget::Tag::of::<CheckboxNodeTag>(),
+        NodeKind::Column => advanced::widget::Tag::of::<ColumnNodeTag>(),
+        NodeKind::DatePicker => advanced::widget::Tag::of::<DatePickerNodeTag>(),
+        NodeKind::Image => advanced::widget::Tag::of::<ImageNodeTag>(),
+        NodeKind::Progress => advanced::widget::Tag::of::<ProgressNodeTag>(),
+        NodeKind::Radio => advanced::widget::Tag::of::<RadioNodeTag>(),
+        NodeKind::Row => advanced::widget::Tag::of::<RowNodeTag>(),
+        NodeKind::Scroll => advanced::widget::Tag::of::<ScrollNodeTag>(),
+        NodeKind::Slider => advanced::widget::Tag::of::<SliderNodeTag>(),
+        NodeKind::Stack => advanced::widget::Tag::of::<StackNodeTag>(),
+        NodeKind::Swiper => advanced::widget::Tag::of::<SwiperNodeTag>(),
+        NodeKind::Text => advanced::widget::Tag::of::<TextNodeTag>(),
+        NodeKind::TextArea => advanced::widget::Tag::of::<TextAreaNodeTag>(),
+        NodeKind::TextInput => advanced::widget::Tag::of::<TextInputNodeTag>(),
+        NodeKind::Toggle => advanced::widget::Tag::of::<ToggleNodeTag>(),
+    }
+}
+
 fn sync_element_tree<Message, AppTheme>(
     element: &Element<Message, AppTheme>,
     tree: &mut advanced::widget::Tree,
+    state_cache: &mut StateCache,
 ) where
     Message: 'static,
     AppTheme: 'static,
 {
     let widget = element.as_widget();
-    if tree.tag() != widget.tag() {
-        *tree = arkit_core::advanced::tree_of(element);
-    } else {
-        widget.diff(tree);
+    let next_tag = widget.tag();
+    let next_persistent_key = widget.persistent_key();
+    if tree.tag() != next_tag || tree.persistent_key() != next_persistent_key {
+        let next_tree = state_cache
+            .take(next_tag, next_persistent_key)
+            .unwrap_or_else(|| arkit_core::advanced::tree_of(element));
+        let previous_tree = std::mem::replace(tree, next_tree);
+        state_cache.store(previous_tree);
     }
+
+    widget.diff(tree);
+    tree.set_persistent_key(next_persistent_key.map(str::to_string));
 }
 
 fn sync_child_trees<Message, AppTheme>(
     children: &[Element<Message, AppTheme>],
     tree: &mut advanced::widget::Tree,
+    state_cache: &mut StateCache,
 ) where
     Message: 'static,
     AppTheme: 'static,
@@ -2010,13 +2205,30 @@ fn sync_child_trees<Message, AppTheme>(
     let mut existing = std::mem::take(tree.children_mut());
 
     for child in children {
-        let mut child_tree = if existing.is_empty() {
+        let widget = child.as_widget();
+        let next_tag = widget.tag();
+        let next_persistent_key = widget.persistent_key();
+        let mut child_tree = if let Some(persistent_key) = next_persistent_key {
+            if let Some(index) = existing.iter().position(|tree| {
+                tree.tag() == next_tag && tree.persistent_key() == Some(persistent_key)
+            }) {
+                existing.remove(index)
+            } else {
+                state_cache
+                    .take(next_tag, Some(persistent_key))
+                    .unwrap_or_else(|| arkit_core::advanced::tree_of(child))
+            }
+        } else if existing.is_empty() {
             arkit_core::advanced::tree_of(child)
         } else {
             existing.remove(0)
         };
-        sync_element_tree(child, &mut child_tree);
+        sync_element_tree(child, &mut child_tree, state_cache);
         next_trees.push(child_tree);
+    }
+
+    for child_tree in existing {
+        state_cache.store(child_tree);
     }
 
     tree.replace_children(next_trees);
@@ -2027,10 +2239,102 @@ struct CompiledElement<Message, AppTheme = arkit_core::Theme> {
     overlays: Vec<Element<Message, AppTheme>>,
 }
 
+fn bind_node_state(
+    kind: NodeKind,
+    event_handlers: &mut Vec<EventHandlerSpec>,
+    attach_effects: &mut Vec<AttachEffect>,
+    state_bound: &mut bool,
+    tree: &mut advanced::widget::Tree,
+) {
+    if *state_bound || !matches!(kind, NodeKind::Scroll) {
+        return;
+    }
+
+    let Some(scroll_state) = tree
+        .state()
+        .downcast_mut::<Rc<RefCell<ScrollState>>>()
+        .cloned()
+    else {
+        return;
+    };
+
+    event_handlers.push(EventHandlerSpec {
+        event_type: NodeEventType::ScrollEventOnScroll,
+        callback: Rc::new({
+            let scroll_state = scroll_state.clone();
+            move |event| {
+                let event_offset = ScrollOffset {
+                    x: event.f32_value(0).unwrap_or_default(),
+                    y: event.f32_value(1).unwrap_or_default(),
+                };
+                let offset = scroll_state
+                    .borrow()
+                    .node
+                    .clone()
+                    .and_then(|mut node| read_scroll_offset(&mut node))
+                    .unwrap_or(event_offset);
+                let mut state = scroll_state.borrow_mut();
+                state.offset = offset;
+                if let Some(viewport) = state.viewport.as_mut() {
+                    viewport.offset = offset;
+                }
+            }
+        }),
+    });
+
+    attach_effects.push(Box::new(move |node| {
+        let alive = Rc::new(Cell::new(true));
+        let scroll_node = node.clone();
+        let scroll_state = scroll_state.clone();
+        scroll_state.borrow_mut().node = Some(scroll_node.clone());
+
+        let restore_state = scroll_state.clone();
+        let restore = Rc::new(move || {
+            let offset = restore_state.borrow().offset;
+            if offset == ScrollOffset::default() {
+                return;
+            }
+            let mut scroll_node = scroll_node.clone();
+            if let Err(error) = apply_scroll_offset(&mut scroll_node, offset) {
+                ohos_hilog_binding::error(format!(
+                    "renderer error: failed to restore scroll offset: {error}"
+                ));
+            }
+        });
+
+        let frame_alive = alive.clone();
+        let frame_restore = restore.clone();
+        node.post_frame_callback(move |_timestamp, _frame| {
+            if !frame_alive.get() {
+                return;
+            }
+            frame_restore();
+        })?;
+
+        let idle_alive = alive.clone();
+        let idle_restore = restore;
+        node.post_idle_callback(move |_time_left, _frame| {
+            if !idle_alive.get() {
+                return;
+            }
+            idle_restore();
+        })?;
+
+        Ok(Some(Box::new(move || {
+            alive.set(false);
+            scroll_state.borrow_mut().node = None;
+        }) as Cleanup))
+    }));
+
+    *state_bound = true;
+}
+
 fn compile_node<Message, AppTheme>(
     node: Node<Message, AppTheme>,
     tree: &mut advanced::widget::Tree,
+    state_cache: &mut StateCache,
     renderer: &Renderer,
+    bind_state: bool,
 ) -> CompiledElement<Message, AppTheme>
 where
     Message: 'static,
@@ -2039,24 +2343,35 @@ where
     let Node {
         kind,
         key,
+        persistent_key,
         init_attrs,
         patch_attrs,
-        event_handlers,
+        mut event_handlers,
         long_press_handler,
         mount_effects,
-        attach_effects,
+        mut attach_effects,
         patch_effects,
         exit_effect,
+        mut state_bound,
         children,
     } = node;
 
-    sync_child_trees(&children, tree);
+    if bind_state {
+        bind_node_state(
+            kind,
+            &mut event_handlers,
+            &mut attach_effects,
+            &mut state_bound,
+            tree,
+        );
+    }
+    sync_child_trees(&children, tree, state_cache);
 
     let mut compiled_children = Vec::with_capacity(children.len());
     let mut overlays = Vec::new();
 
     for (child, child_tree) in children.into_iter().zip(tree.children_mut().iter_mut()) {
-        let compiled = compile_element(child, child_tree, renderer);
+        let compiled = compile_element(child, child_tree, state_cache, renderer, bind_state);
         compiled_children.push(compiled.body);
         overlays.extend(compiled.overlays);
     }
@@ -2065,6 +2380,7 @@ where
         body: Node {
             kind,
             key,
+            persistent_key,
             init_attrs,
             patch_attrs,
             event_handlers,
@@ -2073,6 +2389,7 @@ where
             attach_effects,
             patch_effects,
             exit_effect,
+            state_bound,
             children: compiled_children,
         }
         .into(),
@@ -2083,13 +2400,15 @@ where
 fn compile_element<Message, AppTheme>(
     element: Element<Message, AppTheme>,
     tree: &mut advanced::widget::Tree,
+    state_cache: &mut StateCache,
     renderer: &Renderer,
+    bind_state: bool,
 ) -> CompiledElement<Message, AppTheme>
 where
     Message: 'static,
     AppTheme: 'static,
 {
-    sync_element_tree(&element, tree);
+    sync_element_tree(&element, tree, state_cache);
 
     let widget = element.into_widget();
     if widget.as_any().is::<Node<Message, AppTheme>>() {
@@ -2102,7 +2421,7 @@ where
                     type_name::<Node<Message, AppTheme>>()
                 )
             });
-        return compile_node(*node, tree, renderer);
+        return compile_node(*node, tree, state_cache, renderer, bind_state);
     }
 
     let body = widget
@@ -2112,8 +2431,8 @@ where
         let body_tree = tree
             .child_mut(0)
             .unwrap_or_else(|| panic!("composite widget body child was not initialized"));
-        sync_element_tree(&body, body_tree);
-        compile_element(body, body_tree, renderer)
+        sync_element_tree(&body, body_tree, state_cache);
+        compile_element(body, body_tree, state_cache, renderer, bind_state)
     };
 
     let overlay = widget.overlay(tree, renderer);
@@ -2122,8 +2441,9 @@ where
         let overlay_tree = tree
             .child_mut(1)
             .unwrap_or_else(|| panic!("composite widget overlay child was not initialized"));
-        sync_element_tree(&overlay, overlay_tree);
-        let compiled_overlay = compile_element(overlay, overlay_tree, renderer);
+        sync_element_tree(&overlay, overlay_tree, state_cache);
+        let compiled_overlay =
+            compile_element(overlay, overlay_tree, state_cache, renderer, bind_state);
         overlays.push(compiled_overlay.body);
         overlays.extend(compiled_overlay.overlays);
     }
@@ -2178,7 +2498,14 @@ where
     AppTheme: 'static,
 {
     let mut tree = arkit_core::advanced::tree_of(&element);
-    let compiled = compile_element(element, &mut tree, &Renderer::default());
+    let mut state_cache = StateCache::default();
+    let compiled = compile_element(
+        element,
+        &mut tree,
+        &mut state_cache,
+        &Renderer::default(),
+        false,
+    );
     let widget = compiled.body.into_widget();
     let any = widget.into_any();
     *any.downcast::<Node<Message, AppTheme>>()
@@ -2534,6 +2861,7 @@ where
     let Node {
         kind,
         key,
+        persistent_key: _,
         init_attrs,
         patch_attrs,
         event_handlers,
@@ -2542,6 +2870,7 @@ where
         attach_effects,
         patch_effects,
         exit_effect,
+        state_bound: _,
         children,
     } = into_node(element);
 
@@ -2620,6 +2949,7 @@ where
     let Node {
         kind,
         key,
+        persistent_key: _,
         init_attrs,
         patch_attrs,
         event_handlers,
@@ -2628,6 +2958,7 @@ where
         attach_effects: _,
         patch_effects,
         exit_effect,
+        state_bound: _,
         children,
     } = into_node(element);
 
@@ -2752,7 +3083,14 @@ where
     AppTheme: 'static,
 {
     let mut tree = arkit_core::advanced::tree_of(&element);
-    let compiled = compile_element(element, &mut tree, &Renderer::default());
+    let mut state_cache = StateCache::default();
+    let compiled = compile_element(
+        element,
+        &mut tree,
+        &mut state_cache,
+        &Renderer::default(),
+        true,
+    );
     let root = compose_compiled_overlays(compiled);
     let (node, render) = mount_node(root)?;
     Ok((node, MountedNode::new(tree, render)))
@@ -2771,10 +3109,15 @@ where
     Message: Send + 'static,
     AppTheme: 'static,
 {
-    sync_element_tree(&element, mounted.tree_mut());
-    let compiled = compile_element(element, mounted.tree_mut(), &Renderer::default());
+    let MountedNode {
+        tree,
+        retained_state,
+        render,
+    } = mounted;
+    sync_element_tree(&element, tree, retained_state);
+    let compiled = compile_element(element, tree, retained_state, &Renderer::default(), true);
     let root = compose_compiled_overlays(compiled);
-    patch_node(root, node, mounted.render_mut())
+    patch_node(root, node, render)
 }
 
 impl<Message, AppTheme> From<Node<Message, AppTheme>> for Element<Message, AppTheme>

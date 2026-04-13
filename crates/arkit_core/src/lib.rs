@@ -300,10 +300,24 @@ pub mod advanced {
             pub fn downcast_mut<T: 'static>(&mut self) -> Option<&mut T> {
                 self.inner.as_mut()?.downcast_mut::<T>()
             }
+
+            pub fn downcast_ref<T: 'static>(&self) -> Option<&T> {
+                self.inner.as_ref()?.downcast_ref::<T>()
+            }
+
+            pub fn get_or_insert_with<T: 'static>(&mut self, init: impl FnOnce() -> T) -> &mut T {
+                if self.downcast_ref::<T>().is_none() {
+                    self.inner = Some(Box::new(init()));
+                }
+
+                self.downcast_mut::<T>()
+                    .expect("widget state was just initialized with this type")
+            }
         }
 
         pub struct Tree {
             tag: Tag,
+            persistent_key: Option<String>,
             state: State,
             children: Vec<Tree>,
         }
@@ -312,6 +326,7 @@ pub mod advanced {
             pub fn empty() -> Self {
                 Self {
                     tag: Tag::of::<()>(),
+                    persistent_key: None,
                     state: State::none(),
                     children: Vec::new(),
                 }
@@ -320,14 +335,21 @@ pub mod advanced {
             pub fn new<T: 'static>() -> Self {
                 Self {
                     tag: Tag::of::<T>(),
+                    persistent_key: None,
                     state: State::none(),
                     children: Vec::new(),
                 }
             }
 
-            pub fn with(tag: Tag, state: State, children: Vec<Tree>) -> Self {
+            pub fn with(
+                tag: Tag,
+                persistent_key: Option<String>,
+                state: State,
+                children: Vec<Tree>,
+            ) -> Self {
                 Self {
                     tag,
+                    persistent_key,
                     state,
                     children,
                 }
@@ -335,6 +357,10 @@ pub mod advanced {
 
             pub fn tag(&self) -> Tag {
                 self.tag
+            }
+
+            pub fn persistent_key(&self) -> Option<&str> {
+                self.persistent_key.as_deref()
             }
 
             pub fn state(&mut self) -> &mut State {
@@ -360,6 +386,10 @@ pub mod advanced {
             pub fn set_tag(&mut self, tag: Tag) {
                 self.tag = tag;
             }
+
+            pub fn set_persistent_key(&mut self, key: Option<String>) {
+                self.persistent_key = key;
+            }
         }
     }
 
@@ -375,6 +405,10 @@ pub mod advanced {
             widget::State::none()
         }
 
+        fn persistent_key(&self) -> Option<&str> {
+            None
+        }
+
         fn children(&self) -> Vec<widget::Tree> {
             Vec::new()
         }
@@ -384,6 +418,7 @@ pub mod advanced {
             Self: 'static,
         {
             tree.set_tag(self.tag());
+            tree.set_persistent_key(self.persistent_key().map(str::to_string));
         }
 
         fn size_hint(&self) -> Size<Length> {
@@ -431,7 +466,12 @@ pub mod advanced {
         element: &Element<'static, Message, AppTheme, Renderer>,
     ) -> widget::Tree {
         let widget = element.as_widget();
-        widget::Tree::with(widget.tag(), widget.state(), widget.children())
+        widget::Tree::with(
+            widget.tag(),
+            widget.persistent_key().map(str::to_string),
+            widget.state(),
+            widget.children(),
+        )
     }
 
     pub struct Shell<'a, Message> {

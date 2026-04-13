@@ -333,6 +333,7 @@ fn route_page(
 
     arkit::stack_component()
         .key(route.key())
+        .persistent_state_key(route.key())
         .percent_width(1.0)
         .percent_height(1.0)
         .children(vec![content])
