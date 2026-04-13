@@ -1,6 +1,8 @@
 use super::*;
 use std::rc::Rc;
 
+const TRANSPARENT: u32 = 0x00000000;
+
 pub fn tabs<Message: 'static>(
     tab_labels: Vec<String>,
     active: usize,
@@ -48,17 +50,18 @@ fn tabs_list<Message: 'static>(
             let is_active = active == index;
             let on_change = on_change.clone();
             arkit::row_component::<Message, arkit::Theme>()
-                .height(35.0)
+                .height(TABS_TRIGGER_HEIGHT)
                 .align_items_center()
                 .justify_content_center()
                 .padding([spacing::XXS, spacing::SM, spacing::XXS, spacing::SM])
                 .border_radius([radius::MD, radius::MD, radius::MD, radius::MD])
                 .border_width([1.0, 1.0, 1.0, 1.0])
-                .border_color(0x00000000)
+                .border_color(TRANSPARENT)
+                .clear_shadow()
                 .background_color(if is_active {
                     color::BACKGROUND
                 } else {
-                    0x00000000
+                    TRANSPARENT
                 })
                 .on_click(move || on_change(index))
                 .children(vec![body_text::<Message>(label)

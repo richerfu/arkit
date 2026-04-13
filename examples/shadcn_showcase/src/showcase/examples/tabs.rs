@@ -1,4 +1,3 @@
-use super::super::layout::max_width;
 use super::shared::{top_start_canvas, DemoContext};
 use crate::prelude::*;
 use crate::Message;
@@ -6,8 +5,10 @@ use arkit_shadcn as shadcn;
 
 pub(crate) fn render(ctx: DemoContext) -> Element {
     top_start_canvas(
-        max_width(
-            shadcn::tabs(
+        arkit::row_component()
+            .percent_width(1.0)
+            .max_width_constraint(384.0)
+            .children(vec![shadcn::tabs(
                 vec![String::from("Feedback"), String::from("Survey")],
                 ctx.active_tab,
                 Message::SetActiveTab,
@@ -78,9 +79,8 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                             .into()]),
                     ]),
                 ],
-            ),
-            384.0,
-        ),
+            )])
+            .into(),
         24.0,
     )
 }

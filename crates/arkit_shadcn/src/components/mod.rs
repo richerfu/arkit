@@ -14,6 +14,11 @@ use crate::styles::{
 use crate::theme::{color, radius, spacing, typography};
 use std::rc::Rc;
 
+const FIX_AT_IDEAL_SIZE_POLICY: i32 = 2;
+const TABS_LIST_HEIGHT: f32 = 36.0;
+const TABS_LIST_PADDING: f32 = 3.0;
+const TABS_TRIGGER_HEIGHT: f32 = TABS_LIST_HEIGHT - (TABS_LIST_PADDING * 2.0);
+
 pub(crate) fn touch_activate<Message: 'static, AppTheme: 'static>(
     row: RowElement<Message, AppTheme>,
     on_activate: impl Fn() + 'static,
@@ -290,9 +295,14 @@ pub(crate) fn rounded_tabs_list_surface<Message>(
     element: RowElement<Message>,
 ) -> RowElement<Message> {
     element
-        .padding(3.0)
-        .height(36.0)
+        .attr(
+            ArkUINodeAttributeType::WidthLayoutpolicy,
+            FIX_AT_IDEAL_SIZE_POLICY,
+        )
+        .padding(TABS_LIST_PADDING)
+        .height(TABS_LIST_HEIGHT)
         .align_items_center()
+        .justify_content_center()
         .border_radius(radius::LG)
         .background_color(color::MUTED)
 }
