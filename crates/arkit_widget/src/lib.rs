@@ -33,8 +33,8 @@ pub use render_impl::{
     text_area_component, text_component, text_input, text_input_component, toggle,
     toggle_component, Attribute as ArkUINodeAttributeType,
     AttributeValue as ArkUINodeAttributeItem, BorderStyle, ButtonType, Element, FontStyle,
-    HitTestBehavior, ItemAlignment, JustifyContent, MountedNode, Node, ObjectFit, Renderer,
-    UiState, Visibility,
+    HitTestBehavior, ItemAlignment, JustifyContent, MountedNode, Node, ObjectFit,
+    ProgressLinearStyle, ProgressType, Renderer, UiState, Visibility,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -110,7 +110,7 @@ pub mod prelude {
         FontWeight, HitTestBehavior, Horizontal, ItemAlignment, JustifyContent, LayoutFrame,
         LayoutSize, Length, LifecycleEvent, ModalOverlaySpec, ModalPresentation,
         NativeOverlayPlacement, NodeCustomEvent, NodeCustomEventType, NodeEventType, ObjectFit,
-        OverlayDismissMode, OverlayStrategy, Padding, ShadowStyle, Size, TextAlignment, Theme,
-        UiState, Vertical, Visibility,
+        OverlayDismissMode, OverlayStrategy, Padding, ProgressLinearStyle, ProgressType,
+        ShadowStyle, Size, TextAlignment, Theme, UiState, Vertical, Visibility,
     };
 }
