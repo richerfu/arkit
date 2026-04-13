@@ -723,6 +723,21 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
         })
     }
 
+    fn attr_bool(&self, attr: ArkUINodeAttributeType) -> Option<bool> {
+        self.attr_value(attr).and_then(|value| match value {
+            ArkUINodeAttributeItem::NumberValue(values) => {
+                values.first().map(|value| match value {
+                    ArkUINodeAttributeNumber::Float(value) => *value != 0.0,
+                    ArkUINodeAttributeNumber::Int(value) => *value != 0,
+                    ArkUINodeAttributeNumber::Uint(value) => *value != 0,
+                })
+            }
+            ArkUINodeAttributeItem::String(_)
+            | ArkUINodeAttributeItem::Object(_)
+            | ArkUINodeAttributeItem::Composite(_) => None,
+        })
+    }
+
     fn attr_value(&self, attr: ArkUINodeAttributeType) -> Option<&ArkUINodeAttributeItem> {
         self.patch_attrs
             .iter()
@@ -1532,9 +1547,14 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
                     arkit_runtime::dispatch(handler(event.i32_value(0).unwrap_or_default() != 0));
                 })
             }
-            NodeKind::Toggle => self.on_event(NodeEventType::ToggleOnChange, move |event| {
-                arkit_runtime::dispatch(handler(event.i32_value(0).unwrap_or_default() != 0));
-            }),
+            NodeKind::Toggle => {
+                let checked = self
+                    .attr_bool(ArkUINodeAttributeType::ToggleValue)
+                    .unwrap_or(false);
+                self.on_event(NodeEventType::OnClick, move |_| {
+                    arkit_runtime::dispatch(handler(!checked));
+                })
+            }
             NodeKind::Radio => self.on_event(NodeEventType::RadioEventOnChange, move |event| {
                 arkit_runtime::dispatch(handler(event.i32_value(0).unwrap_or_default() != 0));
             }),
@@ -1550,9 +1570,14 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
                     handler(event.i32_value(0).unwrap_or_default() != 0);
                 })
             }
-            NodeKind::Toggle => self.on_event(NodeEventType::ToggleOnChange, move |event| {
-                handler(event.i32_value(0).unwrap_or_default() != 0);
-            }),
+            NodeKind::Toggle => {
+                let checked = self
+                    .attr_bool(ArkUINodeAttributeType::ToggleValue)
+                    .unwrap_or(false);
+                self.on_event(NodeEventType::OnClick, move |_| {
+                    handler(!checked);
+                })
+            }
             NodeKind::Radio => self.on_event(NodeEventType::RadioEventOnChange, move |event| {
                 handler(event.i32_value(0).unwrap_or_default() != 0);
             }),
