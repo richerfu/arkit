@@ -277,7 +277,7 @@ pub(crate) fn rounded_menubar_surface<Message>(
     element: RowElement<Message>,
 ) -> RowElement<Message> {
     element
-        .padding(3.0)
+        .padding(spacing::XXS)
         .height(36.0)
         .align_items_center()
         .border_radius(radius::MD)

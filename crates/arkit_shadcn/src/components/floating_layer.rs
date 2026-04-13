@@ -11,6 +11,7 @@ fn floating_spec(
     open: bool,
     side: FloatingSide,
     align: FloatingAlign,
+    offset_vp: f32,
     on_dismiss: bool,
     pass_through_dismiss: bool,
     match_trigger_width: bool,
@@ -20,7 +21,7 @@ fn floating_spec(
         open,
         side,
         align,
-        offset_vp: FLOATING_SIDE_OFFSET_VP,
+        offset_vp,
         match_trigger_width,
         dismiss_mode: if on_dismiss {
             if pass_through_dismiss {
@@ -57,6 +58,7 @@ pub(crate) fn floating_panel_aligned<Message: 'static>(
             open,
             side,
             align,
+            FLOATING_SIDE_OFFSET_VP,
             on_dismiss.is_some(),
             pass_through_dismiss,
             false,
@@ -73,6 +75,7 @@ pub(crate) fn floating_panel_aligned_with_builder<Message: 'static>(
     open: bool,
     side: FloatingSide,
     align: FloatingAlign,
+    offset_vp: f32,
     panel_builder: Rc<dyn Fn(Option<f32>) -> Element<Message>>,
     on_dismiss: Option<Rc<dyn Fn()>>,
     pass_through_dismiss: bool,
@@ -85,6 +88,7 @@ pub(crate) fn floating_panel_aligned_with_builder<Message: 'static>(
             open,
             side,
             align,
+            offset_vp,
             on_dismiss.is_some(),
             pass_through_dismiss,
             false,
@@ -147,7 +151,16 @@ where
     arkit::floating_overlay(
         trigger,
         if open { Some(panel) } else { None },
-        floating_spec(open, side, align, false, false, false, true),
+        floating_spec(
+            open,
+            side,
+            align,
+            FLOATING_SIDE_OFFSET_VP,
+            false,
+            false,
+            false,
+            true,
+        ),
         None,
     )
 }
@@ -162,7 +175,16 @@ pub(crate) fn floating_panel_with_builder<Message: 'static>(
 ) -> Element<Message> {
     arkit_widget::floating_overlay_with_builder_and_surfaces(
         trigger,
-        floating_spec(open, side, align, on_dismiss.is_some(), false, true, false),
+        floating_spec(
+            open,
+            side,
+            align,
+            FLOATING_SIDE_OFFSET_VP,
+            on_dismiss.is_some(),
+            false,
+            true,
+            false,
+        ),
         panel_builder,
         on_dismiss,
         Vec::new(),

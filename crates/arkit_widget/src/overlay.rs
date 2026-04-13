@@ -18,7 +18,9 @@ use ohos_display_binding::default_display_virtual_pixel_ratio;
 const FLOATING_LAYOUT_EPSILON: f32 = 0.5;
 const FLOATING_HIDDEN_POSITION_VP: f32 = -10_000.0;
 const TRANSPARENT: u32 = 0x00000000;
-const WRAP_CONTENT_POLICY: i32 = 1;
+// wrapContent is constrained by the full-screen portal stack; floating panels
+// need their unconstrained ideal size so overlong content does not become viewport-width.
+const FIX_AT_IDEAL_SIZE_POLICY: i32 = 2;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct LayoutSize {
@@ -560,6 +562,7 @@ fn vp_to_px(value: f32) -> f32 {
 fn floating_position(
     trigger: LayoutFrame,
     panel: LayoutSize,
+    container: LayoutFrame,
     side: FloatingSide,
     align: FloatingAlign,
     offset_vp: f32,
@@ -569,10 +572,27 @@ fn floating_position(
         FloatingAlign::Start => trigger.x,
         FloatingAlign::Center => trigger.x + ((trigger.width - panel.width) / 2.0),
     };
-    match side {
+    let [x, y] = match side {
         FloatingSide::Right => [trigger.x + trigger.width + side_offset, trigger.y],
         FloatingSide::Top => [aligned_x, trigger.y - panel.height - side_offset],
         FloatingSide::Bottom => [aligned_x, trigger.y + trigger.height + side_offset],
+    };
+
+    [
+        clamp_floating_axis(x, container.x, container.x + container.width - panel.width),
+        clamp_floating_axis(
+            y,
+            container.y,
+            container.y + container.height - panel.height,
+        ),
+    ]
+}
+
+fn clamp_floating_axis(value: f32, min: f32, max: f32) -> f32 {
+    if max < min {
+        min
+    } else {
+        value.clamp(min, max)
     }
 }
 
@@ -587,8 +607,14 @@ fn apply_floating_position(state: &FloatingState) {
 
     if let Some(column) = state.nodes.position_column.borrow().as_ref() {
         let position: ArkUINodeAttributeItem = if ready {
-            let [px_x, px_y] =
-                floating_position(trigger, panel_size, spec.side, spec.align, spec.offset_vp);
+            let [px_x, px_y] = floating_position(
+                trigger,
+                panel_size,
+                container,
+                spec.side,
+                spec.align,
+                spec.offset_vp,
+            );
             surface_frame = LayoutFrame {
                 x: px_x,
                 y: px_y,
@@ -730,11 +756,11 @@ where
         column_component::<Message, AppTheme>()
             .attr(
                 ArkUINodeAttributeType::WidthLayoutpolicy,
-                WRAP_CONTENT_POLICY,
+                FIX_AT_IDEAL_SIZE_POLICY,
             )
             .attr(
                 ArkUINodeAttributeType::HeightLayoutpolicy,
-                WRAP_CONTENT_POLICY,
+                FIX_AT_IDEAL_SIZE_POLICY,
             )
             .attr(
                 ArkUINodeAttributeType::Position,
@@ -754,11 +780,11 @@ where
             .children(vec![stack_component::<Message, AppTheme>()
                 .attr(
                     ArkUINodeAttributeType::WidthLayoutpolicy,
-                    WRAP_CONTENT_POLICY,
+                    FIX_AT_IDEAL_SIZE_POLICY,
                 )
                 .attr(
                     ArkUINodeAttributeType::HeightLayoutpolicy,
-                    WRAP_CONTENT_POLICY,
+                    FIX_AT_IDEAL_SIZE_POLICY,
                 )
                 .attr(ArkUINodeAttributeType::Clip, false)
                 .with_patch({
@@ -798,8 +824,11 @@ where
     let container_on_change: Rc<dyn Fn(LayoutFrame)> = Rc::new({
         let state = state.clone();
         move |frame| {
-            state.container_offset.set(frame);
+            let changed = state.container_offset.set_if_changed(frame);
             apply_floating_position(&state);
+            if changed && state.spec.get().open {
+                request_runtime_rerender();
+            }
         }
     });
 

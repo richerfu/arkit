@@ -4,6 +4,7 @@ use std::rc::Rc;
 
 const MENU_PANEL_WIDTH: f32 = 224.0;
 const SUBMENU_PANEL_WIDTH: f32 = MENU_PANEL_WIDTH - (spacing::XXS * 2.0);
+const MENU_PANEL_SIDE_OFFSET: f32 = spacing::SM;
 const MENUBAR_ITEM_TRANSPARENT: u32 = 0x00000000;
 
 pub type MenubarEntry = MenuEntry;
@@ -29,7 +30,7 @@ fn menubar_trigger_surface<Message: 'static>(
         .height(28.0)
         .align_items_center()
         .justify_content_center()
-        .padding([6.0, spacing::MD, 6.0, spacing::MD])
+        .padding([spacing::XXS, spacing::SM, spacing::XXS, spacing::SM])
         .border_radius([radius::SM, radius::SM, radius::SM, radius::SM])
         .background_color(if active {
             color::ACCENT
@@ -94,6 +95,7 @@ where
                 MenuStyle {
                     width: MENU_PANEL_WIDTH,
                     submenu_width: SUBMENU_PANEL_WIDTH,
+                    side_offset_vp: MENU_PANEL_SIDE_OFFSET,
                 },
             )
         })

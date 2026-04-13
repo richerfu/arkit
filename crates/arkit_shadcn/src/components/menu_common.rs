@@ -12,6 +12,11 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 pub(crate) const TRANSPARENT: u32 = 0x00000000;
+const MENU_PANEL_HORIZONTAL_PADDING: f32 = spacing::XXS * 2.0;
+const MENU_PANEL_MAX_SIZE: f32 = 100_000.0;
+const FIX_AT_IDEAL_SIZE_POLICY: i32 = 2;
+const MENU_TEXT_MAX_LINES: i32 = 1;
+const MENU_TRAILING_GAP: f32 = spacing::SM;
 
 type ActionCallback = Rc<dyn Fn()>;
 type ToggleCallback = Rc<dyn Fn(bool)>;
@@ -21,6 +26,7 @@ type SelectCallback = Rc<dyn Fn(String)>;
 pub(crate) struct MenuStyle {
     pub(crate) width: f32,
     pub(crate) submenu_width: f32,
+    pub(crate) side_offset_vp: f32,
 }
 
 #[derive(Clone)]
@@ -232,6 +238,7 @@ impl<Message: 'static> advanced::Widget<Message, arkit::Theme, arkit::Renderer>
         };
         let panel_items = self.items.clone();
         let panel_style = self.style.clone();
+        let panel_side_offset_vp = self.style.side_offset_vp;
         let panel_builder = Rc::new(move |_trigger_width: Option<f32>| {
             menu_content_with_width(
                 panel_style.width,
@@ -244,6 +251,7 @@ impl<Message: 'static> advanced::Widget<Message, arkit::Theme, arkit::Renderer>
             self.open,
             FloatingSide::Bottom,
             FloatingAlign::Start,
+            panel_side_offset_vp,
             panel_builder,
             Some(dismiss),
             false,
@@ -300,6 +308,7 @@ impl<Message: 'static> advanced::Widget<Message, arkit::Theme, arkit::Renderer>
             title,
             self.inset,
             submenu_open,
+            menu_row_min_width(&self.context.style),
             Rc::new(move || {
                 toggle_menu_branch(&toggle_state, &toggle_path);
                 request_widget_rerender();
@@ -319,9 +328,14 @@ impl<Message: 'static> advanced::Widget<Message, arkit::Theme, arkit::Renderer>
                 style: self.context.style.clone(),
             };
             let sub_items = render_menu_entries::<Message>(self.items.clone(), submenu_context);
+            let min_width = menu_submenu_min_width(&self.context.style);
 
             let sub_content = arkit::column_component::<Message, arkit::Theme>()
-                .percent_width(1.0)
+                .attr(
+                    ArkUINodeAttributeType::WidthLayoutpolicy,
+                    FIX_AT_IDEAL_SIZE_POLICY,
+                )
+                .constraint_size(min_width, MENU_PANEL_MAX_SIZE, 0.0, MENU_PANEL_MAX_SIZE)
                 .align_items_start()
                 .padding([spacing::XXS, spacing::XXS, spacing::XXS, spacing::XXS])
                 .border_radius([radius::SM, radius::SM, radius::SM, radius::SM])
@@ -333,7 +347,16 @@ impl<Message: 'static> advanced::Widget<Message, arkit::Theme, arkit::Renderer>
 
         Some(
             arkit::column_component::<Message, arkit::Theme>()
-                .percent_width(1.0)
+                .attr(
+                    ArkUINodeAttributeType::WidthLayoutpolicy,
+                    FIX_AT_IDEAL_SIZE_POLICY,
+                )
+                .constraint_size(
+                    menu_subtree_min_width(&self.context.style),
+                    MENU_PANEL_MAX_SIZE,
+                    0.0,
+                    MENU_PANEL_MAX_SIZE,
+                )
                 .align_items_start()
                 .children(column_children)
                 .into(),
@@ -393,8 +416,8 @@ fn render_menu_entry<Message: 'static>(
         }),
         MenuEntry::Checkbox(entry) => render_checkbox_entry(entry, &context),
         MenuEntry::Radio(entry) => render_radio_entry(entry, &context),
-        MenuEntry::Label(entry) => render_label_entry(entry),
-        MenuEntry::Separator => menu_separator(),
+        MenuEntry::Label(entry) => render_label_entry(entry, &context),
+        MenuEntry::Separator => menu_separator(menu_row_min_width(&context.style)),
     }
 }
 
@@ -402,27 +425,26 @@ fn render_action_entry<Message: 'static>(
     entry: MenuActionEntry,
     context: &MenuRenderContext,
 ) -> Element<Message> {
-    let mut children = Vec::new();
-    if entry.inset {
-        children.push(leading_slot(None));
-    }
-    children.push(fill_slot(item_text(
-        entry.title,
-        if entry.destructive {
-            color::DESTRUCTIVE
-        } else {
-            color::POPOVER_FOREGROUND
-        },
-        FontWeight::W400,
-    )));
-    if let Some(shortcut) = entry.shortcut {
-        children.push(shortcut_text(shortcut));
-    }
+    let leading = entry.inset.then(|| leading_slot(None));
+    let children = menu_row_children(
+        leading,
+        item_text(
+            entry.title,
+            if entry.destructive {
+                color::DESTRUCTIVE
+            } else {
+                color::POPOVER_FOREGROUND
+            },
+            FontWeight::W400,
+        ),
+        entry.shortcut.map(shortcut_text),
+    );
 
     let on_select = entry.on_select.clone();
     let dismiss = context.dismiss.clone();
     let row = interactive_menu_row(
         children,
+        menu_row_min_width(&context.style),
         entry.disabled,
         if entry.destructive {
             MenuInteractionVariant::Destructive
@@ -446,12 +468,12 @@ fn render_action_entry<Message: 'static>(
 
 fn render_checkbox_entry<Message: 'static>(
     entry: MenuCheckboxEntry,
-    _context: &MenuRenderContext,
+    context: &MenuRenderContext,
 ) -> Element<Message> {
     let on_toggle = entry.on_toggle.clone();
     interactive_menu_row(
-        vec![
-            leading_slot(if entry.checked {
+        menu_row_children(
+            Some(leading_slot(if entry.checked {
                 Some(
                     lucide::icon("check")
                         .size(16.0)
@@ -461,13 +483,11 @@ fn render_checkbox_entry<Message: 'static>(
                 )
             } else {
                 None
-            }),
-            fill_slot(item_text(
-                entry.title,
-                color::POPOVER_FOREGROUND,
-                FontWeight::W400,
-            )),
-        ],
+            })),
+            item_text(entry.title, color::POPOVER_FOREGROUND, FontWeight::W400),
+            None,
+        ),
+        menu_row_min_width(&context.style),
         false,
         MenuInteractionVariant::Default,
         None,
@@ -480,14 +500,14 @@ fn render_checkbox_entry<Message: 'static>(
 
 fn render_radio_entry<Message: 'static>(
     entry: MenuRadioEntry,
-    _context: &MenuRenderContext,
+    context: &MenuRenderContext,
 ) -> Element<Message> {
     let on_select = entry.on_select.clone();
     let selected = entry.selected == entry.value;
     let value = entry.value.clone();
     interactive_menu_row(
-        vec![
-            leading_slot(if selected {
+        menu_row_children(
+            Some(leading_slot(if selected {
                 Some(
                     arkit::row_component()
                         .width(8.0)
@@ -498,13 +518,11 @@ fn render_radio_entry<Message: 'static>(
                 )
             } else {
                 None
-            }),
-            fill_slot(item_text(
-                entry.title,
-                color::POPOVER_FOREGROUND,
-                FontWeight::W400,
-            )),
-        ],
+            })),
+            item_text(entry.title, color::POPOVER_FOREGROUND, FontWeight::W400),
+            None,
+        ),
+        menu_row_min_width(&context.style),
         false,
         MenuInteractionVariant::Default,
         None,
@@ -515,42 +533,40 @@ fn render_radio_entry<Message: 'static>(
     .into()
 }
 
-fn render_label_entry<Message: 'static>(entry: MenuLabelEntry) -> Element<Message> {
-    let mut children = Vec::new();
-    if entry.inset {
-        children.push(leading_slot(None));
-    }
-    children.push(fill_slot(item_text(
-        entry.title,
-        color::FOREGROUND,
-        FontWeight::W500,
-    )));
-    menu_row(children, false).into()
+fn render_label_entry<Message: 'static>(
+    entry: MenuLabelEntry,
+    context: &MenuRenderContext,
+) -> Element<Message> {
+    let leading = entry.inset.then(|| leading_slot(None));
+    let children = menu_row_children(
+        leading,
+        item_text(entry.title, color::FOREGROUND, FontWeight::W500),
+        None,
+    );
+    menu_row(children, menu_row_min_width(&context.style), false).into()
 }
 
 fn submenu_trigger_row<Message: 'static>(
     title: String,
     inset: bool,
     active: bool,
+    min_width: f32,
     on_click: Rc<dyn Fn()>,
 ) -> Element<Message> {
-    let mut children = Vec::new();
-    if inset {
-        children.push(leading_slot(None));
-    }
-    children.push(fill_slot(item_text(
-        title,
-        color::POPOVER_FOREGROUND,
-        FontWeight::W400,
-    )));
-    children.push(
-        lucide::icon(if active { "chevron-up" } else { "chevron-down" })
-            .size(16.0)
-            .color(color::FOREGROUND)
-            .render::<Message, arkit::Theme>(),
+    let leading = inset.then(|| leading_slot(None));
+    let children = menu_row_children(
+        leading,
+        item_text(title, color::POPOVER_FOREGROUND, FontWeight::W400),
+        Some(
+            lucide::icon(if active { "chevron-up" } else { "chevron-down" })
+                .size(16.0)
+                .color(color::FOREGROUND)
+                .render::<Message, arkit::Theme>(),
+        ),
     );
     interactive_menu_row(
         children,
+        min_width,
         false,
         MenuInteractionVariant::Default,
         Some(active),
@@ -632,7 +648,11 @@ pub(crate) fn menu_content_with_width<Message: 'static>(
 ) -> Element<Message> {
     shadow_sm(
         arkit::column_component::<Message, arkit::Theme>()
-            .width(width)
+            .attr(
+                ArkUINodeAttributeType::WidthLayoutpolicy,
+                FIX_AT_IDEAL_SIZE_POLICY,
+            )
+            .constraint_size(width, MENU_PANEL_MAX_SIZE, 0.0, MENU_PANEL_MAX_SIZE)
             .align_items_start()
             .padding([spacing::XXS, spacing::XXS, spacing::XXS, spacing::XXS])
             .border_radius([radius::LG, radius::LG, radius::LG, radius::LG])
@@ -655,6 +675,7 @@ pub(crate) fn item_text<Message: 'static>(
         .font_color(color_value)
         .font_weight(weight)
         .line_height(20.0)
+        .attr(ArkUINodeAttributeType::TextMaxLines, MENU_TEXT_MAX_LINES)
         .text_align(TextAlignment::Start)
         .into()
 }
@@ -665,6 +686,7 @@ pub(crate) fn shortcut_text<Message: 'static>(content: impl Into<String>) -> Ele
         .font_color(color::MUTED_FOREGROUND)
         .line_height(16.0)
         .text_letter_spacing(1.2_f32)
+        .attr(ArkUINodeAttributeType::TextMaxLines, MENU_TEXT_MAX_LINES)
         .text_align(TextAlignment::Start)
         .into()
 }
@@ -681,26 +703,70 @@ pub(crate) fn leading_slot<Message: 'static>(child: Option<Element<Message>>) ->
     }
 
     arkit::row_component::<Message, arkit::Theme>()
+        .attr(
+            ArkUINodeAttributeType::WidthLayoutpolicy,
+            FIX_AT_IDEAL_SIZE_POLICY,
+        )
         .margin([0.0, 8.0, 0.0, 0.0])
         .children(vec![slot.into()])
         .into()
 }
 
-pub(crate) fn fill_slot<Message: 'static>(child: Element<Message>) -> Element<Message> {
+fn menu_row_children<Message: 'static>(
+    leading: Option<Element<Message>>,
+    label: Element<Message>,
+    trailing: Option<Element<Message>>,
+) -> Vec<Element<Message>> {
+    let mut leading_children = Vec::new();
+    if let Some(leading) = leading {
+        leading_children.push(leading);
+    }
+    leading_children.push(label);
+
+    let mut children = vec![menu_row_leading_group(leading_children)];
+    if let Some(trailing) = trailing {
+        children.push(menu_row_trailing_group(trailing));
+    }
+    children
+}
+
+fn menu_row_leading_group<Message: 'static>(children: Vec<Element<Message>>) -> Element<Message> {
     arkit::row_component::<Message, arkit::Theme>()
-        .layout_weight(1.0_f32)
+        .attr(
+            ArkUINodeAttributeType::WidthLayoutpolicy,
+            FIX_AT_IDEAL_SIZE_POLICY,
+        )
+        .align_items_center()
+        .children(children)
+        .into()
+}
+
+fn menu_row_trailing_group<Message: 'static>(child: Element<Message>) -> Element<Message> {
+    arkit::row_component::<Message, arkit::Theme>()
+        .attr(
+            ArkUINodeAttributeType::WidthLayoutpolicy,
+            FIX_AT_IDEAL_SIZE_POLICY,
+        )
+        .align_items_center()
+        .margin([0.0, 0.0, 0.0, MENU_TRAILING_GAP])
         .children(vec![child])
         .into()
 }
 
 pub(crate) fn menu_row<Message: 'static>(
     children: Vec<Element<Message>>,
+    min_width: f32,
     disabled: bool,
 ) -> RowElement<Message> {
     let mut row = arkit::row_component::<Message, arkit::Theme>()
-        .percent_width(1.0)
+        .attr(
+            ArkUINodeAttributeType::WidthLayoutpolicy,
+            FIX_AT_IDEAL_SIZE_POLICY,
+        )
+        .constraint_size(min_width, MENU_PANEL_MAX_SIZE, 0.0, MENU_PANEL_MAX_SIZE)
         .height(32.0)
         .align_items_center()
+        .justify_content(arkit::JustifyContent::SpaceBetween)
         .padding([6.0, 8.0, 6.0, 8.0])
         .border_radius([radius::SM, radius::SM, radius::SM, radius::SM])
         .clip(true)
@@ -714,13 +780,29 @@ pub(crate) fn menu_row<Message: 'static>(
     row
 }
 
-pub(crate) fn menu_separator<Message: 'static>() -> Element<Message> {
+pub(crate) fn menu_separator<Message: 'static>(min_width: f32) -> Element<Message> {
     arkit::row_component::<Message, arkit::Theme>()
+        .attr(
+            ArkUINodeAttributeType::WidthLayoutpolicy,
+            FIX_AT_IDEAL_SIZE_POLICY,
+        )
+        .constraint_size(min_width, MENU_PANEL_MAX_SIZE, 0.0, MENU_PANEL_MAX_SIZE)
         .height(1.0)
-        .percent_width(1.0)
         .margin([4.0, 0.0, 4.0, 0.0])
         .background_color(color::BORDER)
         .into()
+}
+
+fn menu_row_min_width(style: &MenuStyle) -> f32 {
+    (style.width - MENU_PANEL_HORIZONTAL_PADDING).max(0.0)
+}
+
+fn menu_submenu_min_width(style: &MenuStyle) -> f32 {
+    style.submenu_width.max(0.0)
+}
+
+fn menu_subtree_min_width(style: &MenuStyle) -> f32 {
+    menu_row_min_width(style).max(menu_submenu_min_width(style))
 }
 
 fn menu_row_pressed_background(variant: MenuInteractionVariant) -> u32 {
@@ -732,6 +814,7 @@ fn menu_row_pressed_background(variant: MenuInteractionVariant) -> u32 {
 
 pub(crate) fn interactive_menu_row<Message: 'static>(
     children: Vec<Element<Message>>,
+    min_width: f32,
     disabled: bool,
     variant: MenuInteractionVariant,
     active: Option<bool>,
@@ -739,7 +822,7 @@ pub(crate) fn interactive_menu_row<Message: 'static>(
 ) -> RowElement<Message> {
     let runtime_node = Rc::new(RefCell::new(None::<RuntimeMenuRowNode>));
     let capture_node = runtime_node.clone();
-    let row = menu_row(children, disabled)
+    let row = menu_row(children, min_width, disabled)
         .background_color(if active.unwrap_or(false) {
             menu_row_pressed_background(variant)
         } else {

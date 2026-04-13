@@ -27,6 +27,7 @@ where
         MenuStyle {
             width: MENU_PANEL_WIDTH,
             submenu_width: SUBMENU_PANEL_WIDTH,
+            side_offset_vp: spacing::XXS,
         },
     )
 }
