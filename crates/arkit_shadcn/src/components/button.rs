@@ -2,31 +2,15 @@ use super::*;
 use arkit::ohos_arkui_binding::common::attribute::{
     ArkUINodeAttributeItem, ArkUINodeAttributeNumber,
 };
-use arkit::ohos_arkui_binding::common::node::ArkUINode;
-use arkit::ohos_arkui_binding::component::attribute::{
-    ArkUIAttributeBasic, ArkUICommonAttribute, ArkUICommonFontAttribute,
-};
 use arkit::ohos_arkui_binding::types::alignment::Alignment;
 use arkit::prelude::Padding;
-use arkit::{ShadowStyle, TextAlignment, UiState};
+use arkit::{ShadowStyle, TextAlignment};
 use arkit_icon as lucide;
-use std::cell::Cell;
-use std::rc::Rc;
 
 const TRANSPARENT: u32 = 0x00000000;
 const WHITE: u32 = 0xFFFFFFFF;
-const FONT_WEIGHT_MEDIUM: i32 = 4;
 const TEXT_DECORATION_NONE: i32 = 0;
-const TEXT_DECORATION_UNDERLINE: i32 = 1;
 const TEXT_DECORATION_STYLE_SOLID: i32 = 0;
-
-fn edge_all(value: f32) -> Vec<f32> {
-    vec![value, value, value, value]
-}
-
-fn color_all(value: u32) -> Vec<u32> {
-    vec![value, value, value, value]
-}
 
 fn disabled_opacity(disabled: bool) -> f32 {
     if disabled {
@@ -72,110 +56,6 @@ struct ButtonVariantStyle {
     shadow: bool,
 }
 
-#[derive(Debug, Clone, Copy)]
-struct ButtonInteractionStyle {
-    background: u32,
-    foreground: u32,
-    border_width: f32,
-    border_color: u32,
-    text_decoration: i32,
-}
-
-struct RuntimeButtonNode(ArkUINode);
-impl ArkUIAttributeBasic for RuntimeButtonNode {
-    fn raw(&self) -> &ArkUINode {
-        &self.0
-    }
-
-    fn borrow_mut(&mut self) -> &mut ArkUINode {
-        &mut self.0
-    }
-}
-
-impl ArkUICommonAttribute for RuntimeButtonNode {}
-impl ArkUICommonFontAttribute for RuntimeButtonNode {}
-
-#[derive(Default)]
-struct RuntimeButtonContentNodes {
-    texts: Vec<ArkUINode>,
-    images: Vec<ArkUINode>,
-}
-
-fn with_runtime_button_content(
-    node: &RuntimeButtonNode,
-    apply: impl FnOnce(&RuntimeButtonContentNodes),
-) {
-    let mut content = RuntimeButtonContentNodes::default();
-    collect_button_content_nodes(&node.0, &mut content);
-    apply(&content);
-}
-
-fn collect_button_content_nodes(node: &ArkUINode, content: &mut RuntimeButtonContentNodes) {
-    for child in node.children() {
-        let child = child.borrow();
-        if child
-            .get_attribute(ArkUINodeAttributeType::TextContent)
-            .is_ok()
-        {
-            content.texts.push(child.clone());
-        }
-        if child
-            .get_attribute(ArkUINodeAttributeType::ImageAlt)
-            .is_ok()
-        {
-            content.images.push(child.clone());
-        }
-        collect_button_content_nodes(&child, content);
-    }
-}
-
-fn apply_content_interaction_style(
-    content: &RuntimeButtonContentNodes,
-    style: ButtonInteractionStyle,
-) {
-    for text in &content.texts {
-        let _ = text.set_attribute(
-            ArkUINodeAttributeType::FontColor,
-            ArkUINodeAttributeItem::from(style.foreground),
-        );
-    }
-
-    for image in &content.images {
-        let _ = image.set_attribute(
-            ArkUINodeAttributeType::ColorBlend,
-            ArkUINodeAttributeItem::from(style.foreground),
-        );
-        let _ = image.set_attribute(
-            ArkUINodeAttributeType::ForegroundColor,
-            ArkUINodeAttributeItem::from(style.foreground),
-        );
-    }
-}
-
-fn restore_content_interaction_style(content: &RuntimeButtonContentNodes, normal_foreground: u32) {
-    for text in &content.texts {
-        let _ = text.set_attribute(
-            ArkUINodeAttributeType::FontColor,
-            ArkUINodeAttributeItem::from(normal_foreground),
-        );
-    }
-
-    for image in &content.images {
-        let _ = image.reset_attribute(ArkUINodeAttributeType::ColorBlend);
-        let _ = image.reset_attribute(ArkUINodeAttributeType::ForegroundColor);
-    }
-}
-
-fn apply_content_interaction_style_if_changed(
-    content: &RuntimeButtonContentNodes,
-    style: ButtonInteractionStyle,
-    current_foreground: u32,
-) {
-    if style.foreground != current_foreground {
-        apply_content_interaction_style(content, style);
-    }
-}
-
 fn retheme_button_content<Message: Send + 'static, AppTheme: 'static>(
     element: ButtonElement<Message, AppTheme>,
     foreground: u32,
@@ -202,7 +82,7 @@ fn retheme_button_content<Message: Send + 'static, AppTheme: 'static>(
 
 pub fn button<Message: Send + 'static>(label: impl Into<String>) -> ButtonElement<Message> {
     apply_button_size(
-        button_host(normal_button(label)),
+        apply_button_theme(button_host(normal_button(label)), ButtonVariant::Default),
         size_style(ButtonSize::Default),
     )
 }
@@ -221,72 +101,56 @@ fn icon_label_button<Message: Send + 'static>(
 ) -> ButtonElement<Message> {
     let label = label.into();
     let icon_name = icon_name.into();
-    button_host(normal_button_component())
+    let button = button_host(normal_button_component())
         .children(vec![button_content_row(
             Some(label),
             Some(icon_name),
             color::FOREGROUND,
             icon_size(size),
         )])
-        .size(size)
+        .size(size);
+
+    apply_button_theme(button, ButtonVariant::Default)
 }
 
 pub fn icon_button<Message: Send + 'static>(icon: impl Into<String>) -> ButtonElement<Message> {
-    button_host(normal_button_component())
+    let button = button_host(normal_button_component())
         .children(vec![button_content_row(
             None,
             Some(icon.into()),
             color::FOREGROUND,
             icon_size(ButtonSize::Icon),
         )])
-        .size(ButtonSize::Icon)
+        .size(ButtonSize::Icon);
+
+    apply_button_theme(button, ButtonVariant::Default)
 }
 
 pub fn normal_button_component<Message, AppTheme>() -> ButtonElement<Message, AppTheme> {
-    arkit::button_component().attr(
-        ArkUINodeAttributeType::ButtonType,
-        i32::from(ButtonType::Normal),
-    )
+    arkit::stack_component::<Message, AppTheme>()
 }
 
-pub fn normal_button<Message, AppTheme>(
+pub fn normal_button<Message: 'static, AppTheme: 'static>(
     label: impl Into<String>,
 ) -> ButtonElement<Message, AppTheme> {
-    normal_button_component().label(label)
+    normal_button_component().children(vec![arkit::text(label).into()])
 }
 
 fn button_host<Message, AppTheme>(
     element: ButtonElement<Message, AppTheme>,
 ) -> ButtonElement<Message, AppTheme> {
     element
-        .attr(ArkUINodeAttributeType::Focusable, false)
-        .attr(ArkUINodeAttributeType::FocusOnTouch, false)
-        .attr(ArkUINodeAttributeType::BackgroundColor, TRANSPARENT)
-        .attr(ArkUINodeAttributeType::Clip, true)
-        .attr(
-            ArkUINodeAttributeType::BorderStyle,
-            i32::from(BorderStyle::Solid),
-        )
-        .attr(
-            ArkUINodeAttributeType::Alignment,
-            i32::from(Alignment::Center),
-        )
-        .attr(ArkUINodeAttributeType::BorderRadius, edge_all(radius::MD))
-        .attr(
-            ArkUINodeAttributeType::Padding,
-            vec![
-                Padding::ZERO.top,
-                Padding::ZERO.right,
-                Padding::ZERO.bottom,
-                Padding::ZERO.left,
-            ],
-        )
-        .attr(ArkUINodeAttributeType::BorderWidth, edge_all(0.0))
-        .attr(ArkUINodeAttributeType::BorderColor, color_all(TRANSPARENT))
-        .attr(
-            ArkUINodeAttributeType::AlignSelf,
-            i32::from(ItemAlignment::Start),
-        )
+        .focusable(false)
+        .focus_on_touch(false)
+        .background_color(TRANSPARENT)
+        .border_style(BorderStyle::Solid)
+        .border_radius(radius::MD)
+        .clip(true)
+        .alignment(Alignment::Center)
+        .padding(Padding::ZERO)
+        .border_width(0.0)
+        .border_color(TRANSPARENT)
+        .align_self(ItemAlignment::Start)
 }
 
 fn apply_button_size<Message, AppTheme>(
@@ -343,58 +207,23 @@ fn apply_button_theme_with_content<Message: Send + 'static, AppTheme>(
     variant: ButtonVariant,
 ) -> ButtonElement<Message, AppTheme> {
     let variant_style = variant_style(variant);
-    let pressed_style = pressed_style(variant);
     let initial_text_decoration = TEXT_DECORATION_NONE;
 
     let button = element
-        .attr(ArkUINodeAttributeType::Clip, true)
-        .attr(ArkUINodeAttributeType::BorderRadius, edge_all(radius::MD))
-        .attr(
-            ArkUINodeAttributeType::BorderWidth,
-            edge_all(variant_style.border_width),
-        )
-        .patch_attr(
-            ArkUINodeAttributeType::BorderWidth,
-            edge_all(variant_style.border_width),
-        )
-        .attr(
-            ArkUINodeAttributeType::BorderColor,
-            color_all(variant_style.border_color),
-        )
-        .patch_attr(
-            ArkUINodeAttributeType::BorderColor,
-            color_all(variant_style.border_color),
-        )
-        .attr(
-            ArkUINodeAttributeType::BackgroundColor,
-            variant_style.background,
-        )
-        .patch_attr(
-            ArkUINodeAttributeType::BackgroundColor,
-            variant_style.background,
-        )
-        .attr(ArkUINodeAttributeType::FontWeight, FONT_WEIGHT_MEDIUM)
-        .patch_attr(ArkUINodeAttributeType::FontWeight, FONT_WEIGHT_MEDIUM)
-        .attr(ArkUINodeAttributeType::FontColor, variant_style.foreground)
-        .patch_attr(ArkUINodeAttributeType::FontColor, variant_style.foreground)
-        .attr(
-            ArkUINodeAttributeType::TextAlign,
-            i32::from(TextAlignment::Center),
-        )
-        .patch_attr(
-            ArkUINodeAttributeType::TextAlign,
-            i32::from(TextAlignment::Center),
-        )
-        .attr(
-            ArkUINodeAttributeType::TextDecoration,
-            text_decoration(initial_text_decoration, variant_style.foreground),
-        )
-        .patch_attr(
-            ArkUINodeAttributeType::TextDecoration,
-            text_decoration(initial_text_decoration, variant_style.foreground),
-        );
+        .border_radius(radius::MD)
+        .clip(true)
+        .border_width(variant_style.border_width)
+        .border_color(variant_style.border_color)
+        .background_color(variant_style.background)
+        .font_weight(FontWeight::W500)
+        .font_color(variant_style.foreground)
+        .text_align(TextAlignment::Center)
+        .text_decoration(text_decoration(
+            initial_text_decoration,
+            variant_style.foreground,
+        ));
 
-    finalize_button(button, variant_style, pressed_style)
+    finalize_button(button, variant_style)
 }
 
 pub trait ButtonStyleExt: Sized {
@@ -503,161 +332,10 @@ fn variant_style(variant: ButtonVariant) -> ButtonVariantStyle {
     }
 }
 
-fn blend_over_background(foreground: u32, background: u32, alpha_percent: u32) -> u32 {
-    let alpha = (alpha_percent.min(100) as f32) / 100.0;
-    let [_, fg_r, fg_g, fg_b] = foreground.to_be_bytes();
-    let [_, bg_r, bg_g, bg_b] = background.to_be_bytes();
-
-    let mix = |fg: u8, bg: u8| -> u8 {
-        ((fg as f32 * alpha) + (bg as f32 * (1.0 - alpha))).round() as u8
-    };
-
-    u32::from_be_bytes([0xFF, mix(fg_r, bg_r), mix(fg_g, bg_g), mix(fg_b, bg_b)])
-}
-
-fn pressed_style(variant: ButtonVariant) -> Option<ButtonInteractionStyle> {
-    match variant {
-        // active:bg-primary/90
-        ButtonVariant::Default => Some(ButtonInteractionStyle {
-            background: blend_over_background(color::PRIMARY, color::BACKGROUND, 90),
-            foreground: color::PRIMARY_FOREGROUND,
-            border_width: 0.0,
-            border_color: TRANSPARENT,
-            text_decoration: TEXT_DECORATION_NONE,
-        }),
-        // active:bg-secondary/80
-        ButtonVariant::Secondary => Some(ButtonInteractionStyle {
-            background: blend_over_background(color::SECONDARY, color::BACKGROUND, 80),
-            foreground: color::SECONDARY_FOREGROUND,
-            border_width: 0.0,
-            border_color: TRANSPARENT,
-            text_decoration: TEXT_DECORATION_NONE,
-        }),
-        // active:bg-accent, group-active:text-accent-foreground
-        ButtonVariant::Outline => Some(ButtonInteractionStyle {
-            background: color::ACCENT,
-            foreground: color::ACCENT_FOREGROUND,
-            border_width: 1.0,
-            border_color: color::BORDER,
-            text_decoration: TEXT_DECORATION_NONE,
-        }),
-        // active:bg-accent, group-active:text-accent-foreground
-        ButtonVariant::Ghost => Some(ButtonInteractionStyle {
-            background: color::ACCENT,
-            foreground: color::ACCENT_FOREGROUND,
-            border_width: 0.0,
-            border_color: TRANSPARENT,
-            text_decoration: TEXT_DECORATION_NONE,
-        }),
-        // active:bg-destructive/90
-        ButtonVariant::Destructive => Some(ButtonInteractionStyle {
-            background: blend_over_background(color::DESTRUCTIVE, color::BACKGROUND, 90),
-            foreground: WHITE,
-            border_width: 0.0,
-            border_color: TRANSPARENT,
-            text_decoration: TEXT_DECORATION_NONE,
-        }),
-        // group-active:underline
-        ButtonVariant::Link => Some(ButtonInteractionStyle {
-            background: TRANSPARENT,
-            foreground: color::PRIMARY,
-            border_width: 0.0,
-            border_color: TRANSPARENT,
-            text_decoration: TEXT_DECORATION_UNDERLINE,
-        }),
-    }
-}
-
-fn interaction_style(style: ButtonVariantStyle) -> ButtonInteractionStyle {
-    ButtonInteractionStyle {
-        background: style.background,
-        foreground: style.foreground,
-        border_width: style.border_width,
-        border_color: style.border_color,
-        text_decoration: TEXT_DECORATION_NONE,
-    }
-}
-
 fn finalize_button<Message: Send + 'static, AppTheme>(
     mut button: ButtonElement<Message, AppTheme>,
     variant_style: ButtonVariantStyle,
-    pressed_style: Option<ButtonInteractionStyle>,
 ) -> ButtonElement<Message, AppTheme> {
-    let pressed_state = Rc::new(Cell::new(false));
-    let normal_style = ButtonInteractionStyle {
-        text_decoration: TEXT_DECORATION_NONE,
-        ..interaction_style(variant_style)
-    };
-    let normal_border_radius = Rc::new(edge_all(radius::MD));
-
-    {
-        let pressed_state = pressed_state.clone();
-        let normal_border_radius = normal_border_radius.clone();
-        button = button.with_patch(move |node| {
-            let runtime = RuntimeButtonNode(node.clone());
-            apply_runtime_button_state(
-                &runtime,
-                normal_style,
-                pressed_style,
-                pressed_state.get(),
-                normal_border_radius.as_slice(),
-            );
-            Ok(())
-        });
-    }
-
-    {
-        let pressed_state = pressed_state.clone();
-        let normal_border_radius = normal_border_radius.clone();
-        button = button.with_next_frame(move |node| {
-            let runtime = RuntimeButtonNode(node.clone());
-            apply_runtime_button_state(
-                &runtime,
-                normal_style,
-                pressed_style,
-                pressed_state.get(),
-                normal_border_radius.as_slice(),
-            );
-            Ok(())
-        });
-    }
-
-    {
-        let pressed_state = pressed_state.clone();
-        let normal_border_radius = normal_border_radius.clone();
-        button = button.with_next_idle(move |node| {
-            let runtime = RuntimeButtonNode(node.clone());
-            apply_runtime_button_state(
-                &runtime,
-                normal_style,
-                pressed_style,
-                pressed_state.get(),
-                normal_border_radius.as_slice(),
-            );
-            Ok(())
-        });
-    }
-
-    if let Some(pressed_style) = pressed_style {
-        let pressed_state = pressed_state.clone();
-        let normal_border_radius = normal_border_radius.clone();
-        button = button.on_supported_ui_states(UiState::PRESSED, true, move |node, current| {
-            let runtime = RuntimeButtonNode(node.clone());
-            if current.contains(UiState::PRESSED) {
-                pressed_state.set(true);
-            } else {
-                pressed_state.set(false);
-            }
-            apply_runtime_button_state(
-                &runtime,
-                normal_style,
-                Some(pressed_style),
-                pressed_state.get(),
-                normal_border_radius.as_slice(),
-            );
-        });
-    }
-
     button = if variant_style.shadow {
         subtle_button_shadow(button)
     } else {
@@ -665,8 +343,6 @@ fn finalize_button<Message: Send + 'static, AppTheme>(
     };
 
     button
-        .patch_attr(ArkUINodeAttributeType::Clip, true)
-        .patch_attr(ArkUINodeAttributeType::BorderRadius, edge_all(radius::MD))
 }
 
 fn button_content_row<Message: 'static>(
@@ -698,15 +374,15 @@ fn button_content_row<Message: 'static>(
             children.push(text);
         } else {
             children.push(
-                arkit::row_component()
-                    .margin_left(8.0)
+                arkit::row_component::<Message, arkit::Theme>()
+                    .margin([0.0, 0.0, 0.0, 8.0])
                     .children(vec![text])
                     .into(),
             );
         }
     }
 
-    arkit::row_component()
+    arkit::row_component::<Message, arkit::Theme>()
         .align_items_center()
         .justify_content_center()
         .children(children)
@@ -720,74 +396,6 @@ fn icon_size(size: ButtonSize) -> f32 {
         ButtonSize::Lg => 18.0,
         ButtonSize::Default => 16.0,
     }
-}
-
-fn apply_runtime_button_state(
-    node: &RuntimeButtonNode,
-    normal: ButtonInteractionStyle,
-    pressed: Option<ButtonInteractionStyle>,
-    is_pressed: bool,
-    border_radius: &[f32],
-) {
-    apply_button_interaction_state(node, normal, pressed, is_pressed, border_radius);
-    with_runtime_button_content(node, |content| {
-        if is_pressed {
-            if let Some(pressed) = pressed {
-                apply_content_interaction_style_if_changed(content, pressed, normal.foreground);
-                return;
-            }
-        }
-        restore_content_interaction_style(content, normal.foreground);
-    });
-}
-
-fn apply_button_interaction_state(
-    node: &RuntimeButtonNode,
-    normal: ButtonInteractionStyle,
-    pressed: Option<ButtonInteractionStyle>,
-    is_pressed: bool,
-    border_radius: &[f32],
-) {
-    if is_pressed {
-        if let Some(pressed) = pressed {
-            apply_interaction_style(node, pressed, border_radius);
-            return;
-        }
-    }
-    apply_interaction_style(node, normal, border_radius);
-}
-
-fn apply_interaction_style(
-    node: &RuntimeButtonNode,
-    style: ButtonInteractionStyle,
-    border_radius: &[f32],
-) {
-    let _ = node.set_attribute(
-        ArkUINodeAttributeType::Clip,
-        ArkUINodeAttributeItem::from(true),
-    );
-    let _ = node.set_attribute(
-        ArkUINodeAttributeType::BorderStyle,
-        ArkUINodeAttributeItem::from(i32::from(BorderStyle::Solid)),
-    );
-    let _ = node.background_color(style.background);
-    let _ = node.set_attribute(
-        ArkUINodeAttributeType::BorderWidth,
-        ArkUINodeAttributeItem::from(edge_all(style.border_width)),
-    );
-    let _ = node.set_attribute(
-        ArkUINodeAttributeType::BorderColor,
-        ArkUINodeAttributeItem::from(color_all(style.border_color)),
-    );
-    let _ = node.set_attribute(
-        ArkUINodeAttributeType::BorderRadius,
-        ArkUINodeAttributeItem::from(border_radius.to_vec()),
-    );
-    let _ = node.font_color(style.foreground);
-    let _ = node.set_attribute(
-        ArkUINodeAttributeType::TextDecoration,
-        text_decoration(style.text_decoration, style.foreground),
-    );
 }
 
 fn subtle_button_shadow<Message, AppTheme>(

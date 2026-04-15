@@ -130,13 +130,14 @@ pub(crate) fn toggle_surface<Message>(
     shadow_override: Option<bool>,
 ) -> ButtonElement<Message> {
     let visual = toggle_visual_style(variant, active);
-    let mut element = arkit::row_component::<Message, arkit::Theme>()
+    let mut element = arkit::stack_component::<Message, arkit::Theme>()
+        .focusable(false)
+        .focus_on_touch(false)
         .border_radius(border_radius)
         .clip(true)
         .border_style(BorderStyle::Solid)
         .align_self(ItemAlignment::Start)
-        .align_items_center()
-        .justify_content_center()
+        .alignment(arkit::ohos_arkui_binding::types::alignment::Alignment::Center)
         .border_width(border_width)
         .border_color_all(visual.border_color)
         .padding(size_style.padding)

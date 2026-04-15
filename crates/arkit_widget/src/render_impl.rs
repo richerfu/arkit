@@ -671,6 +671,34 @@ fn padding_edges(value: Padding) -> Vec<f32> {
     vec![value.top, value.right, value.bottom, value.left]
 }
 
+pub trait EdgeAttributeValue {
+    fn edge_values(self) -> Vec<f32>;
+}
+
+impl EdgeAttributeValue for f32 {
+    fn edge_values(self) -> Vec<f32> {
+        vec![self, self, self, self]
+    }
+}
+
+impl EdgeAttributeValue for [f32; 2] {
+    fn edge_values(self) -> Vec<f32> {
+        padding_edges(Padding::from(self))
+    }
+}
+
+impl EdgeAttributeValue for [f32; 4] {
+    fn edge_values(self) -> Vec<f32> {
+        self.to_vec()
+    }
+}
+
+impl EdgeAttributeValue for Padding {
+    fn edge_values(self) -> Vec<f32> {
+        padding_edges(self)
+    }
+}
+
 fn clone_attr_value(value: &ArkUINodeAttributeItem) -> ArkUINodeAttributeItem {
     match value {
         ArkUINodeAttributeItem::NumberValue(values) => {
@@ -1041,18 +1069,12 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
         self.builder_attr(ArkUINodeAttributeType::FocusOnTouch, value)
     }
 
-    pub fn border_radius(self, value: impl Into<Padding>) -> Self {
-        self.builder_attr(
-            ArkUINodeAttributeType::BorderRadius,
-            padding_edges(value.into()),
-        )
+    pub fn border_radius(self, value: impl EdgeAttributeValue) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::BorderRadius, value.edge_values())
     }
 
-    pub fn border_width(self, value: impl Into<Padding>) -> Self {
-        self.builder_attr(
-            ArkUINodeAttributeType::BorderWidth,
-            padding_edges(value.into()),
-        )
+    pub fn border_width(self, value: impl EdgeAttributeValue) -> Self {
+        self.builder_attr(ArkUINodeAttributeType::BorderWidth, value.edge_values())
     }
 
     pub fn border_color(self, value: u32) -> Self {
@@ -1074,6 +1096,28 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
         self.builder_attr(
             ArkUINodeAttributeType::Shadow,
             vec![shadow_style_value(value)],
+        )
+    }
+
+    pub fn custom_shadow(
+        self,
+        blur_radius: f32,
+        offset_x: f32,
+        offset_y: f32,
+        color: u32,
+        fill: bool,
+    ) -> Self {
+        self.builder_attr(
+            ArkUINodeAttributeType::CustomShadow,
+            vec![
+                ArkUINodeAttributeNumber::Float(blur_radius),
+                ArkUINodeAttributeNumber::Int(0),
+                ArkUINodeAttributeNumber::Float(offset_x),
+                ArkUINodeAttributeNumber::Float(offset_y),
+                ArkUINodeAttributeNumber::Int(0),
+                ArkUINodeAttributeNumber::Uint(color),
+                ArkUINodeAttributeNumber::Uint(u32::from(fill)),
+            ],
         )
     }
 
@@ -2064,13 +2108,33 @@ fn apply_attr_list(
     attrs: Vec<(ArkUINodeAttributeType, ArkUINodeAttributeItem)>,
 ) {
     let runtime = RuntimeNode(node);
-    for (attr, value) in attrs {
+    for (attr, value) in ordered_attrs_for_application(attrs) {
         if let Err(error) = runtime.set_attribute(attr, value) {
             ohos_hilog_binding::error(format!(
                 "renderer error: failed to set attribute {attr:?}: {error}"
             ));
         }
     }
+}
+
+fn ordered_attrs_for_application(
+    attrs: Vec<(ArkUINodeAttributeType, ArkUINodeAttributeItem)>,
+) -> Vec<(ArkUINodeAttributeType, ArkUINodeAttributeItem)> {
+    let mut ordered = Vec::with_capacity(attrs.len());
+    let mut deferred = Vec::new();
+
+    for (attr, value) in attrs {
+        match attr {
+            ArkUINodeAttributeType::BorderRadius
+            | ArkUINodeAttributeType::BorderRadiusPercent
+            | ArkUINodeAttributeType::Clip
+            | ArkUINodeAttributeType::ClipShape => deferred.push((attr, value)),
+            _ => ordered.push((attr, value)),
+        }
+    }
+
+    ordered.extend(deferred);
+    ordered
 }
 
 fn run_cleanups(mut cleanups: Vec<Cleanup>) {
@@ -2523,14 +2587,13 @@ fn desired_attrs(
 ) -> Vec<(ArkUINodeAttributeType, ArkUINodeAttributeItem)> {
     let mut attrs = Vec::new();
     for (attr, value) in init_attrs.into_iter().chain(patch_attrs) {
-        if let Some((_, current)) = attrs
-            .iter_mut()
-            .find(|(current_attr, _)| *current_attr == attr)
+        if let Some(index) = attrs
+            .iter()
+            .position(|(current_attr, _)| *current_attr == attr)
         {
-            *current = value;
-        } else {
-            attrs.push((attr, value));
+            attrs.remove(index);
         }
+        attrs.push((attr, value));
     }
     attrs
 }
@@ -3127,5 +3190,67 @@ where
 {
     fn from(value: Node<Message, AppTheme>) -> Self {
         arkit_core::Element::new(value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn desired_attrs_preserve_last_set_order() {
+        let attrs = desired_attrs(
+            vec![
+                (ArkUINodeAttributeType::Width, 10.0_f32.into()),
+                (ArkUINodeAttributeType::Height, 20.0_f32.into()),
+                (ArkUINodeAttributeType::Width, 30.0_f32.into()),
+            ],
+            vec![
+                (
+                    ArkUINodeAttributeType::BackgroundColor,
+                    0xFF000000_u32.into(),
+                ),
+                (ArkUINodeAttributeType::Height, 40.0_f32.into()),
+            ],
+        );
+
+        assert_eq!(
+            attr_types(&attrs),
+            vec![
+                ArkUINodeAttributeType::Width,
+                ArkUINodeAttributeType::BackgroundColor,
+                ArkUINodeAttributeType::Height,
+            ]
+        );
+    }
+
+    #[test]
+    fn scalar_edges_expand_to_explicit_edges() {
+        assert_eq!(6.0_f32.edge_values(), vec![6.0, 6.0, 6.0, 6.0]);
+    }
+
+    #[test]
+    fn visual_clipping_attrs_are_applied_after_size_and_background() {
+        let attrs = ordered_attrs_for_application(vec![
+            (ArkUINodeAttributeType::BorderRadius, 6.0_f32.into()),
+            (ArkUINodeAttributeType::Clip, true.into()),
+            (ArkUINodeAttributeType::Height, 40.0_f32.into()),
+            (ArkUINodeAttributeType::Padding, vec![0.0_f32, 8.0].into()),
+            (
+                ArkUINodeAttributeType::BackgroundColor,
+                0xFF000000_u32.into(),
+            ),
+        ]);
+
+        assert_eq!(
+            attr_types(&attrs),
+            vec![
+                ArkUINodeAttributeType::Height,
+                ArkUINodeAttributeType::Padding,
+                ArkUINodeAttributeType::BackgroundColor,
+                ArkUINodeAttributeType::BorderRadius,
+                ArkUINodeAttributeType::Clip,
+            ]
+        );
     }
 }

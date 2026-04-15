@@ -39,6 +39,10 @@ pub fn shadow_sm<Message, AppTheme>(element: Node<Message, AppTheme>) -> Node<Me
     element.shadow(ShadowStyle::OuterDefaultSm)
 }
 
+fn input_shadow_sm<Message, AppTheme>(element: Node<Message, AppTheme>) -> Node<Message, AppTheme> {
+    element.custom_shadow(2.0, 0.0, 1.0, 0x0D000000, false)
+}
+
 pub fn font_weight_medium<Message, AppTheme>(
     element: Node<Message, AppTheme>,
 ) -> Node<Message, AppTheme> {
@@ -68,7 +72,7 @@ pub fn card_surface<Message, AppTheme>(
 pub fn input_surface<Message, AppTheme>(
     element: Node<Message, AppTheme>,
 ) -> Node<Message, AppTheme> {
-    shadow_sm(rounded(
+    input_shadow_sm(rounded(
         border(
             padding_xy(
                 element.background_color(color::BACKGROUND),

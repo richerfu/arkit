@@ -1,7 +1,7 @@
 use arkit::ohos_arkui_binding::arkui_input_binding::UIInputAction;
 use arkit::prelude::ArkUINodeAttributeType;
 use arkit::{
-    BorderStyle, ButtonElement, ButtonType, CalendarPickerElement, DatePickerElement, Element,
+    BorderStyle, ButtonElement, CalendarPickerElement, DatePickerElement, Element,
     FontStyle, FontWeight, HitTestBehavior, ItemAlignment, JustifyContent, Node, ProgressElement,
     ProgressLinearStyle, ProgressType, RowElement, ScrollElement, SliderElement, SwiperElement,
     TextAreaElement, TextElement, TextInputElement, ToggleElement, Visibility,
