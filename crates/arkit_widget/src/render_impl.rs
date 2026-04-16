@@ -447,7 +447,7 @@ struct LongPressHandlerSpec {
 }
 
 struct LongPressCallbackContext {
-    callback: Rc<dyn Fn()>,
+    callback: Rc<RefCell<Rc<dyn Fn()>>>,
 }
 
 fn panic_payload_message(payload: &(dyn Any + Send)) -> String {
@@ -474,7 +474,7 @@ fn long_press_gesture_callback(event: GestureEventData) {
         return;
     };
     let context = unsafe { &*(data as *const LongPressCallbackContext) };
-    let callback = context.callback.clone();
+    let callback = context.callback.borrow().clone();
     run_guarded_ui_callback(
         "gesture error: on_long_press callback panicked",
         move || (callback.as_ref())(),
@@ -518,6 +518,7 @@ struct MountedRenderNode {
     patch_effect_count: usize,
     has_long_press: bool,
     long_press_cleanup: Option<Cleanup>,
+    long_press_callback: Option<Rc<RefCell<Rc<dyn Fn()>>>>,
     cleanups: Vec<Cleanup>,
     exit_effect: Option<ExitEffect>,
     exiting_children: Rc<RefCell<Vec<PendingExit>>>,
@@ -615,6 +616,7 @@ impl MountedRenderNode {
         patch_effect_count: usize,
         has_long_press: bool,
         long_press_cleanup: Option<Cleanup>,
+        long_press_callback: Option<Rc<RefCell<Rc<dyn Fn()>>>>,
         cleanups: Vec<Cleanup>,
         exit_effect: Option<ExitEffect>,
         pending_patch_attrs: Vec<(ArkUINodeAttributeType, ArkUINodeAttributeItem)>,
@@ -632,6 +634,7 @@ impl MountedRenderNode {
             patch_effect_count,
             has_long_press,
             long_press_cleanup,
+            long_press_callback,
             cleanups,
             exit_effect,
             exiting_children: Rc::new(RefCell::new(Vec::new())),
@@ -2709,10 +2712,11 @@ fn clear_removed_events(node: &mut ArkUINode, previous: &[NodeEventType], next: 
 fn mount_long_press(
     node: &mut ArkUINode,
     handler: &LongPressHandlerSpec,
-) -> ArkUIResult<Option<Cleanup>> {
+) -> ArkUIResult<(Option<Cleanup>, Rc<RefCell<Rc<dyn Fn()>>>)> {
     let gesture = Gesture::create_long_gesture(1, true, DEFAULT_LONG_PRESS_DURATION_MS)?;
+    let callback_state = Rc::new(RefCell::new(handler.callback.clone()));
     let callback_data = Box::into_raw(Box::new(LongPressCallbackContext {
-        callback: handler.callback.clone(),
+        callback: callback_state.clone(),
     }));
 
     if let Err(error) = gesture.on_gesture_with_data(
@@ -2737,14 +2741,15 @@ fn mount_long_press(
     }
 
     let mut cleanup_node = node.clone();
-    Ok(Some(Box::new(move || {
+    let cleanup = Box::new(move || {
         let runtime = RuntimeNode(&mut cleanup_node);
         let _ = runtime.remove_gesture(&gesture);
         let _ = gesture.dispose();
         unsafe {
             drop(Box::from_raw(callback_data));
         }
-    }) as Cleanup))
+    }) as Cleanup;
+    Ok((Some(cleanup), callback_state))
 }
 
 fn attach_child(parent: &mut ArkUINode, child: ArkUINode) -> ArkUIResult<()> {
@@ -2962,9 +2967,12 @@ where
 
     apply_event_handlers(&mut node, &event_handlers);
     let events = event_types(&event_handlers);
-    let long_press_cleanup = match long_press_handler.as_ref() {
-        Some(handler) => mount_long_press(&mut node, handler)?,
-        None => None,
+    let (long_press_cleanup, long_press_callback) = match long_press_handler.as_ref() {
+        Some(handler) => {
+            let (cleanup, callback) = mount_long_press(&mut node, handler)?;
+            (cleanup, Some(callback))
+        }
+        None => (None, None),
     };
 
     let mut mounted_children = Vec::with_capacity(children.len());
@@ -2990,6 +2998,7 @@ where
             patch_effect_count,
             has_long_press,
             long_press_cleanup,
+            long_press_callback,
             cleanups,
             exit_effect,
             pending_patch_attrs,
@@ -3042,13 +3051,24 @@ where
     apply_event_handlers(node, &event_handlers);
     mounted.events = next_events;
 
-    if let Some(cleanup) = mounted.long_press_cleanup.take() {
-        cleanup();
+    match (long_press_handler.as_ref(), mounted.long_press_callback.as_ref()) {
+        (Some(handler), Some(callback)) => {
+            callback.replace(handler.callback.clone());
+        }
+        (Some(handler), None) => {
+            let (cleanup, callback) = mount_long_press(node, handler)?;
+            mounted.long_press_cleanup = cleanup;
+            mounted.long_press_callback = Some(callback);
+        }
+        (None, Some(_)) => {
+            if let Some(cleanup) = mounted.long_press_cleanup.take() {
+                cleanup();
+            }
+            mounted.long_press_callback = None;
+        }
+        (None, None) => {}
     }
-    mounted.long_press_cleanup = match long_press_handler.as_ref() {
-        Some(handler) => mount_long_press(node, handler)?,
-        None => None,
-    };
+    mounted.has_long_press = long_press_handler.is_some();
 
     reconcile_children(node, mounted, children)
 }
