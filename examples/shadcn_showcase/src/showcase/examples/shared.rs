@@ -1,6 +1,7 @@
 use crate::prelude::*;
 use arkit_icon as lucide;
 use arkit_shadcn as shadcn;
+use shadcn::theme::{ThemeMode, ThemePreset};
 
 use super::super::layout::{component_canvas_with, fixed_width, h_stack, v_stack};
 use crate::Message;
@@ -32,6 +33,10 @@ pub(crate) struct DemoContext {
     pub checkbox_card: bool,
     pub toggle_group_values: Vec<String>,
     pub menubar_active: Option<usize>,
+    pub theme_menu_open: bool,
+    pub theme_mode: ThemeMode,
+    pub theme_preset: ThemePreset,
+    pub custom_theme: bool,
 }
 
 fn showcase_horizontal_padding(value: f32) -> f32 {
@@ -76,7 +81,7 @@ fn carousel_nav_surface(child: Element, disabled: bool) -> Element {
     // In the RN demo the icon button looks like: `h-10 w-10 rounded-md border bg-background
     // shadow-sm ...`. Keep the border/radius on the wrapper so the corners stay stable across
     // press + re-render (ArkUI may re-apply default button styles after interaction).
-    let radius = shadcn::theme::radius::MD;
+    let radius = shadcn::theme::radii().md;
     arkit::row_component()
         .width(40.0)
         .height(40.0)
@@ -88,10 +93,10 @@ fn carousel_nav_surface(child: Element, disabled: bool) -> Element {
             .height(40.0)
             .align_items_center()
             .justify_content_center()
-            .background_color(shadcn::theme::color::BACKGROUND)
+            .background_color(shadcn::theme::colors().background)
             .border_style(BorderStyle::Solid)
             .border_width([1.0, 1.0, 1.0, 1.0])
-            .border_color(shadcn::theme::color::BORDER)
+            .border_color(shadcn::theme::colors().border)
             .border_radius([radius, radius, radius, radius])
             .clip(true)
             .children(vec![child])
@@ -353,14 +358,14 @@ fn icon_tile(name: &str, icon: Element) -> Element {
                 .align_items_center()
                 .justify_content_center()
                 .border_radius([
-                    shadcn::theme::radius::MD,
-                    shadcn::theme::radius::MD,
-                    shadcn::theme::radius::MD,
-                    shadcn::theme::radius::MD,
+                    shadcn::theme::radii().md,
+                    shadcn::theme::radii().md,
+                    shadcn::theme::radii().md,
+                    shadcn::theme::radii().md,
                 ])
                 .border_width([1.0, 1.0, 1.0, 1.0])
-                .border_color(shadcn::theme::color::BORDER)
-                .background_color(shadcn::theme::color::BACKGROUND)
+                .border_color(shadcn::theme::colors().border)
+                .background_color(shadcn::theme::colors().background)
                 .children(vec![icon])
                 .into(),
             arkit::row_component()
@@ -384,21 +389,21 @@ pub(crate) fn icon_showcase() -> Element {
                             "mail",
                             lucide::icon("mail")
                                 .size(20.0)
-                                .color(shadcn::theme::color::FOREGROUND)
+                                .color(shadcn::theme::colors().foreground)
                                 .render(),
                         ),
                         icon_tile(
                             "chevron-right",
                             lucide::icon("chevron-right")
                                 .size(20.0)
-                                .color(shadcn::theme::color::FOREGROUND)
+                                .color(shadcn::theme::colors().foreground)
                                 .render(),
                         ),
                         icon_tile(
                             "search",
                             lucide::icon("search")
                                 .size(20.0)
-                                .color(shadcn::theme::color::FOREGROUND)
+                                .color(shadcn::theme::colors().foreground)
                                 .render(),
                         ),
                     ],
@@ -421,7 +426,7 @@ pub(crate) fn icon_showcase() -> Element {
                             "settings-2",
                             lucide::icon("settings-2")
                                 .size(20.0)
-                                .color(shadcn::theme::color::FOREGROUND)
+                                .color(shadcn::theme::colors().foreground)
                                 .render(),
                         ),
                     ],
@@ -590,12 +595,12 @@ pub(crate) fn text_carousel(page: i32) -> Element {
 
             fn code_chip(content: impl Into<String>, color: u32) -> Element {
                 arkit::row_component()
-                    .background_color(shadcn::theme::color::MUTED)
+                    .background_color(shadcn::theme::colors().muted)
                     .border_radius([
-                        shadcn::theme::radius::SM,
-                        shadcn::theme::radius::SM,
-                        shadcn::theme::radius::SM,
-                        shadcn::theme::radius::SM,
+                        shadcn::theme::radii().sm,
+                        shadcn::theme::radii().sm,
+                        shadcn::theme::radii().sm,
+                        shadcn::theme::radii().sm,
                     ])
                     .padding([3.0, 5.0, 3.0, 5.0])
                     .children(vec![arkit::text(content)

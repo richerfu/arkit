@@ -2533,7 +2533,7 @@ where
                 .percent_width(1.0)
                 .percent_height(1.0)
                 .attr(ArkUINodeAttributeType::Clip, false)
-                .hit_test_behavior(HitTestBehavior::Transparent)
+                .hit_test_behavior(HitTestBehavior::Default)
                 .attr(
                     ArkUINodeAttributeType::Alignment,
                     i32::from(Alignment::TopStart),

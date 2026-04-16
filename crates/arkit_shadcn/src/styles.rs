@@ -1,6 +1,6 @@
 use arkit::{FontWeight, Node, ShadowStyle, TextAlignment};
 
-use crate::theme::{color, radius, spacing, typography};
+use crate::theme::{colors, radii, spacing, typography};
 
 pub fn padding_xy<Message, AppTheme>(
     element: Node<Message, AppTheme>,
@@ -25,7 +25,7 @@ pub fn rounded<Message, AppTheme>(
 }
 
 pub fn border<Message, AppTheme>(element: Node<Message, AppTheme>) -> Node<Message, AppTheme> {
-    element.border_width(1.0).border_color(color::BORDER)
+    element.border_width(1.0).border_color(colors().border)
 }
 
 pub fn border_color<Message, AppTheme>(
@@ -61,11 +61,11 @@ pub fn card_surface<Message, AppTheme>(
     shadow_sm(rounded(
         border(
             element
-                .background_color(color::CARD)
-                .foreground_color(color::CARD_FOREGROUND)
+                .background_color(colors().card)
+                .foreground_color(colors().card_foreground)
                 .padding([0.0, spacing::XXL]),
         ),
-        radius::XL,
+        radii().xl,
     ))
 }
 
@@ -75,13 +75,13 @@ pub fn input_surface<Message, AppTheme>(
     input_shadow_sm(rounded(
         border(
             padding_xy(
-                element.background_color(color::BACKGROUND),
+                element.background_color(colors().background),
                 spacing::MD,
                 spacing::XXS,
             )
-            .foreground_color(color::FOREGROUND),
+            .foreground_color(colors().foreground),
         ),
-        radius::MD,
+        radii().md,
     ))
 }
 
@@ -91,10 +91,10 @@ pub fn panel_surface<Message, AppTheme>(
     shadow_sm(rounded(
         border(
             element
-                .background_color(color::POPOVER)
-                .foreground_color(color::POPOVER_FOREGROUND),
+                .background_color(colors().popover)
+                .foreground_color(colors().popover_foreground),
         ),
-        radius::MD,
+        radii().md,
     ))
 }
 
@@ -102,7 +102,7 @@ pub fn title_text<Message: 'static>(content: impl Into<String>) -> arkit::TextEl
     font_weight_semibold(
         arkit::text::<Message, arkit::Theme>(content)
             .font_size(typography::LG)
-            .font_color(color::FOREGROUND)
+            .font_color(colors().foreground)
             .line_height(20.0)
             .text_align(TextAlignment::Start),
     )
@@ -112,7 +112,7 @@ pub fn body_text<Message: 'static>(content: impl Into<String>) -> arkit::TextEle
     font_weight_medium(
         arkit::text::<Message, arkit::Theme>(content)
             .font_size(typography::SM)
-            .font_color(color::FOREGROUND)
+            .font_color(colors().foreground)
             .line_height(20.0)
             .text_align(TextAlignment::Start),
     )
@@ -123,7 +123,7 @@ pub fn body_text_regular<Message: 'static>(
 ) -> arkit::TextElement<Message> {
     arkit::text::<Message, arkit::Theme>(content)
         .font_size(typography::MD)
-        .font_color(color::FOREGROUND)
+        .font_color(colors().foreground)
         .line_height(20.0)
         .text_align(TextAlignment::Start)
 }
@@ -131,7 +131,7 @@ pub fn body_text_regular<Message: 'static>(
 pub fn muted_text<Message: 'static>(content: impl Into<String>) -> arkit::TextElement<Message> {
     arkit::text::<Message, arkit::Theme>(content)
         .font_size(typography::SM)
-        .font_color(color::MUTED_FOREGROUND)
+        .font_color(colors().muted_foreground)
         .line_height(20.0)
         .text_align(TextAlignment::Start)
 }

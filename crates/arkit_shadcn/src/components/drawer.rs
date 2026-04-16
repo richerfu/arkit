@@ -23,10 +23,10 @@ where
                         .percent_width(1.0)
                         .max_width_constraint(DRAWER_MAX_WIDTH)
                         .padding([spacing::LG, spacing::XXL, spacing::XXL, spacing::XXL])
-                        .border_radius([radius::LG, radius::LG, 0.0, 0.0])
+                        .border_radius([radii().lg, radii().lg, 0.0, 0.0])
                         .border_width([1.0, 0.0, 0.0, 0.0])
-                        .border_color(color::BORDER)
-                        .background_color(color::BACKGROUND)
+                        .border_color(colors().border)
+                        .background_color(colors().background)
                         .children(vec![arkit::column_component::<Message, arkit::Theme>()
                             .percent_width(1.0)
                             .children(vec![
@@ -37,12 +37,12 @@ where
                                         .width(40.0)
                                         .height(4.0)
                                         .border_radius([
-                                            radius::FULL,
-                                            radius::FULL,
-                                            radius::FULL,
-                                            radius::FULL,
+                                            radii().full,
+                                            radii().full,
+                                            radii().full,
+                                            radii().full,
                                         ])
-                                        .background_color(color::MUTED_FOREGROUND)
+                                        .background_color(colors().muted_foreground)
                                         .opacity(0.4_f32)
                                         .into()])
                                     .into(),

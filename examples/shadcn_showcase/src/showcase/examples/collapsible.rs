@@ -9,12 +9,12 @@ fn repo_row(name: &str) -> Element {
         .percent_width(1.0)
         .padding([8.0, 16.0, 8.0, 16.0])
         .border_width([1.0, 1.0, 1.0, 1.0])
-        .border_color(shadcn::theme::color::BORDER)
+        .border_color(shadcn::theme::colors().border)
         .border_radius([
-            shadcn::theme::radius::MD,
-            shadcn::theme::radius::MD,
-            shadcn::theme::radius::MD,
-            shadcn::theme::radius::MD,
+            shadcn::theme::radii().md,
+            shadcn::theme::radii().md,
+            shadcn::theme::radii().md,
+            shadcn::theme::radii().md,
         ])
         .children(vec![shadcn::text_sm(name)])
         .into()

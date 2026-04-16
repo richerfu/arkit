@@ -11,8 +11,8 @@ fn toggle_group_border(index: usize) -> [f32; 4] {
 }
 
 fn toggle_group_radius(index: usize, total: usize) -> [f32; 4] {
-    let left_radius = if index == 0 { radius::MD } else { 0.0 };
-    let right_radius = if index + 1 == total { radius::MD } else { 0.0 };
+    let left_radius = if index == 0 { radii().md } else { 0.0 };
+    let right_radius = if index + 1 == total { radii().md } else { 0.0 };
     [left_radius, right_radius, left_radius, right_radius]
 }
 
@@ -20,7 +20,7 @@ fn toggle_group_shell<Message: 'static>(children: Vec<Element<Message>>) -> Elem
     shadow_sm(
         arkit::row_component::<Message, arkit::Theme>()
             .align_items_center()
-            .border_radius([radius::MD, radius::MD, radius::MD, radius::MD])
+            .border_radius([radii().md, radii().md, radii().md, radii().md])
             .clip(true)
             .children(children),
     )

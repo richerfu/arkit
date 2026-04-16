@@ -9,6 +9,7 @@ use arkit_animation::{Motion, MotionExt};
 use arkit_router::{
     Route as RouterRoute, RouteDefinition, RouteTransitionDirection, Router, StructuredRoute,
 };
+use arkit_shadcn::theme::{ColorTokens, RadiusTokens, ThemeMode, ThemePreset};
 use std::cell::Cell;
 use std::rc::Rc;
 
@@ -94,9 +95,13 @@ enum Message {
     SetCheckboxCard(bool),
     SetToggleGroupValues(Vec<String>),
     SetMenubarActive(Option<usize>),
+    SetThemeMenuOpen(bool),
+    SetThemeMode(ThemeMode),
+    SetThemePreset(ThemePreset),
+    SetCustomTheme(bool),
 }
 
-struct ShowcaseState {
+pub(crate) struct ShowcaseState {
     router: Router,
     route: Route,
     route_transition_direction: Rc<Cell<RouteTransitionDirection>>,
@@ -122,6 +127,10 @@ struct ShowcaseState {
     checkbox_card: bool,
     toggle_group_values: Vec<String>,
     menubar_active: Option<usize>,
+    pub(crate) theme_menu_open: bool,
+    pub(crate) theme_mode: ThemeMode,
+    pub(crate) theme_preset: ThemePreset,
+    pub(crate) custom_theme: bool,
 }
 
 impl Default for ShowcaseState {
@@ -157,6 +166,10 @@ impl Default for ShowcaseState {
             checkbox_card: false,
             toggle_group_values: vec![String::from("bold")],
             menubar_active: None,
+            theme_menu_open: false,
+            theme_mode: ThemeMode::Light,
+            theme_preset: ThemePreset::Zinc,
+            custom_theme: false,
         }
     }
 }
@@ -189,6 +202,10 @@ impl ShowcaseState {
             checkbox_card: self.checkbox_card,
             toggle_group_values: self.toggle_group_values.clone(),
             menubar_active: self.menubar_active,
+            theme_menu_open: self.theme_menu_open,
+            theme_mode: self.theme_mode,
+            theme_preset: self.theme_preset,
+            custom_theme: self.custom_theme,
         }
     }
 
@@ -215,6 +232,48 @@ impl ShowcaseState {
         self.toggle_group_values = vec![String::from("bold")];
         self.menubar_active = None;
     }
+
+    fn theme(&self) -> arkit_shadcn::theme::Theme {
+        if self.custom_theme {
+            let colors = custom_theme_colors(self.theme_mode);
+            return arkit_shadcn::theme::Theme::custom(colors)
+                .with_mode(self.theme_mode)
+                .with_radius(RadiusTokens::from_base(10.0));
+        }
+
+        arkit_shadcn::theme::Theme::preset(self.theme_preset, self.theme_mode)
+    }
+}
+
+fn custom_theme_colors(mode: ThemeMode) -> ColorTokens {
+    let mut colors = arkit_shadcn::theme::Theme::preset(ThemePreset::Mist, mode).colors;
+
+    match mode {
+        ThemeMode::Light => {
+            colors.primary = 0xFF0F766E;
+            colors.primary_foreground = 0xFFF0FDFA;
+            colors.primary_track = arkit_shadcn::theme::with_alpha(colors.primary, 0x33);
+            colors.ring = 0xFF0F766E;
+            colors.chart_1 = 0xFF0F766E;
+            colors.chart_2 = 0xFF2563EB;
+            colors.chart_3 = 0xFF7C3AED;
+            colors.sidebar_primary = colors.primary;
+            colors.sidebar_primary_foreground = colors.primary_foreground;
+        }
+        ThemeMode::Dark => {
+            colors.primary = 0xFF5EEAD4;
+            colors.primary_foreground = 0xFF042F2E;
+            colors.primary_track = arkit_shadcn::theme::with_alpha(colors.primary, 0x33);
+            colors.ring = 0xFF5EEAD4;
+            colors.chart_1 = 0xFF5EEAD4;
+            colors.chart_2 = 0xFF60A5FA;
+            colors.chart_3 = 0xFFC084FC;
+            colors.sidebar_primary = colors.primary;
+            colors.sidebar_primary_foreground = colors.primary_foreground;
+        }
+    }
+
+    colors
 }
 
 fn update(state: &mut ShowcaseState, message: Message) -> Task<Message> {
@@ -288,6 +347,20 @@ fn update(state: &mut ShowcaseState, message: Message) -> Task<Message> {
         Message::SetCheckboxCard(value) => state.checkbox_card = value,
         Message::SetToggleGroupValues(value) => state.toggle_group_values = value,
         Message::SetMenubarActive(value) => state.menubar_active = value,
+        Message::SetThemeMenuOpen(value) => state.theme_menu_open = value,
+        Message::SetThemeMode(value) => {
+            state.theme_mode = value;
+            state.theme_menu_open = false;
+        }
+        Message::SetThemePreset(value) => {
+            state.theme_preset = value;
+            state.custom_theme = false;
+            state.theme_menu_open = false;
+        }
+        Message::SetCustomTheme(value) => {
+            state.custom_theme = value;
+            state.theme_menu_open = false;
+        }
     }
 
     Task::none()
@@ -348,16 +421,18 @@ fn route_page(
 }
 
 fn view(state: &ShowcaseState) -> ArkElement<Message> {
-    let content = match &state.route {
-        Route::Home => catalog_home(state.home_search.clone()),
-        Route::Component { slug } => component_page(slug.clone(), state.demo_context()),
-    };
+    arkit_shadcn::theme::with_theme(state.theme(), || {
+        let content = match &state.route {
+            Route::Home => catalog_home(state),
+            Route::Component { slug } => component_page(slug.clone(), state.demo_context()),
+        };
 
-    route_page(
-        &state.route,
-        state.route_transition_direction.clone(),
-        content,
-    )
+        route_page(
+            &state.route,
+            state.route_transition_direction.clone(),
+            content,
+        )
+    })
 }
 
 #[entry]

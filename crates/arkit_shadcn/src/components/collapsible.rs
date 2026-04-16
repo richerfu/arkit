@@ -26,7 +26,7 @@ pub fn collapsible<Message: Send + 'static>(
         .children(vec![
             body_text(title)
                 .font_weight(FontWeight::W600)
-                .font_color(color::FOREGROUND)
+                .font_color(colors().foreground)
                 .into(),
             icon_button("chevrons-up-down")
                 .theme(ButtonVariant::Ghost)

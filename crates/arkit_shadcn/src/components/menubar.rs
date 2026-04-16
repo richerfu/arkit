@@ -31,16 +31,16 @@ fn menubar_trigger_surface<Message: 'static>(
         .align_items_center()
         .justify_content_center()
         .padding([spacing::XXS, spacing::SM, spacing::XXS, spacing::SM])
-        .border_radius([radius::SM, radius::SM, radius::SM, radius::SM])
+        .border_radius([radii().sm, radii().sm, radii().sm, radii().sm])
         .background_color(if active {
-            color::ACCENT
+            colors().accent
         } else {
             MENUBAR_ITEM_TRANSPARENT
         })
         .children(vec![arkit::text::<Message, arkit::Theme>(title)
             .font_size(typography::SM)
             .font_weight(FontWeight::W500)
-            .font_color(color::FOREGROUND)
+            .font_color(colors().foreground)
             .line_height(20.0)
             .into()])
         .into()
@@ -92,6 +92,7 @@ where
                         on_close(None);
                     }
                 },
+                super::floating_layer::FloatingAlign::Start,
                 MenuStyle {
                     width: MENU_PANEL_WIDTH,
                     submenu_width: SUBMENU_PANEL_WIDTH,

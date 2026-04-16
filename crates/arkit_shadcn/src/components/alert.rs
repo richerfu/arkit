@@ -43,15 +43,15 @@ pub fn alert_root<Message: 'static>(
 
     arkit::stack_component::<Message, arkit::Theme>()
         .percent_width(1.0)
-        .border_radius([radius::LG, radius::LG, radius::LG, radius::LG])
+        .border_radius([radii().lg, radii().lg, radii().lg, radii().lg])
         .border_width([
             ALERT_BORDER_WIDTH,
             ALERT_BORDER_WIDTH,
             ALERT_BORDER_WIDTH,
             ALERT_BORDER_WIDTH,
         ])
-        .border_color(color::BORDER)
-        .background_color(color::CARD)
+        .border_color(colors().border)
+        .background_color(colors().card)
         .children(vec![
             arkit::row_component::<Message, arkit::Theme>()
                 .width(ALERT_ICON_SIZE)
@@ -144,14 +144,14 @@ pub fn alert_list<Message: 'static>(
 fn alert_tone(variant: AlertVariant) -> AlertTone {
     match variant {
         AlertVariant::Default => AlertTone {
-            title_color: color::FOREGROUND,
-            description_color: color::MUTED_FOREGROUND,
-            icon_color: color::FOREGROUND,
+            title_color: colors().foreground,
+            description_color: colors().muted_foreground,
+            icon_color: colors().foreground,
         },
         AlertVariant::Destructive => AlertTone {
-            title_color: color::DESTRUCTIVE,
-            description_color: 0xE6EF4444,
-            icon_color: color::DESTRUCTIVE,
+            title_color: colors().destructive,
+            description_color: with_alpha(colors().destructive, 0xE6),
+            icon_color: colors().destructive,
         },
     }
 }

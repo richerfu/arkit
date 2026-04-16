@@ -15,11 +15,11 @@ pub fn tooltip<Message: 'static>(
         trigger,
         arkit::row_component::<Message, arkit::Theme>()
             .padding([8.0, 12.0, 8.0, 12.0])
-            .border_radius([radius::MD, radius::MD, radius::MD, radius::MD])
-            .background_color(color::PRIMARY)
+            .border_radius([radii().md, radii().md, radii().md, radii().md])
+            .background_color(colors().primary)
             .children(vec![arkit::text::<Message, arkit::Theme>(content)
                 .font_size(typography::XS)
-                .font_color(color::PRIMARY_FOREGROUND)
+                .font_color(colors().primary_foreground)
                 .line_height(16.0)
                 .into()])
             .into(),

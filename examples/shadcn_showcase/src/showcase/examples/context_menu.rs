@@ -14,12 +14,12 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                     .align_items_center()
                     .justify_content(JustifyContent::Center)
                     .border_width([1.0, 1.0, 1.0, 1.0])
-                    .border_color(shadcn::theme::color::BORDER)
+                    .border_color(shadcn::theme::colors().border)
                     .border_radius([
-                        shadcn::theme::radius::MD,
-                        shadcn::theme::radius::MD,
-                        shadcn::theme::radius::MD,
-                        shadcn::theme::radius::MD,
+                        shadcn::theme::radii().md,
+                        shadcn::theme::radii().md,
+                        shadcn::theme::radii().md,
+                        shadcn::theme::radii().md,
                     ])
                     .border_style(BorderStyle::Dashed)
                     .clip(true)

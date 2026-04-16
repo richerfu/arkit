@@ -21,7 +21,7 @@ pub enum TextVariant {
 fn base_text<Message: 'static>(content: impl Into<String>) -> TextElement<Message> {
     arkit::text::<Message, arkit::Theme>(content)
         .font_size(typography::MD)
-        .font_color(color::FOREGROUND)
+        .font_color(colors().foreground)
         .line_height(24.0)
         .text_align(TextAlignment::Start)
 }
@@ -34,7 +34,7 @@ pub fn text<Message: 'static>(content: impl Into<String>) -> Element<Message> {
 pub fn text_sm<Message: 'static>(content: impl Into<String>) -> Element<Message> {
     arkit::text::<Message, arkit::Theme>(content)
         .font_size(typography::SM)
-        .font_color(color::FOREGROUND)
+        .font_color(colors().foreground)
         .line_height(20.0)
         .text_align(TextAlignment::Start)
         .into()
@@ -45,7 +45,7 @@ pub fn text_sm_medium<Message: 'static>(content: impl Into<String>) -> Element<M
     arkit::text::<Message, arkit::Theme>(content)
         .font_size(typography::SM)
         .font_weight(FontWeight::W500)
-        .font_color(color::FOREGROUND)
+        .font_color(colors().foreground)
         .line_height(20.0)
         .text_align(TextAlignment::Start)
         .into()
@@ -78,7 +78,7 @@ pub fn text_with_variant<Message: 'static>(
                     .percent_width(1.0)
                     .height(1.0)
                     .margin_top(8.0)
-                    .background_color(color::BORDER)
+                    .background_color(colors().border)
                     .into(),
             ])
             .into(),
@@ -92,7 +92,7 @@ pub fn text_with_variant<Message: 'static>(
         TextVariant::Blockquote => arkit::row_component::<Message, arkit::Theme>()
             .percent_width(1.0)
             .border_width([0.0, 0.0, 0.0, 2.0])
-            .border_color(color::BORDER)
+            .border_color(colors().border)
             .padding([0.0, 0.0, 0.0, 12.0])
             .children(vec![base_text::<Message>(content)
                 .font_style(FontStyle::Italic)
@@ -101,28 +101,28 @@ pub fn text_with_variant<Message: 'static>(
             .into(),
         TextVariant::Code => crate::styles::rounded(
             arkit::row_component::<Message, arkit::Theme>()
-                .background_color(color::MUTED)
+                .background_color(colors().muted)
                 .padding([5.0, 3.0])
                 .children(vec![arkit::text::<Message, arkit::Theme>(content)
                     .font_size(typography::SM)
                     .font_family("monospace")
                     .font_weight(FontWeight::W600)
-                    .font_color(color::FOREGROUND)
+                    .font_color(colors().foreground)
                     .line_height(18.0)
                     .into()]),
-            radius::SM,
+            radii().sm,
         )
         .into(),
         TextVariant::Lead => arkit::text::<Message, arkit::Theme>(content)
             .font_size(typography::XL)
-            .font_color(color::MUTED_FOREGROUND)
+            .font_color(colors().muted_foreground)
             .line_height(28.0)
             .text_align(TextAlignment::Start)
             .into(),
         TextVariant::Large => arkit::text::<Message, arkit::Theme>(content)
             .font_size(typography::LG)
             .font_weight(FontWeight::W600)
-            .font_color(color::FOREGROUND)
+            .font_color(colors().foreground)
             .line_height(28.0)
             .text_letter_spacing(TRACKING_TIGHT)
             .text_align(TextAlignment::Start)
@@ -130,13 +130,13 @@ pub fn text_with_variant<Message: 'static>(
         TextVariant::Small => arkit::text::<Message, arkit::Theme>(content)
             .font_size(typography::SM)
             .font_weight(FontWeight::W500)
-            .font_color(color::FOREGROUND)
+            .font_color(colors().foreground)
             .line_height(14.0)
             .text_align(TextAlignment::Start)
             .into(),
         TextVariant::Muted => arkit::text::<Message, arkit::Theme>(content)
             .font_size(typography::SM)
-            .font_color(color::MUTED_FOREGROUND)
+            .font_color(colors().muted_foreground)
             .line_height(20.0)
             .text_align(TextAlignment::Start)
             .into(),

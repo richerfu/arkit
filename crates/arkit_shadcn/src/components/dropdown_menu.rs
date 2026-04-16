@@ -19,11 +19,31 @@ pub fn dropdown_menu_message<Message>(
 where
     Message: Send + 'static,
 {
+    dropdown_menu_aligned_message(
+        trigger,
+        items,
+        open,
+        on_open_change,
+        super::floating_layer::FloatingAlign::Start,
+    )
+}
+
+pub fn dropdown_menu_aligned_message<Message>(
+    trigger: Element<Message>,
+    items: Vec<DropdownMenuEntry>,
+    open: bool,
+    on_open_change: impl Fn(bool) -> Message + 'static,
+    align: super::floating_layer::FloatingAlign,
+) -> Element<Message>
+where
+    Message: Send + 'static,
+{
     menu_popup(
         trigger,
         items,
         open,
         move |value| dispatch_message(on_open_change(value)),
+        align,
         MenuStyle {
             width: MENU_PANEL_WIDTH,
             submenu_width: SUBMENU_PANEL_WIDTH,

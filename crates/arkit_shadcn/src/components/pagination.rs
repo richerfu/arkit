@@ -83,7 +83,7 @@ fn pagination_ellipsis<Message: 'static>() -> Element<Message> {
         .justify_content_center()
         .children(vec![arkit::text::<Message, arkit::Theme>("...")
             .font_size(typography::SM)
-            .font_color(color::MUTED_FOREGROUND)
+            .font_color(colors().muted_foreground)
             .line_height(20.0)
             .into()])
         .into()

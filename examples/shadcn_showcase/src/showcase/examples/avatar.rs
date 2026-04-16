@@ -14,7 +14,7 @@ pub(crate) fn render(_ctx: DemoContext) -> Element {
                 shadcn::avatar_ring_with_radius(
                     Some(String::from("https://github.com/shadcn.png")),
                     "CN",
-                    shadcn::theme::radius::LG,
+                    shadcn::theme::radii().lg,
                 ),
                 h_stack(
                     vec![

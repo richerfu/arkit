@@ -25,19 +25,19 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                                     arkit::text("@expo")
                                         .font_size(shadcn::theme::typography::SM)
                                         .font_weight(FontWeight::W600)
-                                        .font_color(shadcn::theme::color::FOREGROUND)
+                                        .font_color(shadcn::theme::colors().foreground)
                                         .line_height(20.0)
                                         .into(),
                                     arkit::text(
                                         "Framework and tools for creating native apps with React.",
                                     )
                                     .font_size(shadcn::theme::typography::SM)
-                                    .font_color(shadcn::theme::color::FOREGROUND)
+                                    .font_color(shadcn::theme::colors().foreground)
                                     .line_height(20.0)
                                     .into(),
                                     arkit::text("Joined December 2021")
                                         .font_size(shadcn::theme::typography::XS)
-                                        .font_color(shadcn::theme::color::MUTED_FOREGROUND)
+                                        .font_color(shadcn::theme::colors().muted_foreground)
                                         .line_height(16.0)
                                         .into(),
                                 ],

@@ -19,10 +19,10 @@ pub fn alert_dialog_with_message<Message: 'static>(
             .percent_width(1.0)
             .max_width_constraint(super::dialog::DIALOG_MAX_WIDTH)
             .padding([spacing::XXL, spacing::XXL, spacing::XXL, spacing::XXL])
-            .border_radius([radius::LG, radius::LG, radius::LG, radius::LG])
+            .border_radius([radii().lg, radii().lg, radii().lg, radii().lg])
             .border_width([1.0, 1.0, 1.0, 1.0])
-            .border_color(color::BORDER)
-            .background_color(color::BACKGROUND)
+            .border_color(colors().border)
+            .background_color(colors().background)
             .children(vec![stack(
                 vec![
                     super::dialog::dialog_header(title, description),

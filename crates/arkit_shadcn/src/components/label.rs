@@ -5,6 +5,6 @@ pub fn label<Message: 'static>(content: impl Into<String>) -> TextElement<Messag
     arkit::text::<Message, arkit::Theme>(content)
         .font_size(typography::SM)
         .font_weight(FontWeight::W500)
-        .font_color(color::FOREGROUND)
+        .font_color(colors().foreground)
         .text_align(TextAlignment::Start)
 }

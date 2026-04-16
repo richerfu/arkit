@@ -1,12 +1,42 @@
 use crate::prelude::*;
 use arkit_icon as lucide;
 use arkit_shadcn as shadcn;
+use shadcn::theme::{ThemeMode, ThemePreset};
 
-use crate::{Message, Route};
+use crate::{Message, Route, ShowcaseState};
 
 const HOME_HEADER_HEIGHT: f32 = 80.0;
 const DETAIL_HEADER_HEIGHT: f32 = 48.0;
 const TRACKING_TIGHT: f32 = -0.35;
+
+const THEME_PRESETS: [ThemePreset; 7] = [
+    ThemePreset::Zinc,
+    ThemePreset::Neutral,
+    ThemePreset::Stone,
+    ThemePreset::Mauve,
+    ThemePreset::Olive,
+    ThemePreset::Mist,
+    ThemePreset::Taupe,
+];
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ThemeMenuState {
+    pub(crate) mode: ThemeMode,
+    pub(crate) preset: ThemePreset,
+    pub(crate) custom: bool,
+    pub(crate) open: bool,
+}
+
+impl From<&ShowcaseState> for ThemeMenuState {
+    fn from(state: &ShowcaseState) -> Self {
+        Self {
+            mode: state.theme_mode,
+            preset: state.theme_preset,
+            custom: state.custom_theme,
+            open: state.theme_menu_open,
+        }
+    }
+}
 
 fn empty_box(width: f32, height: f32) -> Element {
     arkit::row_component().width(width).height(height).into()
@@ -15,7 +45,7 @@ fn empty_box(width: f32, height: f32) -> Element {
 fn nav_title_text(title: impl Into<String>, home: bool) -> Element {
     let title = title.into();
     let mut text = arkit::text(title)
-        .font_color(shadcn::theme::color::FOREGROUND)
+        .font_color(shadcn::theme::colors().foreground)
         .text_letter_spacing(TRACKING_TIGHT);
 
     if home {
@@ -41,6 +71,100 @@ fn plain_back_button() -> Element {
         .padding(arkit::Padding::ZERO)
         .on_press(Message::Back)
         .into()
+}
+
+fn theme_menu_icon(mode: ThemeMode) -> &'static str {
+    match mode {
+        ThemeMode::Light => "sun",
+        ThemeMode::Dark => "moon",
+    }
+}
+
+fn theme_mode_key(mode: ThemeMode) -> &'static str {
+    match mode {
+        ThemeMode::Light => "light",
+        ThemeMode::Dark => "dark",
+    }
+}
+
+fn theme_preset_key(preset: ThemePreset) -> &'static str {
+    match preset {
+        ThemePreset::Zinc => "zinc",
+        ThemePreset::Neutral => "neutral",
+        ThemePreset::Stone => "stone",
+        ThemePreset::Mauve => "mauve",
+        ThemePreset::Olive => "olive",
+        ThemePreset::Mist => "mist",
+        ThemePreset::Taupe => "taupe",
+    }
+}
+
+fn theme_preset_label(preset: ThemePreset) -> &'static str {
+    match preset {
+        ThemePreset::Zinc => "Zinc",
+        ThemePreset::Neutral => "Neutral",
+        ThemePreset::Stone => "Stone",
+        ThemePreset::Mauve => "Mauve",
+        ThemePreset::Olive => "Olive",
+        ThemePreset::Mist => "Mist",
+        ThemePreset::Taupe => "Taupe",
+    }
+}
+
+fn theme_menu_button(state: ThemeMenuState) -> Element {
+    let selected_preset = if state.custom {
+        String::from("custom")
+    } else {
+        String::from(theme_preset_key(state.preset))
+    };
+
+    let mut items = vec![
+        shadcn::dropdown_label("Appearance"),
+        shadcn::dropdown_radio_item(
+            "Light",
+            theme_mode_key(ThemeMode::Light),
+            theme_mode_key(state.mode),
+            |_| Message::SetThemeMode(ThemeMode::Light),
+        ),
+        shadcn::dropdown_radio_item(
+            "Dark",
+            theme_mode_key(ThemeMode::Dark),
+            theme_mode_key(state.mode),
+            |_| Message::SetThemeMode(ThemeMode::Dark),
+        ),
+        shadcn::dropdown_separator(),
+        shadcn::dropdown_label("Theme"),
+    ];
+
+    items.extend(THEME_PRESETS.iter().map(|preset| {
+        let preset = *preset;
+        shadcn::dropdown_radio_item(
+            theme_preset_label(preset),
+            theme_preset_key(preset),
+            selected_preset.clone(),
+            move |_| Message::SetThemePreset(preset),
+        )
+    }));
+    items.extend([
+        shadcn::dropdown_separator(),
+        shadcn::dropdown_radio_item("Custom", "custom", selected_preset, |_| {
+            Message::SetCustomTheme(true)
+        }),
+    ]);
+
+    shadcn::dropdown_menu_aligned(
+        shadcn::icon_button(theme_menu_icon(state.mode))
+            .theme(shadcn::ButtonVariant::Ghost)
+            .width(36.0)
+            .height(36.0)
+            .padding(arkit::Padding::ZERO)
+            .on_press(Message::SetThemeMenuOpen(!state.open))
+            .into(),
+        items,
+        state.open,
+        Message::SetThemeMenuOpen,
+        FloatingAlign::End,
+    )
 }
 
 fn constrained_width(child: Element, width: f32) -> Element {
@@ -131,7 +255,7 @@ pub(crate) fn page_scroll(children: Vec<Element>) -> Element {
     arkit::scroll_component()
         .percent_width(1.0)
         .layout_weight(1.0_f32)
-        .background_color(shadcn::theme::color::SURFACE)
+        .background_color(shadcn::theme::colors().surface)
         .children(vec![arkit::column_component()
             .percent_width(1.0)
             .padding([
@@ -178,7 +302,7 @@ pub(crate) fn component_canvas_with(
     arkit::scroll_component()
         .percent_width(1.0)
         .layout_weight(1.0_f32)
-        .background_color(shadcn::theme::color::SURFACE)
+        .background_color(shadcn::theme::colors().surface)
         .children(vec![container
             .padding([
                 padding[0],
@@ -197,14 +321,20 @@ pub(crate) fn component_canvas_with(
         .into()
 }
 
-pub(crate) fn nav_bar(title: impl Into<String>, back: bool) -> Element {
+pub(crate) fn nav_bar(title: impl Into<String>, back: bool, theme: ThemeMenuState) -> Element {
     let title = title.into();
 
     if !back {
+        let left: Element = arkit::row_component()
+            .layout_weight(1.0_f32)
+            .align_items_bottom()
+            .children(vec![nav_title_text(title, true)])
+            .into();
+
         return arkit::row_component()
             .percent_width(1.0)
             .height(HOME_HEADER_HEIGHT)
-            .background_color(shadcn::theme::color::BACKGROUND)
+            .background_color(shadcn::theme::colors().background)
             .padding([
                 18.0,
                 shadcn::theme::spacing::LG,
@@ -212,7 +342,7 @@ pub(crate) fn nav_bar(title: impl Into<String>, back: bool) -> Element {
                 shadcn::theme::spacing::LG,
             ])
             .align_items_bottom()
-            .children(vec![nav_title_text(title, true)])
+            .children(vec![left, theme_menu_button(theme)])
             .into();
     }
 
@@ -233,10 +363,12 @@ pub(crate) fn nav_bar(title: impl Into<String>, back: bool) -> Element {
         ])
         .into();
 
+    let right = theme_menu_button(theme);
+
     arkit::row_component()
         .percent_width(1.0)
         .height(DETAIL_HEADER_HEIGHT)
-        .background_color(shadcn::theme::color::BACKGROUND)
+        .background_color(shadcn::theme::colors().background)
         .padding([
             4.0,
             shadcn::theme::spacing::LG,
@@ -244,7 +376,7 @@ pub(crate) fn nav_bar(title: impl Into<String>, back: bool) -> Element {
             shadcn::theme::spacing::LG,
         ])
         .align_items_center()
-        .children(vec![left])
+        .children(vec![left, right])
         .into()
 }
 
@@ -255,7 +387,7 @@ pub(crate) fn component_list_cell(slug: &str, title: &str, first: bool, last: bo
     } else {
         [1.0, 1.0, 0.0, 1.0]
     };
-    let radius = shadcn::theme::radius::LG;
+    let radius = shadcn::theme::radii().lg;
     let border_radius = [
         if first { radius } else { 0.0 },
         if first { radius } else { 0.0 },
@@ -270,21 +402,21 @@ pub(crate) fn component_list_cell(slug: &str, title: &str, first: bool, last: bo
         .justify_content(JustifyContent::SpaceBetween)
         .padding([12.0, 16.0, 12.0, 14.0])
         .border_width(border_width)
-        .border_color(shadcn::theme::color::BORDER)
+        .border_color(shadcn::theme::colors().border)
         .border_radius(border_radius)
-        .background_color(shadcn::theme::color::CARD)
+        .background_color(shadcn::theme::colors().card)
         .on_press(Message::Navigate(Route::Component { slug }))
         .children(vec![
             arkit::text(title)
                 .font_size(shadcn::theme::typography::MD)
-                .font_color(shadcn::theme::color::FOREGROUND)
+                .font_color(shadcn::theme::colors().foreground)
                 .font_weight(FontWeight::W400)
                 .line_height(20.0)
                 .into(),
             lucide::icon("chevron-right")
                 .size(16.0)
                 .stroke_width(1.5)
-                .color(shadcn::theme::color::MUTED_FOREGROUND)
+                .color(shadcn::theme::colors().muted_foreground)
                 .render(),
         ])
         .into()

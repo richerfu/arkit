@@ -23,10 +23,10 @@ where
                         .width(SHEET_WIDTH)
                         .percent_height(1.0)
                         .padding([spacing::XXL, spacing::XXL, spacing::XXL, spacing::XXL])
-                        .border_radius([0.0, 0.0, radius::LG, radius::LG])
+                        .border_radius([0.0, 0.0, radii().lg, radii().lg])
                         .border_width([0.0, 0.0, 0.0, 1.0])
-                        .border_color(color::BORDER)
-                        .background_color(color::BACKGROUND)
+                        .border_color(colors().border)
+                        .background_color(colors().background)
                         .children(vec![
                             arkit::column_component::<Message, arkit::Theme>()
                                 .percent_width(1.0)

@@ -22,8 +22,8 @@ pub fn select<Message: 'static>(
                 arkit::row_component::<Message, arkit::Theme>()
                     .height(40.0)
                     .percent_width(1.0)
-                    .background_color(color::BACKGROUND)
-                    .foreground_color(color::FOREGROUND)
+                    .background_color(colors().background)
+                    .foreground_color(colors().foreground)
                     .padding([8.0, spacing::MD, 8.0, spacing::MD])
                     .align_items_center()
                     .justify_content(JustifyContent::SpaceBetween)
@@ -38,20 +38,20 @@ pub fn select<Message: 'static>(
                             arkit::text::<Message, arkit::Theme>(label)
                                 .font_size(typography::SM)
                                 .font_color(if has_value {
-                                    color::FOREGROUND
+                                    colors().foreground
                                 } else {
-                                    color::MUTED_FOREGROUND
+                                    colors().muted_foreground
                                 })
                                 .line_height(20.0)
                                 .into()
                         },
                         lucide::icon("chevron-down")
                             .size(16.0)
-                            .color(color::MUTED_FOREGROUND)
+                            .color(colors().muted_foreground)
                             .render(),
                     ]),
             ),
-            radius::MD,
+            radii().md,
         )),
         {
             let on_open_change = on_open_change.clone();
@@ -85,22 +85,22 @@ pub fn select<Message: 'static>(
                             .align_items_center()
                             .justify_content(JustifyContent::SpaceBetween)
                             .padding([8.0, spacing::SM, 8.0, spacing::SM])
-                            .border_radius([radius::SM, radius::SM, radius::SM, radius::SM])
-                            .background_color(if active { color::ACCENT } else { 0x00000000 })
+                            .border_radius([radii().sm, radii().sm, radii().sm, radii().sm])
+                            .background_color(if active { colors().accent } else { 0x00000000 })
                             .children(vec![
                                 arkit::text::<Message, arkit::Theme>(opt.clone())
                                     .font_size(typography::SM)
                                     .font_color(if active {
-                                        color::ACCENT_FOREGROUND
+                                        colors().accent_foreground
                                     } else {
-                                        color::FOREGROUND
+                                        colors().foreground
                                     })
                                     .line_height(20.0)
                                     .into(),
                                 if active {
                                     lucide::icon("check")
                                         .size(16.0)
-                                        .color(color::MUTED_FOREGROUND)
+                                        .color(colors().muted_foreground)
                                         .render::<Message, arkit::Theme>()
                                 } else {
                                     arkit::row_component::<Message, arkit::Theme>()
@@ -140,7 +140,7 @@ pub fn select<Message: 'static>(
                         .padding([8.0, spacing::SM, 8.0, spacing::SM])
                         .children(vec![arkit::text::<Message, arkit::Theme>("Fruits")
                             .font_size(typography::XS)
-                            .font_color(color::MUTED_FOREGROUND)
+                            .font_color(colors().muted_foreground)
                             .line_height(16.0)
                             .into()])
                         .into(),

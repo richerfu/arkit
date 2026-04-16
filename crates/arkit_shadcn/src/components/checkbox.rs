@@ -20,7 +20,7 @@ fn checkbox_indicator<Message: 'static>(checked: bool, style: CheckboxStyle) -> 
             .height(CHECKBOX_SIZE)
             .align_items_center()
             .justify_content_center()
-            .border_radius([radius::SM, radius::SM, radius::SM, radius::SM])
+            .border_radius([radii().sm, radii().sm, radii().sm, radii().sm])
             .border_width([
                 CHECKBOX_BORDER_WIDTH,
                 CHECKBOX_BORDER_WIDTH,
@@ -30,13 +30,13 @@ fn checkbox_indicator<Message: 'static>(checked: bool, style: CheckboxStyle) -> 
             .border_color(if checked {
                 style.checked_color
             } else {
-                color::INPUT
+                colors().input
             })
             .clip(true)
             .background_color(if checked {
                 style.checked_color
             } else {
-                color::BACKGROUND
+                colors().background
             }),
     );
 
@@ -44,7 +44,7 @@ fn checkbox_indicator<Message: 'static>(checked: bool, style: CheckboxStyle) -> 
         indicator = indicator.children(vec![lucide::icon("check")
             .size(CHECKBOX_ICON_SIZE)
             .stroke_width(CHECKBOX_ICON_STROKE_WIDTH)
-            .color(color::PRIMARY_FOREGROUND)
+            .color(colors().primary_foreground)
             .render::<Message, arkit::Theme>()]);
     }
 
@@ -99,7 +99,7 @@ where
         checked,
         Some(Rc::new(move |value| dispatch_message(on_toggle(value)))),
         CheckboxStyle {
-            checked_color: color::PRIMARY,
+            checked_color: colors().primary,
             disabled: false,
         },
     )
@@ -134,7 +134,7 @@ pub fn disabled_checkbox<Message: 'static>(
         checked,
         None,
         CheckboxStyle {
-            checked_color: color::PRIMARY,
+            checked_color: colors().primary,
             disabled: true,
         },
     )

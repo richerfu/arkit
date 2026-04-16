@@ -33,7 +33,7 @@ pub fn card_title<Message: 'static>(content: impl Into<String>) -> Element<Messa
     arkit::text::<Message, arkit::Theme>(content)
         .font_size(typography::MD)
         .font_weight(FontWeight::W600)
-        .font_color(color::FOREGROUND)
+        .font_color(colors().foreground)
         .line_height(16.0)
         .text_letter_spacing(-0.2_f32)
         .into()

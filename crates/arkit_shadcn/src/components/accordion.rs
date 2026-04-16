@@ -5,7 +5,6 @@ use arkit::ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
 use arkit_icon as lucide;
 
 const ACCORDION_TRIGGER_GAP: f32 = spacing::LG;
-const ACCORDION_TRIGGER_RADIUS: f32 = radius::MD;
 const ACCORDION_ICON_SIZE: f32 = 16.0;
 const ACCORDION_CHEVRON_ROTATION: f32 = 180.0;
 
@@ -112,7 +111,7 @@ fn accordion_chevron<Message: 'static>(is_open: bool) -> Element<Message> {
         })
         .children(vec![lucide::icon("chevron-down")
             .size(ACCORDION_ICON_SIZE)
-            .color(color::MUTED_FOREGROUND)
+            .color(colors().muted_foreground)
             .render::<Message, arkit::Theme>()])
         .into()
 }
@@ -161,12 +160,7 @@ where
         .align_items_top()
         .justify_content_start()
         .padding([spacing::LG, 0.0, spacing::LG, 0.0])
-        .border_radius([
-            ACCORDION_TRIGGER_RADIUS,
-            ACCORDION_TRIGGER_RADIUS,
-            ACCORDION_TRIGGER_RADIUS,
-            ACCORDION_TRIGGER_RADIUS,
-        ])
+        .border_radius([radii().md, radii().md, radii().md, radii().md])
         .children(vec![
             arkit::column_component::<Message, arkit::Theme>()
                 .layout_weight(1.0_f32)
@@ -186,7 +180,7 @@ where
     arkit::column_component::<Message, arkit::Theme>()
         .percent_width(1.0)
         .border_width([0.0, 0.0, 1.0, 0.0])
-        .border_color(color::BORDER)
+        .border_color(colors().border)
         .children(vec![
             trigger_row.into(),
             accordion_content_panel(content, is_open),

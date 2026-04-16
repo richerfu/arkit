@@ -110,6 +110,7 @@ struct MenuPopupWidget<Message> {
     trigger: RefCell<Option<Element<Message>>>,
     items: Vec<MenuEntry>,
     open: bool,
+    align: FloatingAlign,
     on_open_change: Rc<dyn Fn(bool)>,
     style: MenuStyle,
 }
@@ -250,7 +251,7 @@ impl<Message: 'static> advanced::Widget<Message, arkit::Theme, arkit::Renderer>
             trigger,
             self.open,
             FloatingSide::Bottom,
-            FloatingAlign::Start,
+            self.align,
             panel_side_offset_vp,
             panel_builder,
             Some(dismiss),
@@ -338,8 +339,8 @@ impl<Message: 'static> advanced::Widget<Message, arkit::Theme, arkit::Renderer>
                 .constraint_size(min_width, MENU_PANEL_MAX_SIZE, 0.0, MENU_PANEL_MAX_SIZE)
                 .align_items_start()
                 .padding([spacing::XXS, spacing::XXS, spacing::XXS, spacing::XXS])
-                .border_radius([radius::SM, radius::SM, radius::SM, radius::SM])
-                .background_color(color::ACCENT)
+                .border_radius([radii().sm, radii().sm, radii().sm, radii().sm])
+                .background_color(colors().accent)
                 .children(sub_items);
 
             column_children.push(sub_content.into());
@@ -377,12 +378,14 @@ pub(crate) fn menu_popup<Message: 'static>(
     items: Vec<MenuEntry>,
     open: bool,
     on_open_change: impl Fn(bool) + 'static,
+    align: FloatingAlign,
     style: MenuStyle,
 ) -> Element<Message> {
     Element::new(MenuPopupWidget {
         trigger: RefCell::new(Some(trigger)),
         items,
         open,
+        align,
         on_open_change: Rc::new(on_open_change),
         style,
     })
@@ -431,9 +434,9 @@ fn render_action_entry<Message: 'static>(
         item_text(
             entry.title,
             if entry.destructive {
-                color::DESTRUCTIVE
+                colors().destructive
             } else {
-                color::POPOVER_FOREGROUND
+                colors().popover_foreground
             },
             FontWeight::W400,
         ),
@@ -471,6 +474,7 @@ fn render_checkbox_entry<Message: 'static>(
     context: &MenuRenderContext,
 ) -> Element<Message> {
     let on_toggle = entry.on_toggle.clone();
+    let dismiss = context.dismiss.clone();
     interactive_menu_row(
         menu_row_children(
             Some(leading_slot(if entry.checked {
@@ -478,13 +482,13 @@ fn render_checkbox_entry<Message: 'static>(
                     lucide::icon("check")
                         .size(16.0)
                         .stroke_width(3.0)
-                        .color(color::FOREGROUND)
+                        .color(colors().foreground)
                         .render::<Message, arkit::Theme>(),
                 )
             } else {
                 None
             })),
-            item_text(entry.title, color::POPOVER_FOREGROUND, FontWeight::W400),
+            item_text(entry.title, colors().popover_foreground, FontWeight::W400),
             None,
         ),
         menu_row_min_width(&context.style),
@@ -493,6 +497,7 @@ fn render_checkbox_entry<Message: 'static>(
         None,
         Some(Rc::new(move || {
             on_toggle(!entry.checked);
+            dismiss();
         })),
     )
     .into()
@@ -503,6 +508,7 @@ fn render_radio_entry<Message: 'static>(
     context: &MenuRenderContext,
 ) -> Element<Message> {
     let on_select = entry.on_select.clone();
+    let dismiss = context.dismiss.clone();
     let selected = entry.selected == entry.value;
     let value = entry.value.clone();
     interactive_menu_row(
@@ -512,14 +518,14 @@ fn render_radio_entry<Message: 'static>(
                     arkit::row_component()
                         .width(8.0)
                         .height(8.0)
-                        .border_radius([radius::FULL, radius::FULL, radius::FULL, radius::FULL])
-                        .background_color(color::FOREGROUND)
+                        .border_radius([radii().full, radii().full, radii().full, radii().full])
+                        .background_color(colors().foreground)
                         .into(),
                 )
             } else {
                 None
             })),
-            item_text(entry.title, color::POPOVER_FOREGROUND, FontWeight::W400),
+            item_text(entry.title, colors().popover_foreground, FontWeight::W400),
             None,
         ),
         menu_row_min_width(&context.style),
@@ -528,6 +534,7 @@ fn render_radio_entry<Message: 'static>(
         None,
         Some(Rc::new(move || {
             on_select(value.clone());
+            dismiss();
         })),
     )
     .into()
@@ -540,7 +547,7 @@ fn render_label_entry<Message: 'static>(
     let leading = entry.inset.then(|| leading_slot(None));
     let children = menu_row_children(
         leading,
-        item_text(entry.title, color::FOREGROUND, FontWeight::W500),
+        item_text(entry.title, colors().foreground, FontWeight::W500),
         None,
     );
     menu_row(children, menu_row_min_width(&context.style), false).into()
@@ -556,11 +563,11 @@ fn submenu_trigger_row<Message: 'static>(
     let leading = inset.then(|| leading_slot(None));
     let children = menu_row_children(
         leading,
-        item_text(title, color::POPOVER_FOREGROUND, FontWeight::W400),
+        item_text(title, colors().popover_foreground, FontWeight::W400),
         Some(
             lucide::icon(if active { "chevron-up" } else { "chevron-down" })
                 .size(16.0)
-                .color(color::FOREGROUND)
+                .color(colors().foreground)
                 .render::<Message, arkit::Theme>(),
         ),
     );
@@ -655,11 +662,11 @@ pub(crate) fn menu_content_with_width<Message: 'static>(
             .constraint_size(width, MENU_PANEL_MAX_SIZE, 0.0, MENU_PANEL_MAX_SIZE)
             .align_items_start()
             .padding([spacing::XXS, spacing::XXS, spacing::XXS, spacing::XXS])
-            .border_radius([radius::LG, radius::LG, radius::LG, radius::LG])
+            .border_radius([radii().lg, radii().lg, radii().lg, radii().lg])
             .border_width([1.0, 1.0, 1.0, 1.0])
-            .border_color(color::BORDER)
+            .border_color(colors().border)
             .clip(true)
-            .background_color(color::POPOVER)
+            .background_color(colors().popover)
             .children(items),
     )
     .into()
@@ -683,7 +690,7 @@ pub(crate) fn item_text<Message: 'static>(
 pub(crate) fn shortcut_text<Message: 'static>(content: impl Into<String>) -> Element<Message> {
     arkit::text::<Message, arkit::Theme>(content)
         .font_size(typography::XS)
-        .font_color(color::MUTED_FOREGROUND)
+        .font_color(colors().muted_foreground)
         .line_height(16.0)
         .text_letter_spacing(1.2_f32)
         .attr(ArkUINodeAttributeType::TextMaxLines, MENU_TEXT_MAX_LINES)
@@ -768,7 +775,7 @@ pub(crate) fn menu_row<Message: 'static>(
         .align_items_center()
         .justify_content(arkit::JustifyContent::SpaceBetween)
         .padding([6.0, 8.0, 6.0, 8.0])
-        .border_radius([radius::SM, radius::SM, radius::SM, radius::SM])
+        .border_radius([radii().sm, radii().sm, radii().sm, radii().sm])
         .clip(true)
         .background_color(TRANSPARENT)
         .children(children);
@@ -789,7 +796,7 @@ pub(crate) fn menu_separator<Message: 'static>(min_width: f32) -> Element<Messag
         .constraint_size(min_width, MENU_PANEL_MAX_SIZE, 0.0, MENU_PANEL_MAX_SIZE)
         .height(1.0)
         .margin([4.0, 0.0, 4.0, 0.0])
-        .background_color(color::BORDER)
+        .background_color(colors().border)
         .into()
 }
 
@@ -807,8 +814,8 @@ fn menu_subtree_min_width(style: &MenuStyle) -> f32 {
 
 fn menu_row_pressed_background(variant: MenuInteractionVariant) -> u32 {
     match variant {
-        MenuInteractionVariant::Default => color::ACCENT,
-        MenuInteractionVariant::Destructive => 0x1AEF4444,
+        MenuInteractionVariant::Default => colors().accent,
+        MenuInteractionVariant::Destructive => with_alpha(colors().destructive, 0x1A),
     }
 }
 

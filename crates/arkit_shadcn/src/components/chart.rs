@@ -2,11 +2,11 @@ use super::*;
 
 pub fn chart(values: Vec<f32>) -> Element {
     let palette = [
-        color::CHART_1,
-        color::CHART_2,
-        color::CHART_3,
-        color::CHART_4,
-        color::CHART_5,
+        colors().chart_1,
+        colors().chart_2,
+        colors().chart_3,
+        colors().chart_4,
+        colors().chart_5,
     ];
 
     card(

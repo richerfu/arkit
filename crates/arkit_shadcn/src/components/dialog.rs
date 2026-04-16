@@ -43,10 +43,10 @@ pub(crate) fn dialog_panel<Message: Send + 'static>(
             .percent_width(1.0)
             .max_width_constraint(DIALOG_MAX_WIDTH)
             .padding([spacing::XXL, spacing::XXL, spacing::XXL, spacing::XXL])
-            .border_radius([radius::LG, radius::LG, radius::LG, radius::LG])
+            .border_radius([radii().lg, radii().lg, radii().lg, radii().lg])
             .border_width([1.0, 1.0, 1.0, 1.0])
-            .border_color(color::BORDER)
-            .background_color(color::BACKGROUND)
+            .border_color(colors().border)
+            .background_color(colors().background)
             .children(vec![
                 arkit::row_component::<Message, arkit::Theme>()
                     .percent_width(1.0)
@@ -126,7 +126,7 @@ pub fn dialog_header<Message: 'static>(
     let mut children = vec![arkit::text::<Message, arkit::Theme>(title)
         .font_size(typography::LG)
         .font_weight(FontWeight::W600)
-        .font_color(color::FOREGROUND)
+        .font_color(colors().foreground)
         .line_height(18.0)
         .into()];
     if !description.is_empty() {
@@ -134,7 +134,7 @@ pub fn dialog_header<Message: 'static>(
             margin_top(
                 arkit::text::<Message, arkit::Theme>(description)
                     .font_size(typography::SM)
-                    .font_color(color::MUTED_FOREGROUND)
+                    .font_color(colors().muted_foreground)
                     .line_height(20.0),
                 spacing::SM,
             )

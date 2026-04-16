@@ -54,18 +54,18 @@ fn tabs_list<Message: 'static>(
                 .align_items_center()
                 .justify_content_center()
                 .padding([spacing::XXS, spacing::SM, spacing::XXS, spacing::SM])
-                .border_radius([radius::MD, radius::MD, radius::MD, radius::MD])
+                .border_radius([radii().md, radii().md, radii().md, radii().md])
                 .border_width([1.0, 1.0, 1.0, 1.0])
                 .border_color(TRANSPARENT)
                 .clear_shadow()
                 .background_color(if is_active {
-                    color::BACKGROUND
+                    colors().background
                 } else {
                     TRANSPARENT
                 })
                 .on_click(move || on_change(index))
                 .children(vec![body_text::<Message>(label)
-                    .font_color(color::FOREGROUND)
+                    .font_color(colors().foreground)
                     .into()])
                 .into()
         })

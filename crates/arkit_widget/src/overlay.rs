@@ -10,14 +10,13 @@ use crate::{
     column_component, row_component, stack_component, Alignment, ArkUINodeAttributeItem,
     ArkUINodeAttributeType, Direction, Element, HitTestBehavior, NodeEventType,
 };
-use ohos_arkui_binding::arkui_input_binding::UIInputAction;
+use ohos_arkui_binding::arkui_input_binding::{HitTest, UIInputAction};
 use ohos_arkui_binding::common::node::ArkUINode;
 use ohos_arkui_binding::component::attribute::{ArkUIAttributeBasic, ArkUICommonAttribute};
 use ohos_display_binding::default_display_virtual_pixel_ratio;
 
 const FLOATING_LAYOUT_EPSILON: f32 = 0.5;
 const FLOATING_HIDDEN_POSITION_VP: f32 = -10_000.0;
-const TRANSPARENT: u32 = 0x00000000;
 // wrapContent is constrained by the full-screen portal stack; floating panels
 // need their unconstrained ideal size so overlong content does not become viewport-width.
 const FIX_AT_IDEAL_SIZE_POLICY: i32 = 2;
@@ -59,6 +58,7 @@ pub enum FloatingSide {
 pub enum FloatingAlign {
     Start,
     Center,
+    End,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -571,6 +571,7 @@ fn floating_position(
     let aligned_x = match align {
         FloatingAlign::Start => trigger.x,
         FloatingAlign::Center => trigger.x + ((trigger.width - panel.width) / 2.0),
+        FloatingAlign::End => trigger.x + trigger.width - panel.width,
     };
     let [x, y] = match side {
         FloatingSide::Right => [trigger.x + trigger.width + side_offset, trigger.y],
@@ -688,8 +689,8 @@ where
             row_component::<Message, AppTheme>()
                 .percent_width(1.0)
                 .percent_height(1.0)
-                .background_color(TRANSPARENT)
-                .hit_test_behavior(HitTestBehavior::Transparent)
+                .background_color(0x01000000)
+                .hit_test_behavior(HitTestBehavior::Default)
                 .with_patch(move |node| {
                     backdrop_node.replace(Some(node.borrow_mut().clone()));
                     backdrop_sync();
@@ -700,6 +701,8 @@ where
                         let Some(input_event) = event.input_event() else {
                             return;
                         };
+                        let _ = input_event.pointer_set_stop_propagation(true);
+                        let _ = input_event.pointer_set_intercept_hit_test_mode(HitTest::Default);
                         if !matches!(
                             input_event.action,
                             UIInputAction::Up | UIInputAction::Cancel
@@ -767,7 +770,7 @@ where
                 vec![FLOATING_HIDDEN_POSITION_VP, FLOATING_HIDDEN_POSITION_VP],
             )
             .attr(ArkUINodeAttributeType::Opacity, 0.0_f32)
-            .hit_test_behavior(HitTestBehavior::Transparent)
+            .hit_test_behavior(HitTestBehavior::Default)
             .attr(ArkUINodeAttributeType::ZIndex, 1_i32)
             .with_patch({
                 let state = state.clone();
@@ -787,6 +790,7 @@ where
                     FIX_AT_IDEAL_SIZE_POLICY,
                 )
                 .attr(ArkUINodeAttributeType::Clip, false)
+                .hit_test_behavior(HitTestBehavior::Default)
                 .with_patch({
                     let node_ref = panel_size_node_ref.clone();
                     let on_change = panel_size_on_change.clone();
@@ -813,6 +817,7 @@ where
                 .on_event(NodeEventType::TouchEvent, move |event| {
                     if let Some(input_event) = event.input_event() {
                         let _ = input_event.pointer_set_stop_propagation(true);
+                        let _ = input_event.pointer_set_intercept_hit_test_mode(HitTest::Default);
                     }
                 })
                 .child(panel)
@@ -836,7 +841,13 @@ where
         .percent_width(1.0)
         .percent_height(1.0)
         .attr(ArkUINodeAttributeType::Clip, false)
-        .hit_test_behavior(HitTestBehavior::Transparent)
+        .hit_test_behavior(
+            if matches!(state.spec.get().dismiss_mode, OverlayDismissMode::Backdrop) {
+                HitTestBehavior::BlockHierarchy
+            } else {
+                HitTestBehavior::Transparent
+            },
+        )
         .attr(
             ArkUINodeAttributeType::Alignment,
             i32::from(Alignment::TopStart),

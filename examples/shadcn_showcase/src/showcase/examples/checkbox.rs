@@ -64,18 +64,18 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                         .border_color(if ctx.checkbox_card {
                                 0xFF2563EB
                             } else {
-                                shadcn::theme::color::BORDER
+                                shadcn::theme::colors().border
                             })
                         .border_radius([
-                                shadcn::theme::radius::LG,
-                                shadcn::theme::radius::LG,
-                                shadcn::theme::radius::LG,
-                                shadcn::theme::radius::LG,
+                                shadcn::theme::radii().lg,
+                                shadcn::theme::radii().lg,
+                                shadcn::theme::radii().lg,
+                                shadcn::theme::radii().lg,
                             ])
                         .background_color(if ctx.checkbox_card {
                             0xFFEFF6FF
                         } else {
-                            shadcn::theme::color::BACKGROUND
+                            shadcn::theme::colors().background
                         })
                         .on_press(Message::SetCheckboxCard(!card_checked))
                         .children(vec![arkit::row_component()
@@ -97,7 +97,7 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                                             arkit::text("Enable notifications")
                                                 .font_size(shadcn::theme::typography::SM)
                                                 .font_weight(FontWeight::W500,)
-                                                .font_color(shadcn::theme::color::FOREGROUND,)
+                                                .font_color(shadcn::theme::colors().foreground,)
                                                 .line_height(14.0,)
                                                 .into(),
                                             shadcn::text_variant(

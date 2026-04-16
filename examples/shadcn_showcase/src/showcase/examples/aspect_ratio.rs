@@ -13,10 +13,10 @@ pub(crate) fn render(_ctx: DemoContext) -> Element {
                 .percent_height(1.0)
                 .clip(true)
                 .border_radius([
-                    shadcn::theme::radius::MD,
-                    shadcn::theme::radius::MD,
-                    shadcn::theme::radius::MD,
-                    shadcn::theme::radius::MD,
+                    shadcn::theme::radii().md,
+                    shadcn::theme::radii().md,
+                    shadcn::theme::radii().md,
+                    shadcn::theme::radii().md,
                 ])
                 .children(vec![arkit::image(
                     "https://images.unsplash.com/photo-1672758247442-82df22f5899e",

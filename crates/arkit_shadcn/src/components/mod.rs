@@ -1,8 +1,8 @@
 use arkit::ohos_arkui_binding::arkui_input_binding::UIInputAction;
 use arkit::prelude::ArkUINodeAttributeType;
 use arkit::{
-    BorderStyle, ButtonElement, CalendarPickerElement, DatePickerElement, Element,
-    FontStyle, FontWeight, HitTestBehavior, ItemAlignment, JustifyContent, Node, ProgressElement,
+    BorderStyle, ButtonElement, CalendarPickerElement, DatePickerElement, Element, FontStyle,
+    FontWeight, HitTestBehavior, ItemAlignment, JustifyContent, Node, ProgressElement,
     ProgressLinearStyle, ProgressType, RowElement, ScrollElement, SliderElement, SwiperElement,
     TextAreaElement, TextElement, TextInputElement, ToggleElement, Visibility,
 };
@@ -11,7 +11,7 @@ use crate::styles::{
     body_text, body_text_regular, border_color, card_surface, input_surface, margin_top,
     muted_text, panel_surface, shadow_sm, title_text,
 };
-use crate::theme::{color, radius, spacing, typography};
+use crate::theme::{colors, radii, spacing, typography, with_alpha};
 use std::rc::Rc;
 
 const FIX_AT_IDEAL_SIZE_POLICY: i32 = 2;
@@ -132,8 +132,9 @@ pub use dropdown_menu::{
     dropdown_checkbox_item_message as dropdown_checkbox_item, dropdown_item,
     dropdown_item_destructive, dropdown_item_inset, dropdown_item_inset_with_shortcut,
     dropdown_item_with_shortcut, dropdown_label, dropdown_label_inset,
-    dropdown_menu_message as dropdown_menu, dropdown_radio_item_message as dropdown_radio_item,
-    dropdown_separator, dropdown_subcontent, dropdown_submenu_message as dropdown_submenu,
+    dropdown_menu_aligned_message as dropdown_menu_aligned, dropdown_menu_message as dropdown_menu,
+    dropdown_radio_item_message as dropdown_radio_item, dropdown_separator, dropdown_subcontent,
+    dropdown_submenu_message as dropdown_submenu,
 };
 pub use form::*;
 pub use hover_card::{
@@ -267,15 +268,15 @@ pub(crate) fn rounded_progress<Message>(
     element
         .progress_type(ProgressType::Linear)
         .progress_linear_style(ProgressLinearStyle::new(8.0, 4.0))
-        .border_radius(radius::FULL)
+        .border_radius(radii().full)
         .clip(true)
-        .background_color(color::SECONDARY)
+        .background_color(colors().secondary)
 }
 
 pub(crate) fn rounded_table_surface<Message, AppTheme>(
     element: Node<Message, AppTheme>,
 ) -> Node<Message, AppTheme> {
-    element.border_radius(radius::SM).clip(true)
+    element.border_radius(radii().sm).clip(true)
 }
 
 pub(crate) fn rounded_menubar_surface<Message>(
@@ -285,10 +286,10 @@ pub(crate) fn rounded_menubar_surface<Message>(
         .padding(spacing::XXS)
         .height(36.0)
         .align_items_center()
-        .border_radius(radius::MD)
+        .border_radius(radii().md)
         .border_width(1.0)
-        .border_color(color::BORDER)
-        .background_color(color::BACKGROUND)
+        .border_color(colors().border)
+        .background_color(colors().background)
 }
 
 pub(crate) fn rounded_tabs_list_surface<Message>(
@@ -303,6 +304,6 @@ pub(crate) fn rounded_tabs_list_surface<Message>(
         .height(TABS_LIST_HEIGHT)
         .align_items_center()
         .justify_content_center()
-        .border_radius(radius::LG)
-        .background_color(color::MUTED)
+        .border_radius(radii().lg)
+        .background_color(colors().muted)
 }

@@ -4,7 +4,7 @@ pub fn table<Message: 'static>(headers: Vec<String>, rows: Vec<Vec<String>>) -> 
     let header_row = arkit::row_component::<Message, arkit::Theme>()
         .percent_width(1.0)
         .border_width([0.0, 0.0, 1.0, 0.0])
-        .border_color(color::BORDER)
+        .border_color(colors().border)
         .children(
             headers
                 .into_iter()
@@ -15,7 +15,7 @@ pub fn table<Message: 'static>(headers: Vec<String>, rows: Vec<Vec<String>>) -> 
                         .align_items_center()
                         .padding([0.0, 8.0, 0.0, 8.0])
                         .children(vec![body_text(header)
-                            .font_color(color::MUTED_FOREGROUND)
+                            .font_color(colors().muted_foreground)
                             .into()])
                         .into()
                 })
@@ -36,7 +36,7 @@ pub fn table<Message: 'static>(headers: Vec<String>, rows: Vec<Vec<String>>) -> 
                 } else {
                     [0.0, 0.0, 1.0, 0.0]
                 })
-                .border_color(color::BORDER)
+                .border_color(colors().border)
                 .children(
                     row.into_iter()
                         .map(|cell| {
@@ -46,7 +46,7 @@ pub fn table<Message: 'static>(headers: Vec<String>, rows: Vec<Vec<String>>) -> 
                                 .padding([8.0, 8.0, 8.0, 8.0])
                                 .children(vec![arkit::text::<Message, arkit::Theme>(cell)
                                     .font_size(typography::SM)
-                                    .font_color(color::FOREGROUND)
+                                    .font_color(colors().foreground)
                                     .line_height(20.0)
                                     .into()])
                                 .into()
@@ -61,9 +61,9 @@ pub fn table<Message: 'static>(headers: Vec<String>, rows: Vec<Vec<String>>) -> 
         arkit::column_component::<Message, arkit::Theme>()
             .percent_width(1.0)
             .border_width([1.0, 1.0, 1.0, 1.0])
-            .border_color(color::BORDER)
-            .border_radius([radius::SM, radius::SM, radius::SM, radius::SM])
-            .background_color(color::CARD)
+            .border_color(colors().border)
+            .border_radius([radii().sm, radii().sm, radii().sm, radii().sm])
+            .background_color(colors().card)
             .children(
                 std::iter::once(header_row)
                     .chain(body_rows)

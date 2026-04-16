@@ -8,7 +8,6 @@ use arkit::{ShadowStyle, TextAlignment};
 use arkit_icon as lucide;
 
 const TRANSPARENT: u32 = 0x00000000;
-const WHITE: u32 = 0xFFFFFFFF;
 const TEXT_DECORATION_NONE: i32 = 0;
 const TEXT_DECORATION_STYLE_SOLID: i32 = 0;
 
@@ -105,7 +104,7 @@ fn icon_label_button<Message: Send + 'static>(
         .children(vec![button_content_row(
             Some(label),
             Some(icon_name),
-            color::FOREGROUND,
+            colors().foreground,
             icon_size(size),
         )])
         .size(size);
@@ -118,7 +117,7 @@ pub fn icon_button<Message: Send + 'static>(icon: impl Into<String>) -> ButtonEl
         .children(vec![button_content_row(
             None,
             Some(icon.into()),
-            color::FOREGROUND,
+            colors().foreground,
             icon_size(ButtonSize::Icon),
         )])
         .size(ButtonSize::Icon);
@@ -144,7 +143,7 @@ fn button_host<Message, AppTheme>(
         .focus_on_touch(false)
         .background_color(TRANSPARENT)
         .border_style(BorderStyle::Solid)
-        .border_radius(radius::MD)
+        .border_radius(radii().md)
         .clip(true)
         .alignment(Alignment::Center)
         .padding(Padding::ZERO)
@@ -210,7 +209,7 @@ fn apply_button_theme_with_content<Message: Send + 'static, AppTheme>(
     let initial_text_decoration = TEXT_DECORATION_NONE;
 
     let button = element
-        .border_radius(radius::MD)
+        .border_radius(radii().md)
         .clip(true)
         .border_width(variant_style.border_width)
         .border_color(variant_style.border_color)
@@ -283,40 +282,40 @@ fn variant_style(variant: ButtonVariant) -> ButtonVariantStyle {
     match variant {
         // bg-primary, shadow-sm
         ButtonVariant::Default => ButtonVariantStyle {
-            background: color::PRIMARY,
-            foreground: color::PRIMARY_FOREGROUND,
+            background: colors().primary,
+            foreground: colors().primary_foreground,
             border_width: 0.0,
             border_color: TRANSPARENT,
             shadow: true,
         },
         // bg-secondary, shadow-sm
         ButtonVariant::Secondary => ButtonVariantStyle {
-            background: color::SECONDARY,
-            foreground: color::SECONDARY_FOREGROUND,
+            background: colors().secondary,
+            foreground: colors().secondary_foreground,
             border_width: 0.0,
             border_color: TRANSPARENT,
             shadow: true,
         },
         // border-border bg-background, shadow-sm
         ButtonVariant::Outline => ButtonVariantStyle {
-            background: color::BACKGROUND,
-            foreground: color::FOREGROUND,
+            background: colors().background,
+            foreground: colors().foreground,
             border_width: 1.0,
-            border_color: color::BORDER,
+            border_color: colors().border,
             shadow: true,
         },
         // no bg, no shadow
         ButtonVariant::Ghost => ButtonVariantStyle {
             background: TRANSPARENT,
-            foreground: color::FOREGROUND,
+            foreground: colors().foreground,
             border_width: 0.0,
             border_color: TRANSPARENT,
             shadow: false,
         },
         // bg-destructive, shadow-sm
         ButtonVariant::Destructive => ButtonVariantStyle {
-            background: color::DESTRUCTIVE,
-            foreground: WHITE,
+            background: colors().destructive,
+            foreground: colors().destructive_foreground,
             border_width: 0.0,
             border_color: TRANSPARENT,
             shadow: true,
@@ -324,7 +323,7 @@ fn variant_style(variant: ButtonVariant) -> ButtonVariantStyle {
         // no bg, no shadow
         ButtonVariant::Link => ButtonVariantStyle {
             background: TRANSPARENT,
-            foreground: color::PRIMARY,
+            foreground: colors().primary,
             border_width: 0.0,
             border_color: TRANSPARENT,
             shadow: false,

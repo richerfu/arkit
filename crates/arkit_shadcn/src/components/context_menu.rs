@@ -24,6 +24,7 @@ where
         items,
         open,
         move |value| dispatch_message(on_open_change(value)),
+        super::floating_layer::FloatingAlign::Start,
         MenuStyle {
             width: MENU_PANEL_WIDTH,
             submenu_width: SUBMENU_PANEL_WIDTH,

@@ -47,30 +47,30 @@ pub(crate) fn toggle_visual_style(variant: ToggleVariant, active: bool) -> Toggl
     match variant {
         ToggleVariant::Default => ToggleVisualStyle {
             background: if active {
-                color::ACCENT
+                colors().accent
             } else {
                 TOGGLE_TRANSPARENT
             },
             foreground: if active {
-                color::ACCENT_FOREGROUND
+                colors().accent_foreground
             } else {
-                color::FOREGROUND
+                colors().foreground
             },
             border_color: TOGGLE_TRANSPARENT,
             shadow: false,
         },
         ToggleVariant::Outline => ToggleVisualStyle {
             background: if active {
-                color::ACCENT
+                colors().accent
             } else {
                 TOGGLE_TRANSPARENT
             },
             foreground: if active {
-                color::ACCENT_FOREGROUND
+                colors().accent_foreground
             } else {
-                color::FOREGROUND
+                colors().foreground
             },
-            border_color: color::INPUT,
+            border_color: colors().input,
             shadow: true,
         },
     }
@@ -176,7 +176,7 @@ pub fn toggle<Message: Send + 'static>(
         ToggleVariant::Default,
         size_style,
         [0.0, 0.0, 0.0, 0.0],
-        [radius::MD, radius::MD, radius::MD, radius::MD],
+        [radii().md, radii().md, radii().md, radii().md],
         None,
     )
     .on_click(move || on_toggle(!state))
@@ -211,7 +211,7 @@ pub fn toggle_icon<Message: Send + 'static>(
         ToggleVariant::Default,
         size_style,
         [0.0, 0.0, 0.0, 0.0],
-        [radius::MD, radius::MD, radius::MD, radius::MD],
+        [radii().md, radii().md, radii().md, radii().md],
         None,
     )
     .on_click(move || on_toggle(!state))

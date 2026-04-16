@@ -2,10 +2,11 @@ use crate::prelude::*;
 use arkit_shadcn as shadcn;
 
 use super::constants::SHOWCASE_COMPONENTS;
-use super::layout::{component_list_cell, max_width, nav_bar, v_stack};
-use crate::Message;
+use super::layout::{component_list_cell, max_width, nav_bar, v_stack, ThemeMenuState};
+use crate::{Message, ShowcaseState};
 
-pub(crate) fn catalog_home(search: String) -> Element {
+pub(crate) fn catalog_home(state: &ShowcaseState) -> Element {
+    let search = state.home_search.clone();
     let keyword = search.to_lowercase();
     let filtered = SHOWCASE_COMPONENTS
         .iter()
@@ -29,11 +30,11 @@ pub(crate) fn catalog_home(search: String) -> Element {
     };
 
     arkit::column(vec![
-        nav_bar("Showcase", false),
+        nav_bar("Showcase", false, ThemeMenuState::from(state)),
         arkit::scroll_component()
             .width(Length::Fill)
             .layout_weight(1.0_f32)
-            .background_color(shadcn::theme::color::BACKGROUND)
+            .background_color(shadcn::theme::colors().background)
             .children(vec![max_width(
                 arkit::column_component()
                     .width(Length::Fill)

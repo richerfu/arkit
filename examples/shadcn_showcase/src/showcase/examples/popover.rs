@@ -36,7 +36,7 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                             arkit::text("Dimensions")
                                 .font_size(shadcn::theme::typography::MD)
                                 .font_weight(FontWeight::W500)
-                                .font_color(shadcn::theme::color::FOREGROUND)
+                                .font_color(shadcn::theme::colors().foreground)
                                 .line_height(16.0)
                                 .into(),
                             shadcn::text_with_variant(

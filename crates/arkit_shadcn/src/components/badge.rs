@@ -4,7 +4,6 @@ use arkit_icon as lucide;
 const BADGE_ICON_SIZE: f32 = 12.0;
 const BADGE_VERTICAL_PADDING: f32 = 2.0;
 const BADGE_ICON_GAP: f32 = 4.0;
-const BADGE_RADIUS: f32 = radius::MD;
 const BADGE_TEXT_LINE_HEIGHT: f32 = 16.0;
 const BADGE_MIN_HEIGHT: f32 = 22.0;
 
@@ -19,28 +18,28 @@ pub enum BadgeVariant {
 fn badge_style(variant: BadgeVariant) -> (u32, u32, [f32; 4], u32) {
     match variant {
         BadgeVariant::Default => (
-            color::PRIMARY,
-            color::PRIMARY_FOREGROUND,
+            colors().primary,
+            colors().primary_foreground,
             [1.0, 1.0, 1.0, 1.0],
             0x00000000,
         ),
         BadgeVariant::Secondary => (
-            color::SECONDARY,
-            color::SECONDARY_FOREGROUND,
+            colors().secondary,
+            colors().secondary_foreground,
             [1.0, 1.0, 1.0, 1.0],
             0x00000000,
         ),
         BadgeVariant::Destructive => (
-            color::DESTRUCTIVE,
-            color::DESTRUCTIVE_FOREGROUND,
+            colors().destructive,
+            colors().destructive_foreground,
             [1.0, 1.0, 1.0, 1.0],
             0x00000000,
         ),
         BadgeVariant::Outline => (
-            color::BACKGROUND,
-            color::FOREGROUND,
+            colors().background,
+            colors().foreground,
             [1.0, 1.0, 1.0, 1.0],
-            color::BORDER,
+            colors().border,
         ),
     }
 }
@@ -66,7 +65,7 @@ fn badge_shell<Message: 'static>(
 ) -> Element<Message> {
     arkit::row_component::<Message, arkit::Theme>()
         .constraint_size(0.0, 100000.0, BADGE_MIN_HEIGHT, 100000.0)
-        .border_radius([BADGE_RADIUS, BADGE_RADIUS, BADGE_RADIUS, BADGE_RADIUS])
+        .border_radius([radii().md, radii().md, radii().md, radii().md])
         .background_color(background)
         .border_width(border_width)
         .border_color(border_color)
@@ -156,7 +155,7 @@ pub fn pill_badge_with_variant<Message: 'static>(
     let (background, foreground, border_width, border_color) = badge_style(variant);
     arkit::row_component::<Message, arkit::Theme>()
         .constraint_size(20.0, 100000.0, BADGE_MIN_HEIGHT, 100000.0)
-        .border_radius([radius::FULL, radius::FULL, radius::FULL, radius::FULL])
+        .border_radius([radii().full, radii().full, radii().full, radii().full])
         .background_color(background)
         .border_width(border_width)
         .border_color(border_color)

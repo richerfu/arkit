@@ -12,7 +12,7 @@ fn radio_indicator<Message: 'static>(checked: bool) -> Element<Message> {
             .height(RADIO_SIZE)
             .align_items_center()
             .justify_content_center()
-            .border_radius([radius::FULL, radius::FULL, radius::FULL, radius::FULL])
+            .border_radius([radii().full, radii().full, radii().full, radii().full])
             .border_width([
                 RADIO_BORDER_WIDTH,
                 RADIO_BORDER_WIDTH,
@@ -20,19 +20,19 @@ fn radio_indicator<Message: 'static>(checked: bool) -> Element<Message> {
                 RADIO_BORDER_WIDTH,
             ])
             .border_color(if checked {
-                color::PRIMARY
+                colors().primary
             } else {
-                color::INPUT
+                colors().input
             })
-            .background_color(color::BACKGROUND),
+            .background_color(colors().background),
     );
 
     if checked {
         indicator = indicator.children(vec![arkit::row_component::<Message, arkit::Theme>()
             .width(RADIO_DOT_SIZE)
             .height(RADIO_DOT_SIZE)
-            .border_radius([radius::FULL, radius::FULL, radius::FULL, radius::FULL])
-            .background_color(color::PRIMARY)
+            .border_radius([radii().full, radii().full, radii().full, radii().full])
+            .background_color(colors().primary)
             .into()]);
     }
 
