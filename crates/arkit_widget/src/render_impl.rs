@@ -1033,7 +1033,21 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
     }
 
     pub fn font_size(self, value: f32) -> Self {
-        self.builder_attr(ArkUINodeAttributeType::FontSize, value)
+        let node = self.builder_attr(ArkUINodeAttributeType::FontSize, value);
+        let placeholder_attr = match node.kind {
+            NodeKind::TextInput => Some(ArkUINodeAttributeType::TextInputPlaceholderFont),
+            NodeKind::TextArea => Some(ArkUINodeAttributeType::TextAreaPlaceholderFont),
+            _ => None,
+        };
+
+        if let Some(attr) = placeholder_attr {
+            node.builder_attr(
+                attr,
+                ArkUINodeAttributeItem::NumberValue(vec![ArkUINodeAttributeNumber::Float(value)]),
+            )
+        } else {
+            node
+        }
     }
 
     pub fn line_height(self, value: f32) -> Self {
@@ -3271,6 +3285,28 @@ mod tests {
                 ArkUINodeAttributeType::BorderRadius,
                 ArkUINodeAttributeType::Clip,
             ]
+        );
+    }
+
+    #[test]
+    fn text_input_font_size_sets_placeholder_font_size() {
+        let node = text_input_component::<(), arkit_core::Theme>().font_size(14.0);
+
+        assert_eq!(node.attr_f32(ArkUINodeAttributeType::FontSize), Some(14.0));
+        assert_eq!(
+            node.attr_f32(ArkUINodeAttributeType::TextInputPlaceholderFont),
+            Some(14.0)
+        );
+    }
+
+    #[test]
+    fn text_area_font_size_sets_placeholder_font_size() {
+        let node = text_area_component::<(), arkit_core::Theme>().font_size(13.0);
+
+        assert_eq!(node.attr_f32(ArkUINodeAttributeType::FontSize), Some(13.0));
+        assert_eq!(
+            node.attr_f32(ArkUINodeAttributeType::TextAreaPlaceholderFont),
+            Some(13.0)
         );
     }
 }
