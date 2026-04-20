@@ -24,6 +24,7 @@ dependencies = [
  "napi-ohos",
  "ohos-arkui-binding",
  "openharmony-ability",
+ "tokio",
 ]
 
 [[package]]
@@ -72,6 +73,7 @@ version = "0.1.0"
 dependencies = [
  "arkit_core",
  "arkit_futures",
+ "tokio",
 ]
 
 [[package]]
@@ -93,6 +95,17 @@ dependencies = [
  "ohos-arkui-binding",
  "ohos-display-binding",
  "ohos-hilog-binding",
+]
+
+[[package]]
+name = "async_task"
+version = "0.1.0"
+dependencies = [
+ "arkit",
+ "napi-build-ohos",
+ "napi-derive-ohos",
+ "napi-ohos",
+ "tokio",
 ]
 
 [[package]]
@@ -745,6 +758,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "tokio"
+version = "1.52.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b67dee974fe86fd92cc45b7a95fdd2f99a36a6d7b0d431a231178d3d670bbcc6"
+dependencies = [
+ "pin-project-lite",
 ]
 
 [[package]]

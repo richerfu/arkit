@@ -2,6 +2,7 @@ use std::any::Any;
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::rc::{Rc, Weak};
+use std::sync::mpsc;
 
 use arkit_core::{theme, window};
 use arkit_runtime::{
@@ -9,7 +10,7 @@ use arkit_runtime::{
         clear_ui_loop_effects, run_ui_loop_effects, set_current_runtime, set_dispatcher,
         set_ui_waker, RuntimeDispatcher, RuntimeHandle,
     },
-    Program, SubscriptionHandle,
+    Program, SubscriptionHandle, Task, TaskAction,
 };
 use arkit_widget::{
     begin_render_pass, end_render_pass, mount, patch, realize_attached_mount, Element, MountedNode,
@@ -19,7 +20,7 @@ use napi_ohos::{Error, Result};
 use ohos_arkui_binding::common::handle::ArkUIHandle;
 use ohos_arkui_binding::common::node::ArkUINode;
 use ohos_arkui_binding::component::root::RootNode;
-use openharmony_ability::{Event as AbilityEvent, OpenHarmonyApp};
+use openharmony_ability::{Event as AbilityEvent, OpenHarmonyApp, OpenHarmonyWaker};
 
 pub use napi_derive_ohos;
 pub use napi_ohos;
@@ -171,6 +172,56 @@ where
     _program: Rc<P>,
 }
 
+struct TaskRunner<Message>
+where
+    Message: Send + 'static,
+{
+    runtime: tokio::runtime::Runtime,
+    sender: mpsc::Sender<Message>,
+    waker: OpenHarmonyWaker,
+}
+
+impl<Message> TaskRunner<Message>
+where
+    Message: Send + 'static,
+{
+    fn new(sender: mpsc::Sender<Message>, waker: OpenHarmonyWaker) -> Result<Self> {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .thread_name("arkit-task")
+            .enable_all()
+            .build()
+            .map_err(|error| Error::from_reason(error.to_string()))?;
+
+        Ok(Self {
+            runtime,
+            sender,
+            waker,
+        })
+    }
+
+    fn run(&self, task: Task<Message>) -> Vec<Message> {
+        let mut ready = Vec::new();
+
+        for action in task.into_actions() {
+            match action {
+                TaskAction::Ready(action) => action(&mut ready),
+                TaskAction::Future(future) => {
+                    let sender = self.sender.clone();
+                    let waker = self.waker.clone();
+                    self.runtime.spawn(async move {
+                        let message = future.await;
+                        if sender.send(message).is_ok() {
+                            waker.wake();
+                        }
+                    });
+                }
+            }
+        }
+
+        ready
+    }
+}
+
 struct ApplicationState<P>
 where
     P: Program<Renderer = Renderer> + 'static,
@@ -180,6 +231,9 @@ where
     handling: Cell<bool>,
     redraw_pending: Cell<bool>,
     pending: RefCell<Vec<P::Message>>,
+    background_sender: mpsc::Sender<P::Message>,
+    background_receiver: RefCell<mpsc::Receiver<P::Message>>,
+    task_runner: RefCell<Option<Rc<TaskRunner<P::Message>>>>,
     emitter: RefCell<Option<Rc<dyn Fn(P::Message)>>>,
     subscriptions: RefCell<BTreeMap<String, SubscriptionHandle>>,
 }
@@ -189,19 +243,22 @@ where
     P: Program<Renderer = Renderer> + 'static,
     P::Theme: theme::Base + Default + 'static,
 {
-    fn new(program: Rc<P>) -> Rc<Self> {
+    fn new(program: Rc<P>) -> (Rc<Self>, Task<P::Message>) {
         let (state, boot_task) = program.boot();
+        let (background_sender, background_receiver) = mpsc::channel();
         let app = Rc::new(Self {
             program,
             state: Rc::new(RefCell::new(state)),
             handling: Cell::new(false),
             redraw_pending: Cell::new(false),
             pending: RefCell::new(Vec::new()),
+            background_sender,
+            background_receiver: RefCell::new(background_receiver),
+            task_runner: RefCell::new(None),
             emitter: RefCell::new(None),
             subscriptions: RefCell::new(BTreeMap::new()),
         });
-        app.enqueue_many(boot_task.into_messages());
-        app
+        (app, boot_task)
     }
 
     fn render(&self) -> Element<P::Message, P::Theme> {
@@ -227,6 +284,33 @@ where
         self.flush()
     }
 
+    fn set_task_runner(&self, waker: OpenHarmonyWaker) -> Result<()> {
+        let runner = TaskRunner::new(self.background_sender.clone(), waker)?;
+        self.task_runner.replace(Some(Rc::new(runner)));
+        Ok(())
+    }
+
+    fn run_task(&self, task: Task<P::Message>) -> Vec<P::Message> {
+        let runner = self
+            .task_runner
+            .borrow()
+            .as_ref()
+            .cloned()
+            .expect("arkit runtime task executed before task runner was installed");
+        runner.run(task)
+    }
+
+    fn drain_background(&self) -> bool {
+        let mut messages = Vec::new();
+        {
+            let receiver = self.background_receiver.borrow_mut();
+            while let Ok(message) = receiver.try_recv() {
+                messages.push(message);
+            }
+        }
+        self.enqueue_many(messages)
+    }
+
     fn flush(&self) -> bool {
         if self.handling.replace(true) {
             return false;
@@ -243,9 +327,8 @@ where
                 self.program.update(&mut state, message)
             };
             self.sync_subscription();
-            self.pending
-                .borrow_mut()
-                .extend(task.into_messages().into_iter().rev());
+            let messages = self.run_task(task);
+            self.pending.borrow_mut().extend(messages.into_iter().rev());
         }
 
         self.handling.set(false);
@@ -319,17 +402,32 @@ where
 {
     pub fn new(slot: ArkUIHandle, app: OpenHarmonyApp, program: P) -> Result<Self> {
         let program = Rc::new(program);
-        let application = ApplicationState::new(program.clone());
+        let (application, boot_task) = ApplicationState::new(program.clone());
         let waker = app.create_waker();
-        set_ui_waker(Some(Rc::new(move || waker.wake())));
+        application.set_task_runner(waker.clone())?;
+        set_ui_waker(Some(Rc::new({
+            let waker = waker.clone();
+            move || waker.wake()
+        })));
+        let runtime_slot = Rc::new(RefCell::new(
+            None::<Weak<RootRuntime<P::Message, P::Theme>>>,
+        ));
+        let event_application = application.clone();
+        let event_runtime = runtime_slot.clone();
         app.run_loop(move |event| {
             if matches!(event, AbilityEvent::UserEvent) {
                 run_ui_loop_effects();
+                if event_application.drain_background() {
+                    if let Some(runtime) = event_runtime.borrow().clone() {
+                        event_application.schedule_redraw(runtime);
+                    }
+                }
             }
         });
         let render_state = application.clone();
         let runtime = RootRuntime::new(slot, app, move || render_state.render())?;
         let runtime = Rc::new(runtime);
+        runtime_slot.replace(Some(Rc::downgrade(&runtime)));
         set_current_runtime(Some(RuntimeHandle::new({
             let runtime = runtime.clone();
             move || {
@@ -356,6 +454,9 @@ where
         });
         application.set_emitter(emitter);
         set_dispatcher(Some(dispatcher.clone()));
+        if application.enqueue_many(application.run_task(boot_task)) {
+            application.schedule_redraw(Rc::downgrade(&runtime));
+        }
 
         Ok(Self {
             runtime,

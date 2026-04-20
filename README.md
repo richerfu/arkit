@@ -21,6 +21,7 @@ dedicated crates and are re-exported here.
 - `crates/arkit_derive`: `#[entry]` and `#[component]` macros
 - `crates/arkit_shadcn`: shadcn-style component crate (built on `arkit`)
 - `examples/counter`: minimal smoke example for OpenHarmony integration
+- `examples/async_task`: minimal async `Task::perform` smoke example
 - `examples/shadcn_showcase`: shadcn / react-native-reusables showcase example
 
 ## Key APIs
@@ -31,6 +32,10 @@ dedicated crates and are re-exported here.
 - `NavigationStack<T>`: explicit application-state navigation for example apps
 - `#[component]`: a no-op marker for reusable view helpers; it does not create hidden state
 - `floating_overlay` / `modal_overlay`: shared detached overlay primitives for popups, menus, dialogs, sheets, and drawers
+
+`Task::perform` runs an async operation on the runtime executor and sends the
+mapped `Message` back through `update` when it completes. Background work must
+return messages; it must not mutate application state directly.
 
 ## Shadcn Component Crate
 
@@ -114,5 +119,35 @@ fn view(state: &State) -> Element {
 #[entry]
 fn app() -> impl arkit::EntryPoint {
     application(State::default, update, view)
+}
+```
+
+Async work follows the same message loop:
+
+```rust
+#[derive(Clone, Debug)]
+enum Message {
+    Load,
+    Loaded(String),
+}
+
+fn update(state: &mut State, message: Message) -> Task<Message> {
+    match message {
+        Message::Load => {
+            state.loading = true;
+            Task::perform(
+                async {
+                    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                    String::from("ready")
+                },
+                Message::Loaded,
+            )
+        }
+        Message::Loaded(value) => {
+            state.loading = false;
+            state.value = value;
+            Task::none()
+        }
+    }
 }
 ```

@@ -1,6 +1,9 @@
 use std::any::Any;
 use std::cell::RefCell;
+use std::future::Future;
+use std::pin::Pin;
 use std::rc::Rc;
+use std::sync::Arc;
 
 pub use arkit_core::theme;
 pub use arkit_core::{advanced, window, Settings, Theme};
@@ -112,8 +115,17 @@ pub fn clear_ui_loop_effects() {
     });
 }
 
+#[doc(hidden)]
+pub type BoxedTaskFuture<Message> = Pin<Box<dyn Future<Output = Message> + Send + 'static>>;
+
+#[doc(hidden)]
+pub enum TaskAction<Message> {
+    Ready(Box<dyn FnOnce(&mut Vec<Message>)>),
+    Future(BoxedTaskFuture<Message>),
+}
+
 pub struct Task<Message> {
-    actions: Vec<Box<dyn FnOnce(&mut Vec<Message>)>>,
+    actions: Vec<TaskAction<Message>>,
 }
 
 impl<Message: Send + 'static> Task<Message> {
@@ -125,7 +137,9 @@ impl<Message: Send + 'static> Task<Message> {
 
     pub fn done(value: Message) -> Self {
         Self {
-            actions: vec![Box::new(move |messages| messages.push(value))],
+            actions: vec![TaskAction::Ready(Box::new(move |messages| {
+                messages.push(value)
+            }))],
         }
     }
 
@@ -139,30 +153,46 @@ impl<Message: Send + 'static> Task<Message> {
 
     pub fn run(action: impl FnOnce() -> Message + 'static) -> Self {
         Self {
-            actions: vec![Box::new(move |messages| messages.push(action()))],
+            actions: vec![TaskAction::Ready(Box::new(move |messages| {
+                messages.push(action())
+            }))],
         }
     }
 
-    pub fn perform<T: 'static>(
-        operation: impl FnOnce() -> T + 'static,
-        map: impl FnOnce(T) -> Message + 'static,
+    pub fn perform<T: Send + 'static>(
+        operation: impl Future<Output = T> + Send + 'static,
+        map: impl FnOnce(T) -> Message + Send + 'static,
     ) -> Self {
         Self {
-            actions: vec![Box::new(move |messages| messages.push(map(operation())))],
+            actions: vec![TaskAction::Future(Box::pin(
+                async move { map(operation.await) },
+            ))],
         }
     }
 
-    pub fn map<B: Send + 'static>(self, map: impl Fn(Message) -> B + 'static) -> Task<B> {
-        let map = Rc::new(map);
+    pub fn map<B: Send + 'static>(
+        self,
+        map: impl Fn(Message) -> B + Send + Sync + 'static,
+    ) -> Task<B> {
+        let map = Arc::new(map);
         let mut actions = Vec::with_capacity(self.actions.len());
 
         for action in self.actions {
             let map = map.clone();
-            actions.push(Box::new(move |messages: &mut Vec<B>| {
-                let mut source = Vec::new();
-                action(&mut source);
-                messages.extend(source.into_iter().map(|message| map(message)));
-            }) as Box<dyn FnOnce(&mut Vec<B>)>);
+            match action {
+                TaskAction::Ready(action) => {
+                    actions.push(TaskAction::Ready(Box::new(move |messages: &mut Vec<B>| {
+                        let mut source = Vec::new();
+                        action(&mut source);
+                        messages.extend(source.into_iter().map(|message| map(message)));
+                    })));
+                }
+                TaskAction::Future(future) => {
+                    actions.push(TaskAction::Future(Box::pin(
+                        async move { map(future.await) },
+                    )));
+                }
+            }
         }
 
         Task { actions }
@@ -175,9 +205,19 @@ impl<Message: Send + 'static> Task<Message> {
     pub fn into_messages(self) -> Vec<Message> {
         let mut messages = Vec::new();
         for action in self.actions {
-            action(&mut messages);
+            match action {
+                TaskAction::Ready(action) => action(&mut messages),
+                TaskAction::Future(_) => {
+                    panic!("Task::into_messages cannot consume async tasks");
+                }
+            }
         }
         messages
+    }
+
+    #[doc(hidden)]
+    pub fn into_actions(self) -> Vec<TaskAction<Message>> {
+        self.actions
     }
 }
 
@@ -414,4 +454,64 @@ pub mod internal {
         set_current_runtime, set_dispatcher, set_ui_waker, with_dispatcher, RuntimeDispatcher,
         RuntimeHandle,
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Task, TaskAction};
+
+    fn test_runtime() -> tokio::runtime::Runtime {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("test tokio runtime")
+    }
+
+    #[test]
+    fn ready_tasks_produce_messages_in_batch_order() {
+        let task = Task::batch([Task::done(1), Task::run(|| 2), Task::done(3)]);
+
+        assert_eq!(task.into_messages(), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn perform_maps_async_result_to_message() {
+        let mut actions = Task::perform(async { 41 }, |value| value + 1).into_actions();
+        assert_eq!(actions.len(), 1);
+
+        let TaskAction::Future(future) = actions.remove(0) else {
+            panic!("Task::perform should create a future action");
+        };
+
+        assert_eq!(test_runtime().block_on(future), 42);
+    }
+
+    #[test]
+    fn map_applies_to_ready_and_async_actions() {
+        let task = Task::batch([Task::done(1), Task::perform(async { 2 }, |value| value)])
+            .map(|value| format!("message:{value}"));
+
+        let mut ready = Vec::new();
+        let mut futures = Vec::new();
+
+        for action in task.into_actions() {
+            match action {
+                TaskAction::Ready(action) => action(&mut ready),
+                TaskAction::Future(future) => futures.push(future),
+            }
+        }
+
+        assert_eq!(ready, vec![String::from("message:1")]);
+        assert_eq!(futures.len(), 1);
+        assert_eq!(
+            test_runtime().block_on(futures.remove(0)),
+            String::from("message:2")
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Task::into_messages cannot consume async tasks")]
+    fn into_messages_rejects_async_tasks() {
+        let _ = Task::perform(async { 1 }, |value| value).into_messages();
+    }
 }

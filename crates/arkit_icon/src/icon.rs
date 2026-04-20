@@ -65,6 +65,18 @@ pub(crate) struct IconSpec {
     pub(crate) stroke_width: f32,
 }
 
+impl IconSpec {
+    fn render_key(&self) -> String {
+        format!(
+            "arkit-icon:{}:{:08x}:{:08x}:{:08x}",
+            self.name,
+            self.size.to_bits(),
+            self.color,
+            self.stroke_width.to_bits()
+        )
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct IconCacheKey {
     name: String,
@@ -175,6 +187,7 @@ fn build_icon_node<Message: 'static, AppTheme: 'static>(
     let alt = spec.name.clone();
 
     Ok(arkit::image_component()
+        .key(spec.render_key())
         .native_with_cleanup(move |image| {
             let native = NativeIconImage::decode(svg, size).map_err(icon_to_arkui_error)?;
             image.set_attribute(
@@ -322,5 +335,42 @@ impl Drop for NativeIconImage {
             drawable.dispose();
         }
         let _ = &self.pixel_map;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn render_key_changes_when_icon_name_changes() {
+        let first = IconSpec {
+            name: "chevron-right".into(),
+            size: 18.0,
+            color: 0xFF71717A,
+            stroke_width: DEFAULT_STROKE_WIDTH,
+        };
+        let second = IconSpec {
+            name: "chevron-down".into(),
+            ..first.clone()
+        };
+
+        assert_ne!(first.render_key(), second.render_key());
+    }
+
+    #[test]
+    fn render_key_changes_when_visual_spec_changes() {
+        let first = IconSpec {
+            name: "loader".into(),
+            size: 16.0,
+            color: 0xFF71717A,
+            stroke_width: DEFAULT_STROKE_WIDTH,
+        };
+        let second = IconSpec {
+            size: 18.0,
+            ..first.clone()
+        };
+
+        assert_ne!(first.render_key(), second.render_key());
     }
 }

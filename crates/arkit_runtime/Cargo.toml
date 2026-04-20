@@ -11,3 +11,6 @@ api-22 = []
 [dependencies]
 arkit_core.workspace = true
 arkit_futures.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true

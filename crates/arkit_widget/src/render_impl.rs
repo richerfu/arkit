@@ -1849,11 +1849,11 @@ impl<Message: 'static, AppTheme: 'static> advanced::Widget<Message, AppTheme, Re
 }
 
 pub fn button_component<Message, AppTheme>() -> Node<Message, AppTheme> {
-    Node::new(NodeKind::Button)
+    Node::new(NodeKind::Stack)
 }
 
 pub fn button<Message, AppTheme>(label: impl Into<String>) -> Node<Message, AppTheme> {
-    button_component().label(label)
+    Node::new(NodeKind::Button).label(label)
 }
 
 pub fn text_component<Message, AppTheme>() -> Node<Message, AppTheme> {
@@ -3065,7 +3065,10 @@ where
     apply_event_handlers(node, &event_handlers);
     mounted.events = next_events;
 
-    match (long_press_handler.as_ref(), mounted.long_press_callback.as_ref()) {
+    match (
+        long_press_handler.as_ref(),
+        mounted.long_press_callback.as_ref(),
+    ) {
         (Some(handler), Some(callback)) => {
             callback.replace(handler.callback.clone());
         }
@@ -3285,6 +3288,41 @@ mod tests {
                 ArkUINodeAttributeType::BorderRadius,
                 ArkUINodeAttributeType::Clip,
             ]
+        );
+    }
+
+    #[test]
+    fn button_component_uses_pressable_surface_host() {
+        let node = button_component::<(), arkit_core::Theme>();
+
+        assert_eq!(node.kind, NodeKind::Stack);
+        assert_eq!(node.attr_f32(ArkUINodeAttributeType::ButtonType), None);
+    }
+
+    #[test]
+    fn button_component_keeps_border_radius_as_surface_style() {
+        let node = button_component::<(), arkit_core::Theme>().border_radius(8.0);
+
+        assert_eq!(node.kind, NodeKind::Stack);
+        assert_eq!(node.attr_f32(ArkUINodeAttributeType::ButtonType), None);
+        assert_eq!(
+            node.attr_f32(ArkUINodeAttributeType::BorderRadius),
+            Some(8.0)
+        );
+    }
+
+    #[test]
+    fn label_button_uses_native_button() {
+        let node = button::<(), arkit_core::Theme>("OK").border_radius(8.0);
+
+        assert_eq!(node.kind, NodeKind::Button);
+        assert_eq!(
+            node.attr_string(ArkUINodeAttributeType::ButtonLabel),
+            Some("OK")
+        );
+        assert_eq!(
+            node.attr_f32(ArkUINodeAttributeType::BorderRadius),
+            Some(8.0)
         );
     }
 
