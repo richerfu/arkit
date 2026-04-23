@@ -58,7 +58,11 @@ where
         return;
     }
 
-    if let Some(dispatcher) = GLOBAL_DISPATCHER.lock().expect("global dispatcher lock").clone() {
+    if let Some(dispatcher) = GLOBAL_DISPATCHER
+        .lock()
+        .expect("global dispatcher lock")
+        .clone()
+    {
         dispatcher(Box::new(message));
         return;
     }
@@ -480,8 +484,8 @@ where
 #[doc(hidden)]
 pub mod internal {
     pub use crate::{
-        clear_ui_loop_effects, current_runtime, dispatch, queue_ui_loop, run_ui_loop_effects,
-        global_dispatcher, set_current_runtime, set_dispatcher, set_global_dispatcher,
+        clear_ui_loop_effects, current_runtime, dispatch, global_dispatcher, queue_ui_loop,
+        run_ui_loop_effects, set_current_runtime, set_dispatcher, set_global_dispatcher,
         set_ui_waker, with_dispatcher, with_global_dispatcher, GlobalRuntimeDispatcher,
         RuntimeDispatcher, RuntimeHandle,
     };

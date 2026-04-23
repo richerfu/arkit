@@ -78,9 +78,7 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
             state.status = match state.controller.evaluate_script_with_callback(
                 "document.title",
                 Some(Box::new(|title| {
-                    dispatch(Message::StatusChanged(format!(
-                        "document.title = {title}"
-                    )));
+                    dispatch(Message::StatusChanged(format!("document.title = {title}")));
                 })),
             ) {
                 Ok(()) => String::from("requested document.title"),
@@ -201,12 +199,12 @@ fn toolbar_button(label: &str, message: Message) -> Node<Message> {
             .font_size(13.0)
             .line_height(16.0),
     )
-        .align_items_center()
-        .justify_content_center()
-        .padding([10.0, 14.0, 10.0, 14.0])
-        .border_radius(10.0)
-        .background_color(0xFF111827)
-        .on_press(message)
+    .align_items_center()
+    .justify_content_center()
+    .padding([10.0, 14.0, 10.0, 14.0])
+    .border_radius(10.0)
+    .background_color(0xFF111827)
+    .on_press(message)
 }
 
 #[entry]

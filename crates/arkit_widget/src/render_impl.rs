@@ -21,13 +21,13 @@ use ohos_arkui_binding::api::attribute_option::ProgressLinearStyleOption;
 use ohos_arkui_binding::api::node_custom_event::NodeCustomEvent;
 use ohos_arkui_binding::common::attribute::{ArkUINodeAttributeItem, ArkUINodeAttributeNumber};
 use ohos_arkui_binding::common::error::ArkUIResult;
-use ohos_arkui_binding::common::node::{ArkUINode, ArkUINodeRaw};
+use ohos_arkui_binding::common::node::ArkUINode;
 use ohos_arkui_binding::component::attribute::{
     ArkUIAttributeBasic, ArkUICommonAttribute, ArkUIEvent, ArkUIGesture,
 };
 use ohos_arkui_binding::component::built_in_component::{
-    Button, CalendarPicker, Checkbox, Column, DatePicker, Image, Progress, Radio, Row, Scroll,
-    Slider, Stack, Swiper, Text, TextArea, TextInput, Toggle,
+    Button, CalendarPicker, Checkbox, Column, DatePicker, Image, List, ListItem, Progress, Radio,
+    Refresh, Row, Scroll, Slider, Stack, Swiper, Text, TextArea, TextInput, Toggle,
 };
 use ohos_arkui_binding::event::inner_event::Event as ArkEvent;
 use ohos_arkui_binding::gesture::gesture_data::GestureEventData;
@@ -40,9 +40,9 @@ use ohos_arkui_binding::types::event::NodeEventType;
 use ohos_arkui_binding::types::gesture_event::GestureEventAction;
 use ohos_arkui_binding::types::text_alignment::TextAlignment;
 #[cfg(feature = "webview")]
-pub use openharmony_ability::{DownloadStartResult, WebViewStyle, Webview};
-#[cfg(feature = "webview")]
 use openharmony_ability::{get_helper, get_main_thread_env, WebViewInitData};
+#[cfg(feature = "webview")]
+pub use openharmony_ability::{DownloadStartResult, WebViewStyle, Webview};
 
 #[cfg(feature = "webview")]
 fn run_with_webview_dispatcher<R>(
@@ -136,6 +136,23 @@ pub struct ScrollViewport {
     pub offset: ScrollOffset,
     pub viewport_size: Size<f32>,
     pub content_size: Size<f32>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ListScrollIndexEvent {
+    pub first_index: i32,
+    pub last_index: i32,
+    pub center_index: i32,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ListVisibleContentChangeEvent {
+    pub first_index: i32,
+    pub start_area: i32,
+    pub start_item_index: i32,
+    pub last_index: i32,
+    pub end_area: i32,
+    pub end_item_index: i32,
 }
 
 #[derive(Default)]
@@ -373,9 +390,7 @@ impl WebViewController {
                     Either::B(_undefined) => String::from("undefined"),
                 };
                 if let Some(callback) = callback.as_ref() {
-                    run_with_webview_dispatcher(callback_dispatcher.clone(), move || {
-                        callback(ret)
-                    });
+                    run_with_webview_dispatcher(callback_dispatcher.clone(), move || callback(ret));
                 }
                 Ok(())
             })
@@ -804,8 +819,11 @@ enum NodeKind {
     Column,
     DatePicker,
     Image,
+    List,
+    ListItem,
     Progress,
     Radio,
+    Refresh,
     Row,
     Scroll,
     Slider,
@@ -1543,6 +1561,30 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
         self
     }
 
+    pub fn refreshing(self, value: bool) -> Self {
+        if self.kind != NodeKind::Refresh {
+            return self;
+        }
+
+        self.builder_attr(ArkUINodeAttributeType::RefreshRefreshing, value)
+    }
+
+    pub fn refresh_offset(self, value: f32) -> Self {
+        if self.kind != NodeKind::Refresh {
+            return self;
+        }
+
+        self.builder_attr(ArkUINodeAttributeType::RefreshOffset, value)
+    }
+
+    pub fn refresh_pull_to_refresh(self, value: bool) -> Self {
+        if self.kind != NodeKind::Refresh {
+            return self;
+        }
+
+        self.builder_attr(ArkUINodeAttributeType::RefreshPullToRefresh, value)
+    }
+
     pub fn on_scroll_offset(self, callback: impl Fn(ScrollOffset) + 'static) -> Self {
         if self.kind != NodeKind::Scroll {
             return self;
@@ -2154,6 +2196,45 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
         }
     }
 
+    pub fn on_refresh(self, message: Message) -> Self
+    where
+        Message: Clone + Send + 'static,
+    {
+        if self.kind != NodeKind::Refresh {
+            return self;
+        }
+
+        self.on_event(NodeEventType::RefreshOnRefresh, move |_| {
+            arkit_runtime::dispatch(message.clone());
+        })
+    }
+
+    pub fn on_refresh_state_change(self, handler: impl Fn(i32) -> Message + 'static) -> Self
+    where
+        Message: Send + 'static,
+    {
+        if self.kind != NodeKind::Refresh {
+            return self;
+        }
+
+        self.on_event(NodeEventType::RefreshStateChange, move |event| {
+            arkit_runtime::dispatch(handler(event.i32_value(0).unwrap_or_default()));
+        })
+    }
+
+    pub fn on_refresh_offset_change(self, handler: impl Fn(f32) -> Message + 'static) -> Self
+    where
+        Message: Send + 'static,
+    {
+        if self.kind != NodeKind::Refresh {
+            return self;
+        }
+
+        self.on_event(NodeEventType::RefreshOnOffsetChange, move |event| {
+            arkit_runtime::dispatch(handler(event.f32_value(0).unwrap_or_default()));
+        })
+    }
+
     pub fn on_toggle(self, handler: impl Fn(bool) -> Message + 'static) -> Self
     where
         Message: Send + 'static,
@@ -2200,6 +2281,69 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
             }),
             _ => self,
         }
+    }
+
+    pub fn on_list_scroll_index(
+        self,
+        handler: impl Fn(ListScrollIndexEvent) -> Message + 'static,
+    ) -> Self
+    where
+        Message: Send + 'static,
+    {
+        if self.kind != NodeKind::List {
+            return self;
+        }
+
+        self.on_event(NodeEventType::ListOnScrollIndex, move |event| {
+            arkit_runtime::dispatch(handler(ListScrollIndexEvent {
+                first_index: event.i32_value(0).unwrap_or_default(),
+                last_index: event.i32_value(1).unwrap_or_default(),
+                center_index: event.i32_value(2).unwrap_or_default(),
+            }));
+        })
+    }
+
+    pub fn on_list_scroll_index_local(
+        self,
+        handler: impl Fn(ListScrollIndexEvent) + 'static,
+    ) -> Self {
+        if self.kind != NodeKind::List {
+            return self;
+        }
+
+        self.on_event(NodeEventType::ListOnScrollIndex, move |event| {
+            handler(ListScrollIndexEvent {
+                first_index: event.i32_value(0).unwrap_or_default(),
+                last_index: event.i32_value(1).unwrap_or_default(),
+                center_index: event.i32_value(2).unwrap_or_default(),
+            });
+        })
+    }
+
+    pub fn on_list_visible_content_change(
+        self,
+        handler: impl Fn(ListVisibleContentChangeEvent) -> Message + 'static,
+    ) -> Self
+    where
+        Message: Send + 'static,
+    {
+        if self.kind != NodeKind::List {
+            return self;
+        }
+
+        self.on_event(
+            NodeEventType::ListOnScrollVisibleContentChange,
+            move |event| {
+                arkit_runtime::dispatch(handler(ListVisibleContentChangeEvent {
+                    first_index: event.i32_value(0).unwrap_or_default(),
+                    start_area: event.i32_value(1).unwrap_or_default(),
+                    start_item_index: event.i32_value(2).unwrap_or_default(),
+                    last_index: event.i32_value(3).unwrap_or_default(),
+                    end_area: event.i32_value(4).unwrap_or_default(),
+                    end_item_index: event.i32_value(5).unwrap_or_default(),
+                }));
+            },
+        )
     }
 
     pub fn on_change(self, handler: impl Fn(f32) -> Message + 'static) -> Self
@@ -2366,6 +2510,30 @@ pub fn image<Message, AppTheme>(src: impl Into<String>) -> Node<Message, AppThem
         .patch_attr(ArkUINodeAttributeType::ImageSrc, src)
 }
 
+pub fn list_component<Message, AppTheme>() -> Node<Message, AppTheme> {
+    Node::new(NodeKind::List)
+}
+
+pub fn list<Message: 'static, AppTheme: 'static>(
+    children: Vec<Element<Message, AppTheme>>,
+) -> Element<Message, AppTheme> {
+    list_component()
+        .percent_width(1.0)
+        .percent_height(1.0)
+        .children(children)
+        .into()
+}
+
+pub fn list_item_component<Message, AppTheme>() -> Node<Message, AppTheme> {
+    Node::new(NodeKind::ListItem)
+}
+
+pub fn list_item<Message: 'static, AppTheme: 'static>(
+    child: impl Into<Element<Message, AppTheme>>,
+) -> Element<Message, AppTheme> {
+    list_item_component().child(child.into()).into()
+}
+
 pub fn column_component<Message, AppTheme>() -> Node<Message, AppTheme> {
     Node::new(NodeKind::Column)
 }
@@ -2420,6 +2588,20 @@ pub fn scroll<Message: 'static, AppTheme: 'static>(
     child: impl Into<Element<Message, AppTheme>>,
 ) -> Element<Message, AppTheme> {
     scroll_component().child(child.into()).into()
+}
+
+pub fn refresh_component<Message, AppTheme>() -> Node<Message, AppTheme> {
+    Node::new(NodeKind::Refresh)
+}
+
+pub fn refresh<Message: 'static, AppTheme: 'static>(
+    child: impl Into<Element<Message, AppTheme>>,
+) -> Element<Message, AppTheme> {
+    refresh_component()
+        .percent_width(1.0)
+        .percent_height(1.0)
+        .child(child.into())
+        .into()
 }
 
 pub(crate) fn read_layout_size(node: &ArkUINode) -> Option<LayoutSize> {
@@ -2677,10 +2859,7 @@ fn build_initial_webview_style(
 
 #[cfg(feature = "webview")]
 fn webview_frame_is_valid(frame: LayoutFrame) -> bool {
-    frame.width.is_finite()
-        && frame.height.is_finite()
-        && frame.width > 0.0
-        && frame.height > 0.0
+    frame.width.is_finite() && frame.height.is_finite() && frame.width > 0.0 && frame.height > 0.0
 }
 
 #[cfg(feature = "webview")]
@@ -2708,7 +2887,10 @@ fn sync_embedded_webview_node_bounds(
 }
 
 #[cfg(feature = "webview")]
-fn same_style_value(left: &Option<Either<f64, String>>, right: &Option<Either<f64, String>>) -> bool {
+fn same_style_value(
+    left: &Option<Either<f64, String>>,
+    right: &Option<Either<f64, String>>,
+) -> bool {
     match (left, right) {
         (None, None) => true,
         (Some(Either::A(left)), Some(Either::A(right))) => left == right,
@@ -2808,10 +2990,9 @@ fn create_native_webview(
                 };
                 let mut path = PathBuf::from(temp_path);
                 let handler = handler.clone();
-                let allow =
-                    run_with_webview_dispatcher(callback_dispatcher.clone(), || {
-                        handler(origin_url, &mut path)
-                    });
+                let allow = run_with_webview_dispatcher(callback_dispatcher.clone(), || {
+                    handler(origin_url, &mut path)
+                });
                 Ok(DownloadStartResult {
                     allow,
                     temp_path: Some(path.to_string_lossy().to_string()),
@@ -2860,9 +3041,10 @@ fn create_native_webview(
                     Either::B(_undefined) => String::new(),
                 };
                 let handler = handler.clone();
-                Ok(run_with_webview_dispatcher(callback_dispatcher.clone(), || {
-                    handler(url)
-                }))
+                Ok(run_with_webview_dispatcher(
+                    callback_dispatcher.clone(),
+                    || handler(url),
+                ))
             })
             .ok()
     });
@@ -2923,8 +3105,8 @@ fn create_native_webview(
         .map_err(|error| error.to_string())?;
     let node = ArkUINode::from_raw_handle(node_raw.raw)
         .ok_or_else(|| String::from("embedded webview content handle is null"))?;
-    let webview =
-        Webview::new(controller.id().to_string(), controller_ref).map_err(|error| error.to_string())?;
+    let webview = Webview::new(controller.id().to_string(), controller_ref)
+        .map_err(|error| error.to_string())?;
 
     Ok(NativeWebViewMount { webview, node })
 }
@@ -2947,7 +3129,9 @@ fn attach_embedded_webview_node(
     }
 
     let mut runtime = RuntimeNode(host);
-    runtime.add_existing_child(node).map_err(|error| error.to_string())
+    runtime
+        .add_existing_child(node)
+        .map_err(|error| error.to_string())
 }
 
 #[cfg(feature = "webview")]
@@ -2991,7 +3175,10 @@ fn mount_or_show_webview(
             let _ = mount.webview.dispose();
             return Err(error.to_string());
         }
-        controller.inner.embedded_node.replace(Some(mount.node.clone()));
+        controller
+            .inner
+            .embedded_node
+            .replace(Some(mount.node.clone()));
         let webview = mount.webview;
         controller.inner.webview.replace(Some(webview.clone()));
         register_internal_webview_callbacks(controller, &webview)?;
@@ -3062,11 +3249,14 @@ fn sync_webview_config(
         let current_visible = current_style.and_then(|style| style.visible);
         if previous_visible != current_visible {
             if let Some(visible) = current_visible {
-                webview.set_visible(visible).map_err(|error| error.to_string())?;
+                webview
+                    .set_visible(visible)
+                    .map_err(|error| error.to_string())?;
             }
         }
 
-        let previous_background = previous_style.and_then(|style| style.background_color.as_deref());
+        let previous_background =
+            previous_style.and_then(|style| style.background_color.as_deref());
         let current_background = current_style.and_then(|style| style.background_color.as_deref());
         if previous_background != current_background {
             if let Some(background) = current_background {
@@ -3198,7 +3388,9 @@ fn enrich_webview_host<Message, AppTheme>(node: &mut Node<Message, AppTheme>) {
                 if controller.inner.webview.borrow().is_none() {
                     return;
                 }
-                if let Err(error) = sync_webview_config(&controller, &spec, read_layout_frame(&node)) {
+                if let Err(error) =
+                    sync_webview_config(&controller, &spec, read_layout_frame(&node))
+                {
                     ohos_hilog_binding::error(format!(
                         "webview error: failed to sync webview '{}' after area change: {error}",
                         controller.id()
@@ -3281,8 +3473,11 @@ fn create_node(kind: NodeKind) -> ArkUIResult<ArkUINode> {
         NodeKind::Column => Column::new()?.into(),
         NodeKind::DatePicker => DatePicker::new()?.into(),
         NodeKind::Image => Image::new()?.into(),
+        NodeKind::List => List::new()?.into(),
+        NodeKind::ListItem => ListItem::new()?.into(),
         NodeKind::Progress => Progress::new()?.into(),
         NodeKind::Radio => Radio::new()?.into(),
+        NodeKind::Refresh => Refresh::new()?.into(),
         NodeKind::Row => Row::new()?.into(),
         NodeKind::Scroll => Scroll::new()?.into(),
         NodeKind::Slider => Slider::new()?.into(),
@@ -3305,8 +3500,11 @@ fn node_type_id(kind: NodeKind) -> TypeId {
         NodeKind::Column => TypeId::of::<Column>(),
         NodeKind::DatePicker => TypeId::of::<DatePicker>(),
         NodeKind::Image => TypeId::of::<Image>(),
+        NodeKind::List => TypeId::of::<List>(),
+        NodeKind::ListItem => TypeId::of::<ListItem>(),
         NodeKind::Progress => TypeId::of::<Progress>(),
         NodeKind::Radio => TypeId::of::<Radio>(),
+        NodeKind::Refresh => TypeId::of::<Refresh>(),
         NodeKind::Row => TypeId::of::<Row>(),
         NodeKind::Scroll => TypeId::of::<Scroll>(),
         NodeKind::Slider => TypeId::of::<Slider>(),
@@ -3327,8 +3525,11 @@ struct CheckboxNodeTag;
 struct ColumnNodeTag;
 struct DatePickerNodeTag;
 struct ImageNodeTag;
+struct ListNodeTag;
+struct ListItemNodeTag;
 struct ProgressNodeTag;
 struct RadioNodeTag;
+struct RefreshNodeTag;
 struct RowNodeTag;
 struct ScrollNodeTag;
 struct SliderNodeTag;
@@ -3349,8 +3550,11 @@ fn node_widget_tag(kind: NodeKind) -> advanced::widget::Tag {
         NodeKind::Column => advanced::widget::Tag::of::<ColumnNodeTag>(),
         NodeKind::DatePicker => advanced::widget::Tag::of::<DatePickerNodeTag>(),
         NodeKind::Image => advanced::widget::Tag::of::<ImageNodeTag>(),
+        NodeKind::List => advanced::widget::Tag::of::<ListNodeTag>(),
+        NodeKind::ListItem => advanced::widget::Tag::of::<ListItemNodeTag>(),
         NodeKind::Progress => advanced::widget::Tag::of::<ProgressNodeTag>(),
         NodeKind::Radio => advanced::widget::Tag::of::<RadioNodeTag>(),
+        NodeKind::Refresh => advanced::widget::Tag::of::<RefreshNodeTag>(),
         NodeKind::Row => advanced::widget::Tag::of::<RowNodeTag>(),
         NodeKind::Scroll => advanced::widget::Tag::of::<ScrollNodeTag>(),
         NodeKind::Slider => advanced::widget::Tag::of::<SliderNodeTag>(),
@@ -4464,6 +4668,41 @@ mod tests {
     }
 
     #[test]
+    fn list_component_uses_native_list() {
+        let node = list_component::<(), arkit_core::Theme>();
+
+        assert_eq!(node.kind, NodeKind::List);
+    }
+
+    #[test]
+    fn list_item_component_uses_native_list_item() {
+        let node = list_item_component::<(), arkit_core::Theme>();
+
+        assert_eq!(node.kind, NodeKind::ListItem);
+    }
+
+    #[test]
+    fn refresh_component_sets_refresh_attributes() {
+        let node = refresh_component::<(), arkit_core::Theme>()
+            .refreshing(true)
+            .refresh_offset(72.0)
+            .refresh_pull_to_refresh(false);
+
+        assert_eq!(
+            node.attr_bool(ArkUINodeAttributeType::RefreshRefreshing),
+            Some(true)
+        );
+        assert_eq!(
+            node.attr_f32(ArkUINodeAttributeType::RefreshOffset),
+            Some(72.0)
+        );
+        assert_eq!(
+            node.attr_bool(ArkUINodeAttributeType::RefreshPullToRefresh),
+            Some(false)
+        );
+    }
+
+    #[test]
     fn text_input_font_size_sets_placeholder_font_size() {
         let node = text_input_component::<(), arkit_core::Theme>().font_size(14.0);
 
@@ -4550,7 +4789,10 @@ mod tests {
     #[cfg(feature = "webview")]
     #[test]
     fn compose_compiled_overlays_skips_wrapper_without_overlays() {
-        let node = into_node(compose_compiled_overlays(CompiledElement::<(), arkit_core::Theme> {
+        let node = into_node(compose_compiled_overlays(CompiledElement::<
+            (),
+            arkit_core::Theme,
+        > {
             body: column_component::<(), arkit_core::Theme>().into(),
             overlays: Vec::new(),
         }));
@@ -4561,7 +4803,10 @@ mod tests {
     #[cfg(feature = "webview")]
     #[test]
     fn compose_compiled_overlays_keeps_stack_wrapper_with_overlays() {
-        let node = into_node(compose_compiled_overlays(CompiledElement::<(), arkit_core::Theme> {
+        let node = into_node(compose_compiled_overlays(CompiledElement::<
+            (),
+            arkit_core::Theme,
+        > {
             body: column_component::<(), arkit_core::Theme>().into(),
             overlays: vec![text::<(), arkit_core::Theme>("overlay").into()],
         }));
