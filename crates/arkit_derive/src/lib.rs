@@ -82,8 +82,9 @@ pub fn entry(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 helper: ::arkit::napi_ohos::bindgen_prelude::ObjectRef,
                 #[napi(ts_arg_type = "NodeContent")] slot: ::arkit::ohos_arkui_binding::common::handle::ArkUIHandle,
             ) -> ::arkit::napi_ohos::Result<()> {
-                let _ = env;
-                let _ = helper;
+                ::arkit::openharmony_ability::set_helper(helper);
+                ::arkit::openharmony_ability::set_main_thread_env(*env);
+                let _ = ::arkit::openharmony_ability::create_permission_request_tsfn(env);
 
                 RUNTIME.with(|state| -> ::arkit::napi_ohos::Result<()> {
                     let mut runtime_state = state.borrow_mut();

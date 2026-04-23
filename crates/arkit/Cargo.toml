@@ -7,6 +7,11 @@ license.workspace = true
 [features]
 default = ["api-22"]
 api-22 = ["arkit_widget/api-22"]
+webview = [
+    "arkit_widget/webview",
+    "openharmony-ability/webview",
+    "openharmony-ability/drag_and_drop",
+]
 
 [dependencies]
 arkit_core.workspace = true

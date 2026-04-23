@@ -1,16 +1,27 @@
 use std::any::{type_name, Any, TypeId};
 use std::cell::{Cell, RefCell};
+#[cfg(feature = "webview")]
+use std::collections::HashMap;
 use std::mem::{align_of, size_of, ManuallyDrop};
 use std::panic::{catch_unwind, AssertUnwindSafe};
+#[cfg(feature = "webview")]
+use std::path::PathBuf;
 use std::rc::Rc;
+#[cfg(feature = "webview")]
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::{Alignment, LayoutFrame, LayoutSize};
 use arkit_core::{advanced, Horizontal, Length, Padding, Size, Vertical};
+#[cfg(feature = "webview")]
+use napi_ohos::{
+    bindgen_prelude::{FnArgs, Function, JsObjectValue, Object, ObjectRef},
+    Either,
+};
 use ohos_arkui_binding::api::attribute_option::ProgressLinearStyleOption;
 use ohos_arkui_binding::api::node_custom_event::NodeCustomEvent;
 use ohos_arkui_binding::common::attribute::{ArkUINodeAttributeItem, ArkUINodeAttributeNumber};
 use ohos_arkui_binding::common::error::ArkUIResult;
-use ohos_arkui_binding::common::node::ArkUINode;
+use ohos_arkui_binding::common::node::{ArkUINode, ArkUINodeRaw};
 use ohos_arkui_binding::component::attribute::{
     ArkUIAttributeBasic, ArkUICommonAttribute, ArkUIEvent, ArkUIGesture,
 };
@@ -28,6 +39,18 @@ use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
 use ohos_arkui_binding::types::event::NodeEventType;
 use ohos_arkui_binding::types::gesture_event::GestureEventAction;
 use ohos_arkui_binding::types::text_alignment::TextAlignment;
+#[cfg(feature = "webview")]
+pub use openharmony_ability::{DownloadStartResult, WebViewStyle, Webview};
+#[cfg(feature = "webview")]
+use openharmony_ability::{get_helper, get_main_thread_env, WebViewInitData};
+
+#[cfg(feature = "webview")]
+fn run_with_webview_dispatcher<R>(
+    dispatcher: Option<arkit_runtime::internal::GlobalRuntimeDispatcher>,
+    f: impl FnOnce() -> R,
+) -> R {
+    arkit_runtime::internal::with_global_dispatcher(dispatcher, f)
+}
 
 pub use ohos_arkui_binding::common::attribute::ArkUINodeAttributeItem as AttributeValue;
 pub use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType as Attribute;
@@ -120,6 +143,298 @@ struct ScrollState {
     offset: ScrollOffset,
     viewport: Option<ScrollViewport>,
     node: Option<ArkUINode>,
+}
+
+#[cfg(feature = "webview")]
+static NEXT_WEBVIEW_ID: AtomicU64 = AtomicU64::new(1);
+
+#[cfg(feature = "webview")]
+type WebViewReadyCallback = Rc<dyn Fn(&Webview)>;
+#[cfg(feature = "webview")]
+type WebViewLifecycleCallback = Rc<RefCell<Box<dyn FnMut()>>>;
+#[cfg(feature = "webview")]
+type DragAndDropCallback = Rc<dyn Fn(String)>;
+#[cfg(feature = "webview")]
+type DownloadStartCallback = Rc<dyn Fn(String, &mut PathBuf) -> bool>;
+#[cfg(feature = "webview")]
+type DownloadEndCallback = Rc<dyn Fn(String, Option<PathBuf>, bool)>;
+#[cfg(feature = "webview")]
+type NavigationRequestCallback = Rc<dyn Fn(String) -> bool>;
+#[cfg(feature = "webview")]
+type TitleChangeCallback = Rc<dyn Fn(String)>;
+
+#[cfg(feature = "webview")]
+#[derive(Debug, Clone, Default)]
+struct WebViewAppliedState {
+    url: Option<String>,
+    html: Option<String>,
+    headers: Option<HashMap<String, String>>,
+    style: Option<WebViewStyle>,
+}
+
+#[cfg(feature = "webview")]
+struct WebViewControllerState {
+    id: String,
+    webview: RefCell<Option<Webview>>,
+    embedded_node: RefCell<Option<ArkUINode>>,
+    ready_callbacks: RefCell<Vec<WebViewReadyCallback>>,
+    controller_attach_callbacks: RefCell<Vec<WebViewLifecycleCallback>>,
+    page_begin_callbacks: RefCell<Vec<WebViewLifecycleCallback>>,
+    page_end_callbacks: RefCell<Vec<WebViewLifecycleCallback>>,
+    destroy_callbacks: RefCell<Vec<WebViewLifecycleCallback>>,
+    applied: RefCell<Option<WebViewAppliedState>>,
+    active_binding: Cell<bool>,
+    attached: Cell<bool>,
+}
+
+#[cfg(feature = "webview")]
+impl WebViewControllerState {
+    fn new(id: String) -> Self {
+        Self {
+            id,
+            webview: RefCell::new(None),
+            embedded_node: RefCell::new(None),
+            ready_callbacks: RefCell::new(Vec::new()),
+            controller_attach_callbacks: RefCell::new(Vec::new()),
+            page_begin_callbacks: RefCell::new(Vec::new()),
+            page_end_callbacks: RefCell::new(Vec::new()),
+            destroy_callbacks: RefCell::new(Vec::new()),
+            applied: RefCell::new(None),
+            active_binding: Cell::new(false),
+            attached: Cell::new(false),
+        }
+    }
+}
+
+#[cfg(feature = "webview")]
+#[derive(Clone)]
+pub struct WebViewController {
+    inner: Rc<WebViewControllerState>,
+}
+
+#[cfg(feature = "webview")]
+impl Default for WebViewController {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(feature = "webview")]
+impl WebViewController {
+    pub fn new() -> Self {
+        let id = format!(
+            "arkit-webview-{}",
+            NEXT_WEBVIEW_ID.fetch_add(1, Ordering::Relaxed)
+        );
+        Self::with_id(id)
+    }
+
+    pub fn with_id(id: impl Into<String>) -> Self {
+        Self {
+            inner: Rc::new(WebViewControllerState::new(id.into())),
+        }
+    }
+
+    pub fn id(&self) -> &str {
+        self.inner.id.as_str()
+    }
+
+    pub fn handle(&self) -> Result<Webview, String> {
+        self.inner
+            .webview
+            .borrow()
+            .clone()
+            .ok_or_else(|| format!("webview '{}' is not mounted", self.id()))
+    }
+
+    pub fn on_ready(&self, callback: impl Fn(&Webview) + 'static) {
+        let callback = Rc::new(callback) as WebViewReadyCallback;
+        if let Some(webview) = self.inner.webview.borrow().as_ref() {
+            callback(webview);
+        }
+        self.inner.ready_callbacks.borrow_mut().push(callback);
+    }
+
+    pub fn on_controller_attach(&self, callback: impl FnMut() + 'static) -> Result<(), String> {
+        let callback: WebViewLifecycleCallback = Rc::new(RefCell::new(Box::new(callback)));
+        if let Some(webview) = self.inner.webview.borrow().as_ref() {
+            register_lifecycle_callback(webview, &callback, WebViewLifecycle::ControllerAttach)?;
+        }
+        self.inner
+            .controller_attach_callbacks
+            .borrow_mut()
+            .push(callback);
+        Ok(())
+    }
+
+    pub fn on_page_begin(&self, callback: impl FnMut() + 'static) -> Result<(), String> {
+        let callback: WebViewLifecycleCallback = Rc::new(RefCell::new(Box::new(callback)));
+        if let Some(webview) = self.inner.webview.borrow().as_ref() {
+            register_lifecycle_callback(webview, &callback, WebViewLifecycle::PageBegin)?;
+        }
+        self.inner.page_begin_callbacks.borrow_mut().push(callback);
+        Ok(())
+    }
+
+    pub fn on_page_end(&self, callback: impl FnMut() + 'static) -> Result<(), String> {
+        let callback: WebViewLifecycleCallback = Rc::new(RefCell::new(Box::new(callback)));
+        if let Some(webview) = self.inner.webview.borrow().as_ref() {
+            register_lifecycle_callback(webview, &callback, WebViewLifecycle::PageEnd)?;
+        }
+        self.inner.page_end_callbacks.borrow_mut().push(callback);
+        Ok(())
+    }
+
+    pub fn on_destroy(&self, callback: impl FnMut() + 'static) -> Result<(), String> {
+        let callback: WebViewLifecycleCallback = Rc::new(RefCell::new(Box::new(callback)));
+        if let Some(webview) = self.inner.webview.borrow().as_ref() {
+            register_lifecycle_callback(webview, &callback, WebViewLifecycle::Destroy)?;
+        }
+        self.inner.destroy_callbacks.borrow_mut().push(callback);
+        Ok(())
+    }
+
+    pub fn url(&self) -> Result<String, String> {
+        self.with_handle(|webview| webview.url())
+    }
+
+    pub fn cookies_with_url(&self, url: &str) -> Result<String, String> {
+        self.with_handle(|webview| webview.cookies_with_url(url))
+    }
+
+    pub fn load_url(&self, url: &str) -> Result<(), String> {
+        self.with_handle(|webview| webview.load_url(url))
+    }
+
+    pub fn load_url_with_headers(
+        &self,
+        url: &str,
+        headers: impl IntoIterator<Item = (String, String)>,
+    ) -> Result<(), String> {
+        let mut header_map = http::HeaderMap::new();
+        for (key, value) in headers {
+            let name = key
+                .parse::<http::header::HeaderName>()
+                .map_err(|error| error.to_string())?;
+            let value = value
+                .parse::<http::header::HeaderValue>()
+                .map_err(|error| error.to_string())?;
+            header_map.insert(name, value);
+        }
+        self.with_handle(|webview| webview.load_url_with_headers(url, header_map))
+    }
+
+    pub fn load_html(&self, html: &str) -> Result<(), String> {
+        self.with_handle(|webview| webview.load_html(html))
+    }
+
+    pub fn reload(&self) -> Result<(), String> {
+        self.with_handle(|webview| webview.reload())
+    }
+
+    pub fn focus(&self) -> Result<(), String> {
+        self.with_handle(|webview| webview.focus())
+    }
+
+    pub fn set_zoom(&self, zoom: f64) -> Result<(), String> {
+        self.with_handle(|webview| webview.set_zoom(zoom))
+    }
+
+    pub fn evaluate_script(&self, js: &str) -> Result<(), String> {
+        self.with_handle(|webview| webview.evaluate_script(js))
+    }
+
+    pub fn evaluate_script_with_callback(
+        &self,
+        js: &str,
+        callback: Option<Box<dyn Fn(String) + Send + 'static>>,
+    ) -> Result<(), String> {
+        let webview = self.handle()?;
+        let env_state = get_main_thread_env();
+        let env_borrow = env_state.borrow();
+        let Some(env) = env_borrow.as_ref() else {
+            return Err(String::from("failed to get main thread env"));
+        };
+        let run_javascript = webview
+            .inner()
+            .get_value(env)
+            .map_err(|error| error.to_string())?
+            .get_named_property::<Function<'_, FnArgs<(String, Function<'_, String, ()>)>, ()>>(
+                "runJavaScript",
+            )
+            .map_err(|error| error.to_string())?;
+        let callback_dispatcher = arkit_runtime::internal::global_dispatcher();
+
+        let cb = env
+            .create_function_from_closure("arkit_evaluate_js_callback", move |ctx| {
+                let ret = ctx.try_get::<String>(0)?;
+                let ret = match ret {
+                    Either::A(value) => value,
+                    Either::B(_undefined) => String::from("undefined"),
+                };
+                if let Some(callback) = callback.as_ref() {
+                    run_with_webview_dispatcher(callback_dispatcher.clone(), move || {
+                        callback(ret)
+                    });
+                }
+                Ok(())
+            })
+            .map_err(|error| error.to_string())?;
+
+        run_javascript
+            .call((js.to_string(), cb).into())
+            .map_err(|error| error.to_string())
+    }
+
+    pub fn clear_all_browsing_data(&self) -> Result<(), String> {
+        self.with_handle(|webview| webview.clear_all_browsing_data())
+    }
+
+    pub fn set_background_color(&self, color: &str) -> Result<(), String> {
+        self.with_handle(|webview| webview.set_background_color(color))
+    }
+
+    pub fn set_visible(&self, visible: bool) -> Result<(), String> {
+        self.with_handle(|webview| webview.set_visible(visible))
+    }
+
+    fn with_handle<R, E: ToString>(
+        &self,
+        f: impl FnOnce(&Webview) -> Result<R, E>,
+    ) -> Result<R, String> {
+        let webview = self.handle()?;
+        f(&webview).map_err(|error| error.to_string())
+    }
+}
+
+#[cfg(feature = "webview")]
+#[derive(Clone, Default)]
+struct WebViewSpec {
+    controller: Option<WebViewController>,
+    url: Option<String>,
+    html: Option<String>,
+    style: Option<WebViewStyle>,
+    javascript_enabled: Option<bool>,
+    devtools: Option<bool>,
+    transparent: Option<bool>,
+    autoplay: Option<bool>,
+    user_agent: Option<String>,
+    initialization_scripts: Option<Vec<String>>,
+    headers: Option<HashMap<String, String>>,
+    on_drag_and_drop: Option<DragAndDropCallback>,
+    on_download_start: Option<DownloadStartCallback>,
+    on_download_end: Option<DownloadEndCallback>,
+    on_navigation_request: Option<NavigationRequestCallback>,
+    on_title_change: Option<TitleChangeCallback>,
+}
+
+#[cfg(feature = "webview")]
+#[derive(Clone, Copy)]
+enum WebViewLifecycle {
+    ControllerAttach,
+    PageBegin,
+    PageEnd,
+    Destroy,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -500,6 +815,8 @@ enum NodeKind {
     TextArea,
     TextInput,
     Toggle,
+    #[cfg(feature = "webview")]
+    WebViewHost,
 }
 
 pub struct MountedNode {
@@ -728,6 +1045,8 @@ pub struct Node<Message, AppTheme = arkit_core::Theme> {
     patch_effects: Vec<PatchEffect>,
     exit_effect: Option<ExitEffect>,
     state_bound: bool,
+    #[cfg(feature = "webview")]
+    webview: Option<WebViewSpec>,
     children: Vec<Element<Message, AppTheme>>,
 }
 
@@ -746,6 +1065,8 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
             patch_effects: Vec::new(),
             exit_effect: None,
             state_bound: false,
+            #[cfg(feature = "webview")]
+            webview: None,
             children: Vec::new(),
         }
     }
@@ -796,6 +1117,8 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
             patch_effects,
             exit_effect,
             state_bound,
+            #[cfg(feature = "webview")]
+            webview,
             children,
         } = self;
 
@@ -817,6 +1140,8 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
             patch_effects,
             exit_effect,
             state_bound,
+            #[cfg(feature = "webview")]
+            webview,
             children,
         })
     }
@@ -895,6 +1220,19 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
             .rev()
             .chain(self.init_attrs.iter().rev())
             .find_map(|(current_attr, value)| (*current_attr == attr).then_some(value))
+    }
+
+    #[cfg(feature = "webview")]
+    fn webview_spec_mut(&mut self) -> Option<&mut WebViewSpec> {
+        self.webview.as_mut()
+    }
+
+    #[cfg(feature = "webview")]
+    fn map_webview(mut self, update: impl FnOnce(&mut WebViewSpec)) -> Self {
+        if let Some(spec) = self.webview_spec_mut() {
+            update(spec);
+        }
+        self
     }
 
     pub fn width(mut self, value: impl Into<Length>) -> Self {
@@ -1447,6 +1785,91 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
             _ => {}
         }
         self
+    }
+
+    #[cfg(feature = "webview")]
+    pub fn webview_style(self, style: WebViewStyle) -> Self {
+        self.map_webview(|spec| spec.style = Some(style))
+    }
+
+    #[cfg(feature = "webview")]
+    pub fn url(self, url: impl Into<String>) -> Self {
+        let url = url.into();
+        self.map_webview(|spec| spec.url = Some(url))
+    }
+
+    #[cfg(feature = "webview")]
+    pub fn html(self, html: impl Into<String>) -> Self {
+        let html = html.into();
+        self.map_webview(|spec| spec.html = Some(html))
+    }
+
+    #[cfg(feature = "webview")]
+    pub fn javascript_enabled(self, enabled: bool) -> Self {
+        self.map_webview(|spec| spec.javascript_enabled = Some(enabled))
+    }
+
+    #[cfg(feature = "webview")]
+    pub fn devtools(self, enabled: bool) -> Self {
+        self.map_webview(|spec| spec.devtools = Some(enabled))
+    }
+
+    #[cfg(feature = "webview")]
+    pub fn transparent(self, enabled: bool) -> Self {
+        self.map_webview(|spec| spec.transparent = Some(enabled))
+    }
+
+    #[cfg(feature = "webview")]
+    pub fn autoplay(self, enabled: bool) -> Self {
+        self.map_webview(|spec| spec.autoplay = Some(enabled))
+    }
+
+    #[cfg(feature = "webview")]
+    pub fn user_agent(self, user_agent: impl Into<String>) -> Self {
+        let user_agent = user_agent.into();
+        self.map_webview(|spec| spec.user_agent = Some(user_agent))
+    }
+
+    #[cfg(feature = "webview")]
+    pub fn initialization_scripts(self, scripts: Vec<String>) -> Self {
+        self.map_webview(|spec| spec.initialization_scripts = Some(scripts))
+    }
+
+    #[cfg(feature = "webview")]
+    pub fn headers(self, headers: impl IntoIterator<Item = (String, String)>) -> Self {
+        let headers = headers.into_iter().collect::<HashMap<_, _>>();
+        self.map_webview(|spec| spec.headers = Some(headers))
+    }
+
+    #[cfg(feature = "webview")]
+    pub fn on_drag_and_drop(self, callback: impl Fn(String) + 'static) -> Self {
+        self.map_webview(|spec| spec.on_drag_and_drop = Some(Rc::new(callback)))
+    }
+
+    #[cfg(feature = "webview")]
+    pub fn on_download_start(
+        self,
+        callback: impl Fn(String, &mut PathBuf) -> bool + 'static,
+    ) -> Self {
+        self.map_webview(|spec| spec.on_download_start = Some(Rc::new(callback)))
+    }
+
+    #[cfg(feature = "webview")]
+    pub fn on_download_end(
+        self,
+        callback: impl Fn(String, Option<PathBuf>, bool) + 'static,
+    ) -> Self {
+        self.map_webview(|spec| spec.on_download_end = Some(Rc::new(callback)))
+    }
+
+    #[cfg(feature = "webview")]
+    pub fn on_navigation_request(self, callback: impl Fn(String) -> bool + 'static) -> Self {
+        self.map_webview(|spec| spec.on_navigation_request = Some(Rc::new(callback)))
+    }
+
+    #[cfg(feature = "webview")]
+    pub fn on_title_change(self, callback: impl Fn(String) + 'static) -> Self {
+        self.map_webview(|spec| spec.on_title_change = Some(Rc::new(callback)))
     }
 
     pub fn with(
@@ -2120,6 +2543,689 @@ pub fn date_picker<Message, AppTheme>() -> Node<Message, AppTheme> {
     date_picker_component()
 }
 
+#[cfg(feature = "webview")]
+pub fn web_view_component<Message, AppTheme>(
+    controller: WebViewController,
+) -> Node<Message, AppTheme> {
+    let mut node = Node::new(NodeKind::WebViewHost)
+        .key(controller.id().to_string())
+        .clip(true)
+        .hit_test_behavior(HitTestBehavior::Transparent);
+    node.webview = Some(WebViewSpec {
+        controller: Some(controller),
+        ..WebViewSpec::default()
+    });
+    node
+}
+
+#[cfg(feature = "webview")]
+pub fn web_view<Message, AppTheme>(
+    controller: WebViewController,
+    url: impl Into<String>,
+) -> Node<Message, AppTheme> {
+    web_view_component(controller)
+        .percent_width(1.0)
+        .percent_height(1.0)
+        .url(url)
+}
+
+#[cfg(feature = "webview")]
+fn register_lifecycle_callback(
+    webview: &Webview,
+    callback: &WebViewLifecycleCallback,
+    lifecycle: WebViewLifecycle,
+) -> Result<(), String> {
+    let callback = callback.clone();
+    let callback_dispatcher = arkit_runtime::internal::global_dispatcher();
+    match lifecycle {
+        WebViewLifecycle::ControllerAttach => webview.on_controller_attach({
+            let callback = callback.clone();
+            let callback_dispatcher = callback_dispatcher.clone();
+            move || {
+                run_with_webview_dispatcher(callback_dispatcher.clone(), || {
+                    let mut callback = callback.borrow_mut();
+                    (callback.as_mut())();
+                });
+            }
+        }),
+        WebViewLifecycle::PageBegin => webview.on_page_begin({
+            let callback = callback.clone();
+            let callback_dispatcher = callback_dispatcher.clone();
+            move || {
+                run_with_webview_dispatcher(callback_dispatcher.clone(), || {
+                    let mut callback = callback.borrow_mut();
+                    (callback.as_mut())();
+                });
+            }
+        }),
+        WebViewLifecycle::PageEnd => webview.on_page_end({
+            let callback = callback.clone();
+            let callback_dispatcher = callback_dispatcher.clone();
+            move || {
+                run_with_webview_dispatcher(callback_dispatcher.clone(), || {
+                    let mut callback = callback.borrow_mut();
+                    (callback.as_mut())();
+                });
+            }
+        }),
+        WebViewLifecycle::Destroy => webview.on_destroy({
+            let callback = callback.clone();
+            let callback_dispatcher = callback_dispatcher.clone();
+            move || {
+                run_with_webview_dispatcher(callback_dispatcher.clone(), || {
+                    let mut callback = callback.borrow_mut();
+                    (callback.as_mut())();
+                });
+            }
+        }),
+    }
+    .map_err(|error| error.to_string())
+}
+
+#[cfg(feature = "webview")]
+fn register_webview_lifecycle_callbacks(
+    controller: &WebViewController,
+    webview: &Webview,
+) -> Result<(), String> {
+    for callback in controller.inner.controller_attach_callbacks.borrow().iter() {
+        register_lifecycle_callback(webview, callback, WebViewLifecycle::ControllerAttach)?;
+    }
+    for callback in controller.inner.page_begin_callbacks.borrow().iter() {
+        register_lifecycle_callback(webview, callback, WebViewLifecycle::PageBegin)?;
+    }
+    for callback in controller.inner.page_end_callbacks.borrow().iter() {
+        register_lifecycle_callback(webview, callback, WebViewLifecycle::PageEnd)?;
+    }
+    for callback in controller.inner.destroy_callbacks.borrow().iter() {
+        register_lifecycle_callback(webview, callback, WebViewLifecycle::Destroy)?;
+    }
+    Ok(())
+}
+
+#[cfg(feature = "webview")]
+fn register_internal_webview_callbacks(
+    controller: &WebViewController,
+    webview: &Webview,
+) -> Result<(), String> {
+    let attach_controller = controller.clone();
+    webview
+        .on_controller_attach(move || {
+            attach_controller.inner.attached.set(true);
+        })
+        .map_err(|error| error.to_string())?;
+
+    let state = controller.inner.clone();
+    webview
+        .on_destroy(move || {
+            state.attached.set(false);
+        })
+        .map_err(|error| error.to_string())
+}
+
+#[cfg(feature = "webview")]
+fn build_initial_webview_style(
+    spec: &WebViewSpec,
+    _frame: Option<LayoutFrame>,
+) -> Option<WebViewStyle> {
+    let style = spec.style.clone().unwrap_or_default();
+    let has_style = style.x.is_some()
+        || style.y.is_some()
+        || style.visible.is_some()
+        || style.background_color.is_some();
+    has_style.then_some(style)
+}
+
+#[cfg(feature = "webview")]
+fn webview_frame_is_valid(frame: LayoutFrame) -> bool {
+    frame.width.is_finite()
+        && frame.height.is_finite()
+        && frame.width > 0.0
+        && frame.height > 0.0
+}
+
+#[cfg(feature = "webview")]
+fn sync_embedded_webview_node_bounds(
+    controller: &WebViewController,
+    frame: Option<LayoutFrame>,
+) -> Result<(), String> {
+    let Some(frame) = frame.filter(|frame| webview_frame_is_valid(*frame)) else {
+        return Ok(());
+    };
+    let Some(mut node) = controller.inner.embedded_node.borrow().clone() else {
+        return Ok(());
+    };
+
+    let runtime = RuntimeNode(&mut node);
+    runtime
+        .set_position(vec![0.0_f32, 0.0_f32])
+        .map_err(|error| error.to_string())?;
+    runtime
+        .set_size(vec![frame.width, frame.height])
+        .map_err(|error| error.to_string())?;
+    runtime
+        .set_layout_rect(vec![0.0_f32, 0.0_f32, frame.width, frame.height])
+        .map_err(|error| error.to_string())
+}
+
+#[cfg(feature = "webview")]
+fn same_style_value(left: &Option<Either<f64, String>>, right: &Option<Either<f64, String>>) -> bool {
+    match (left, right) {
+        (None, None) => true,
+        (Some(Either::A(left)), Some(Either::A(right))) => left == right,
+        (Some(Either::B(left)), Some(Either::B(right))) => left == right,
+        _ => false,
+    }
+}
+
+#[cfg(feature = "webview")]
+fn same_webview_style(left: Option<&WebViewStyle>, right: Option<&WebViewStyle>) -> bool {
+    match (left, right) {
+        (None, None) => true,
+        (Some(left), Some(right)) => {
+            same_style_value(&left.x, &right.x)
+                && same_style_value(&left.y, &right.y)
+                && left.visible == right.visible
+                && left.background_color == right.background_color
+        }
+        _ => false,
+    }
+}
+
+#[cfg(feature = "webview")]
+fn current_applied_state(spec: &WebViewSpec, frame: Option<LayoutFrame>) -> WebViewAppliedState {
+    WebViewAppliedState {
+        url: spec.url.clone(),
+        html: spec.html.clone(),
+        headers: spec.headers.clone(),
+        style: build_initial_webview_style(spec, frame),
+    }
+}
+
+#[cfg(feature = "webview")]
+struct NativeWebViewMount {
+    webview: Webview,
+    node: ArkUINode,
+}
+
+#[cfg(feature = "webview")]
+fn create_native_webview(
+    spec: &WebViewSpec,
+    frame: Option<LayoutFrame>,
+) -> Result<NativeWebViewMount, String> {
+    let controller = spec
+        .controller
+        .as_ref()
+        .ok_or_else(|| String::from("webview controller is missing"))?;
+    let helper = unsafe { get_helper() };
+    let helper_borrow = helper.borrow();
+    let helper_ref = helper_borrow
+        .as_ref()
+        .ok_or_else(|| String::from("arkts helper is not available"))?;
+    let env = get_main_thread_env();
+    let env_borrow = env.borrow();
+    let env_ref = env_borrow
+        .as_ref()
+        .ok_or_else(|| String::from("main thread env is not available"))?;
+    let helper_object = helper_ref
+        .get_value(env_ref)
+        .map_err(|error| error.to_string())?;
+    let create_webview = helper_object
+        .get_named_property::<Function<'_, WebViewInitData<'_>, ObjectRef>>("createEmbeddedWebview")
+        .map_err(|error| error.to_string())?;
+    let callback_dispatcher = arkit_runtime::internal::global_dispatcher();
+
+    let on_drag_and_drop = spec.on_drag_and_drop.as_ref().and_then(|handler| {
+        let handler = handler.clone();
+        let callback_dispatcher = callback_dispatcher.clone();
+        env_ref
+            .create_function_from_closure("arkit_on_drag_and_drop", move |ctx| {
+                let event = ctx.try_get::<String>(0)?;
+                let event = match event {
+                    Either::A(value) => value,
+                    Either::B(_undefined) => String::new(),
+                };
+                let handler = handler.clone();
+                run_with_webview_dispatcher(callback_dispatcher.clone(), || handler(event));
+                Ok(())
+            })
+            .ok()
+    });
+
+    let on_download_start = spec.on_download_start.as_ref().and_then(|handler| {
+        let handler = handler.clone();
+        let callback_dispatcher = callback_dispatcher.clone();
+        env_ref
+            .create_function_from_closure("arkit_on_download_start", move |ctx| {
+                let origin_url = ctx.try_get::<String>(0)?;
+                let temp_path = ctx.try_get::<String>(1)?;
+                let origin_url = match origin_url {
+                    Either::A(value) => value,
+                    Either::B(_undefined) => String::new(),
+                };
+                let temp_path = match temp_path {
+                    Either::A(value) => value,
+                    Either::B(_undefined) => String::new(),
+                };
+                let mut path = PathBuf::from(temp_path);
+                let handler = handler.clone();
+                let allow =
+                    run_with_webview_dispatcher(callback_dispatcher.clone(), || {
+                        handler(origin_url, &mut path)
+                    });
+                Ok(DownloadStartResult {
+                    allow,
+                    temp_path: Some(path.to_string_lossy().to_string()),
+                })
+            })
+            .ok()
+    });
+
+    let on_download_end = spec.on_download_end.as_ref().and_then(|handler| {
+        let handler = handler.clone();
+        let callback_dispatcher = callback_dispatcher.clone();
+        env_ref
+            .create_function_from_closure("arkit_on_download_end", move |ctx| {
+                let origin_url = ctx.try_get::<String>(0)?;
+                let temp_path = ctx.try_get::<String>(1)?;
+                let success = ctx.try_get::<bool>(2)?;
+                let origin_url = match origin_url {
+                    Either::A(value) => value,
+                    Either::B(_undefined) => String::new(),
+                };
+                let temp_path = match temp_path {
+                    Either::A(value) => Some(PathBuf::from(value)),
+                    Either::B(_undefined) => None,
+                };
+                let success = match success {
+                    Either::A(value) => value,
+                    Either::B(_undefined) => false,
+                };
+                let handler = handler.clone();
+                run_with_webview_dispatcher(callback_dispatcher.clone(), || {
+                    handler(origin_url, temp_path, success);
+                });
+                Ok(())
+            })
+            .ok()
+    });
+
+    let on_navigation_request = spec.on_navigation_request.as_ref().and_then(|handler| {
+        let handler = handler.clone();
+        let callback_dispatcher = callback_dispatcher.clone();
+        env_ref
+            .create_function_from_closure("arkit_on_navigation_request", move |ctx| {
+                let url = ctx.try_get::<String>(0)?;
+                let url = match url {
+                    Either::A(value) => value,
+                    Either::B(_undefined) => String::new(),
+                };
+                let handler = handler.clone();
+                Ok(run_with_webview_dispatcher(callback_dispatcher.clone(), || {
+                    handler(url)
+                }))
+            })
+            .ok()
+    });
+
+    let on_title_change = spec.on_title_change.as_ref().and_then(|handler| {
+        let handler = handler.clone();
+        let callback_dispatcher = callback_dispatcher.clone();
+        env_ref
+            .create_function_from_closure("arkit_on_title_change", move |ctx| {
+                let title = ctx.try_get::<String>(0)?;
+                let title = match title {
+                    Either::A(value) => value,
+                    Either::B(_undefined) => String::new(),
+                };
+                let handler = handler.clone();
+                run_with_webview_dispatcher(callback_dispatcher.clone(), || {
+                    handler(title);
+                });
+                Ok(())
+            })
+            .ok()
+    });
+
+    let embedded_webview = create_webview
+        .call(WebViewInitData {
+            url: spec.url.clone(),
+            id: Some(controller.id().to_string()),
+            style: build_initial_webview_style(spec, frame),
+            javascript_enabled: spec.javascript_enabled,
+            devtools: spec.devtools,
+            user_agent: spec.user_agent.clone(),
+            autoplay: spec.autoplay,
+            initialization_scripts: spec.initialization_scripts.clone(),
+            headers: spec.headers.clone(),
+            html: spec.html.clone(),
+            transparent: spec.transparent,
+            on_drag_and_drop,
+            on_download_start,
+            on_download_end,
+            on_navigation_request,
+            on_title_change,
+        })
+        .map_err(|error| error.to_string())?;
+
+    let embedded_value = embedded_webview
+        .get_value(env_ref)
+        .map_err(|error| error.to_string())?;
+    let controller_object = embedded_value
+        .get::<Object>("controller")
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| String::from("embedded webview controller is missing"))?;
+    let node_raw = embedded_value
+        .get::<ArkUINodeRaw>("content")
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| String::from("embedded webview content is missing"))?;
+    let controller_ref = controller_object
+        .create_ref::<true>()
+        .map_err(|error| error.to_string())?;
+    let node = ArkUINode::from_raw_handle(node_raw.raw)
+        .ok_or_else(|| String::from("embedded webview content handle is null"))?;
+    let webview =
+        Webview::new(controller.id().to_string(), controller_ref).map_err(|error| error.to_string())?;
+
+    Ok(NativeWebViewMount { webview, node })
+}
+
+#[cfg(feature = "webview")]
+fn attach_embedded_webview_node(
+    host: &mut ArkUINode,
+    controller: &WebViewController,
+) -> Result<(), String> {
+    let Some(node) = controller.inner.embedded_node.borrow().clone() else {
+        return Ok(());
+    };
+    let raw_handle = node.raw_handle() as usize;
+    if host
+        .children()
+        .iter()
+        .any(|child| child.borrow().raw_handle() as usize == raw_handle)
+    {
+        return Ok(());
+    }
+
+    let mut runtime = RuntimeNode(host);
+    runtime.add_existing_child(node).map_err(|error| error.to_string())
+}
+
+#[cfg(feature = "webview")]
+fn detach_embedded_webview_node(host: &mut ArkUINode, controller: &WebViewController) {
+    let Some(raw_handle) = controller
+        .inner
+        .embedded_node
+        .borrow()
+        .as_ref()
+        .map(|node| node.raw_handle() as usize)
+    else {
+        return;
+    };
+
+    if let Err(error) = remove_child_by_raw(host, raw_handle) {
+        ohos_hilog_binding::error(format!(
+            "webview error: failed to detach embedded webview '{}': {error}",
+            controller.id()
+        ));
+    }
+}
+
+#[cfg(feature = "webview")]
+fn mount_or_show_webview(
+    host: &mut ArkUINode,
+    controller: &WebViewController,
+    spec: &WebViewSpec,
+    frame: Option<LayoutFrame>,
+) -> Result<(), String> {
+    let created = if controller.inner.webview.borrow().is_none() {
+        controller.inner.attached.set(false);
+        let mount = match create_native_webview(spec, frame) {
+            Ok(mount) => mount,
+            Err(error) => {
+                controller.inner.active_binding.set(false);
+                return Err(error);
+            }
+        };
+        let mut runtime = RuntimeNode(host);
+        if let Err(error) = runtime.add_existing_child(mount.node.clone()) {
+            let _ = mount.webview.dispose();
+            return Err(error.to_string());
+        }
+        controller.inner.embedded_node.replace(Some(mount.node.clone()));
+        let webview = mount.webview;
+        controller.inner.webview.replace(Some(webview.clone()));
+        register_internal_webview_callbacks(controller, &webview)?;
+        register_webview_lifecycle_callbacks(controller, &webview)?;
+        for callback in controller.inner.ready_callbacks.borrow().iter() {
+            callback(&webview);
+        }
+        controller
+            .inner
+            .applied
+            .replace(Some(current_applied_state(spec, frame)));
+        true
+    } else {
+        false
+    };
+
+    if controller.inner.active_binding.replace(true) && created {
+        ohos_hilog_binding::error(format!(
+            "webview error: controller '{}' is already bound to an active host",
+            controller.id()
+        ));
+    }
+
+    attach_embedded_webview_node(host, controller)?;
+    sync_embedded_webview_node_bounds(controller, frame)?;
+
+    if !created {
+        sync_webview_config(controller, spec, frame)?;
+    }
+    Ok(())
+}
+
+#[cfg(feature = "webview")]
+fn ensure_webview_mounted(
+    host: &mut ArkUINode,
+    controller: &WebViewController,
+    spec: &WebViewSpec,
+    frame: Option<LayoutFrame>,
+) -> Result<(), String> {
+    if controller.inner.webview.borrow().is_none() {
+        mount_or_show_webview(host, controller, spec, frame)
+    } else {
+        attach_embedded_webview_node(host, controller)?;
+        sync_embedded_webview_node_bounds(controller, frame)?;
+        sync_webview_config(controller, spec, frame)
+    }
+}
+
+#[cfg(feature = "webview")]
+fn sync_webview_config(
+    controller: &WebViewController,
+    spec: &WebViewSpec,
+    frame: Option<LayoutFrame>,
+) -> Result<(), String> {
+    let current = current_applied_state(spec, frame);
+    let previous = controller.inner.applied.borrow().clone();
+    controller.inner.applied.replace(Some(current.clone()));
+
+    let Some(webview) = controller.inner.webview.borrow().clone() else {
+        return Ok(());
+    };
+
+    if force_webview_style_sync(previous.as_ref(), &current) {
+        let previous_style = previous.as_ref().and_then(|state| state.style.as_ref());
+        let current_style = current.style.as_ref();
+
+        let previous_visible = previous_style.and_then(|style| style.visible);
+        let current_visible = current_style.and_then(|style| style.visible);
+        if previous_visible != current_visible {
+            if let Some(visible) = current_visible {
+                webview.set_visible(visible).map_err(|error| error.to_string())?;
+            }
+        }
+
+        let previous_background = previous_style.and_then(|style| style.background_color.as_deref());
+        let current_background = current_style.and_then(|style| style.background_color.as_deref());
+        if previous_background != current_background {
+            if let Some(background) = current_background {
+                webview
+                    .set_background_color(background)
+                    .map_err(|error| error.to_string())?;
+            }
+        }
+    }
+
+    if !controller.inner.attached.get() {
+        return Ok(());
+    }
+
+    let page_source_changed = match previous.as_ref() {
+        Some(state) => state.url != current.url || state.headers != current.headers,
+        None => current.url.is_some() || current.headers.is_some(),
+    };
+    let html_changed = match previous.as_ref() {
+        Some(state) => state.html != current.html,
+        None => current.html.is_some(),
+    };
+
+    if page_source_changed {
+        if let Some(url) = current.url.as_deref() {
+            if let Some(headers) = current.headers.clone() {
+                let headers = headers
+                    .into_iter()
+                    .map(|(key, value)| {
+                        (
+                            key.parse::<http::header::HeaderName>()
+                                .expect("webview header name should be valid"),
+                            value
+                                .parse::<http::header::HeaderValue>()
+                                .expect("webview header value should be valid"),
+                        )
+                    })
+                    .collect();
+                webview
+                    .load_url_with_headers(url, headers)
+                    .map_err(|error| error.to_string())?;
+            } else {
+                webview.load_url(url).map_err(|error| error.to_string())?;
+            }
+        } else if let Some(html) = current.html.as_deref() {
+            webview.load_html(html).map_err(|error| error.to_string())?;
+        }
+    } else if html_changed {
+        if let Some(html) = current.html.as_deref() {
+            webview.load_html(html).map_err(|error| error.to_string())?;
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(feature = "webview")]
+fn force_webview_style_sync(
+    previous: Option<&WebViewAppliedState>,
+    current: &WebViewAppliedState,
+) -> bool {
+    !same_webview_style(
+        previous.and_then(|state| state.style.as_ref()),
+        current.style.as_ref(),
+    )
+}
+
+#[cfg(feature = "webview")]
+fn unmount_webview(controller: &WebViewController) {
+    controller.inner.active_binding.set(false);
+    controller.inner.attached.set(false);
+    controller.inner.applied.replace(None);
+    controller.inner.embedded_node.replace(None);
+    if let Some(webview) = controller.inner.webview.borrow_mut().take() {
+        let _ = webview.dispose();
+    }
+}
+
+#[cfg(feature = "webview")]
+fn enrich_webview_host<Message, AppTheme>(node: &mut Node<Message, AppTheme>) {
+    let Some(spec) = node.webview.clone() else {
+        return;
+    };
+    let Some(controller) = spec.controller.clone() else {
+        return;
+    };
+    let node_ref = Rc::new(RefCell::new(None::<ArkUINode>));
+
+    node.mount_effects.push(Box::new({
+        let controller = controller.clone();
+        let node_ref = node_ref.clone();
+        move |_node| {
+            Ok(Some(Box::new(move || {
+                if let Some(mut host) = node_ref.borrow().as_ref().cloned() {
+                    detach_embedded_webview_node(&mut host, &controller);
+                }
+                unmount_webview(&controller);
+            }) as Cleanup))
+        }
+    }));
+
+    node.attach_effects.push(Box::new({
+        let controller = controller.clone();
+        let spec = spec.clone();
+        let node_ref = node_ref.clone();
+        move |node| {
+            let frame = read_layout_frame(node);
+            if let Err(error) = ensure_webview_mounted(node, &controller, &spec, frame) {
+                ohos_hilog_binding::error(format!(
+                    "webview error: failed to mount webview '{}': {error}",
+                    controller.id()
+                ));
+            }
+            node_ref.replace(Some(node.clone()));
+            Ok(None)
+        }
+    }));
+
+    node.event_handlers.push(EventHandlerSpec {
+        event_type: NodeEventType::EventOnAreaChange,
+        callback: Rc::new({
+            let controller = controller.clone();
+            let spec = spec.clone();
+            let node_ref = node_ref.clone();
+            move |_| {
+                let Some(node) = node_ref.borrow().as_ref().cloned() else {
+                    return;
+                };
+                if controller.inner.webview.borrow().is_none() {
+                    return;
+                }
+                if let Err(error) = sync_webview_config(&controller, &spec, read_layout_frame(&node)) {
+                    ohos_hilog_binding::error(format!(
+                        "webview error: failed to sync webview '{}' after area change: {error}",
+                        controller.id()
+                    ));
+                }
+            }
+        }),
+    });
+
+    node.patch_effects.push(Box::new({
+        let controller = controller.clone();
+        let spec = spec.clone();
+        let node_ref = node_ref.clone();
+        move |node| {
+            let frame = read_layout_frame(node);
+            if let Err(error) = ensure_webview_mounted(node, &controller, &spec, frame) {
+                ohos_hilog_binding::error(format!(
+                    "webview error: failed to sync webview '{}': {error}",
+                    controller.id()
+                ));
+            }
+            node_ref.replace(Some(node.clone()));
+            Ok(())
+        }
+    }));
+}
+
 fn apply_attr_list(
     node: &mut ArkUINode,
     attrs: Vec<(ArkUINodeAttributeType, ArkUINodeAttributeItem)>,
@@ -2186,6 +3292,8 @@ fn create_node(kind: NodeKind) -> ArkUIResult<ArkUINode> {
         NodeKind::TextArea => TextArea::new()?.into(),
         NodeKind::TextInput => TextInput::new()?.into(),
         NodeKind::Toggle => Toggle::new()?.into(),
+        #[cfg(feature = "webview")]
+        NodeKind::WebViewHost => Stack::new()?.into(),
     })
 }
 
@@ -2208,6 +3316,8 @@ fn node_type_id(kind: NodeKind) -> TypeId {
         NodeKind::TextArea => TypeId::of::<TextArea>(),
         NodeKind::TextInput => TypeId::of::<TextInput>(),
         NodeKind::Toggle => TypeId::of::<Toggle>(),
+        #[cfg(feature = "webview")]
+        NodeKind::WebViewHost => TypeId::of::<WebViewHostNodeTag>(),
     }
 }
 
@@ -2228,6 +3338,8 @@ struct TextNodeTag;
 struct TextAreaNodeTag;
 struct TextInputNodeTag;
 struct ToggleNodeTag;
+#[cfg(feature = "webview")]
+struct WebViewHostNodeTag;
 
 fn node_widget_tag(kind: NodeKind) -> advanced::widget::Tag {
     match kind {
@@ -2248,6 +3360,8 @@ fn node_widget_tag(kind: NodeKind) -> advanced::widget::Tag {
         NodeKind::TextArea => advanced::widget::Tag::of::<TextAreaNodeTag>(),
         NodeKind::TextInput => advanced::widget::Tag::of::<TextInputNodeTag>(),
         NodeKind::Toggle => advanced::widget::Tag::of::<ToggleNodeTag>(),
+        #[cfg(feature = "webview")]
+        NodeKind::WebViewHost => advanced::widget::Tag::of::<WebViewHostNodeTag>(),
     }
 }
 
@@ -2410,6 +3524,19 @@ fn bind_node_state(
     *state_bound = true;
 }
 
+#[cfg(feature = "webview")]
+fn prepare_node<Message, AppTheme>(mut node: Node<Message, AppTheme>) -> Node<Message, AppTheme> {
+    if node.kind == NodeKind::WebViewHost {
+        enrich_webview_host(&mut node);
+    }
+    node
+}
+
+#[cfg(not(feature = "webview"))]
+fn prepare_node<Message, AppTheme>(node: Node<Message, AppTheme>) -> Node<Message, AppTheme> {
+    node
+}
+
 fn compile_node<Message, AppTheme>(
     node: Node<Message, AppTheme>,
     tree: &mut advanced::widget::Tree,
@@ -2434,8 +3561,10 @@ where
         patch_effects,
         exit_effect,
         mut state_bound,
+        #[cfg(feature = "webview")]
+            webview: _,
         children,
-    } = node;
+    } = prepare_node(node);
 
     if bind_state {
         bind_node_state(
@@ -2471,6 +3600,8 @@ where
             patch_effects,
             exit_effect,
             state_bound,
+            #[cfg(feature = "webview")]
+            webview: None,
             children: compiled_children,
         }
         .into(),
@@ -2542,24 +3673,26 @@ where
     Message: 'static,
     AppTheme: 'static,
 {
+    if compiled.overlays.is_empty() {
+        return compiled.body;
+    }
+
     let mut children = vec![compiled.body];
 
-    if !compiled.overlays.is_empty() {
-        children.push(
-            stack_component::<Message, AppTheme>()
-                .percent_width(1.0)
-                .percent_height(1.0)
-                .attr(ArkUINodeAttributeType::Clip, false)
-                .hit_test_behavior(HitTestBehavior::Default)
-                .attr(
-                    ArkUINodeAttributeType::Alignment,
-                    i32::from(Alignment::TopStart),
-                )
-                .attr(ArkUINodeAttributeType::ZIndex, 10_000_i32)
-                .children(compiled.overlays)
-                .into(),
-        );
-    }
+    children.push(
+        stack_component::<Message, AppTheme>()
+            .percent_width(1.0)
+            .percent_height(1.0)
+            .attr(ArkUINodeAttributeType::Clip, false)
+            .hit_test_behavior(HitTestBehavior::Default)
+            .attr(
+                ArkUINodeAttributeType::Alignment,
+                i32::from(Alignment::TopStart),
+            )
+            .attr(ArkUINodeAttributeType::ZIndex, 10_000_i32)
+            .children(compiled.overlays)
+            .into(),
+    );
 
     stack_component::<Message, AppTheme>()
         .percent_width(1.0)
@@ -2953,8 +4086,10 @@ where
         patch_effects,
         exit_effect,
         state_bound: _,
+        #[cfg(feature = "webview")]
+            webview: _,
         children,
-    } = into_node(element);
+    } = prepare_node(into_node(element));
 
     let mut node = create_node(kind)?;
     let init_attr_keys = attr_types(&init_attrs);
@@ -3045,8 +4180,10 @@ where
         patch_effects,
         exit_effect,
         state_bound: _,
+        #[cfg(feature = "webview")]
+            webview: _,
         children,
-    } = into_node(element);
+    } = prepare_node(into_node(element));
 
     mounted.tag = node_type_id(kind);
     mounted.key = key;
@@ -3345,6 +4482,111 @@ mod tests {
         assert_eq!(
             node.attr_f32(ArkUINodeAttributeType::TextAreaPlaceholderFont),
             Some(13.0)
+        );
+    }
+
+    #[cfg(feature = "webview")]
+    #[test]
+    fn web_view_component_uses_dedicated_host_kind() {
+        let controller = WebViewController::with_id("webview-test");
+        let node = web_view_component::<(), arkit_core::Theme>(controller.clone())
+            .javascript_enabled(true)
+            .devtools(true);
+
+        assert_eq!(node.kind, NodeKind::WebViewHost);
+        let spec = node.webview.as_ref().expect("webview spec should exist");
+        assert_eq!(
+            spec.controller
+                .as_ref()
+                .expect("controller should be present")
+                .id(),
+            "webview-test"
+        );
+        assert_eq!(spec.javascript_enabled, Some(true));
+        assert_eq!(spec.devtools, Some(true));
+    }
+
+    #[cfg(feature = "webview")]
+    #[test]
+    fn web_view_component_uses_transparent_hit_testing() {
+        let controller = WebViewController::with_id("webview-transparent");
+        let node = web_view_component::<(), arkit_core::Theme>(controller);
+
+        assert_eq!(
+            node.attr_f32(ArkUINodeAttributeType::HitTestBehavior),
+            Some(i32::from(HitTestBehavior::Transparent) as f32)
+        );
+    }
+
+    #[cfg(feature = "webview")]
+    #[test]
+    fn web_view_component_clips_to_host_bounds() {
+        let controller = WebViewController::with_id("webview-clipped");
+        let node = web_view_component::<(), arkit_core::Theme>(controller);
+
+        assert_eq!(node.attr_bool(ArkUINodeAttributeType::Clip), Some(true));
+    }
+
+    #[cfg(feature = "webview")]
+    #[test]
+    fn build_initial_webview_style_only_preserves_explicit_style_fields() {
+        let style = build_initial_webview_style(
+            &WebViewSpec::default(),
+            Some(LayoutFrame {
+                x: 12.0,
+                y: 34.0,
+                width: 200.0,
+                height: 120.0,
+            }),
+        )
+        .expect("style should be created");
+
+        assert!(style.x.is_none());
+        assert!(style.y.is_none());
+        assert!(style.background_color.is_none());
+        assert!(style.visible.is_none());
+    }
+
+    #[cfg(feature = "webview")]
+    #[test]
+    fn compose_compiled_overlays_skips_wrapper_without_overlays() {
+        let node = into_node(compose_compiled_overlays(CompiledElement::<(), arkit_core::Theme> {
+            body: column_component::<(), arkit_core::Theme>().into(),
+            overlays: Vec::new(),
+        }));
+
+        assert_eq!(node.kind, NodeKind::Column);
+    }
+
+    #[cfg(feature = "webview")]
+    #[test]
+    fn compose_compiled_overlays_keeps_stack_wrapper_with_overlays() {
+        let node = into_node(compose_compiled_overlays(CompiledElement::<(), arkit_core::Theme> {
+            body: column_component::<(), arkit_core::Theme>().into(),
+            overlays: vec![text::<(), arkit_core::Theme>("overlay").into()],
+        }));
+
+        assert_eq!(node.kind, NodeKind::Stack);
+    }
+
+    #[cfg(feature = "webview")]
+    #[test]
+    fn web_view_constructor_defaults_to_fill_and_url() {
+        let controller = WebViewController::with_id("webview-fill");
+        let node = web_view::<(), arkit_core::Theme>(controller, "https://example.com");
+
+        assert_eq!(node.kind, NodeKind::WebViewHost);
+        assert_eq!(
+            node.attr_f32(ArkUINodeAttributeType::WidthPercent),
+            Some(1.0)
+        );
+        assert_eq!(
+            node.attr_f32(ArkUINodeAttributeType::HeightPercent),
+            Some(1.0)
+        );
+        assert_eq!(
+            node.webview.as_ref().and_then(|spec| spec.url.as_deref()),
+            Some("https://example.com")
         );
     }
 }

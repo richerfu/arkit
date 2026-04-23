@@ -8,7 +8,8 @@ use arkit_core::{theme, window};
 use arkit_runtime::{
     internal::{
         clear_ui_loop_effects, run_ui_loop_effects, set_current_runtime, set_dispatcher,
-        set_ui_waker, RuntimeDispatcher, RuntimeHandle,
+        set_global_dispatcher, set_ui_waker, GlobalRuntimeDispatcher, RuntimeDispatcher,
+        RuntimeHandle,
     },
     Program, SubscriptionHandle, Task, TaskAction,
 };
@@ -424,17 +425,7 @@ where
                 }
             }
         });
-        let render_state = application.clone();
-        let runtime = RootRuntime::new(slot, app, move || render_state.render())?;
-        let runtime = Rc::new(runtime);
-        runtime_slot.replace(Some(Rc::downgrade(&runtime)));
-        set_current_runtime(Some(RuntimeHandle::new({
-            let runtime = runtime.clone();
-            move || {
-                let _ = runtime.request_rerender();
-            }
-        })));
-        let runtime_for_dispatch = Rc::downgrade(&runtime);
+        let runtime_for_dispatch = runtime_slot.clone();
         let app_for_dispatch = Rc::downgrade(&application);
         let emitter: Rc<dyn Fn(P::Message)> = Rc::new(move |message| {
             let Some(application) = Weak::upgrade(&app_for_dispatch) else {
@@ -442,7 +433,9 @@ where
             };
 
             if application.enqueue(message) {
-                application.schedule_redraw(runtime_for_dispatch.clone());
+                if let Some(runtime) = runtime_for_dispatch.borrow().clone() {
+                    application.schedule_redraw(runtime);
+                }
             }
         });
         let dispatcher_emitter = emitter.clone();
@@ -452,8 +445,38 @@ where
                 .expect("dispatch received the wrong message type");
             dispatcher_emitter(*message);
         });
+        let background_sender = application.background_sender.clone();
+        let background_waker = waker.clone();
+        let global_dispatcher: GlobalRuntimeDispatcher =
+            std::sync::Arc::new(move |message: Box<dyn Any + Send>| {
+                let message = message
+                    .downcast::<P::Message>()
+                    .expect("dispatch received the wrong message type");
+                if background_sender.send(*message).is_ok() {
+                    background_waker.wake();
+                }
+            });
         application.set_emitter(emitter);
         set_dispatcher(Some(dispatcher.clone()));
+        set_global_dispatcher(Some(global_dispatcher));
+        let render_state = application.clone();
+        let runtime = match RootRuntime::new(slot, app, move || render_state.render()) {
+            Ok(runtime) => runtime,
+            Err(error) => {
+                set_dispatcher(None);
+                set_global_dispatcher(None);
+                set_ui_waker(None);
+                return Err(error);
+            }
+        };
+        let runtime = Rc::new(runtime);
+        runtime_slot.replace(Some(Rc::downgrade(&runtime)));
+        set_current_runtime(Some(RuntimeHandle::new({
+            let runtime = runtime.clone();
+            move || {
+                let _ = runtime.request_rerender();
+            }
+        })));
         if application.enqueue_many(application.run_task(boot_task)) {
             application.schedule_redraw(Rc::downgrade(&runtime));
         }
@@ -485,6 +508,7 @@ where
     fn drop(&mut self) {
         set_current_runtime(None);
         set_dispatcher(None);
+        set_global_dispatcher(None);
         set_ui_waker(None);
         clear_ui_loop_effects();
     }

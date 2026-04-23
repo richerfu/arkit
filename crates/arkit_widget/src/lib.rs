@@ -36,6 +36,10 @@ pub use render_impl::{
     HitTestBehavior, ItemAlignment, JustifyContent, MountedNode, Node, ObjectFit,
     ProgressLinearStyle, ProgressType, Renderer, ScrollOffset, ScrollViewport, UiState, Visibility,
 };
+#[cfg(feature = "webview")]
+pub use render_impl::{
+    web_view, web_view_component, DownloadStartResult, WebViewController, WebViewStyle, Webview,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LifecycleEvent {
@@ -58,6 +62,8 @@ pub type TextAreaElement<Message = (), AppTheme = Theme> = Node<Message, AppThem
 pub type TextElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
 pub type TextInputElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
 pub type ToggleElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
+#[cfg(feature = "webview")]
+pub type WebViewElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
 
 pub fn observe_layout_size<Message, AppTheme>(
     element: Element<Message, AppTheme>,
@@ -113,5 +119,10 @@ pub mod prelude {
         OverlayDismissMode, OverlayStrategy, Padding, ProgressLinearStyle, ProgressType,
         ScrollOffset, ScrollViewport, ShadowStyle, Size, TextAlignment, Theme, UiState, Vertical,
         Visibility,
+    };
+    #[cfg(feature = "webview")]
+    pub use crate::{
+        web_view, web_view_component, DownloadStartResult, WebViewController, WebViewElement,
+        WebViewStyle, Webview,
     };
 }

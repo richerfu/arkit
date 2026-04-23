@@ -1,97 +1,21 @@
 # arkit
 
-`arkit` is an ArkUI framework for OpenHarmony built on local `ohos-native-bindings`
-and integrated with `openharmony-ability`.
+`arkit` is an ArkUI framework for OpenHarmony.
 
-The public model now follows `iced`:
+It is built on top of local `ohos-native-bindings`, integrates with
+`openharmony-ability`, and uses an `iced`-style programming model:
 
 - application state lives in `State`
-- all side effects flow through `Task<Message>` and `Subscription<Message>`
-- `view(&State) -> Element` is a pure render function
-- widgets use builder-style APIs and theme/style catalogs
+- rendering is `view(&State) -> Element`
+- side effects flow through `Task<Message>` and `Subscription<Message>`
 
-`arkit` itself is the facade crate. Runtime and widget implementation live in
-dedicated crates and are re-exported here.
-
-## Workspace Layout
-
-- `crates/arkit`: facade / re-export crate
-- `crates/arkit_widget`: ArkUI widget tree, renderer, node diff, and widget builders
-- `crates/arkit_runtime`: renderer-agnostic application/runtime shell, task/subscription wiring
-- `crates/arkit_derive`: `#[entry]` and `#[component]` macros
-- `crates/arkit_shadcn`: shadcn-style component crate (built on `arkit`)
-- `examples/counter`: minimal smoke example for OpenHarmony integration
-- `examples/async_task`: minimal async `Task::perform` smoke example
-- `examples/shadcn_showcase`: shadcn / react-native-reusables showcase example
-
-## Key APIs
-
-- `#[entry]`: defines the OpenHarmony entry function and generates `init/render/destroy`
-- `application(boot, update, view)`: iced-style application builder
-- `Task<Message>` / `Subscription<Message>`: message-driven side effects
-- `NavigationStack<T>`: explicit application-state navigation for example apps
-- `#[component]`: a no-op marker for reusable view helpers; it does not create hidden state
-- `floating_overlay` / `modal_overlay`: shared detached overlay primitives for popups, menus, dialogs, sheets, and drawers
-
-`Task::perform` runs an async operation on the runtime executor and sends the
-mapped `Message` back through `update` when it completes. Background work must
-return messages; it must not mutate application state directly.
-
-## Shadcn Component Crate
-
-`arkit_shadcn` provides the full shadcn component list with ArkUI-native rendering:
-
-- accordion, alert, alert_dialog, aspect_ratio, avatar, badge, breadcrumb
-- button, calendar, card, carousel, chart, checkbox, collapsible
-- combobox, command, context_menu, data_table, date_picker, dialog
-- drawer, dropdown_menu, form, hover_card, input, input_otp, label
-- menubar, navigation_menu, pagination, popover, progress, radio_group
-- resizable, scroll_area, select, separator, sheet, sidebar, skeleton
-- slider, sonner, switch, table, tabs, textarea, toast, toggle
-- toggle_group, tooltip
-
-Use `arkit_shadcn::prelude::*` to import the full set.
-
-Button styling follows the widget builder style:
-
-```rust
-button("Save")
-    .theme(ButtonVariant::Default)
-    .size(ButtonSize::Sm)
-    .margin_top(8.0)
-```
-
-Call regular `Node` builder methods after shadcn helpers to override wrapper defaults.
-
-## View Layer (All Components)
-
-`arkit::prelude::*` exposes the ArkUI-backed widget constructors in builder style:
-
-- layout: `column_component`, `row_component`, `stack_component`, `scroll_component`
-- input/content: `text_component`, `text_input_component`, `button_component`, `slider_component`, `checkbox_component`
-- media/others: `image_component`, `calendar_picker_component`, `date_picker_component`, `swiper_component`
-
-For full style/attribute coverage, use the `Node` builder methods:
-
-- `Node::attr(ArkUINodeAttributeType, ArkUINodeAttributeItem)`
-- enum attributes use typed values, for example `text_align(TextAlignment::Start)` and `font_weight(FontWeight::W600)`
-- `Node::on_event(NodeEventType, ...)` for all node events
-- `Node::on_custom_event(NodeCustomEventType, ...)` for all custom events
-- `Node::native(|native| { ... })` for direct ArkUI node access
-
-For detached layers, `arkit::prelude::*` also exports:
-
-- `FloatingOverlaySpec`, `FloatingSide`, `FloatingAlign`
-- `ModalOverlaySpec`, `ModalPresentation`
-- `OverlayDismissMode`, `OverlayStrategy`
-
-## Example
+## Taste
 
 ```rust
 use arkit::prelude::*;
-use arkit::{application, Task};
+use arkit::{application, Element, Task};
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 enum Message {
     Increment,
 }
@@ -109,11 +33,24 @@ fn update(state: &mut State, message: Message) -> Task<Message> {
     Task::none()
 }
 
-fn view(state: &State) -> Element {
-    column(vec![
-        text(format!("count = {}", state.count)).into(),
-        button("+1").on_press(Message::Increment).into(),
-    ])
+fn view(state: &State) -> Element<Message> {
+    column_component()
+        .percent_width(1.0)
+        .percent_height(1.0)
+        .align_items_center()
+        .justify_content_center()
+        .children(vec![
+            text(format!("count = {}", state.count))
+                .font_size(28.0)
+                .line_height(32.0)
+                .into(),
+            button("increment")
+                .margin_top(12.0)
+                .padding([8.0, 12.0, 8.0, 12.0])
+                .on_press(Message::Increment)
+                .into(),
+        ])
+        .into()
 }
 
 #[entry]
@@ -122,32 +59,39 @@ fn app() -> impl arkit::EntryPoint {
 }
 ```
 
-Async work follows the same message loop:
+The complete runnable version is in [examples/counter](examples/counter/src/lib.rs).
 
-```rust
-#[derive(Clone, Debug)]
-enum Message {
-    Load,
-    Loaded(String),
-}
+## Feature Flags
 
-fn update(state: &mut State, message: Message) -> Task<Message> {
-    match message {
-        Message::Load => {
-            state.loading = true;
-            Task::perform(
-                async {
-                    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-                    String::from("ready")
-                },
-                Message::Loaded,
-            )
-        }
-        Message::Loaded(value) => {
-            state.loading = false;
-            state.value = value;
-            Task::none()
-        }
-    }
-}
+- `api-22`: baseline OHOS API level, enabled by default
+- `webview`: enables embedded webview support through `openharmony-ability`
+
+## Examples
+
+- `examples/counter`: minimal state + button update example
+- `examples/async_task`: `Task::perform` example
+- `examples/webview`: embedded webview example behind the `webview` feature
+- `examples/shadcn_showcase`: UI showcase built with `arkit_shadcn`
+
+## Workspace
+
+- `crates/arkit`: facade crate and public re-exports
+- `crates/arkit_widget`: widget tree, renderer, overlays, and ArkUI bindings glue
+- `crates/arkit_runtime`: application runtime, task execution, and subscriptions
+- `crates/arkit_derive`: `#[entry]` and `#[component]`
+- `crates/arkit_shadcn`: shadcn-style components on top of `arkit`
+
+## Building
+
+Build an example from its crate directory with `ohrs`:
+
+```sh
+cd examples/counter
+ohrs build --arch aarch
+```
+
+For webview examples, enable the `webview` feature in the crate dependency:
+
+```toml
+arkit = { workspace = true, features = ["webview"] }
 ```

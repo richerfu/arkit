@@ -24,6 +24,11 @@ pub use arkit_widget::{
     SliderElement, SwiperElement, TextAlignment, TextAreaElement, TextElement, TextInputElement,
     ToggleElement, UiState, Visibility,
 };
+#[cfg(feature = "webview")]
+pub use arkit_widget::{
+    web_view, web_view_component, DownloadStartResult, WebViewController, WebViewElement,
+    WebViewStyle, Webview,
+};
 pub use ohos::{
     mount_application, mount_entry, napi_derive_ohos, napi_ohos, ohos_arkui_binding,
     openharmony_ability, ApplicationRuntime, EntryPoint, MountedEntryHandle,
@@ -68,6 +73,8 @@ pub mod widget {
         stack, stack_component, swiper, swiper_component, text, text_area, text_area_component,
         text_component, text_input, text_input_component, toggle, toggle_component,
     };
+    #[cfg(feature = "webview")]
+    pub use crate::{web_view, web_view_component};
 }
 
 pub mod prelude {
@@ -81,6 +88,11 @@ pub mod prelude {
         OverlayDismissMode, OverlayStrategy, Padding, Program, ProgressLinearStyle, ProgressType,
         Renderer, ScrollOffset, ScrollViewport, Settings, ShadowStyle, Size, Subscription,
         SubscriptionHandle, Task, TextAlignment, Theme, UiState, Vertical, Visibility,
+    };
+    #[cfg(feature = "webview")]
+    pub use crate::{
+        web_view, web_view_component, DownloadStartResult, WebViewController, WebViewElement,
+        WebViewStyle, Webview,
     };
 }
 

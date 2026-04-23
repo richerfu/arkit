@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock, Mutex};
 
 pub use arkit_core::theme;
 pub use arkit_core::{advanced, window, Settings, Theme};
@@ -27,6 +27,10 @@ thread_local! {
 }
 
 pub type RuntimeDispatcher = Rc<dyn Fn(Box<dyn Any + Send>)>;
+pub type GlobalRuntimeDispatcher = Arc<dyn Fn(Box<dyn Any + Send>) + Send + Sync>;
+
+static GLOBAL_DISPATCHER: LazyLock<Mutex<Option<GlobalRuntimeDispatcher>>> =
+    LazyLock::new(|| Mutex::new(None));
 
 #[derive(Clone)]
 pub struct RuntimeHandle {
@@ -49,20 +53,46 @@ pub fn dispatch<Message>(message: Message)
 where
     Message: Send + 'static,
 {
-    DISPATCHER.with(|state| {
-        let dispatcher = state
-            .borrow()
-            .as_ref()
-            .cloned()
-            .expect("arkit runtime dispatch called without an active dispatcher");
+    if let Some(dispatcher) = DISPATCHER.with(|state| state.borrow().as_ref().cloned()) {
         dispatcher(Box::new(message));
-    });
+        return;
+    }
+
+    if let Some(dispatcher) = GLOBAL_DISPATCHER.lock().expect("global dispatcher lock").clone() {
+        dispatcher(Box::new(message));
+        return;
+    }
+
+    panic!("arkit runtime dispatch called without an active dispatcher");
 }
 
 pub fn set_dispatcher(dispatcher: Option<RuntimeDispatcher>) {
     DISPATCHER.with(|state| {
         state.replace(dispatcher);
     });
+}
+
+pub fn set_global_dispatcher(dispatcher: Option<GlobalRuntimeDispatcher>) {
+    *GLOBAL_DISPATCHER.lock().expect("global dispatcher lock") = dispatcher;
+}
+
+pub fn global_dispatcher() -> Option<GlobalRuntimeDispatcher> {
+    GLOBAL_DISPATCHER
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .clone()
+}
+
+pub fn with_global_dispatcher<R>(
+    dispatcher: Option<GlobalRuntimeDispatcher>,
+    f: impl FnOnce() -> R,
+) -> R {
+    let Some(dispatcher) = dispatcher else {
+        return f();
+    };
+
+    let local_dispatcher: RuntimeDispatcher = Rc::new(move |message| dispatcher(message));
+    with_dispatcher(local_dispatcher, f)
 }
 
 pub fn with_dispatcher<R>(dispatcher: RuntimeDispatcher, f: impl FnOnce() -> R) -> R {
@@ -451,8 +481,9 @@ where
 pub mod internal {
     pub use crate::{
         clear_ui_loop_effects, current_runtime, dispatch, queue_ui_loop, run_ui_loop_effects,
-        set_current_runtime, set_dispatcher, set_ui_waker, with_dispatcher, RuntimeDispatcher,
-        RuntimeHandle,
+        global_dispatcher, set_current_runtime, set_dispatcher, set_global_dispatcher,
+        set_ui_waker, with_dispatcher, with_global_dispatcher, GlobalRuntimeDispatcher,
+        RuntimeDispatcher, RuntimeHandle,
     };
 }
 
