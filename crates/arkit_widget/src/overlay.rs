@@ -1007,55 +1007,115 @@ where
         .into();
 
     let overlay_panel = match spec.presentation {
-        ModalPresentation::CenteredDialog => column_component::<Message, AppTheme>()
-            .percent_width(1.0)
-            .percent_height(1.0)
-            .justify_content_center()
-            .align_items_center()
-            .attr(
-                ArkUINodeAttributeType::Padding,
-                vec![
-                    spec.viewport_inset,
-                    spec.viewport_inset,
-                    spec.viewport_inset,
-                    spec.viewport_inset,
-                ],
-            )
-            .children(vec![panel])
-            .into(),
-        ModalPresentation::RightSheet => row_component::<Message, AppTheme>()
-            .percent_width(1.0)
-            .percent_height(1.0)
-            .justify_content_end()
-            .attr(
-                ArkUINodeAttributeType::Padding,
-                vec![
-                    spec.viewport_inset,
-                    spec.viewport_inset,
-                    spec.viewport_inset,
-                    spec.viewport_inset,
-                ],
-            )
-            .children(vec![column_component::<Message, AppTheme>()
+        ModalPresentation::CenteredDialog => {
+            let outside_dismiss = on_dismiss.clone();
+            column_component::<Message, AppTheme>()
+                .percent_width(1.0)
                 .percent_height(1.0)
+                .justify_content_center()
+                .align_items_center()
+                .on_event(NodeEventType::TouchEvent, move |event| {
+                    let Some(input_event) = event.input_event() else {
+                        return;
+                    };
+                    let _ = input_event.pointer_set_stop_propagation(true);
+                    if !matches!(
+                        input_event.action,
+                        UIInputAction::Up | UIInputAction::Cancel
+                    ) {
+                        return;
+                    }
+                    if spec.dismiss_on_backdrop {
+                        if let Some(dismiss) = outside_dismiss.as_ref() {
+                            dismiss();
+                        }
+                    }
+                })
+                .attr(
+                    ArkUINodeAttributeType::Padding,
+                    vec![
+                        spec.viewport_inset,
+                        spec.viewport_inset,
+                        spec.viewport_inset,
+                        spec.viewport_inset,
+                    ],
+                )
                 .children(vec![panel])
-                .into()])
-            .into(),
-        ModalPresentation::BottomDrawer => column_component::<Message, AppTheme>()
-            .percent_width(1.0)
-            .percent_height(1.0)
-            .justify_content_end()
-            .attr(
-                ArkUINodeAttributeType::Padding,
-                vec![
-                    spec.viewport_inset,
-                    spec.viewport_inset,
-                    spec.viewport_inset,
-                    spec.viewport_inset,
-                ],
-            )
-            .children(vec![panel])
-            .into(),
+                .into()
+        }
+        ModalPresentation::RightSheet => {
+            let outside_dismiss = on_dismiss.clone();
+            row_component::<Message, AppTheme>()
+                .percent_width(1.0)
+                .percent_height(1.0)
+                .justify_content_end()
+                .on_event(NodeEventType::TouchEvent, move |event| {
+                    let Some(input_event) = event.input_event() else {
+                        return;
+                    };
+                    let _ = input_event.pointer_set_stop_propagation(true);
+                    if !matches!(
+                        input_event.action,
+                        UIInputAction::Up | UIInputAction::Cancel
+                    ) {
+                        return;
+                    }
+                    if spec.dismiss_on_backdrop {
+                        if let Some(dismiss) = outside_dismiss.as_ref() {
+                            dismiss();
+                        }
+                    }
+                })
+                .attr(
+                    ArkUINodeAttributeType::Padding,
+                    vec![
+                        spec.viewport_inset,
+                        spec.viewport_inset,
+                        spec.viewport_inset,
+                        spec.viewport_inset,
+                    ],
+                )
+                .children(vec![column_component::<Message, AppTheme>()
+                    .percent_height(1.0)
+                    .children(vec![panel])
+                    .into()])
+                .into()
+        }
+        ModalPresentation::BottomDrawer => {
+            let outside_dismiss = on_dismiss.clone();
+            column_component::<Message, AppTheme>()
+                .percent_width(1.0)
+                .percent_height(1.0)
+                .justify_content_end()
+                .on_event(NodeEventType::TouchEvent, move |event| {
+                    let Some(input_event) = event.input_event() else {
+                        return;
+                    };
+                    let _ = input_event.pointer_set_stop_propagation(true);
+                    if !matches!(
+                        input_event.action,
+                        UIInputAction::Up | UIInputAction::Cancel
+                    ) {
+                        return;
+                    }
+                    if spec.dismiss_on_backdrop {
+                        if let Some(dismiss) = outside_dismiss.as_ref() {
+                            dismiss();
+                        }
+                    }
+                })
+                .attr(
+                    ArkUINodeAttributeType::Padding,
+                    vec![
+                        spec.viewport_inset,
+                        spec.viewport_inset,
+                        spec.viewport_inset,
+                        spec.viewport_inset,
+                    ],
+                )
+                .children(vec![panel])
+                .into()
+        }
     };
 
     stack_component::<Message, AppTheme>()

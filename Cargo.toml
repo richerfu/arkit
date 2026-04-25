@@ -41,6 +41,6 @@ proc-macro2 = "1.0"
 openharmony-ability = { git = "https://github.com/harmony-contrib/openharmony-ability.git" }
 openharmony-ability-derive = { git = "https://github.com/harmony-contrib/openharmony-ability.git" }
 
-ohos-arkui-binding = { git = "https://github.com/ohos-rs/ohos-native-bindings.git", branch = "feat-component" }
+ohos-arkui-binding = { path = "../ohos-native-bindings/crates/arkui", default-features = false, features = ["napi", "image"] }
 ohos-display-binding = { git = "https://github.com/ohos-rs/ohos-native-bindings.git", branch = "feat-component" }
 ohos-hilog-binding = { git = "https://github.com/ohos-rs/ohos-native-bindings.git", branch = "feat-component" }

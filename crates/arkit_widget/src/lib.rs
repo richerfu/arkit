@@ -29,15 +29,16 @@ pub use render_impl::{
     checkbox_component, column, column_component, container, date_picker, date_picker_component,
     image, image_component, list, list_component, list_item, list_item_component, mount,
     observe_layout_frame as observe_layout_frame_impl,
-    observe_layout_size as observe_layout_size_impl, patch, progress, progress_component, radio,
+    observe_layout_size as observe_layout_size_impl,
+    observe_text_layout as observe_text_layout_impl, patch, progress, progress_component, radio,
     radio_component, realize_attached_mount, refresh, refresh_component, row, row_component,
     scroll, scroll_component, slider, slider_component, stack, stack_component, swiper,
     swiper_component, text, text_area, text_area_component, text_component, text_input,
     text_input_component, toggle, toggle_component, Attribute as ArkUINodeAttributeType,
     AttributeValue as ArkUINodeAttributeItem, BorderStyle, ButtonType, Element, FontStyle,
     HitTestBehavior, ItemAlignment, JustifyContent, ListScrollIndexEvent, MountedNode, Node,
-    ObjectFit, ProgressLinearStyle, ProgressType, Renderer, ScrollOffset, ScrollViewport, UiState,
-    Visibility,
+    ObjectFit, ProgressLinearStyle, ProgressType, Renderer, ScrollOffset, ScrollViewport,
+    TextLayoutLine, TextLayoutSnapshot, UiState, Visibility,
 };
 #[cfg(feature = "webview")]
 pub use render_impl::{
@@ -80,6 +81,18 @@ where
     AppTheme: 'static,
 {
     observe_layout_size_impl(element, on_change)
+}
+
+pub fn observe_text_layout<Message, AppTheme>(
+    element: Element<Message, AppTheme>,
+    text: impl Into<String>,
+    on_change: impl Fn(TextLayoutSnapshot) + 'static,
+) -> Element<Message, AppTheme>
+where
+    Message: 'static,
+    AppTheme: 'static,
+{
+    observe_text_layout_impl(element, text, on_change)
 }
 
 pub fn observe_layout_frame<Message, AppTheme>(
@@ -126,7 +139,8 @@ pub mod prelude {
         ListScrollIndexEvent, ModalOverlaySpec, ModalPresentation, NativeOverlayPlacement,
         NodeCustomEvent, NodeCustomEventType, NodeEventType, ObjectFit, OverlayDismissMode,
         OverlayStrategy, Padding, ProgressLinearStyle, ProgressType, ScrollOffset, ScrollViewport,
-        ShadowStyle, Size, TextAlignment, Theme, UiState, Vertical, Visibility,
+        ShadowStyle, Size, TextAlignment, TextLayoutLine, TextLayoutSnapshot, Theme, UiState,
+        Vertical, Visibility,
     };
     #[cfg(feature = "webview")]
     pub use crate::{

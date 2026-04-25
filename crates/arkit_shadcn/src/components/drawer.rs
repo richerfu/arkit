@@ -32,7 +32,13 @@ where
                             .children(vec![
                                 arkit::row_component::<Message, arkit::Theme>()
                                     .percent_width(1.0)
+                                    .height(24.0)
                                     .justify_content(JustifyContent::Center)
+                                    .align_items_center()
+                                    .on_click({
+                                        let dismiss = dismiss.clone();
+                                        move || dismiss()
+                                    })
                                     .children(vec![arkit::row_component::<Message, arkit::Theme>()
                                         .width(40.0)
                                         .height(4.0)
