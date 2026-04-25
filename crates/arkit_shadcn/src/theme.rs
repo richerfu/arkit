@@ -1,7 +1,7 @@
-use std::cell::Cell;
+use std::cell::RefCell;
 
 thread_local! {
-    static ACTIVE_RENDER_THEME: Cell<Option<Theme>> = const { Cell::new(None) };
+    static THEME_STACK: RefCell<Vec<Theme>> = const { RefCell::new(Vec::new()) };
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -181,29 +181,36 @@ impl Default for Theme {
 }
 
 pub fn with_theme<R>(theme: Theme, render: impl FnOnce() -> R) -> R {
-    ACTIVE_RENDER_THEME.with(|active| active.set(Some(theme)));
-    arkit_widget::scope(|| {
-        arkit_widget::provide_context(theme);
-        render()
-    })
+    struct ThemeGuard;
+
+    impl Drop for ThemeGuard {
+        fn drop(&mut self) {
+            THEME_STACK.with(|stack| {
+                stack.borrow_mut().pop();
+            });
+        }
+    }
+
+    THEME_STACK.with(|stack| {
+        stack.borrow_mut().push(theme);
+    });
+    let _guard = ThemeGuard;
+
+    render()
 }
 
 pub fn current() -> Theme {
-    arkit_widget::use_context::<Theme>().unwrap_or_default()
+    THEME_STACK
+        .with(|stack| stack.borrow().last().copied())
+        .unwrap_or_default()
 }
 
 pub fn colors() -> ColorTokens {
-    arkit_widget::use_context::<Theme>()
-        .or_else(|| ACTIVE_RENDER_THEME.with(|active| active.get()))
-        .unwrap_or_default()
-        .colors
+    current().colors
 }
 
 pub fn radii() -> RadiusTokens {
-    arkit_widget::use_context::<Theme>()
-        .or_else(|| ACTIVE_RENDER_THEME.with(|active| active.get()))
-        .unwrap_or_default()
-        .radii
+    current().radii
 }
 
 pub const fn with_alpha(color: u32, alpha: u8) -> u32 {
@@ -523,7 +530,7 @@ mod tests {
     }
 
     #[test]
-    fn token_helpers_keep_theme_for_deferred_rendering() {
+    fn token_helpers_restore_default_after_rendering() {
         let theme = Theme::dark(ThemePreset::Stone);
 
         with_theme(theme, || {
@@ -531,7 +538,10 @@ mod tests {
         });
 
         assert_eq!(current(), Theme::default());
-        assert_eq!(super::colors().background, theme.colors.background);
+        assert_eq!(
+            super::colors().background,
+            Theme::default().colors.background
+        );
     }
 
     #[test]

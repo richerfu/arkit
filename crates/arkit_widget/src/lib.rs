@@ -17,7 +17,7 @@ pub use ohos_arkui_binding::types::direction::Direction;
 pub use ohos_arkui_binding::types::event::NodeEventType;
 pub use ohos_arkui_binding::types::text_alignment::TextAlignment;
 pub use overlay::{
-    anchored_overlay, compose_registered_overlays, floating_overlay, floating_overlay_with_builder,
+    anchored_overlay, floating_overlay, floating_overlay_with_builder,
     floating_overlay_with_builder_and_surfaces, floating_overlay_with_surfaces, modal_overlay,
     native_overlay, FloatingAlign, FloatingOverlaySpec, FloatingSide, FloatingSurfaceRegistry,
     LayoutFrame, LayoutSize, ModalOverlaySpec, ModalPresentation, NativeOverlayPlacement,
@@ -116,10 +116,6 @@ where
     AppTheme: 'static,
 {
     observe_layout_frame_impl(element, enabled, on_change)
-}
-
-pub fn on_cleanup(cleanup: impl FnOnce() + 'static) {
-    internal::on_cleanup(cleanup);
 }
 
 pub mod prelude {

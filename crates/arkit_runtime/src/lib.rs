@@ -6,18 +6,11 @@ use std::rc::Rc;
 use std::sync::{Arc, LazyLock, Mutex};
 
 pub use arkit_core::theme;
-pub use arkit_core::{advanced, window, Settings, Theme};
+pub use arkit_core::{window, Theme};
 pub use arkit_futures::{Subscription, SubscriptionHandle};
 
 pub type Element<Message, AppTheme = Theme, AppRenderer = ()> =
     arkit_core::Element<'static, Message, AppTheme, AppRenderer>;
-
-pub trait Executor: 'static {}
-
-#[derive(Debug, Default)]
-pub struct DefaultExecutor;
-
-impl Executor for DefaultExecutor {}
 
 thread_local! {
     static DISPATCHER: RefCell<Option<RuntimeDispatcher>> = RefCell::new(None);
@@ -261,22 +254,12 @@ impl<Message: Send + 'static> Default for Task<Message> {
     }
 }
 
-#[derive(Clone)]
-pub struct Preset<State, Message> {
-    pub state: fn() -> State,
-    pub boot: fn() -> Task<Message>,
-}
-
 pub trait Program: Sized {
     type State: 'static;
     type Message: Send + 'static;
     type Theme: theme::Base + Default;
     type Renderer: Default + 'static;
-    type Executor: Executor;
 
-    fn name() -> &'static str;
-    fn settings(&self) -> Settings;
-    fn window(&self) -> Option<window::Settings>;
     fn boot(&self) -> (Self::State, Task<Self::Message>);
     fn update(&self, state: &mut Self::State, message: Self::Message) -> Task<Self::Message>;
     fn view(
@@ -285,28 +268,8 @@ pub trait Program: Sized {
         window: window::Id,
     ) -> Element<Self::Message, Self::Theme, Self::Renderer>;
 
-    fn title(&self, _state: &Self::State, _window: window::Id) -> String {
-        Self::name().to_string()
-    }
-
     fn subscription(&self, _state: &Self::State) -> Subscription<Self::Message> {
         Subscription::none()
-    }
-
-    fn theme(&self, _state: &Self::State, _window: window::Id) -> Option<Self::Theme> {
-        None
-    }
-
-    fn style(&self, _state: &Self::State, theme: &Self::Theme) -> theme::Style {
-        advanced::default_style(theme)
-    }
-
-    fn scale_factor(&self, _state: &Self::State, _window: window::Id) -> f32 {
-        1.0
-    }
-
-    fn presets(&self) -> &[Preset<Self::State, Self::Message>] {
-        &[]
     }
 }
 
@@ -320,15 +283,7 @@ where
     boot: Rc<dyn Fn() -> (State, Task<Message>)>,
     update: Rc<dyn Fn(&mut State, Message) -> Task<Message>>,
     view: Rc<dyn Fn(&State) -> Element<Message, AppTheme, AppRenderer>>,
-    title: Rc<dyn Fn(&State, window::Id) -> String>,
     subscription: Rc<dyn Fn(&State) -> Subscription<Message>>,
-    theme: Rc<dyn Fn(&State, window::Id) -> Option<AppTheme>>,
-    style: Rc<dyn Fn(&State, &AppTheme) -> theme::Style>,
-    settings: Settings,
-    window: Option<window::Settings>,
-    scale_factor: Rc<dyn Fn(&State, window::Id) -> f32>,
-    presets: Vec<Preset<State, Message>>,
-    name: &'static str,
 }
 
 pub fn application<State, Message, Boot, Update, View, AppTheme, AppRenderer>(
@@ -349,15 +304,7 @@ where
         boot: Rc::new(move || (boot(), Task::none())),
         update: Rc::new(update),
         view: Rc::new(view),
-        title: Rc::new(|_, _| String::from("arkit")),
         subscription: Rc::new(|_| Subscription::none()),
-        theme: Rc::new(|_, _| None),
-        style: Rc::new(|_, theme| advanced::default_style(theme)),
-        settings: Settings::default(),
-        window: Some(window::Settings::default()),
-        scale_factor: Rc::new(|_, _| 1.0),
-        presets: Vec::new(),
-        name: "arkit",
     }
 }
 
@@ -373,43 +320,8 @@ where
         self
     }
 
-    pub fn title(mut self, f: impl Fn(&State, window::Id) -> String + 'static) -> Self {
-        self.title = Rc::new(f);
-        self
-    }
-
     pub fn subscription(mut self, f: impl Fn(&State) -> Subscription<Message> + 'static) -> Self {
         self.subscription = Rc::new(f);
-        self
-    }
-
-    pub fn theme(mut self, f: impl Fn(&State, window::Id) -> AppTheme + 'static) -> Self {
-        self.theme = Rc::new(move |state, window| Some(f(state, window)));
-        self
-    }
-
-    pub fn style(mut self, f: impl Fn(&State, &AppTheme) -> theme::Style + 'static) -> Self {
-        self.style = Rc::new(f);
-        self
-    }
-
-    pub fn settings(mut self, settings: Settings) -> Self {
-        self.settings = settings;
-        self
-    }
-
-    pub fn window(mut self, settings: window::Settings) -> Self {
-        self.window = Some(settings);
-        self
-    }
-
-    pub fn scale_factor(mut self, f: impl Fn(&State, window::Id) -> f32 + 'static) -> Self {
-        self.scale_factor = Rc::new(f);
-        self
-    }
-
-    pub fn presets(mut self, presets: impl IntoIterator<Item = Preset<State, Message>>) -> Self {
-        self.presets = presets.into_iter().collect();
         self
     }
 }
@@ -426,19 +338,6 @@ where
     type Message = Message;
     type Theme = AppTheme;
     type Renderer = AppRenderer;
-    type Executor = DefaultExecutor;
-
-    fn name() -> &'static str {
-        "arkit"
-    }
-
-    fn settings(&self) -> Settings {
-        self.settings.clone()
-    }
-
-    fn window(&self) -> Option<window::Settings> {
-        self.window.clone()
-    }
 
     fn boot(&self) -> (Self::State, Task<Self::Message>) {
         (self.boot)()
@@ -456,28 +355,8 @@ where
         (self.view)(state)
     }
 
-    fn title(&self, state: &Self::State, window: window::Id) -> String {
-        (self.title)(state, window)
-    }
-
     fn subscription(&self, state: &Self::State) -> Subscription<Self::Message> {
         (self.subscription)(state)
-    }
-
-    fn theme(&self, state: &Self::State, window: window::Id) -> Option<Self::Theme> {
-        (self.theme)(state, window)
-    }
-
-    fn style(&self, state: &Self::State, theme: &Self::Theme) -> theme::Style {
-        (self.style)(state, theme)
-    }
-
-    fn scale_factor(&self, state: &Self::State, window: window::Id) -> f32 {
-        (self.scale_factor)(state, window)
-    }
-
-    fn presets(&self) -> &[Preset<Self::State, Self::Message>] {
-        self.presets.as_slice()
     }
 }
 
@@ -493,7 +372,10 @@ pub mod internal {
 
 #[cfg(test)]
 mod tests {
-    use super::{Task, TaskAction};
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    use super::{Subscription, Task, TaskAction};
 
     fn test_runtime() -> tokio::runtime::Runtime {
         tokio::runtime::Builder::new_current_thread()
@@ -548,5 +430,37 @@ mod tests {
     #[should_panic(expected = "Task::into_messages cannot consume async tasks")]
     fn into_messages_rejects_async_tasks() {
         let _ = Task::perform(async { 1 }, |value| value).into_messages();
+    }
+
+    #[test]
+    fn subscriptions_emit_synchronously_in_batch_order() {
+        fn first() -> [i32; 2] {
+            [1, 2]
+        }
+
+        fn second(seed: &i32) -> [i32; 1] {
+            [*seed]
+        }
+
+        let subscription =
+            Subscription::batch([Subscription::run(first), Subscription::run_with(3, second)])
+                .map(|value| format!("message:{value}"));
+
+        assert_eq!(subscription.units(), 2);
+
+        let emitted = Rc::new(RefCell::new(Vec::new()));
+        let mut handles = Vec::new();
+        for recipe in subscription.into_recipes() {
+            let emitted = emitted.clone();
+            handles.push((recipe.start)(Rc::new(move |message| {
+                emitted.borrow_mut().push(message);
+            })));
+        }
+
+        assert_eq!(
+            emitted.borrow().as_slice(),
+            ["message:1", "message:2", "message:3"]
+        );
+        drop(handles);
     }
 }

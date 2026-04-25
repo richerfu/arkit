@@ -1146,16 +1146,6 @@ where
     })
 }
 
-pub fn compose_registered_overlays<Message, AppTheme>(
-    content: Element<Message, AppTheme>,
-) -> Element<Message, AppTheme>
-where
-    Message: 'static,
-    AppTheme: 'static,
-{
-    content
-}
-
 pub fn anchored_overlay<Message: 'static, AppTheme: 'static>(
     trigger: Element<Message, AppTheme>,
     panel: Option<Element<Message, AppTheme>>,
