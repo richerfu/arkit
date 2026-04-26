@@ -355,14 +355,6 @@ impl<Message: 'static> advanced::Widget<Message, arkit::Theme, arkit::Renderer>
             Some(root_surfaces),
         ))
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-        self
-    }
 }
 
 impl<Message: 'static> advanced::Widget<Message, arkit::Theme, arkit::Renderer>
@@ -457,14 +449,6 @@ impl<Message: 'static> advanced::Widget<Message, arkit::Theme, arkit::Renderer>
                 .children(column_children)
                 .into(),
         )
-    }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-        self
     }
 }
 

@@ -211,14 +211,6 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
             super::take_component_slot(&self.content, "dialog content"),
         ))
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-        self
-    }
 }
 
 impl<Message: Send + 'static> From<Dialog<Message>> for Element<Message> {

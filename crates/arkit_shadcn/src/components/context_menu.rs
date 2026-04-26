@@ -233,14 +233,6 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
             },
         ))
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-        self
-    }
 }
 
 impl<Message: Send + 'static> From<ContextMenu<Message>> for Element<Message> {

@@ -57,14 +57,6 @@ impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for 
         .into()
         })
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-        self
-    }
 }
 
 // struct component render

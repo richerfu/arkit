@@ -35,14 +35,6 @@ impl<Message: 'static> arkit::advanced::Widget<Message, arkit::Theme, arkit::Ren
     ) -> Option<Element<Message>> {
         Some(progress::<Message>(self.value, self.total).into())
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-        self
-    }
 }
 
 impl<Message: 'static> From<Progress<Message>> for Element<Message> {

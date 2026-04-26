@@ -217,14 +217,6 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for Webview
                 .into(),
         )
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-        self
-    }
 }
 
 struct ToolbarButton {
@@ -285,14 +277,6 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for Toolbar
             .on_press(self.message.clone())
             .into(),
         )
-    }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-        self
     }
 }
 

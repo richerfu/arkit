@@ -83,14 +83,6 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for Counter
                 .into(),
         )
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-        self
-    }
 }
 
 #[entry]

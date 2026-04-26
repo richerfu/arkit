@@ -225,14 +225,6 @@ impl<Message: 'static> advanced::Widget<Message, Theme, Renderer> for RouterOutl
                 .into(),
         )
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-        self
-    }
 }
 
 impl<Message: 'static> From<RouterOutlet<Message>> for Element<Message> {
@@ -357,14 +349,6 @@ mod tests {
         ) -> Option<Element<()>> {
             Some(crate::text("home").into())
         }
-
-        fn as_any(&self) -> &dyn std::any::Any {
-            self
-        }
-
-        fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-            self
-        }
     }
 
     struct FallbackPage;
@@ -382,14 +366,6 @@ mod tests {
             _renderer: &Renderer,
         ) -> Option<Element<()>> {
             Some(crate::text("fallback").into())
-        }
-
-        fn as_any(&self) -> &dyn std::any::Any {
-            self
-        }
-
-        fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-            self
         }
     }
 

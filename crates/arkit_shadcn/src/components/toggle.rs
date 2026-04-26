@@ -305,14 +305,6 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
             toggle(self.label.clone(), checked, handler)
         })
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-        self
-    }
 }
 
 impl<Message: Send + 'static> From<Toggle<Message>> for Element<Message> {

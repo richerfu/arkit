@@ -72,14 +72,6 @@ macro_rules! impl_component_widget {
             ) -> Option<Element<$message>> {
                 Some($render(self))
             }
-
-            fn as_any(&self) -> &dyn std::any::Any {
-                self
-            }
-
-            fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-                self
-            }
         }
 
         impl<$message: 'static> From<$type> for Element<$message> {

@@ -162,14 +162,6 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
             self.width.unwrap_or(HOVER_CARD_DEFAULT_WIDTH),
         ))
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-        self
-    }
 }
 
 impl<Message: Send + 'static> From<HoverCard<Message>> for Element<Message> {

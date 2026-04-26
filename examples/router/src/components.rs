@@ -45,14 +45,6 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for PageShe
                 .into(),
         )
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-        self
-    }
 }
 
 pub(crate) struct NavButton {
@@ -86,13 +78,5 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for NavButt
                 .on_click(move || on_press())
                 .into(),
         )
-    }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-        self
     }
 }

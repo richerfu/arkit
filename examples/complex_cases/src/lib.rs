@@ -107,14 +107,6 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for Complex
                 .into(),
         )
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-        self
-    }
 }
 
 struct Toolbar {
@@ -165,14 +157,6 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for Toolbar
                 .into(),
         )
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-        self
-    }
 }
 
 struct StatusBar {
@@ -206,14 +190,6 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for StatusB
                 ])
                 .into(),
         )
-    }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-        self
     }
 }
 
@@ -280,14 +256,6 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for Content
             ),
         })
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-        self
-    }
 }
 
 struct ListRow {
@@ -326,14 +294,6 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for ListRow
                 ])
                 .into(),
         )
-    }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-        self
     }
 }
 
@@ -375,14 +335,6 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for GridTil
                 .into(),
         )
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-        self
-    }
 }
 
 struct FlowTile {
@@ -422,14 +374,6 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for FlowTil
                 .into(),
         )
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-        self
-    }
 }
 
 struct GroupHeader {
@@ -456,14 +400,6 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for GroupHe
                     .into()])
                 .into(),
         )
-    }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-        self
     }
 }
 
@@ -494,14 +430,6 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for GroupRo
                 .into()])
                 .into(),
         )
-    }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-        self
     }
 }
 

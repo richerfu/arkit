@@ -42,14 +42,6 @@ impl<Message: 'static, AppTheme: 'static> advanced::Widget<Message, AppTheme, Re
     fn layout(&self) -> arkit_core::layout::Node {
         arkit_core::layout::Node::new(Size::new(0.0, 0.0))
     }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn Any> {
-        self
-    }
 }
 
 impl<Message, AppTheme> From<Node<Message, AppTheme>> for Element<Message, AppTheme>

@@ -110,14 +110,6 @@ impl<Message: 'static, AppTheme: 'static, Kind: 'static>
     fn layout(&self) -> arkit_core::layout::Node {
         advanced::Widget::layout(&self.node)
     }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn Any> {
-        self
-    }
 }
 
 macro_rules! component_kinds {

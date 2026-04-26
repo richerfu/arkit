@@ -580,14 +580,6 @@ impl<Message: Clone + Send + 'static>
     ) -> Option<Element<Message>> {
         Some(self.render())
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-        self
-    }
 }
 
 impl<Message: Clone + Send + 'static> From<Button<Message>> for Element<Message> {

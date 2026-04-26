@@ -27,12 +27,4 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for NotFoun
             vec![text(self.path.clone()).into()],
         )))
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-        self
-    }
 }
