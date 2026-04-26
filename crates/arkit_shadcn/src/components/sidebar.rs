@@ -1,6 +1,7 @@
+use super::button::button;
 use super::*;
 
-pub fn sidebar(navigation: Vec<Element>, content: Element) -> Element {
+fn sidebar(navigation: Vec<Element>, content: Element) -> Element {
     arkit::row_component()
         .percent_width(1.0)
         .children(vec![
@@ -10,7 +11,7 @@ pub fn sidebar(navigation: Vec<Element>, content: Element) -> Element {
         .into()
 }
 
-pub fn sidebar_item(title: impl Into<String>, active: bool) -> Element {
+fn sidebar_item(title: impl Into<String>, active: bool) -> Element {
     let variant = if active {
         ButtonVariant::Secondary
     } else {

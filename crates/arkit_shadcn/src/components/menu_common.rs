@@ -77,6 +77,101 @@ pub struct MenuLabelEntry {
     pub(crate) inset: bool,
 }
 
+impl MenuEntry {
+    pub fn action(title: impl Into<String>) -> Self {
+        menu_action_entry(title, None, false, false, false, None)
+    }
+
+    pub fn submenu(title: impl Into<String>, items: Vec<MenuEntry>) -> Self {
+        menu_submenu_entry(title, false, items)
+    }
+
+    pub fn checkbox<Message>(
+        title: impl Into<String>,
+        checked: bool,
+        on_toggle: impl Fn(bool) -> Message + 'static,
+    ) -> Self
+    where
+        Message: Send + 'static,
+    {
+        menu_checkbox_entry(
+            title,
+            checked,
+            Rc::new(move |value| super::dispatch_message(on_toggle(value))),
+        )
+    }
+
+    pub fn radio<Message>(
+        title: impl Into<String>,
+        value: impl Into<String>,
+        selected: impl Into<String>,
+        on_select: impl Fn(String) -> Message + 'static,
+    ) -> Self
+    where
+        Message: Send + 'static,
+    {
+        menu_radio_entry(
+            title,
+            value,
+            selected,
+            Rc::new(move |value| super::dispatch_message(on_select(value))),
+        )
+    }
+
+    pub fn label(title: impl Into<String>) -> Self {
+        menu_label_entry(title, false)
+    }
+
+    pub fn separator() -> Self {
+        menu_separator_entry()
+    }
+
+    pub fn destructive(mut self) -> Self {
+        if let Self::Action(entry) = &mut self {
+            entry.destructive = true;
+        }
+        self
+    }
+
+    pub fn disabled(mut self) -> Self {
+        if let Self::Action(entry) = &mut self {
+            entry.disabled = true;
+        }
+        self
+    }
+
+    pub fn inset(mut self) -> Self {
+        match &mut self {
+            Self::Action(entry) => entry.inset = true,
+            Self::Submenu(entry) => entry.inset = true,
+            Self::Label(entry) => entry.inset = true,
+            _ => {}
+        }
+        self
+    }
+
+    pub fn shortcut(mut self, shortcut: impl Into<String>) -> Self {
+        if let Self::Action(entry) = &mut self {
+            entry.shortcut = Some(shortcut.into());
+        }
+        self
+    }
+
+    pub fn on_select(mut self, callback: impl Fn() + 'static) -> Self {
+        if let Self::Action(entry) = &mut self {
+            entry.on_select = Some(Rc::new(callback));
+        }
+        self
+    }
+
+    pub fn on_select_message<Message>(self, message: Message) -> Self
+    where
+        Message: Clone + Send + 'static,
+    {
+        self.on_select(move || super::dispatch_message(message.clone()))
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum MenuInteractionVariant {
     Default,
@@ -687,7 +782,7 @@ pub(crate) fn item_text<Message: 'static>(
         .into()
 }
 
-pub(crate) fn shortcut_text<Message: 'static>(content: impl Into<String>) -> Element<Message> {
+fn shortcut_text<Message: 'static>(content: impl Into<String>) -> Element<Message> {
     arkit::text::<Message, arkit::Theme>(content)
         .font_size(typography::XS)
         .font_color(colors().muted_foreground)
@@ -698,7 +793,7 @@ pub(crate) fn shortcut_text<Message: 'static>(content: impl Into<String>) -> Ele
         .into()
 }
 
-pub(crate) fn leading_slot<Message: 'static>(child: Option<Element<Message>>) -> Element<Message> {
+fn leading_slot<Message: 'static>(child: Option<Element<Message>>) -> Element<Message> {
     let mut slot = arkit::row_component::<Message, arkit::Theme>()
         .width(16.0)
         .height(16.0)
@@ -787,7 +882,7 @@ pub(crate) fn menu_row<Message: 'static>(
     row
 }
 
-pub(crate) fn menu_separator<Message: 'static>(min_width: f32) -> Element<Message> {
+fn menu_separator<Message: 'static>(min_width: f32) -> Element<Message> {
     arkit::row_component::<Message, arkit::Theme>()
         .attr(
             ArkUINodeAttributeType::WidthLayoutpolicy,

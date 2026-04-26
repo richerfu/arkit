@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 const TRANSPARENT: u32 = 0x00000000;
 
-pub fn tabs<Message: 'static>(
+fn tabs<Message: 'static>(
     tab_labels: Vec<String>,
     active: usize,
     on_change: impl Fn(usize) + 'static,
@@ -21,7 +21,7 @@ pub fn tabs<Message: 'static>(
         .into()
 }
 
-pub fn tabs_message<Message>(
+fn tabs_message<Message>(
     tab_labels: Vec<String>,
     active: usize,
     on_change: impl Fn(usize) -> Message + 'static,
@@ -104,4 +104,83 @@ fn tabs_content<Message: 'static>(
         .width(arkit::Length::Fill)
         .children(panel_containers)
         .into()
+}
+
+// Struct component API
+pub struct Tabs<Message = ()> {
+    labels: Vec<String>,
+    panels: std::cell::RefCell<Option<Vec<Element<Message>>>>,
+    active: Option<usize>,
+    default_active: usize,
+    on_change: Option<std::rc::Rc<dyn Fn(usize) -> Message>>,
+}
+
+impl<Message> Tabs<Message> {
+    pub fn new(labels: Vec<String>, panels: Vec<Element<Message>>) -> Self {
+        Self {
+            labels,
+            panels: std::cell::RefCell::new(Some(panels)),
+            active: None,
+            default_active: 0,
+            on_change: None,
+        }
+    }
+
+    pub fn active(mut self, active: usize) -> Self {
+        self.active = Some(active);
+        self
+    }
+
+    pub fn default_active(mut self, active: usize) -> Self {
+        self.default_active = active;
+        self
+    }
+
+    pub fn on_change(mut self, handler: impl Fn(usize) -> Message + 'static) -> Self {
+        self.on_change = Some(std::rc::Rc::new(handler));
+        self
+    }
+}
+
+impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer>
+    for Tabs<Message>
+{
+    fn body(
+        &self,
+        tree: &mut arkit::advanced::widget::Tree,
+        _renderer: &arkit::Renderer,
+    ) -> Option<Element<Message>> {
+        let state = super::widget_state(tree, || self.default_active);
+        let is_controlled = self.active.is_some();
+        let active = self.active.unwrap_or_else(|| *state.borrow());
+        let on_change = self.on_change.clone();
+        Some(tabs(
+            self.labels.clone(),
+            active,
+            move |value| {
+                if !is_controlled {
+                    *state.borrow_mut() = value;
+                    super::request_widget_rerender();
+                }
+                if let Some(on_change) = on_change.as_ref() {
+                    dispatch_message(on_change(value));
+                }
+            },
+            super::take_component_slot(&self.panels, "tabs panels"),
+        ))
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
+        self
+    }
+}
+
+impl<Message: Send + 'static> From<Tabs<Message>> for Element<Message> {
+    fn from(value: Tabs<Message>) -> Self {
+        Element::new(value)
+    }
 }

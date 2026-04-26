@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -95,7 +96,57 @@ impl RouteDefinition {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Default)]
+pub struct RouteState {
+    value: Option<Rc<dyn Any>>,
+}
+
+impl RouteState {
+    pub fn empty() -> Self {
+        Self { value: None }
+    }
+
+    pub fn new<T: 'static>(value: T) -> Self {
+        Self {
+            value: Some(Rc::new(value)),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.value.is_none()
+    }
+
+    pub fn is<T: 'static>(&self) -> bool {
+        self.value
+            .as_ref()
+            .is_some_and(|value| value.as_ref().is::<T>())
+    }
+
+    pub fn get<T: 'static>(&self) -> Option<&T> {
+        self.value.as_deref()?.downcast_ref::<T>()
+    }
+
+    pub fn get_cloned<T: Clone + 'static>(&self) -> Option<T> {
+        self.get::<T>().cloned()
+    }
+
+    pub fn get_rc<T: 'static>(&self) -> Option<Rc<T>> {
+        let value = self.value.as_ref()?.clone();
+        value.downcast::<T>().ok()
+    }
+}
+
+impl std::fmt::Debug for RouteState {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.is_empty() {
+            f.write_str("RouteState(None)")
+        } else {
+            f.write_str("RouteState(Some(_))")
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Route {
     raw: String,
     path: String,
@@ -103,7 +154,21 @@ pub struct Route {
     name: Option<String>,
     params: BTreeMap<String, String>,
     query: BTreeMap<String, String>,
+    state: RouteState,
 }
+
+impl PartialEq for Route {
+    fn eq(&self, other: &Self) -> bool {
+        self.raw == other.raw
+            && self.path == other.path
+            && self.pattern == other.pattern
+            && self.name == other.name
+            && self.params == other.params
+            && self.query == other.query
+    }
+}
+
+impl Eq for Route {}
 
 impl Route {
     pub fn raw(&self) -> &str {
@@ -137,10 +202,26 @@ impl Route {
     pub fn query(&self, key: &str) -> Option<&str> {
         self.query.get(key).map(String::as_str)
     }
+
+    pub fn state<T: 'static>(&self) -> Option<&T> {
+        self.state.get::<T>()
+    }
+
+    pub fn state_cloned<T: Clone + 'static>(&self) -> Option<T> {
+        self.state.get_cloned::<T>()
+    }
+
+    pub fn state_rc<T: 'static>(&self) -> Option<Rc<T>> {
+        self.state.get_rc::<T>()
+    }
+
+    pub fn has_state<T: 'static>(&self) -> bool {
+        self.state.is::<T>()
+    }
 }
 
 pub trait StructuredRoute: Clone + Sized {
-    fn definitions() -> Vec<RouteDefinition>;
+    fn definition() -> RouteDefinition;
 
     fn path(&self) -> String;
 
@@ -188,6 +269,10 @@ enum RouteSegment {
 }
 
 impl Router {
+    pub fn ptr_eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.inner, &other.inner)
+    }
+
     pub fn new(initial_path: impl Into<String>) -> Self {
         Self::try_new(initial_path).unwrap_or_else(|_| {
             Self::try_new("/").expect("`/` must always be a valid route for router bootstrap")
@@ -216,33 +301,11 @@ impl Router {
         })
     }
 
-    pub fn register(&self, pattern: impl Into<String>) -> Result<bool, RouteError> {
-        self.register_definition(RouteDefinition::new(pattern)?)
-    }
-
-    pub fn register_named(
-        &self,
-        name: impl Into<String>,
-        pattern: impl Into<String>,
-    ) -> Result<bool, RouteError> {
-        self.register_definition(RouteDefinition::named(name, pattern)?)
-    }
-
-    pub fn register_definitions<I>(&self, definitions: I) -> Result<(), RouteError>
-    where
-        I: IntoIterator<Item = RouteDefinition>,
-    {
-        for definition in definitions {
-            let _ = self.register_definition(definition)?;
-        }
-        Ok(())
-    }
-
-    pub fn register_structured<R>(&self) -> Result<(), RouteError>
+    pub fn register<R>(&self) -> Result<bool, RouteError>
     where
         R: StructuredRoute,
     {
-        self.register_definitions(R::definitions())
+        self.register_definition(R::definition())
     }
 
     pub fn route_definitions(&self) -> Vec<RouteDefinition> {
@@ -328,6 +391,7 @@ impl Router {
                 name: None,
                 params: BTreeMap::new(),
                 query,
+                state: RouteState::empty(),
             });
         }
 
@@ -351,6 +415,7 @@ impl Router {
                             name: record.name.clone(),
                             params,
                             query: query.clone(),
+                            state: RouteState::empty(),
                         },
                     ));
                 }
@@ -370,6 +435,7 @@ impl Router {
                             name: fallback.name.clone(),
                             params,
                             query: query.clone(),
+                            state: RouteState::empty(),
                         },
                     ));
                 }
@@ -381,7 +447,7 @@ impl Router {
             .ok_or(RouteError::UnknownRoute(raw_path))
     }
 
-    pub fn resolve_structured<R>(&self, raw_path: impl Into<String>) -> Result<R, RouteError>
+    pub fn resolve_as<R>(&self, raw_path: impl Into<String>) -> Result<R, RouteError>
     where
         R: StructuredRoute,
     {
@@ -402,11 +468,27 @@ impl Router {
         self.current_route().path
     }
 
-    pub fn current_structured<R>(&self) -> Option<R>
+    pub fn current<R>(&self) -> Option<R>
     where
         R: StructuredRoute,
     {
         R::from_route(&self.current_route())
+    }
+
+    pub fn current_param(&self, key: &str) -> Option<String> {
+        self.current_route().param(key).map(ToOwned::to_owned)
+    }
+
+    pub fn current_query(&self, key: &str) -> Option<String> {
+        self.current_route().query(key).map(ToOwned::to_owned)
+    }
+
+    pub fn current_state<T: 'static>(&self) -> Option<Rc<T>> {
+        self.current_route().state_rc::<T>()
+    }
+
+    pub fn current_state_cloned<T: Clone + 'static>(&self) -> Option<T> {
+        self.current_route().state_cloned::<T>()
     }
 
     pub fn stack_len(&self) -> usize {
@@ -421,10 +503,45 @@ impl Router {
         self.inner.stack.borrow().clone()
     }
 
-    pub fn push(&self, raw_path: impl Into<String>) -> Result<Route, RouteError> {
+    pub fn navigate<R>(&self, route: R) -> Result<Route, RouteError>
+    where
+        R: StructuredRoute,
+    {
+        self.push(route)
+    }
+
+    pub fn navigate_with_state<R, S>(&self, route: R, state: S) -> Result<Route, RouteError>
+    where
+        R: StructuredRoute,
+        S: 'static,
+    {
+        self.push_with_state(route, state)
+    }
+
+    pub fn push<R>(&self, route: R) -> Result<Route, RouteError>
+    where
+        R: StructuredRoute,
+    {
+        self.push_path_with_state(route.path(), RouteState::empty())
+    }
+
+    pub fn push_with_state<R, S>(&self, route: R, state: S) -> Result<Route, RouteError>
+    where
+        R: StructuredRoute,
+        S: 'static,
+    {
+        self.push_path_with_state(route.path(), RouteState::new(state))
+    }
+
+    fn push_path_with_state(
+        &self,
+        raw_path: impl Into<String>,
+        state: RouteState,
+    ) -> Result<Route, RouteError> {
         let raw_path = raw_path.into();
         self.run_guards(&raw_path)?;
-        let route = self.resolve(&raw_path)?;
+        let mut route = self.resolve(&raw_path)?;
+        route.state = state;
         let prev = self.current_route();
         self.inner.stack.borrow_mut().push(route.clone());
         self.dispatch_navigation(
@@ -434,17 +551,30 @@ impl Router {
         Ok(route)
     }
 
-    pub fn push_structured<R>(&self, route: R) -> Result<Route, RouteError>
+    pub fn replace<R>(&self, route: R) -> Result<Route, RouteError>
     where
         R: StructuredRoute,
     {
-        self.push(route.path())
+        self.replace_path_with_state(route.path(), RouteState::empty())
     }
 
-    pub fn replace(&self, raw_path: impl Into<String>) -> Result<Route, RouteError> {
+    pub fn replace_with_state<R, S>(&self, route: R, state: S) -> Result<Route, RouteError>
+    where
+        R: StructuredRoute,
+        S: 'static,
+    {
+        self.replace_path_with_state(route.path(), RouteState::new(state))
+    }
+
+    fn replace_path_with_state(
+        &self,
+        raw_path: impl Into<String>,
+        state: RouteState,
+    ) -> Result<Route, RouteError> {
         let raw_path = raw_path.into();
         self.run_guards(&raw_path)?;
-        let route = self.resolve(&raw_path)?;
+        let mut route = self.resolve(&raw_path)?;
+        route.state = state;
         let prev = self.current_route();
         let mut stack = self.inner.stack.borrow_mut();
         if let Some(last) = stack.last_mut() {
@@ -460,17 +590,30 @@ impl Router {
         Ok(route)
     }
 
-    pub fn replace_structured<R>(&self, route: R) -> Result<Route, RouteError>
+    pub fn reset<R>(&self, route: R) -> Result<Route, RouteError>
     where
         R: StructuredRoute,
     {
-        self.replace(route.path())
+        self.reset_path_with_state(route.path(), RouteState::empty())
     }
 
-    pub fn reset(&self, raw_path: impl Into<String>) -> Result<Route, RouteError> {
+    pub fn reset_with_state<R, S>(&self, route: R, state: S) -> Result<Route, RouteError>
+    where
+        R: StructuredRoute,
+        S: 'static,
+    {
+        self.reset_path_with_state(route.path(), RouteState::new(state))
+    }
+
+    fn reset_path_with_state(
+        &self,
+        raw_path: impl Into<String>,
+        state: RouteState,
+    ) -> Result<Route, RouteError> {
         let raw_path = raw_path.into();
         self.run_guards(&raw_path)?;
-        let route = self.resolve(&raw_path)?;
+        let mut route = self.resolve(&raw_path)?;
+        route.state = state;
         let prev = self.current_route();
         let mut stack = self.inner.stack.borrow_mut();
         stack.clear();
@@ -481,13 +624,6 @@ impl Router {
             RouteTransitionEvent::new(prev, route.clone(), RouteTransitionDirection::Replace),
         );
         Ok(route)
-    }
-
-    pub fn reset_structured<R>(&self, route: R) -> Result<Route, RouteError>
-    where
-        R: StructuredRoute,
-    {
-        self.reset(route.path())
     }
 
     pub fn back(&self) -> bool {
@@ -544,17 +680,21 @@ impl Router {
     }
 
     fn refresh_stack_routes(&self) {
-        let raws = self
+        let entries = self
             .inner
             .stack
             .borrow()
             .iter()
-            .map(|route| route.raw().to_string())
+            .map(|route| (route.raw().to_string(), route.state.clone()))
             .collect::<Vec<_>>();
 
-        let refreshed = raws
+        let refreshed = entries
             .into_iter()
-            .map(|raw| self.resolve(raw))
+            .map(|(raw, state)| {
+                let mut route = self.resolve(raw)?;
+                route.state = state;
+                Ok::<Route, RouteError>(route)
+            })
             .collect::<Vec<_>>();
 
         let mut stack = self.inner.stack.borrow_mut();
@@ -915,6 +1055,7 @@ fn parse_raw_route(raw_path: &str) -> Result<Route, RouteError> {
         name: None,
         params: BTreeMap::new(),
         query,
+        state: RouteState::empty(),
     })
 }
 
@@ -1183,41 +1324,52 @@ mod tests {
     use super::{Route, RouteDefinition, RouteTransitionDirection, Router, StructuredRoute};
 
     #[derive(Clone, Debug, PartialEq, Eq)]
-    enum TestRoute {
-        Home,
-        Detail { id: String },
-    }
+    struct HomeRoute;
 
-    impl StructuredRoute for TestRoute {
-        fn definitions() -> Vec<RouteDefinition> {
-            vec![
-                RouteDefinition::named("home", "/").expect("home route definition"),
-                RouteDefinition::named("detail", "/detail/:id").expect("detail route definition"),
-            ]
+    impl StructuredRoute for HomeRoute {
+        fn definition() -> RouteDefinition {
+            RouteDefinition::named("home", "/").expect("home route definition")
         }
 
         fn path(&self) -> String {
-            match self {
-                TestRoute::Home => "/".to_string(),
-                TestRoute::Detail { id } => format!("/detail/{id}"),
-            }
+            "/".to_string()
         }
 
         fn from_route(route: &Route) -> Option<Self> {
-            match route.name()? {
-                "home" => Some(TestRoute::Home),
-                "detail" => Some(TestRoute::Detail {
-                    id: route.param("id")?.to_string(),
-                }),
-                _ => None,
+            (route.name() == Some("home")).then_some(Self)
+        }
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct DetailRoute {
+        id: String,
+    }
+
+    impl StructuredRoute for DetailRoute {
+        fn definition() -> RouteDefinition {
+            RouteDefinition::named("detail", "/detail/:id").expect("detail route definition")
+        }
+
+        fn path(&self) -> String {
+            format!("/detail/{}", self.id)
+        }
+
+        fn from_route(route: &Route) -> Option<Self> {
+            if route.name() != Some("detail") {
+                return None;
             }
+            Some(Self {
+                id: route.param("id")?.to_string(),
+            })
         }
     }
 
     #[test]
     fn match_and_extract_route_params_and_query() {
         let router = Router::new("/");
-        router.register("/users/:id").expect("register route");
+        router
+            .register_definition(RouteDefinition::new("/users/:id").expect("definition"))
+            .expect("register route");
         let route = router
             .resolve("/users/42?tab=profile")
             .expect("resolve route");
@@ -1231,33 +1383,46 @@ mod tests {
     #[test]
     fn stack_push_replace_back_and_reset() {
         let router = Router::new("/");
-        router.register("/").expect("register route");
-        router.register("/about").expect("register route");
-        router.push("/about").expect("push route");
+        router.register::<HomeRoute>().expect("register home");
+        router.register::<AboutRoute>().expect("register about");
+        router.push(AboutRoute).expect("push route");
         assert_eq!(router.stack_len(), 2);
         assert_eq!(router.current_path(), "/about");
 
-        router.replace("/").expect("replace route");
+        router.replace(HomeRoute).expect("replace route");
         assert_eq!(router.current_path(), "/");
 
         assert!(router.back());
         assert_eq!(router.stack_len(), 1);
         assert!(!router.back());
 
-        router.reset("/about").expect("reset route");
+        router.reset(AboutRoute).expect("reset route");
         assert_eq!(router.stack_len(), 1);
         assert_eq!(router.current_path(), "/about");
     }
 
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct AboutRoute;
+
+    impl StructuredRoute for AboutRoute {
+        fn definition() -> RouteDefinition {
+            RouteDefinition::named("about", "/about").expect("about route definition")
+        }
+
+        fn path(&self) -> String {
+            "/about".to_string()
+        }
+
+        fn from_route(route: &Route) -> Option<Self> {
+            (route.name() == Some("about")).then_some(Self)
+        }
+    }
+
     #[test]
-    fn register_definitions_works() {
+    fn register_struct_routes_works() {
         let router = Router::new("/");
-        router
-            .register_definitions(vec![
-                RouteDefinition::new("/").expect("definition"),
-                RouteDefinition::named("detail", "/detail/:id").expect("definition"),
-            ])
-            .expect("register definitions");
+        router.register::<HomeRoute>().expect("register home");
+        router.register::<DetailRoute>().expect("register detail");
 
         let detail = router.resolve("/detail/9").expect("resolve");
         assert_eq!(detail.name(), Some("detail"));
@@ -1267,15 +1432,14 @@ mod tests {
     #[test]
     fn structured_routes_resolve_and_navigate() {
         let router = Router::new("/");
-        router
-            .register_structured::<TestRoute>()
-            .expect("register structured routes");
+        router.register::<HomeRoute>().expect("register home");
+        router.register::<DetailRoute>().expect("register detail");
 
         assert_eq!(
             router
-                .resolve_structured::<TestRoute>("/detail/7")
+                .resolve_as::<DetailRoute>("/detail/7")
                 .expect("resolve typed route"),
-            TestRoute::Detail {
+            DetailRoute {
                 id: "7".to_string()
             }
         );
@@ -1287,30 +1451,62 @@ mod tests {
         });
 
         router
-            .push_structured(TestRoute::Detail {
+            .push(DetailRoute {
                 id: "9".to_string(),
             })
             .expect("push typed route");
         assert_eq!(
-            router.current_structured::<TestRoute>(),
-            Some(TestRoute::Detail {
+            router.current::<DetailRoute>(),
+            Some(DetailRoute {
                 id: "9".to_string()
             })
         );
         assert!(router.unsubscribe_transition(transition_id));
         assert!(router.back());
+        assert_eq!(router.current::<HomeRoute>(), Some(HomeRoute));
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct ScrollState {
+        offset: u32,
+    }
+
+    #[test]
+    fn typed_state_is_stored_per_route_entry() {
+        let router = Router::new("/");
+        router.register::<HomeRoute>().expect("register home");
+        router.register::<DetailRoute>().expect("register detail");
+        router.replace(HomeRoute).expect("resolve initial home");
+
+        router
+            .push_with_state(
+                DetailRoute {
+                    id: "9".to_string(),
+                },
+                ScrollState { offset: 128 },
+            )
+            .expect("push with state");
+
+        assert_eq!(router.current_param("id"), Some("9".to_string()));
         assert_eq!(
-            router.current_structured::<TestRoute>(),
-            Some(TestRoute::Home)
+            router.current_state_cloned::<ScrollState>(),
+            Some(ScrollState { offset: 128 })
         );
+
+        assert!(router.back());
+        assert!(router.current_state::<ScrollState>().is_none());
     }
 
     #[test]
     fn specificity_static_beats_param() {
         let router = Router::new("/");
         // Register param route first, static route second
-        router.register("/users/:id").expect("register param");
-        router.register("/users/me").expect("register static");
+        router
+            .register_definition(RouteDefinition::new("/users/:id").expect("param"))
+            .expect("register param");
+        router
+            .register_definition(RouteDefinition::new("/users/me").expect("static"))
+            .expect("register static");
 
         let route = router.resolve("/users/me").expect("resolve");
         assert_eq!(route.pattern(), "/users/me");
@@ -1323,8 +1519,12 @@ mod tests {
     #[test]
     fn specificity_param_beats_wildcard() {
         let router = Router::new("/");
-        router.register("/files/*rest").expect("register wildcard");
-        router.register("/files/:id").expect("register param");
+        router
+            .register_definition(RouteDefinition::new("/files/*rest").expect("wildcard"))
+            .expect("register wildcard");
+        router
+            .register_definition(RouteDefinition::new("/files/:id").expect("param"))
+            .expect("register param");
 
         let route = router.resolve("/files/42").expect("resolve");
         assert_eq!(route.pattern(), "/files/:id");
@@ -1336,8 +1536,8 @@ mod tests {
     #[test]
     fn fallback_matches_unregistered_paths() {
         let router = Router::new("/");
-        router.register("/").expect("register home");
-        router.register("/about").expect("register about");
+        router.register::<HomeRoute>().expect("register home");
+        router.register::<AboutRoute>().expect("register about");
         router
             .register_fallback("*rest")
             .expect("register fallback");

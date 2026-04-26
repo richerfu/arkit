@@ -1,6 +1,7 @@
+use super::scroll_area::scroll_area;
 use super::*;
 
-pub fn table<Message: 'static>(headers: Vec<String>, rows: Vec<Vec<String>>) -> Element<Message> {
+fn table<Message: 'static>(headers: Vec<String>, rows: Vec<Vec<String>>) -> Element<Message> {
     let header_row = arkit::row_component::<Message, arkit::Theme>()
         .percent_width(1.0)
         .border_width([0.0, 0.0, 1.0, 0.0])
@@ -73,21 +74,18 @@ pub fn table<Message: 'static>(headers: Vec<String>, rows: Vec<Vec<String>>) -> 
     .into()
 }
 
-pub fn data_table<Message: 'static>(
-    headers: Vec<String>,
-    rows: Vec<Vec<String>>,
-) -> Element<Message> {
+fn data_table<Message: 'static>(headers: Vec<String>, rows: Vec<Vec<String>>) -> Element<Message> {
     table(headers, rows)
 }
 
-pub fn scrollable_table<Message: 'static>(
+fn scrollable_table<Message: 'static>(
     headers: Vec<String>,
     rows: Vec<Vec<String>>,
 ) -> Element<Message> {
     scroll_area::<Message>(vec![table(headers, rows)]).into()
 }
 
-pub fn table_row<Message: 'static>(cells: Vec<String>) -> Element<Message> {
+fn table_row<Message: 'static>(cells: Vec<String>) -> Element<Message> {
     arkit::row_component::<Message, arkit::Theme>()
         .percent_width(1.0)
         .children(
@@ -99,3 +97,24 @@ pub fn table_row<Message: 'static>(cells: Vec<String>) -> Element<Message> {
         )
         .into()
 }
+
+// Struct component API
+pub struct Table<Message = ()> {
+    headers: Vec<String>,
+    rows: Vec<Vec<String>>,
+    _marker: std::marker::PhantomData<Message>,
+}
+
+impl<Message> Table<Message> {
+    pub fn new(headers: Vec<String>, rows: Vec<Vec<String>>) -> Self {
+        Self {
+            headers,
+            rows,
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
+impl_component_widget!(Table<Message>, Message, |value: &Table<Message>| {
+    table(value.headers.clone(), value.rows.clone())
+});

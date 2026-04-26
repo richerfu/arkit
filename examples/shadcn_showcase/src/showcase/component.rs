@@ -1,24 +1,51 @@
 use crate::prelude::*;
 
 use super::constants::component_title;
-use super::examples::{self, DemoContext};
+use super::examples::{DemoContext, ExampleRenderer};
 use super::layout::{nav_bar, ThemeMenuState};
 
-pub(crate) fn component_page(name: String, ctx: DemoContext) -> Element {
-    let title = component_title(&name);
-    let demo_name = name.clone();
+pub(crate) struct ComponentPage {
+    name: String,
+    ctx: DemoContext,
+}
 
-    arkit::column(vec![
-        nav_bar(
-            title,
-            true,
-            ThemeMenuState {
-                mode: ctx.theme_mode,
-                preset: ctx.theme_preset,
-                custom: ctx.custom_theme,
-                open: ctx.theme_menu_open,
-            },
-        ),
-        examples::render(&demo_name, ctx),
-    ])
+impl ComponentPage {
+    pub(crate) fn new(name: String, ctx: DemoContext) -> Self {
+        Self { name, ctx }
+    }
+}
+
+impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for ComponentPage {
+    fn body(
+        &self,
+        _tree: &mut arkit::advanced::widget::Tree,
+        _renderer: &arkit::Renderer,
+    ) -> Option<Element> {
+        let name = self.name.clone();
+        let ctx = self.ctx.clone();
+        let title = component_title(&name);
+        let demo_name = name.clone();
+
+        Some(arkit::column(vec![
+            nav_bar(
+                title,
+                true,
+                ThemeMenuState {
+                    mode: ctx.theme_mode,
+                    preset: ctx.theme_preset,
+                    custom: ctx.custom_theme,
+                    open: ctx.theme_menu_open,
+                },
+            ),
+            Element::new(ExampleRenderer::new(demo_name, ctx)),
+        ]))
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
+        self
+    }
 }

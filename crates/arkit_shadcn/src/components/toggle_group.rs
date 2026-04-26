@@ -48,7 +48,7 @@ fn toggle_group_item<Message: 'static>(
     )
 }
 
-pub fn toggle_group(
+fn toggle_group(
     options: Vec<String>,
     selected: impl Into<String>,
     on_select: impl Fn(String) + 'static,
@@ -86,7 +86,7 @@ pub fn toggle_group(
     toggle_group_shell(children)
 }
 
-pub fn toggle_group_message<Message>(
+fn toggle_group_message<Message>(
     options: Vec<String>,
     selected: impl Into<String>,
     on_select: impl Fn(String) -> Message + 'static,
@@ -99,7 +99,7 @@ where
     })
 }
 
-pub fn toggle_group_icons(
+fn toggle_group_icons(
     options: Vec<String>,
     selected: impl Into<String>,
     on_select: impl Fn(String) + 'static,
@@ -137,7 +137,7 @@ pub fn toggle_group_icons(
     toggle_group_shell(children)
 }
 
-pub fn toggle_group_icons_message<Message>(
+fn toggle_group_icons_message<Message>(
     options: Vec<String>,
     selected: impl Into<String>,
     on_select: impl Fn(String) -> Message + 'static,
@@ -150,7 +150,7 @@ where
     })
 }
 
-pub fn toggle_group_multi(
+fn toggle_group_multi(
     options: Vec<String>,
     selected: Vec<String>,
     on_change: impl Fn(Vec<String>) + 'static,
@@ -196,7 +196,7 @@ pub fn toggle_group_multi(
     toggle_group_shell(children)
 }
 
-pub fn toggle_group_multi_message<Message>(
+fn toggle_group_multi_message<Message>(
     options: Vec<String>,
     selected: Vec<String>,
     on_change: impl Fn(Vec<String>) -> Message + 'static,
@@ -209,7 +209,7 @@ where
     })
 }
 
-pub fn toggle_group_icons_multi<Message: Send + 'static>(
+fn toggle_group_icons_multi<Message: Send + 'static>(
     options: Vec<String>,
     selected: Vec<String>,
     on_change: impl Fn(Vec<String>) + 'static,
@@ -255,7 +255,7 @@ pub fn toggle_group_icons_multi<Message: Send + 'static>(
     toggle_group_shell::<Message>(children)
 }
 
-pub fn toggle_group_icons_multi_message<Message>(
+fn toggle_group_icons_multi_message<Message>(
     options: Vec<String>,
     selected: Vec<String>,
     on_change: impl Fn(Vec<String>) -> Message + 'static,
@@ -266,4 +266,97 @@ where
     toggle_group_icons_multi(options, selected, move |value| {
         dispatch_message(on_change(value))
     })
+}
+
+// Struct component API
+pub struct ToggleGroup<Message = ()> {
+    options: Vec<String>,
+    selected: Option<Vec<String>>,
+    default_selected: Vec<String>,
+    icons: bool,
+    multi: bool,
+    on_change: Option<std::rc::Rc<dyn Fn(Vec<String>) -> Message>>,
+}
+
+impl<Message> ToggleGroup<Message> {
+    pub fn new(options: Vec<String>) -> Self {
+        Self {
+            options,
+            selected: None,
+            default_selected: Vec::new(),
+            icons: false,
+            multi: false,
+            on_change: None,
+        }
+    }
+
+    pub fn icons(mut self, icons: bool) -> Self {
+        self.icons = icons;
+        self
+    }
+
+    pub fn multi(mut self, multi: bool) -> Self {
+        self.multi = multi;
+        self
+    }
+
+    pub fn selected(mut self, selected: Vec<String>) -> Self {
+        self.selected = Some(selected);
+        self
+    }
+
+    pub fn default_selected(mut self, selected: Vec<String>) -> Self {
+        self.default_selected = selected;
+        self
+    }
+
+    pub fn on_change(mut self, handler: impl Fn(Vec<String>) -> Message + 'static) -> Self {
+        self.on_change = Some(std::rc::Rc::new(handler));
+        self
+    }
+}
+
+impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer>
+    for ToggleGroup<Message>
+{
+    fn body(
+        &self,
+        tree: &mut arkit::advanced::widget::Tree,
+        _renderer: &arkit::Renderer,
+    ) -> Option<Element<Message>> {
+        let state = super::widget_state(tree, || self.default_selected.clone());
+        let is_controlled = self.selected.is_some();
+        let selected = self
+            .selected
+            .clone()
+            .unwrap_or_else(|| state.borrow().clone());
+        let on_change = self.on_change.clone();
+        Some(toggle_group_icons_multi(
+            self.options.clone(),
+            selected,
+            move |value| {
+                if !is_controlled {
+                    *state.borrow_mut() = value.clone();
+                    super::request_widget_rerender();
+                }
+                if let Some(on_change) = on_change.as_ref() {
+                    dispatch_message(on_change(value));
+                }
+            },
+        ))
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
+        self
+    }
+}
+
+impl<Message: Send + 'static> From<ToggleGroup<Message>> for Element<Message> {
+    fn from(value: ToggleGroup<Message>) -> Self {
+        Element::new(value)
+    }
 }

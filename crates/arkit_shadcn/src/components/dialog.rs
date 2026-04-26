@@ -1,3 +1,4 @@
+use super::button::icon_button;
 use super::*;
 use std::rc::Rc;
 
@@ -76,7 +77,7 @@ fn dialog_impl<Message: Send + 'static>(
     )
 }
 
-pub fn dialog_message<Message>(
+fn dialog_message<Message>(
     title: impl Into<String>,
     open: bool,
     on_open_change: impl Fn(bool) -> Message + 'static,
@@ -93,7 +94,7 @@ where
     )
 }
 
-pub fn dialog_footer<Message: 'static>(actions: Vec<Element<Message>>) -> Element<Message> {
+pub(super) fn dialog_footer<Message: 'static>(actions: Vec<Element<Message>>) -> Element<Message> {
     arkit::column_component::<Message, arkit::Theme>()
         .percent_width(1.0)
         .children(
@@ -117,7 +118,7 @@ pub fn dialog_footer<Message: 'static>(actions: Vec<Element<Message>>) -> Elemen
         .into()
 }
 
-pub fn dialog_header<Message: 'static>(
+pub(super) fn dialog_header<Message: 'static>(
     title: impl Into<String>,
     description: impl Into<String>,
 ) -> Element<Message> {
@@ -146,3 +147,125 @@ pub fn dialog_header<Message: 'static>(
         .children(children)
         .into()
 }
+
+// Struct component API
+pub struct Dialog<Message = ()> {
+    title: String,
+    open: Option<bool>,
+    default_open: bool,
+    on_open_change: Option<std::rc::Rc<dyn Fn(bool) -> Message>>,
+    content: std::cell::RefCell<Option<Vec<Element<Message>>>>,
+}
+
+impl<Message> Dialog<Message> {
+    pub fn new(title: impl Into<String>, content: Vec<Element<Message>>) -> Self {
+        Self {
+            title: title.into(),
+            open: None,
+            default_open: false,
+            on_open_change: None,
+            content: std::cell::RefCell::new(Some(content)),
+        }
+    }
+
+    pub fn open(mut self, open: bool) -> Self {
+        self.open = Some(open);
+        self
+    }
+
+    pub fn default_open(mut self, open: bool) -> Self {
+        self.default_open = open;
+        self
+    }
+
+    pub fn on_open_change(mut self, handler: impl Fn(bool) -> Message + 'static) -> Self {
+        self.on_open_change = Some(std::rc::Rc::new(handler));
+        self
+    }
+}
+
+impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer>
+    for Dialog<Message>
+{
+    fn body(
+        &self,
+        tree: &mut arkit::advanced::widget::Tree,
+        _renderer: &arkit::Renderer,
+    ) -> Option<Element<Message>> {
+        let state = super::widget_state(tree, || self.default_open);
+        let is_controlled = self.open.is_some();
+        let open = self.open.unwrap_or_else(|| *state.borrow());
+        let handler = self.on_open_change.clone();
+        Some(dialog_impl(
+            self.title.clone(),
+            open,
+            move |value| {
+                if !is_controlled {
+                    *state.borrow_mut() = value;
+                    super::request_widget_rerender();
+                }
+                if let Some(handler) = handler.as_ref() {
+                    dispatch_message(handler(value));
+                }
+            },
+            super::take_component_slot(&self.content, "dialog content"),
+        ))
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
+        self
+    }
+}
+
+impl<Message: Send + 'static> From<Dialog<Message>> for Element<Message> {
+    fn from(value: Dialog<Message>) -> Self {
+        Element::new(value)
+    }
+}
+
+pub struct DialogHeader<Message = ()> {
+    title: String,
+    description: String,
+    _marker: std::marker::PhantomData<Message>,
+}
+
+impl<Message> DialogHeader<Message> {
+    pub fn new(title: impl Into<String>, description: impl Into<String>) -> Self {
+        Self {
+            title: title.into(),
+            description: description.into(),
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
+impl_component_widget!(DialogHeader<Message>, Message, |value: &DialogHeader<
+    Message,
+>| {
+    dialog_header(value.title.clone(), value.description.clone())
+});
+
+pub struct DialogFooter<Message = ()> {
+    actions: std::cell::RefCell<Option<Vec<Element<Message>>>>,
+}
+
+impl<Message> DialogFooter<Message> {
+    pub fn new(actions: Vec<Element<Message>>) -> Self {
+        Self {
+            actions: std::cell::RefCell::new(Some(actions)),
+        }
+    }
+}
+
+impl_component_widget!(DialogFooter<Message>, Message, |value: &DialogFooter<
+    Message,
+>| {
+    dialog_footer(super::take_component_slot(
+        &value.actions,
+        "dialog footer actions",
+    ))
+});

@@ -130,7 +130,7 @@ pub(crate) fn toggle_surface<Message>(
     shadow_override: Option<bool>,
 ) -> ButtonElement<Message> {
     let visual = toggle_visual_style(variant, active);
-    let mut element = arkit::stack_component::<Message, arkit::Theme>()
+    let mut element = arkit::button_component::<Message, arkit::Theme>()
         .focusable(false)
         .focus_on_touch(false)
         .border_radius(border_radius)
@@ -156,7 +156,7 @@ pub(crate) fn toggle_surface<Message>(
     }
 }
 
-pub fn toggle<Message: Send + 'static>(
+fn toggle<Message: Send + 'static>(
     label: impl Into<String>,
     state: bool,
     on_toggle: impl Fn(bool) + 'static,
@@ -183,7 +183,7 @@ pub fn toggle<Message: Send + 'static>(
     .into()
 }
 
-pub fn toggle_message<Message>(
+fn toggle_message<Message>(
     label: impl Into<String>,
     state: bool,
     on_toggle: impl Fn(bool) -> Message + 'static,
@@ -196,7 +196,7 @@ where
     })
 }
 
-pub fn toggle_icon<Message: Send + 'static>(
+fn toggle_icon<Message: Send + 'static>(
     icon_name: impl Into<String>,
     state: bool,
     on_toggle: impl Fn(bool) + 'static,
@@ -218,7 +218,7 @@ pub fn toggle_icon<Message: Send + 'static>(
     .into()
 }
 
-pub fn toggle_icon_message<Message>(
+fn toggle_icon_message<Message>(
     icon_name: impl Into<String>,
     state: bool,
     on_toggle: impl Fn(bool) -> Message + 'static,
@@ -229,4 +229,94 @@ where
     toggle_icon(icon_name, state, move |value| {
         dispatch_message(on_toggle(value))
     })
+}
+
+// Struct component API
+pub struct Toggle<Message = ()> {
+    label: String,
+    icon: bool,
+    checked: Option<bool>,
+    default_checked: bool,
+    on_change: Option<std::rc::Rc<dyn Fn(bool) -> Message>>,
+}
+
+impl<Message> Toggle<Message> {
+    pub fn new(label: impl Into<String>) -> Self {
+        Self {
+            label: label.into(),
+            icon: false,
+            checked: None,
+            default_checked: false,
+            on_change: None,
+        }
+    }
+
+    pub fn icon(icon: impl Into<String>) -> Self {
+        Self {
+            label: icon.into(),
+            icon: true,
+            checked: None,
+            default_checked: false,
+            on_change: None,
+        }
+    }
+
+    pub fn checked(mut self, checked: bool) -> Self {
+        self.checked = Some(checked);
+        self
+    }
+
+    pub fn default_checked(mut self, checked: bool) -> Self {
+        self.default_checked = checked;
+        self
+    }
+
+    pub fn on_change(mut self, handler: impl Fn(bool) -> Message + 'static) -> Self {
+        self.on_change = Some(std::rc::Rc::new(handler));
+        self
+    }
+}
+
+impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer>
+    for Toggle<Message>
+{
+    fn body(
+        &self,
+        tree: &mut arkit::advanced::widget::Tree,
+        _renderer: &arkit::Renderer,
+    ) -> Option<Element<Message>> {
+        let state = super::widget_state(tree, || self.default_checked);
+        let is_controlled = self.checked.is_some();
+        let checked = self.checked.unwrap_or_else(|| *state.borrow());
+        let on_change = self.on_change.clone();
+        let handler = move |value| {
+            if !is_controlled {
+                *state.borrow_mut() = value;
+                super::request_widget_rerender();
+            }
+            if let Some(on_change) = on_change.as_ref() {
+                dispatch_message(on_change(value));
+            }
+        };
+
+        Some(if self.icon {
+            toggle_icon(self.label.clone(), checked, handler)
+        } else {
+            toggle(self.label.clone(), checked, handler)
+        })
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
+        self
+    }
+}
+
+impl<Message: Send + 'static> From<Toggle<Message>> for Element<Message> {
+    fn from(value: Toggle<Message>) -> Self {
+        Element::new(value)
+    }
 }

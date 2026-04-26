@@ -1,49 +1,78 @@
 use super::super::layout::fixed_width;
 use super::shared::{top_center_canvas, DemoContext};
 use crate::prelude::*;
-use crate::Message;
 use arkit_shadcn as shadcn;
 
-pub(crate) fn render(ctx: DemoContext) -> Element {
-    top_center_canvas(
-        fixed_width(
-            shadcn::dropdown_menu(
-                shadcn::button("Open")
-                    .theme(shadcn::ButtonVariant::Outline)
-                    .on_press(Message::SetDropdownMenuOpen(!ctx.dropdown_menu_open))
-                    .into(),
-                vec![
-                    shadcn::dropdown_label("My Account"),
-                    shadcn::dropdown_separator(),
-                    shadcn::dropdown_item_with_shortcut("Profile", "⇧⌘P"),
-                    shadcn::dropdown_item_with_shortcut("Billing", "⌘B"),
-                    shadcn::dropdown_item_with_shortcut("Settings", "⌘S"),
-                    shadcn::dropdown_item_with_shortcut("Keyboard shortcuts", "⌘K"),
-                    shadcn::dropdown_separator(),
-                    shadcn::dropdown_item("Team"),
-                    shadcn::dropdown_submenu(
-                        "Invite users",
-                        vec![
-                            shadcn::dropdown_item("Email"),
-                            shadcn::dropdown_item("Message"),
-                            shadcn::dropdown_separator(),
-                            shadcn::dropdown_item("More..."),
-                        ],
-                    ),
-                    shadcn::dropdown_item_with_shortcut("New Team", "⌘+T"),
-                    shadcn::dropdown_separator(),
-                    shadcn::dropdown_item("GitHub"),
-                    shadcn::dropdown_item("Support"),
-                    shadcn::disabled_dropdown_item("API"),
-                    shadcn::dropdown_separator(),
-                    shadcn::dropdown_item_with_shortcut("Log out", "⇧⌘Q"),
-                ],
-                ctx.dropdown_menu_open,
-                Message::SetDropdownMenuOpen,
-            ),
-            384.0,
-        ),
-        [24.0, 24.0, 24.0, 24.0],
-        true,
-    )
+pub(crate) struct DropdownMenuExample {
+    ctx: DemoContext,
 }
+
+impl DropdownMenuExample {
+    pub(crate) fn new(ctx: DemoContext) -> Self {
+        Self { ctx }
+    }
+}
+
+impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer>
+    for DropdownMenuExample
+{
+    fn body(
+        &self,
+        _tree: &mut arkit::advanced::widget::Tree,
+        _renderer: &arkit::Renderer,
+    ) -> Option<Element> {
+        let _ctx = self.ctx.clone();
+        Some({
+            top_center_canvas(
+                fixed_width(
+                    shadcn::DropdownMenu::new(
+                        shadcn::Button::new("Open")
+                            .theme(shadcn::ButtonVariant::Outline)
+                            .into(),
+                        vec![
+                            shadcn::MenuEntry::label("My Account"),
+                            shadcn::MenuEntry::separator(),
+                            shadcn::MenuEntry::action("Profile").shortcut("⇧⌘P"),
+                            shadcn::MenuEntry::action("Billing").shortcut("⌘B"),
+                            shadcn::MenuEntry::action("Settings").shortcut("⌘S"),
+                            shadcn::MenuEntry::action("Keyboard shortcuts").shortcut("⌘K"),
+                            shadcn::MenuEntry::separator(),
+                            shadcn::MenuEntry::action("Team"),
+                            shadcn::MenuEntry::submenu(
+                                "Invite users",
+                                vec![
+                                    shadcn::MenuEntry::action("Email"),
+                                    shadcn::MenuEntry::action("Message"),
+                                    shadcn::MenuEntry::separator(),
+                                    shadcn::MenuEntry::action("More..."),
+                                ],
+                            ),
+                            shadcn::MenuEntry::action("New Team").shortcut("⌘+T"),
+                            shadcn::MenuEntry::separator(),
+                            shadcn::MenuEntry::action("GitHub"),
+                            shadcn::MenuEntry::action("Support"),
+                            shadcn::MenuEntry::action("API"),
+                            shadcn::MenuEntry::separator(),
+                            shadcn::MenuEntry::action("Log out").shortcut("⇧⌘Q"),
+                        ],
+                    )
+                    .default_open(false)
+                    .into(),
+                    384.0,
+                ),
+                [24.0, 24.0, 24.0, 24.0],
+                true,
+            )
+        })
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
+        self
+    }
+}
+
+// struct component render

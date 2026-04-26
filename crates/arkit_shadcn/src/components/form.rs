@@ -1,6 +1,9 @@
+use super::button::button;
+use super::card::card;
+use super::label::label;
 use super::*;
 
-pub fn form(fields: Vec<Element>, submit_label: impl Into<String>) -> Element {
+fn form(fields: Vec<Element>, submit_label: impl Into<String>) -> Element {
     card(
         fields
             .into_iter()
@@ -14,7 +17,7 @@ pub fn form(fields: Vec<Element>, submit_label: impl Into<String>) -> Element {
     )
 }
 
-pub fn form_item(label_text: impl Into<String>, field: Element) -> Element {
+fn form_item(label_text: impl Into<String>, field: Element) -> Element {
     arkit::column_component()
         .percent_width(1.0)
         .children(vec![

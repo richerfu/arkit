@@ -1,9 +1,10 @@
+use super::button::icon_button;
 use super::*;
 use std::rc::Rc;
 
 const SHEET_WIDTH: f32 = 384.0;
 
-pub fn sheet<Message>(
+fn sheet<Message>(
     title: impl Into<String>,
     open: bool,
     on_open_change: impl Fn(bool) -> Message + 'static,

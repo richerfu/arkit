@@ -1,6 +1,7 @@
+use super::input::input;
 use super::*;
 
-pub fn command<Message>(
+fn command<Message>(
     query: impl Into<String>,
     options: Vec<String>,
     on_query_change: impl Fn(String) -> Message + Clone + 'static,

@@ -12,7 +12,6 @@ const SKY_500: u32 = 0xFF0EA5E9;
 
 #[derive(Clone)]
 pub(crate) struct DemoContext {
-    pub active_tab: usize,
     pub page: i32,
     pub button_preview_feedback: Option<String>,
     pub radio_choice: String,
@@ -20,7 +19,6 @@ pub(crate) struct DemoContext {
     pub query: String,
     pub toggle_state: bool,
     pub context_menu_open: bool,
-    pub dropdown_menu_open: bool,
     pub popover_open: bool,
     pub tooltip_open: bool,
     pub select_open: bool,
@@ -114,7 +112,7 @@ pub(crate) fn carousel_frame(
 
     let prev_disabled = current == 1;
     let prev_button = if prev_disabled {
-        shadcn::icon_button("chevron-left")
+        shadcn::Button::icon("chevron-left")
             .theme(shadcn::ButtonVariant::Ghost)
             .key(format!("carousel-prev:{current}:disabled"))
             .width(40.0)
@@ -122,7 +120,7 @@ pub(crate) fn carousel_frame(
             .padding(arkit::Padding::ZERO)
             .disabled(true)
     } else {
-        shadcn::icon_button("chevron-left")
+        shadcn::Button::icon("chevron-left")
             .theme(shadcn::ButtonVariant::Ghost)
             .key(format!("carousel-prev:{current}:enabled"))
             .width(40.0)
@@ -133,7 +131,7 @@ pub(crate) fn carousel_frame(
 
     let next_disabled = current == count;
     let next_button = if next_disabled {
-        shadcn::icon_button("chevron-right")
+        shadcn::Button::icon("chevron-right")
             .theme(shadcn::ButtonVariant::Ghost)
             .key(format!("carousel-next:{current}:disabled"))
             .width(40.0)
@@ -141,7 +139,7 @@ pub(crate) fn carousel_frame(
             .padding(arkit::Padding::ZERO)
             .disabled(true)
     } else {
-        shadcn::icon_button("chevron-right")
+        shadcn::Button::icon("chevron-right")
             .theme(shadcn::ButtonVariant::Ghost)
             .key(format!("carousel-next:{current}:enabled"))
             .width(40.0)
@@ -227,7 +225,7 @@ pub(crate) fn carousel_frame_fn(
                 let prev_disabled = current == 1;
                 let next_disabled = current == count;
                 let prev_button = if prev_disabled {
-                    shadcn::icon_button("chevron-left")
+                    shadcn::Button::icon("chevron-left")
                         .theme(shadcn::ButtonVariant::Ghost)
                         .key(format!("carousel-prev:{current}:disabled"))
                         .width(40.0)
@@ -235,7 +233,7 @@ pub(crate) fn carousel_frame_fn(
                         .padding(arkit::Padding::ZERO)
                         .disabled(true)
                 } else {
-                    shadcn::icon_button("chevron-left")
+                    shadcn::Button::icon("chevron-left")
                         .theme(shadcn::ButtonVariant::Ghost)
                         .key(format!("carousel-prev:{current}:enabled"))
                         .width(40.0)
@@ -244,7 +242,7 @@ pub(crate) fn carousel_frame_fn(
                         .on_press(Message::SetPage((current - 1).max(1)))
                 };
                 let next_button = if next_disabled {
-                    shadcn::icon_button("chevron-right")
+                    shadcn::Button::icon("chevron-right")
                         .theme(shadcn::ButtonVariant::Ghost)
                         .key(format!("carousel-next:{current}:disabled"))
                         .width(40.0)
@@ -252,7 +250,7 @@ pub(crate) fn carousel_frame_fn(
                         .padding(arkit::Padding::ZERO)
                         .disabled(true)
                 } else {
-                    shadcn::icon_button("chevron-right")
+                    shadcn::Button::icon("chevron-right")
                         .theme(shadcn::ButtonVariant::Ghost)
                         .key(format!("carousel-next:{current}:enabled"))
                         .width(40.0)
@@ -281,39 +279,39 @@ pub(crate) fn carousel_frame_fn(
 fn button_preview(variant: &str) -> Element {
     let preview_press = || Message::ButtonPreviewPressed(variant.to_string());
     match variant {
-        "Destructive" => shadcn::button("Destructive")
+        "Destructive" => shadcn::Button::new("Destructive")
             .theme(shadcn::ButtonVariant::Destructive)
             .on_press(preview_press())
             .into(),
-        "Ghost" => shadcn::button("Ghost")
+        "Ghost" => shadcn::Button::new("Ghost")
             .theme(shadcn::ButtonVariant::Ghost)
             .on_press(preview_press())
             .into(),
-        "Link" => shadcn::button("Link")
+        "Link" => shadcn::Button::new("Link")
             .theme(shadcn::ButtonVariant::Link)
             .on_press(preview_press())
             .into(),
-        "Loading" => shadcn::button_with_icon("Please wait", "loader")
+        "Loading" => shadcn::Button::with_icon("Please wait", "loader")
             .theme(shadcn::ButtonVariant::Default)
             .disabled(true)
             .into(),
-        "Outline" => shadcn::button("Outline")
+        "Outline" => shadcn::Button::new("Outline")
             .theme(shadcn::ButtonVariant::Outline)
             .on_press(preview_press())
             .into(),
-        "Secondary" => shadcn::button("Secondary")
+        "Secondary" => shadcn::Button::new("Secondary")
             .theme(shadcn::ButtonVariant::Secondary)
             .on_press(preview_press())
             .into(),
-        "With Icon" => shadcn::button_with_icon("Login with Email", "mail")
+        "With Icon" => shadcn::Button::with_icon("Login with Email", "mail")
             .theme(shadcn::ButtonVariant::Default)
             .on_press(preview_press())
             .into(),
-        "Icon" => shadcn::icon_button("chevron-right")
+        "Icon" => shadcn::Button::icon("chevron-right")
             .theme(shadcn::ButtonVariant::Outline)
             .on_press(preview_press())
             .into(),
-        _ => shadcn::button("Button")
+        _ => shadcn::Button::new("Button")
             .theme(shadcn::ButtonVariant::Default)
             .on_press(preview_press())
             .into(),
@@ -370,10 +368,11 @@ fn icon_tile(name: &str, icon: Element) -> Element {
                 .into(),
             arkit::row_component()
                 .margin([8.0, 0.0, 0.0, 0.0])
-                .children(vec![shadcn::text_with_variant(
+                .children(vec![shadcn::Text::with_variant(
                     name,
                     shadcn::TextVariant::Small,
-                )])
+                )
+                .into()])
                 .into(),
         ])
         .into()
@@ -476,13 +475,12 @@ pub(crate) fn select_carousel(page: i32, selected: String, open: bool) -> Elemen
         page,
         count,
         fixed_width(
-            shadcn::select(
-                options,
-                selected,
-                open,
-                Message::SetSelectOpen,
-                Message::SetSelectChoice,
-            ),
+            shadcn::Select::new(options)
+                .selected(selected)
+                .open(open)
+                .on_open_change(Message::SetSelectOpen)
+                .on_select(Message::SetSelectChoice)
+                .into(),
             180.0,
         ),
         false,
@@ -503,70 +501,70 @@ pub(crate) fn text_carousel(page: i32) -> Element {
             let content = arkit::column_component()
                 .percent_width(1.0)
                 .children(vec![
-                    shadcn::text_with_variant(
+                    shadcn::Text::with_variant(
                         "The Rainbow Forest Adventure",
                         shadcn::TextVariant::H1,
-                    ),
+                    ).into(),
                     spacer(12.0),
-                    shadcn::text_with_variant(
+                    shadcn::Text::with_variant(
                         "Once upon a time, in a magical forest, there lived a curious rabbit named Whiskers. Whiskers loved exploring and discovering new things every day.",
                         shadcn::TextVariant::P,
-                    ),
+                    ).into(),
                     spacer(24.0),
-                    shadcn::text_with_variant("Whiskers' Discovery", shadcn::TextVariant::H2),
-                    shadcn::text_with_variant(
+                    shadcn::Text::with_variant("Whiskers' Discovery", shadcn::TextVariant::H2).into(),
+                    shadcn::Text::with_variant(
                         "One day, while hopping through the forest, Whiskers stumbled upon a mysterious rainbow-colored flower. The flower had the power to make the forest come alive with vibrant colors and happy creatures.",
                         shadcn::TextVariant::P,
-                    ),
-                    shadcn::text_with_variant(
+                    ).into(),
+                    shadcn::Text::with_variant(
                         "\"Oh, what a wonderful discovery!\" exclaimed Whiskers. \"I must share this magic with all my forest friends!\"",
                         shadcn::TextVariant::Blockquote,
-                    ),
+                    ).into(),
                     spacer(32.0),
-                    shadcn::text_with_variant(
+                    shadcn::Text::with_variant(
                         "The Colorful Transformation",
                         shadcn::TextVariant::H3,
-                    ),
+                    ).into(),
                     spacer(4.0),
-                    shadcn::text_with_variant(
+                    shadcn::Text::with_variant(
                         "Whiskers excitedly gathered all the animals in the forest and showed them the magical rainbow flower. The animals were amazed and decided to plant more of these flowers to make their home even more magical.",
                         shadcn::TextVariant::P,
-                    ),
+                    ).into(),
                     spacer(12.0),
-                    shadcn::text_with_variant(
+                    shadcn::Text::with_variant(
                         "As the rainbow flowers bloomed, the entire forest transformed into a kaleidoscope of colors. Birds chirped in harmony, butterflies danced in the air, and even the trees swayed to the rhythm of the wind.",
                         shadcn::TextVariant::P,
-                    ),
+                    ).into(),
                     spacer(24.0),
-                    shadcn::text_with_variant(
+                    shadcn::Text::with_variant(
                         "The Enchanted Celebration",
                         shadcn::TextVariant::H3,
-                    ),
+                    ).into(),
                     spacer(4.0),
-                    shadcn::text_with_variant(
+                    shadcn::Text::with_variant(
                         "The animals decided to celebrate their enchanted forest with a grand feast. They gathered nuts, berries, and fruits from the colorful trees and shared stories of their adventures. The joyous laughter echoed through the Rainbow Forest.",
                         shadcn::TextVariant::P,
-                    ),
+                    ).into(),
                     spacer(12.0),
-                    shadcn::text_with_variant(
+                    shadcn::Text::with_variant(
                         "And so, the Rainbow Forest became a place of wonder and happiness, where Whiskers and all the animals lived together in harmony.",
                         shadcn::TextVariant::Lead,
-                    ),
+                    ).into(),
                     spacer(24.0),
-                    shadcn::text_with_variant(
+                    shadcn::Text::with_variant(
                         "The Never-ending Magic",
                         shadcn::TextVariant::H3,
-                    ),
+                    ).into(),
                     spacer(4.0),
-                    shadcn::text_with_variant(
+                    shadcn::Text::with_variant(
                         "The magic of the rainbow flowers continued to spread, reaching other parts of the world. Soon, forests everywhere became vibrant and alive, thanks to the discovery of Whiskers and the enchanted Rainbow Forest.",
                         shadcn::TextVariant::P,
-                    ),
+                    ).into(),
                     spacer(12.0),
-                    shadcn::text_with_variant(
+                    shadcn::Text::with_variant(
                         "The moral of the story is: embrace the magic of discovery, share joy with others, and watch as the world transforms into a colorful and beautiful place.",
                         shadcn::TextVariant::Large,
-                    ),
+                    ).into(),
                     spacer(24.0),
                 ])
                 .into();
@@ -640,11 +638,12 @@ pub(crate) fn text_carousel(page: i32) -> Element {
                     vec![
                         h_stack(
                             vec![
-                                shadcn::text("Default:"),
-                                shadcn::text_with_variant(
+                                shadcn::Text::new("Default:").into(),
+                                shadcn::Text::with_variant(
                                     "text-foreground",
                                     shadcn::TextVariant::Code,
-                                ),
+                                )
+                                .into(),
                             ],
                             4.0,
                         ),
@@ -680,7 +679,7 @@ pub(crate) fn text_carousel(page: i32) -> Element {
                 352.0,
             )
         }
-        _ => shadcn::text("Hello, world!"),
+        _ => shadcn::Text::new("Hello, world!").into(),
     };
 
     carousel_frame(page, count, preview, true)

@@ -1,10 +1,39 @@
 use super::shared::{no_padding_center_canvas, select_carousel, DemoContext};
 use crate::prelude::*;
 
-pub(crate) fn render(ctx: DemoContext) -> Element {
-    no_padding_center_canvas(select_carousel(
-        ctx.page,
-        ctx.select_choice,
-        ctx.select_open,
-    ))
+pub(crate) struct SelectExample {
+    ctx: DemoContext,
 }
+
+impl SelectExample {
+    pub(crate) fn new(ctx: DemoContext) -> Self {
+        Self { ctx }
+    }
+}
+
+impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for SelectExample {
+    fn body(
+        &self,
+        _tree: &mut arkit::advanced::widget::Tree,
+        _renderer: &arkit::Renderer,
+    ) -> Option<Element> {
+        let ctx = self.ctx.clone();
+        Some({
+            no_padding_center_canvas(select_carousel(
+                ctx.page,
+                ctx.select_choice,
+                ctx.select_open,
+            ))
+        })
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
+        self
+    }
+}
+
+// struct component render

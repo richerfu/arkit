@@ -79,14 +79,14 @@ fn retheme_button_content<Message: Send + 'static, AppTheme: 'static>(
     })
 }
 
-pub fn button<Message: Send + 'static>(label: impl Into<String>) -> ButtonElement<Message> {
+pub(super) fn button<Message: Send + 'static>(label: impl Into<String>) -> ButtonElement<Message> {
     apply_button_size(
         apply_button_theme(button_host(normal_button(label)), ButtonVariant::Default),
         size_style(ButtonSize::Default),
     )
 }
 
-pub fn button_with_icon<Message: Send + 'static>(
+fn button_with_icon<Message: Send + 'static>(
     label: impl Into<String>,
     icon_name: impl Into<String>,
 ) -> ButtonElement<Message> {
@@ -112,7 +112,9 @@ fn icon_label_button<Message: Send + 'static>(
     apply_button_theme(button, ButtonVariant::Default)
 }
 
-pub fn icon_button<Message: Send + 'static>(icon: impl Into<String>) -> ButtonElement<Message> {
+pub(super) fn icon_button<Message: Send + 'static>(
+    icon: impl Into<String>,
+) -> ButtonElement<Message> {
     let button = button_host(normal_button_component())
         .children(vec![button_content_row(
             None,
@@ -125,11 +127,11 @@ pub fn icon_button<Message: Send + 'static>(icon: impl Into<String>) -> ButtonEl
     apply_button_theme(button, ButtonVariant::Default)
 }
 
-pub fn normal_button_component<Message, AppTheme>() -> ButtonElement<Message, AppTheme> {
-    arkit::stack_component::<Message, AppTheme>()
+fn normal_button_component<Message, AppTheme>() -> ButtonElement<Message, AppTheme> {
+    arkit::button_component::<Message, AppTheme>()
 }
 
-pub fn normal_button<Message: 'static, AppTheme: 'static>(
+fn normal_button<Message: 'static, AppTheme: 'static>(
     label: impl Into<String>,
 ) -> ButtonElement<Message, AppTheme> {
     normal_button_component().children(vec![arkit::text(label).into()])
@@ -415,4 +417,181 @@ fn text_decoration(decoration_type: i32, color_value: u32) -> ArkUINodeAttribute
         ArkUINodeAttributeNumber::Uint(color_value),
         ArkUINodeAttributeNumber::Int(TEXT_DECORATION_STYLE_SOLID),
     ])
+}
+
+// Struct component API
+enum ButtonContent {
+    Label,
+    IconLabel,
+    Icon,
+}
+
+pub struct Button<Message = ()> {
+    content: ButtonContent,
+    label: Option<String>,
+    icon_name: Option<String>,
+    variant: ButtonVariant,
+    size: ButtonSize,
+    disabled: bool,
+    key: Option<String>,
+    width: Option<arkit::Length>,
+    height: Option<arkit::Length>,
+    padding: Option<arkit::Padding>,
+    on_press: std::cell::RefCell<Option<Message>>,
+    on_click: Option<std::rc::Rc<dyn Fn()>>,
+}
+
+impl<Message> Button<Message> {
+    pub fn new(label: impl Into<String>) -> Self {
+        Self {
+            content: ButtonContent::Label,
+            label: Some(label.into()),
+            icon_name: None,
+            variant: ButtonVariant::Default,
+            size: ButtonSize::Default,
+            disabled: false,
+            key: None,
+            width: None,
+            height: None,
+            padding: None,
+            on_press: std::cell::RefCell::new(None),
+            on_click: None,
+        }
+    }
+
+    pub fn with_icon(label: impl Into<String>, icon_name: impl Into<String>) -> Self {
+        Self {
+            content: ButtonContent::IconLabel,
+            label: Some(label.into()),
+            icon_name: Some(icon_name.into()),
+            ..Self::new("")
+        }
+    }
+
+    pub fn icon(icon_name: impl Into<String>) -> Self {
+        Self {
+            content: ButtonContent::Icon,
+            label: None,
+            icon_name: Some(icon_name.into()),
+            size: ButtonSize::Icon,
+            ..Self::new("")
+        }
+    }
+
+    pub fn variant(mut self, variant: ButtonVariant) -> Self {
+        self.variant = variant;
+        self
+    }
+
+    pub fn theme(self, variant: ButtonVariant) -> Self {
+        self.variant(variant)
+    }
+
+    pub fn size(mut self, size: ButtonSize) -> Self {
+        self.size = size;
+        self
+    }
+
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
+    pub fn key(mut self, key: impl Into<String>) -> Self {
+        self.key = Some(key.into());
+        self
+    }
+
+    pub fn width(mut self, width: impl Into<arkit::Length>) -> Self {
+        self.width = Some(width.into());
+        self
+    }
+
+    pub fn percent_width(mut self, value: f32) -> Self {
+        self.width = Some(arkit::Length::FillPortion((value * 1000.0) as u16));
+        self
+    }
+
+    pub fn height(mut self, height: impl Into<arkit::Length>) -> Self {
+        self.height = Some(height.into());
+        self
+    }
+
+    pub fn padding(mut self, padding: impl Into<arkit::Padding>) -> Self {
+        self.padding = Some(padding.into());
+        self
+    }
+
+    pub fn on_press(self, message: Message) -> Self {
+        *self.on_press.borrow_mut() = Some(message);
+        self
+    }
+
+    pub fn on_click(mut self, callback: impl Fn() + 'static) -> Self {
+        self.on_click = Some(std::rc::Rc::new(callback));
+        self
+    }
+}
+
+impl<Message: Clone + Send + 'static> Button<Message> {
+    fn render(&self) -> Element<Message> {
+        let mut button = match self.content {
+            ButtonContent::Label => button(self.label.clone().unwrap_or_default()),
+            ButtonContent::IconLabel => button_with_icon(
+                self.label.clone().unwrap_or_default(),
+                self.icon_name.clone().unwrap_or_default(),
+            ),
+            ButtonContent::Icon => icon_button(self.icon_name.clone().unwrap_or_default()),
+        }
+        .theme(self.variant)
+        .size(self.size)
+        .disabled(self.disabled);
+
+        if let Some(key) = self.key.clone() {
+            button = button.key(key);
+        }
+        if let Some(width) = self.width {
+            button = button.width(width);
+        }
+        if let Some(height) = self.height {
+            button = button.height(height);
+        }
+        if let Some(padding) = self.padding {
+            button = button.padding(padding);
+        }
+        if let Some(message) = self.on_press.borrow_mut().take() {
+            button = button.on_press(message);
+        }
+        if let Some(callback) = self.on_click.clone() {
+            button = button.on_click(move || callback());
+        }
+
+        button.into()
+    }
+}
+
+impl<Message: Clone + Send + 'static>
+    arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for Button<Message>
+{
+    fn body(
+        &self,
+        _tree: &mut arkit::advanced::widget::Tree,
+        _renderer: &arkit::Renderer,
+    ) -> Option<Element<Message>> {
+        Some(self.render())
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
+        self
+    }
+}
+
+impl<Message: Clone + Send + 'static> From<Button<Message>> for Element<Message> {
+    fn from(value: Button<Message>) -> Self {
+        Element::new(value)
+    }
 }

@@ -1,6 +1,6 @@
 use super::*;
 
-pub fn toast(message: impl Into<String>) -> Element {
+fn toast(message: impl Into<String>) -> Element {
     panel_surface(
         arkit::row_component()
             .percent_width(1.0)
@@ -13,7 +13,7 @@ pub fn toast(message: impl Into<String>) -> Element {
     .into()
 }
 
-pub fn toast_destructive(message: impl Into<String>) -> Element {
+fn toast_destructive(message: impl Into<String>) -> Element {
     border_color(
         panel_surface(arkit::row_component().percent_width(1.0).children(vec![
             body_text_regular(message)
@@ -26,6 +26,6 @@ pub fn toast_destructive(message: impl Into<String>) -> Element {
     .into()
 }
 
-pub fn sonner(messages: Vec<String>) -> Element {
+fn sonner(messages: Vec<String>) -> Element {
     super::card::card(messages.into_iter().map(toast).collect::<Vec<Element>>())
 }

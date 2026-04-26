@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use super::text::text_sm_medium;
 use super::*;
 use arkit::ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
 use arkit_icon as lucide;
@@ -56,27 +57,35 @@ impl<Message: 'static> AccordionItemSpec<Message> {
         self.disabled = disabled;
         self
     }
+
+    pub fn trigger(mut self, trigger: Element<Message>) -> Self {
+        self.trigger = trigger;
+        self
+    }
+
+    pub fn content(mut self, content: Vec<Element<Message>>) -> Self {
+        self.content = content;
+        self
+    }
 }
 
-pub fn accordion_trigger<Message: 'static>(
-    child: Element<Message>,
-) -> AccordionTriggerSpec<Message> {
+fn accordion_trigger<Message: 'static>(child: Element<Message>) -> AccordionTriggerSpec<Message> {
     AccordionTriggerSpec { child }
 }
 
-pub fn accordion_trigger_text<Message: 'static>(
+fn accordion_trigger_text<Message: 'static>(
     title: impl Into<String>,
 ) -> AccordionTriggerSpec<Message> {
     accordion_trigger(text_sm_medium(title))
 }
 
-pub fn accordion_content<Message: 'static>(
+fn accordion_content<Message: 'static>(
     children: Vec<Element<Message>>,
 ) -> AccordionContentSpec<Message> {
     AccordionContentSpec { children }
 }
 
-pub fn accordion_item_spec<Message: 'static>(
+fn accordion_item_spec<Message: 'static>(
     title: impl Into<String>,
     value: impl Into<String>,
     content: Vec<Element<Message>>,
@@ -84,7 +93,7 @@ pub fn accordion_item_spec<Message: 'static>(
     AccordionItemSpec::new(title, value, content)
 }
 
-pub fn accordion_item_parts<Message: 'static>(
+fn accordion_item_parts<Message: 'static>(
     value: impl Into<String>,
     trigger: AccordionTriggerSpec<Message>,
     content: AccordionContentSpec<Message>,
@@ -231,11 +240,11 @@ where
     accordion_container(children)
 }
 
-pub fn accordion<Message: 'static>(children: Vec<Element<Message>>) -> Element<Message> {
+fn accordion<Message: 'static>(children: Vec<Element<Message>>) -> Element<Message> {
     accordion_container(children)
 }
 
-pub fn accordion_single_controlled<Message>(
+fn accordion_single_controlled<Message>(
     items: Vec<AccordionItemSpec<Message>>,
     value: Option<String>,
     collapsible: bool,
@@ -250,4 +259,91 @@ where
         collapsible,
         Some(dispatch_optional_string(on_value_change)),
     )
+}
+
+// Struct component API
+pub struct Accordion<Message = ()> {
+    items: std::cell::RefCell<Option<Vec<AccordionItemSpec<Message>>>>,
+    value: Option<Option<String>>,
+    default_value: Option<String>,
+    collapsible: bool,
+    on_value_change: Option<std::rc::Rc<dyn Fn(Option<String>) -> Message>>,
+}
+
+impl<Message> Accordion<Message> {
+    pub fn single(items: Vec<AccordionItemSpec<Message>>) -> Self {
+        Self {
+            items: std::cell::RefCell::new(Some(items)),
+            value: None,
+            default_value: None,
+            collapsible: false,
+            on_value_change: None,
+        }
+    }
+
+    pub fn value(mut self, value: Option<String>) -> Self {
+        self.value = Some(value);
+        self
+    }
+
+    pub fn default_value(mut self, value: Option<String>) -> Self {
+        self.default_value = value;
+        self
+    }
+
+    pub fn collapsible(mut self, collapsible: bool) -> Self {
+        self.collapsible = collapsible;
+        self
+    }
+
+    pub fn on_value_change(
+        mut self,
+        handler: impl Fn(Option<String>) -> Message + 'static,
+    ) -> Self {
+        self.on_value_change = Some(std::rc::Rc::new(handler));
+        self
+    }
+}
+
+impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer>
+    for Accordion<Message>
+{
+    fn body(
+        &self,
+        tree: &mut arkit::advanced::widget::Tree,
+        _renderer: &arkit::Renderer,
+    ) -> Option<Element<Message>> {
+        let state = super::widget_state(tree, || self.default_value.clone());
+        let is_controlled = self.value.is_some();
+        let value = self.value.clone().unwrap_or_else(|| state.borrow().clone());
+        let handler = self.on_value_change.clone();
+        Some(render_single_items(
+            super::take_component_slot(&self.items, "accordion items"),
+            value,
+            self.collapsible,
+            Some(std::rc::Rc::new(move |value| {
+                if !is_controlled {
+                    *state.borrow_mut() = value.clone();
+                    super::request_widget_rerender();
+                }
+                if let Some(handler) = handler.as_ref() {
+                    dispatch_message(handler(value));
+                }
+            })),
+        ))
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
+        self
+    }
+}
+
+impl<Message: Send + 'static> From<Accordion<Message>> for Element<Message> {
+    fn from(value: Accordion<Message>) -> Self {
+        Element::new(value)
+    }
 }

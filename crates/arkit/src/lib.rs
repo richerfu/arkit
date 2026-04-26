@@ -1,9 +1,10 @@
 mod ohos;
+pub mod router;
 
 pub use arkit_core::advanced;
 pub use arkit_core::theme;
 pub use arkit_core::{window, Horizontal, Length, Padding, Settings, Size, Theme, Vertical};
-pub use arkit_derive::entry;
+pub use arkit_derive::{entry, StructuredRoute};
 pub use arkit_runtime::{Application, Program, Subscription, SubscriptionHandle, Task};
 pub use arkit_widget::ListVisibleContentChangeEvent;
 pub use arkit_widget::Renderer;
@@ -20,17 +21,18 @@ pub use arkit_widget::{
     virtual_grid_component, virtual_list, virtual_list_component, virtual_water_flow,
     virtual_water_flow_component, water_flow_component, ArkEvent, ArkUINodeAttributeItem,
     ArkUINodeAttributeType, BorderStyle, ButtonElement, ButtonType, CalendarPickerElement,
-    CheckboxElement, ContainerElement, DatePickerElement, Element, FloatingAlign,
-    FloatingOverlaySpec, FloatingSide, FlowItemElement, FontStyle, FontWeight, GridElement,
-    GridItemElement, GridScrollIndexEvent, HitTestBehavior, ItemAlignment, JustifyContent,
-    LayoutFrame, LayoutSize, LifecycleEvent, ListElement, ListItemElement, ListItemGroupElement,
-    ListScrollIndexEvent, ListStickyStyle, ModalOverlaySpec, ModalPresentation,
-    NativeOverlayPlacement, Node, NodeCustomEvent, NodeCustomEventType, NodeEventType, ObjectFit,
-    OverlayDismissMode, OverlayStrategy, ProgressElement, ProgressLinearStyle, ProgressType,
-    RadioElement, RefreshElement, RowElement, ScrollElement, ScrollOffset, ScrollViewport,
-    ShadowStyle, SliderElement, SwiperElement, TextAlignment, TextAreaElement, TextElement,
-    TextInputElement, TextLayoutLine, TextLayoutSnapshot, ToggleElement, UiState, VirtualListGroup,
-    VirtualVisibleRange, Visibility, WaterFlowElement, WaterFlowScrollIndexEvent,
+    CheckboxElement, ColumnElement, Component, ContainerElement, DatePickerElement, Element,
+    FloatingAlign, FloatingOverlaySpec, FloatingSide, FlowItemElement, FontStyle, FontWeight,
+    GridElement, GridItemElement, GridScrollIndexEvent, HitTestBehavior, ImageElement,
+    ItemAlignment, JustifyContent, LayoutFrame, LayoutSize, LifecycleEvent, ListElement,
+    ListItemElement, ListItemGroupElement, ListScrollIndexEvent, ListStickyStyle, ModalOverlaySpec,
+    ModalPresentation, NativeOverlayPlacement, Node, NodeCustomEvent, NodeCustomEventType,
+    NodeEventType, ObjectFit, OverlayDismissMode, OverlayStrategy, ProgressElement,
+    ProgressLinearStyle, ProgressType, RadioElement, RefreshElement, RowElement, ScrollElement,
+    ScrollOffset, ScrollViewport, ShadowStyle, SliderElement, StackElement, SwiperElement,
+    TextAlignment, TextAreaElement, TextElement, TextInputElement, TextLayoutLine,
+    TextLayoutSnapshot, ToggleElement, UiState, VirtualListGroup, VirtualVisibleRange, Visibility,
+    WaterFlowElement, WaterFlowScrollIndexEvent,
 };
 #[cfg(feature = "webview")]
 pub use arkit_widget::{
@@ -102,9 +104,9 @@ pub mod prelude {
         ModalPresentation, NativeOverlayPlacement, NodeCustomEvent, NodeCustomEventType,
         NodeEventType, ObjectFit, OverlayDismissMode, OverlayStrategy, Padding, Program,
         ProgressLinearStyle, ProgressType, Renderer, ScrollOffset, ScrollViewport, Settings,
-        ShadowStyle, Size, Subscription, SubscriptionHandle, Task, TextAlignment, TextLayoutLine,
-        TextLayoutSnapshot, Theme, UiState, Vertical, VirtualListGroup, VirtualVisibleRange,
-        Visibility, WaterFlowScrollIndexEvent,
+        ShadowStyle, Size, StructuredRoute, Subscription, SubscriptionHandle, Task, TextAlignment,
+        TextLayoutLine, TextLayoutSnapshot, Theme, UiState, Vertical, VirtualListGroup,
+        VirtualVisibleRange, Visibility, WaterFlowScrollIndexEvent,
     };
     #[cfg(feature = "webview")]
     pub use crate::{
