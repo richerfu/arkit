@@ -1,14 +1,15 @@
 use std::any::{type_name, Any, TypeId};
 use std::cell::{Cell, RefCell};
-#[cfg(feature = "webview")]
 use std::collections::HashMap;
+use std::ffi::c_void;
 use std::mem::{align_of, size_of, ManuallyDrop};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 #[cfg(feature = "webview")]
 use std::path::PathBuf;
 use std::rc::Rc;
 #[cfg(feature = "webview")]
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicI32, Ordering};
 
 use crate::{Alignment, LayoutFrame, LayoutSize};
 use arkit_core::{advanced, Horizontal, Length, Padding, Size, Vertical};
@@ -17,23 +18,29 @@ use napi_ohos::{
     bindgen_prelude::{FnArgs, Function, JsObjectValue, Object, ObjectRef},
     Either,
 };
-use ohos_arkui_binding::api::attribute_option::{ProgressLinearStyleOption, TextLayoutManager};
+use ohos_arkui_binding::api::attribute_option::{
+    NodeAdapter, NodeAdapterEvent, ProgressLinearStyleOption, TextLayoutManager,
+};
 use ohos_arkui_binding::api::node_custom_event::NodeCustomEvent;
 use ohos_arkui_binding::common::attribute::{ArkUINodeAttributeItem, ArkUINodeAttributeNumber};
 use ohos_arkui_binding::common::error::ArkUIResult;
 use ohos_arkui_binding::common::node::ArkUINode;
+#[cfg(feature = "webview")]
+use ohos_arkui_binding::common::node::ArkUINodeRaw;
 use ohos_arkui_binding::component::attribute::{
     ArkUIAttributeBasic, ArkUICommonAttribute, ArkUIEvent, ArkUIGesture,
 };
 use ohos_arkui_binding::component::built_in_component::{
-    Button, CalendarPicker, Checkbox, Column, DatePicker, Image, List, ListItem, Progress, Radio,
-    Refresh, Row, Scroll, Slider, Stack, Swiper, Text, TextArea, TextInput, Toggle,
+    Button, CalendarPicker, Checkbox, Column, DatePicker, FlowItem, Grid, GridItem, Image, List,
+    ListItem, ListItemGroup, Progress, Radio, Refresh, Row, Scroll, Slider, Stack, Swiper, Text,
+    TextArea, TextInput, Toggle, WaterFlow,
 };
 use ohos_arkui_binding::event::inner_event::Event as ArkEvent;
 use ohos_arkui_binding::gesture::gesture_data::GestureEventData;
 use ohos_arkui_binding::gesture::inner_gesture::Gesture;
 use ohos_arkui_binding::types::advanced::{
-    FontWeight, HorizontalAlignment, NodeCustomEventType, ShadowStyle, VerticalAlignment,
+    FontWeight, HorizontalAlignment, NodeAdapterEventType, NodeCustomEventType, ShadowStyle,
+    VerticalAlignment,
 };
 use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
 use ohos_arkui_binding::types::event::NodeEventType;
@@ -172,11 +179,137 @@ pub struct ListVisibleContentChangeEvent {
     pub end_item_index: i32,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct GridScrollIndexEvent {
+    pub first_index: i32,
+    pub last_index: i32,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct WaterFlowScrollIndexEvent {
+    pub start_index: i32,
+    pub end_index: i32,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct VirtualVisibleRange {
+    pub first_index: i32,
+    pub last_index: i32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ListStickyStyle {
+    None,
+    Header,
+    Footer,
+    Both,
+}
+
+impl From<ListStickyStyle> for i32 {
+    fn from(value: ListStickyStyle) -> Self {
+        match value {
+            ListStickyStyle::None => 0,
+            ListStickyStyle::Header => 1,
+            ListStickyStyle::Footer => 2,
+            ListStickyStyle::Both => 3,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VirtualListGroup {
+    pub key: String,
+    pub item_count: u32,
+}
+
+impl VirtualListGroup {
+    pub fn new(key: impl Into<String>, item_count: u32) -> Self {
+        Self {
+            key: key.into(),
+            item_count,
+        }
+    }
+}
+
 #[derive(Default)]
 struct ScrollState {
     offset: ScrollOffset,
     viewport: Option<ScrollViewport>,
     node: Option<ArkUINode>,
+}
+
+static NEXT_VIRTUAL_ADAPTER_ID: AtomicI32 = AtomicI32::new(1);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum VirtualContainerKind {
+    List,
+    Grid,
+    WaterFlow,
+    ListItemGroup,
+}
+
+struct VirtualMountedItem {
+    node: ArkUINode,
+    mounted: MountedNode,
+}
+
+struct VirtualAdapterState<Message, AppTheme = arkit_core::Theme> {
+    id: i32,
+    kind: VirtualContainerKind,
+    total_count: u32,
+    render_item: Rc<dyn Fn(u32) -> Element<Message, AppTheme>>,
+    adapter: Option<NodeAdapter>,
+    mounted_items: HashMap<u32, VirtualMountedItem>,
+}
+
+impl<Message, AppTheme> VirtualAdapterState<Message, AppTheme> {
+    fn new(
+        kind: VirtualContainerKind,
+        total_count: u32,
+        render_item: Rc<dyn Fn(u32) -> Element<Message, AppTheme>>,
+    ) -> Self {
+        Self {
+            id: NEXT_VIRTUAL_ADAPTER_ID.fetch_add(1, Ordering::Relaxed),
+            kind,
+            total_count,
+            render_item,
+            adapter: None,
+            mounted_items: HashMap::new(),
+        }
+    }
+
+    fn node_id(&self, index: u32) -> i32 {
+        self.id.wrapping_mul(1_000_003).wrapping_add(index as i32)
+    }
+}
+
+struct VirtualAdapterSpec<Message, AppTheme = arkit_core::Theme> {
+    kind: VirtualContainerKind,
+    total_count: u32,
+    render_item: Rc<dyn Fn(u32) -> Element<Message, AppTheme>>,
+}
+
+trait MountedVirtualAdapter {
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+    fn cleanup(self: Box<Self>);
+}
+
+struct MountedVirtualAdapterState<Message, AppTheme = arkit_core::Theme> {
+    state: Rc<RefCell<VirtualAdapterState<Message, AppTheme>>>,
+}
+
+impl<Message, AppTheme> MountedVirtualAdapter for MountedVirtualAdapterState<Message, AppTheme>
+where
+    Message: 'static,
+    AppTheme: 'static,
+{
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn cleanup(self: Box<Self>) {
+        cleanup_virtual_adapter_state(&self.state);
+    }
 }
 
 #[cfg(feature = "webview")]
@@ -835,9 +968,13 @@ enum NodeKind {
     Checkbox,
     Column,
     DatePicker,
+    FlowItem,
+    Grid,
+    GridItem,
     Image,
     List,
     ListItem,
+    ListItemGroup,
     Progress,
     Radio,
     Refresh,
@@ -850,6 +987,7 @@ enum NodeKind {
     TextArea,
     TextInput,
     Toggle,
+    WaterFlow,
     #[cfg(feature = "webview")]
     WebViewHost,
 }
@@ -877,6 +1015,8 @@ struct MountedRenderNode {
     pending_patch_attrs: Vec<(ArkUINodeAttributeType, ArkUINodeAttributeItem)>,
     pending_attach_effects: Vec<AttachEffect>,
     pending_patch_effects: Vec<PatchEffect>,
+    virtual_adapter_kind: Option<VirtualContainerKind>,
+    virtual_adapter: Option<Box<dyn MountedVirtualAdapter>>,
     children: Vec<MountedRenderNode>,
 }
 
@@ -974,6 +1114,8 @@ impl MountedRenderNode {
         pending_patch_attrs: Vec<(ArkUINodeAttributeType, ArkUINodeAttributeItem)>,
         pending_attach_effects: Vec<AttachEffect>,
         pending_patch_effects: Vec<PatchEffect>,
+        virtual_adapter_kind: Option<VirtualContainerKind>,
+        virtual_adapter: Option<Box<dyn MountedVirtualAdapter>>,
         children: Vec<MountedRenderNode>,
     ) -> Self {
         Self {
@@ -993,6 +1135,8 @@ impl MountedRenderNode {
             pending_patch_attrs,
             pending_attach_effects,
             pending_patch_effects,
+            virtual_adapter_kind,
+            virtual_adapter,
             children,
         }
     }
@@ -1017,6 +1161,9 @@ impl MountedRenderNode {
         }
         if let Some(cleanup) = self.long_press_cleanup {
             cleanup();
+        }
+        if let Some(adapter) = self.virtual_adapter {
+            adapter.cleanup();
         }
         run_cleanups(self.cleanups);
     }
@@ -1080,6 +1227,7 @@ pub struct Node<Message, AppTheme = arkit_core::Theme> {
     patch_effects: Vec<PatchEffect>,
     exit_effect: Option<ExitEffect>,
     state_bound: bool,
+    virtual_adapter: Option<VirtualAdapterSpec<Message, AppTheme>>,
     #[cfg(feature = "webview")]
     webview: Option<WebViewSpec>,
     children: Vec<Element<Message, AppTheme>>,
@@ -1100,6 +1248,7 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
             patch_effects: Vec::new(),
             exit_effect: None,
             state_bound: false,
+            virtual_adapter: None,
             #[cfg(feature = "webview")]
             webview: None,
             children: Vec::new(),
@@ -1152,6 +1301,7 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
             patch_effects,
             exit_effect,
             state_bound,
+            virtual_adapter,
             #[cfg(feature = "webview")]
             webview,
             children,
@@ -1175,6 +1325,7 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
             patch_effects,
             exit_effect,
             state_bound,
+            virtual_adapter,
             #[cfg(feature = "webview")]
             webview,
             children,
@@ -1207,6 +1358,20 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
         let value = value.into();
         self.init_attrs.push((attr, clone_attr_value(&value)));
         self.patch_attrs.push((attr, value));
+        self
+    }
+
+    fn virtual_adapter(
+        mut self,
+        kind: VirtualContainerKind,
+        total_count: u32,
+        render_item: Rc<dyn Fn(u32) -> Element<Message, AppTheme>>,
+    ) -> Self {
+        self.virtual_adapter = Some(VirtualAdapterSpec {
+            kind,
+            total_count,
+            render_item,
+        });
         self
     }
 
@@ -1600,6 +1765,150 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
         }
 
         self.builder_attr(ArkUINodeAttributeType::RefreshPullToRefresh, value)
+    }
+
+    pub fn list_sticky(self, value: ListStickyStyle) -> Self {
+        if self.kind != NodeKind::List {
+            return self;
+        }
+
+        self.builder_attr(ArkUINodeAttributeType::ListSticky, i32::from(value))
+    }
+
+    pub fn list_cached_count(self, value: u32) -> Self {
+        if self.kind != NodeKind::List {
+            return self;
+        }
+
+        self.builder_attr(ArkUINodeAttributeType::ListCachedCount, value)
+    }
+
+    pub fn grid_column_template(self, value: impl Into<String>) -> Self {
+        if self.kind != NodeKind::Grid {
+            return self;
+        }
+
+        self.builder_attr(ArkUINodeAttributeType::GridColumnTemplate, value.into())
+    }
+
+    pub fn grid_row_template(self, value: impl Into<String>) -> Self {
+        if self.kind != NodeKind::Grid {
+            return self;
+        }
+
+        self.builder_attr(ArkUINodeAttributeType::GridRowTemplate, value.into())
+    }
+
+    pub fn grid_column_gap(self, value: f32) -> Self {
+        if self.kind != NodeKind::Grid {
+            return self;
+        }
+
+        self.builder_attr(ArkUINodeAttributeType::GridColumnGap, value)
+    }
+
+    pub fn grid_row_gap(self, value: f32) -> Self {
+        if self.kind != NodeKind::Grid {
+            return self;
+        }
+
+        self.builder_attr(ArkUINodeAttributeType::GridRowGap, value)
+    }
+
+    pub fn grid_cached_count(self, value: u32) -> Self {
+        if self.kind != NodeKind::Grid {
+            return self;
+        }
+
+        self.builder_attr(ArkUINodeAttributeType::GridCachedCount, value)
+    }
+
+    pub fn water_flow_column_template(self, value: impl Into<String>) -> Self {
+        if self.kind != NodeKind::WaterFlow {
+            return self;
+        }
+
+        self.builder_attr(
+            ArkUINodeAttributeType::WaterFlowColumnTemplate,
+            value.into(),
+        )
+    }
+
+    pub fn water_flow_row_template(self, value: impl Into<String>) -> Self {
+        if self.kind != NodeKind::WaterFlow {
+            return self;
+        }
+
+        self.builder_attr(ArkUINodeAttributeType::WaterFlowRowTemplate, value.into())
+    }
+
+    pub fn water_flow_column_gap(self, value: f32) -> Self {
+        if self.kind != NodeKind::WaterFlow {
+            return self;
+        }
+
+        self.builder_attr(ArkUINodeAttributeType::WaterFlowColumnGap, value)
+    }
+
+    pub fn water_flow_row_gap(self, value: f32) -> Self {
+        if self.kind != NodeKind::WaterFlow {
+            return self;
+        }
+
+        self.builder_attr(ArkUINodeAttributeType::WaterFlowRowGap, value)
+    }
+
+    pub fn water_flow_cached_count(self, value: u32) -> Self {
+        if self.kind != NodeKind::WaterFlow {
+            return self;
+        }
+
+        self.builder_attr(ArkUINodeAttributeType::WaterFlowCachedCount, value)
+    }
+
+    pub fn list_item_group_header(self, header: impl Into<Element<Message, AppTheme>>) -> Self
+    where
+        Message: Send + 'static,
+        AppTheme: 'static,
+    {
+        self.list_item_group_slot(ArkUINodeAttributeType::ListItemGroupSetHeader, header)
+    }
+
+    pub fn list_item_group_footer(self, footer: impl Into<Element<Message, AppTheme>>) -> Self
+    where
+        Message: Send + 'static,
+        AppTheme: 'static,
+    {
+        self.list_item_group_slot(ArkUINodeAttributeType::ListItemGroupSetFooter, footer)
+    }
+
+    fn list_item_group_slot(
+        mut self,
+        attr: ArkUINodeAttributeType,
+        slot: impl Into<Element<Message, AppTheme>>,
+    ) -> Self
+    where
+        Message: Send + 'static,
+        AppTheme: 'static,
+    {
+        if self.kind != NodeKind::ListItemGroup {
+            return self;
+        }
+
+        let slot = Rc::new(RefCell::new(Some(slot.into())));
+        self.mount_effects.push(Box::new(move |node| {
+            let Some(slot) = slot.borrow_mut().take() else {
+                return Ok(None);
+            };
+            let (mut slot_node, mut mounted) = mount_detached_element(slot)?;
+            set_node_object_attribute(node, attr, &slot_node)?;
+            realize_attached_mount(&mut slot_node, &mut mounted)?;
+            Ok(Some(Box::new(move || {
+                mounted.cleanup_recursive();
+                let _ = slot_node.dispose();
+            }) as Cleanup))
+        }));
+        self
     }
 
     pub fn on_scroll_offset(self, callback: impl Fn(ScrollOffset) + 'static) -> Self {
@@ -2363,6 +2672,122 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
         )
     }
 
+    pub fn on_grid_scroll_index(
+        self,
+        handler: impl Fn(GridScrollIndexEvent) -> Message + 'static,
+    ) -> Self
+    where
+        Message: Send + 'static,
+    {
+        if self.kind != NodeKind::Grid {
+            return self;
+        }
+
+        self.on_event(NodeEventType::GridOnScrollIndex, move |event| {
+            arkit_runtime::dispatch(handler(GridScrollIndexEvent {
+                first_index: event.i32_value(0).unwrap_or_default(),
+                last_index: event.i32_value(1).unwrap_or_default(),
+            }));
+        })
+    }
+
+    pub fn on_water_flow_scroll_index(
+        self,
+        handler: impl Fn(WaterFlowScrollIndexEvent) -> Message + 'static,
+    ) -> Self
+    where
+        Message: Send + 'static,
+    {
+        if self.kind != NodeKind::WaterFlow {
+            return self;
+        }
+
+        self.on_event(NodeEventType::WaterFlowOnScrollIndex, move |event| {
+            arkit_runtime::dispatch(handler(WaterFlowScrollIndexEvent {
+                start_index: event.i32_value(0).unwrap_or_default(),
+                end_index: event.i32_value(1).unwrap_or_default(),
+            }));
+        })
+    }
+
+    pub fn on_visible_range_change(
+        self,
+        handler: impl Fn(VirtualVisibleRange) -> Message + 'static,
+    ) -> Self
+    where
+        Message: Send + 'static,
+    {
+        match self.kind {
+            NodeKind::List => self.on_list_scroll_index(move |event| {
+                handler(VirtualVisibleRange {
+                    first_index: event.first_index,
+                    last_index: event.last_index,
+                })
+            }),
+            NodeKind::Grid => self.on_grid_scroll_index(move |event| {
+                handler(VirtualVisibleRange {
+                    first_index: event.first_index,
+                    last_index: event.last_index,
+                })
+            }),
+            NodeKind::WaterFlow => self.on_water_flow_scroll_index(move |event| {
+                handler(VirtualVisibleRange {
+                    first_index: event.start_index,
+                    last_index: event.end_index,
+                })
+            }),
+            _ => self,
+        }
+    }
+
+    pub fn on_load_more(
+        self,
+        total_count: u32,
+        threshold: u32,
+        loading: bool,
+        message: Message,
+    ) -> Self
+    where
+        Message: Clone + Send + 'static,
+    {
+        if loading {
+            return self;
+        }
+
+        let trigger_index = total_count.saturating_sub(threshold.max(1)) as i32;
+
+        match self.kind {
+            NodeKind::List => {
+                let message = message.clone();
+                self.on_event(NodeEventType::ListOnScrollIndex, move |event| {
+                    let last_index = event.i32_value(1).unwrap_or_default();
+                    if total_count > 0 && last_index >= trigger_index {
+                        arkit_runtime::dispatch(message.clone());
+                    }
+                })
+            }
+            NodeKind::Grid => {
+                let message = message.clone();
+                self.on_event(NodeEventType::GridOnScrollIndex, move |event| {
+                    let last_index = event.i32_value(1).unwrap_or_default();
+                    if total_count > 0 && last_index >= trigger_index {
+                        arkit_runtime::dispatch(message.clone());
+                    }
+                })
+            }
+            NodeKind::WaterFlow => {
+                let message = message.clone();
+                self.on_event(NodeEventType::WaterFlowOnScrollIndex, move |event| {
+                    let last_index = event.i32_value(1).unwrap_or_default();
+                    if total_count > 0 && last_index >= trigger_index {
+                        arkit_runtime::dispatch(message.clone());
+                    }
+                })
+            }
+            _ => self,
+        }
+    }
+
     pub fn on_change(self, handler: impl Fn(f32) -> Message + 'static) -> Self
     where
         Message: Send + 'static,
@@ -2549,6 +2974,181 @@ pub fn list_item<Message: 'static, AppTheme: 'static>(
     child: impl Into<Element<Message, AppTheme>>,
 ) -> Element<Message, AppTheme> {
     list_item_component().child(child.into()).into()
+}
+
+pub fn list_item_group_component<Message, AppTheme>() -> Node<Message, AppTheme> {
+    Node::new(NodeKind::ListItemGroup)
+}
+
+pub fn grid_component<Message, AppTheme>() -> Node<Message, AppTheme> {
+    Node::new(NodeKind::Grid)
+}
+
+pub fn grid<Message: 'static, AppTheme: 'static>(
+    children: Vec<Element<Message, AppTheme>>,
+) -> Element<Message, AppTheme> {
+    grid_component()
+        .percent_width(1.0)
+        .percent_height(1.0)
+        .children(children)
+        .into()
+}
+
+pub fn grid_item_component<Message, AppTheme>() -> Node<Message, AppTheme> {
+    Node::new(NodeKind::GridItem)
+}
+
+pub fn grid_item<Message: 'static, AppTheme: 'static>(
+    child: impl Into<Element<Message, AppTheme>>,
+) -> Element<Message, AppTheme> {
+    grid_item_component().child(child.into()).into()
+}
+
+pub fn water_flow_component<Message, AppTheme>() -> Node<Message, AppTheme> {
+    Node::new(NodeKind::WaterFlow)
+}
+
+pub fn flow_item_component<Message, AppTheme>() -> Node<Message, AppTheme> {
+    Node::new(NodeKind::FlowItem)
+}
+
+pub fn flow_item<Message: 'static, AppTheme: 'static>(
+    child: impl Into<Element<Message, AppTheme>>,
+) -> Element<Message, AppTheme> {
+    flow_item_component().child(child.into()).into()
+}
+
+pub fn virtual_list_component<Message, AppTheme, F>(
+    total_count: u32,
+    render_item: F,
+) -> Node<Message, AppTheme>
+where
+    Message: Send + 'static,
+    AppTheme: 'static,
+    F: Fn(u32) -> Element<Message, AppTheme> + 'static,
+{
+    list_component()
+        .percent_width(1.0)
+        .percent_height(1.0)
+        .virtual_adapter(
+            VirtualContainerKind::List,
+            total_count,
+            Rc::new(render_item),
+        )
+}
+
+pub fn virtual_list<Message, AppTheme, F>(
+    total_count: u32,
+    render_item: F,
+) -> Element<Message, AppTheme>
+where
+    Message: Send + 'static,
+    AppTheme: 'static,
+    F: Fn(u32) -> Element<Message, AppTheme> + 'static,
+{
+    virtual_list_component(total_count, render_item).into()
+}
+
+pub fn virtual_grid_component<Message, AppTheme, F>(
+    total_count: u32,
+    render_item: F,
+) -> Node<Message, AppTheme>
+where
+    Message: Send + 'static,
+    AppTheme: 'static,
+    F: Fn(u32) -> Element<Message, AppTheme> + 'static,
+{
+    grid_component()
+        .percent_width(1.0)
+        .percent_height(1.0)
+        .virtual_adapter(
+            VirtualContainerKind::Grid,
+            total_count,
+            Rc::new(render_item),
+        )
+}
+
+pub fn virtual_grid<Message, AppTheme, F>(
+    total_count: u32,
+    render_item: F,
+) -> Element<Message, AppTheme>
+where
+    Message: Send + 'static,
+    AppTheme: 'static,
+    F: Fn(u32) -> Element<Message, AppTheme> + 'static,
+{
+    virtual_grid_component(total_count, render_item).into()
+}
+
+pub fn virtual_water_flow_component<Message, AppTheme, F>(
+    total_count: u32,
+    render_item: F,
+) -> Node<Message, AppTheme>
+where
+    Message: Send + 'static,
+    AppTheme: 'static,
+    F: Fn(u32) -> Element<Message, AppTheme> + 'static,
+{
+    water_flow_component()
+        .percent_width(1.0)
+        .percent_height(1.0)
+        .virtual_adapter(
+            VirtualContainerKind::WaterFlow,
+            total_count,
+            Rc::new(render_item),
+        )
+}
+
+pub fn virtual_water_flow<Message, AppTheme, F>(
+    total_count: u32,
+    render_item: F,
+) -> Element<Message, AppTheme>
+where
+    Message: Send + 'static,
+    AppTheme: 'static,
+    F: Fn(u32) -> Element<Message, AppTheme> + 'static,
+{
+    virtual_water_flow_component(total_count, render_item).into()
+}
+
+pub fn grouped_virtual_list<Message, AppTheme, Header, Item>(
+    groups: Vec<VirtualListGroup>,
+    render_header: Header,
+    render_item: Item,
+) -> Element<Message, AppTheme>
+where
+    Message: Send + 'static,
+    AppTheme: 'static,
+    Header: Fn(u32) -> Element<Message, AppTheme> + 'static,
+    Item: Fn(u32, u32) -> Element<Message, AppTheme> + 'static,
+{
+    let render_header = Rc::new(render_header);
+    let render_item = Rc::new(render_item);
+    let children = groups
+        .into_iter()
+        .enumerate()
+        .map(|(group_index, group)| {
+            let group_index = group_index as u32;
+            let header = render_header(group_index);
+            let render_item = render_item.clone();
+            list_item_group_component()
+                .key(group.key)
+                .list_item_group_header(header)
+                .virtual_adapter(
+                    VirtualContainerKind::ListItemGroup,
+                    group.item_count,
+                    Rc::new(move |item_index| render_item(group_index, item_index)),
+                )
+                .into()
+        })
+        .collect();
+
+    list_component()
+        .percent_width(1.0)
+        .percent_height(1.0)
+        .list_sticky(ListStickyStyle::Header)
+        .children(children)
+        .into()
 }
 
 pub fn column_component<Message, AppTheme>() -> Node<Message, AppTheme> {
@@ -3717,9 +4317,13 @@ fn create_node(kind: NodeKind) -> ArkUIResult<ArkUINode> {
         NodeKind::Checkbox => Checkbox::new()?.into(),
         NodeKind::Column => Column::new()?.into(),
         NodeKind::DatePicker => DatePicker::new()?.into(),
+        NodeKind::FlowItem => FlowItem::new()?.into(),
+        NodeKind::Grid => Grid::new()?.into(),
+        NodeKind::GridItem => GridItem::new()?.into(),
         NodeKind::Image => Image::new()?.into(),
         NodeKind::List => List::new()?.into(),
         NodeKind::ListItem => ListItem::new()?.into(),
+        NodeKind::ListItemGroup => ListItemGroup::new()?.into(),
         NodeKind::Progress => Progress::new()?.into(),
         NodeKind::Radio => Radio::new()?.into(),
         NodeKind::Refresh => Refresh::new()?.into(),
@@ -3732,6 +4336,7 @@ fn create_node(kind: NodeKind) -> ArkUIResult<ArkUINode> {
         NodeKind::TextArea => TextArea::new()?.into(),
         NodeKind::TextInput => TextInput::new()?.into(),
         NodeKind::Toggle => Toggle::new()?.into(),
+        NodeKind::WaterFlow => WaterFlow::new()?.into(),
         #[cfg(feature = "webview")]
         NodeKind::WebViewHost => Stack::new()?.into(),
     })
@@ -3744,9 +4349,13 @@ fn node_type_id(kind: NodeKind) -> TypeId {
         NodeKind::Checkbox => TypeId::of::<Checkbox>(),
         NodeKind::Column => TypeId::of::<Column>(),
         NodeKind::DatePicker => TypeId::of::<DatePicker>(),
+        NodeKind::FlowItem => TypeId::of::<FlowItem>(),
+        NodeKind::Grid => TypeId::of::<Grid>(),
+        NodeKind::GridItem => TypeId::of::<GridItem>(),
         NodeKind::Image => TypeId::of::<Image>(),
         NodeKind::List => TypeId::of::<List>(),
         NodeKind::ListItem => TypeId::of::<ListItem>(),
+        NodeKind::ListItemGroup => TypeId::of::<ListItemGroup>(),
         NodeKind::Progress => TypeId::of::<Progress>(),
         NodeKind::Radio => TypeId::of::<Radio>(),
         NodeKind::Refresh => TypeId::of::<Refresh>(),
@@ -3759,6 +4368,7 @@ fn node_type_id(kind: NodeKind) -> TypeId {
         NodeKind::TextArea => TypeId::of::<TextArea>(),
         NodeKind::TextInput => TypeId::of::<TextInput>(),
         NodeKind::Toggle => TypeId::of::<Toggle>(),
+        NodeKind::WaterFlow => TypeId::of::<WaterFlow>(),
         #[cfg(feature = "webview")]
         NodeKind::WebViewHost => TypeId::of::<WebViewHostNodeTag>(),
     }
@@ -3769,9 +4379,13 @@ struct CalendarPickerNodeTag;
 struct CheckboxNodeTag;
 struct ColumnNodeTag;
 struct DatePickerNodeTag;
+struct FlowItemNodeTag;
+struct GridNodeTag;
+struct GridItemNodeTag;
 struct ImageNodeTag;
 struct ListNodeTag;
 struct ListItemNodeTag;
+struct ListItemGroupNodeTag;
 struct ProgressNodeTag;
 struct RadioNodeTag;
 struct RefreshNodeTag;
@@ -3784,6 +4398,7 @@ struct TextNodeTag;
 struct TextAreaNodeTag;
 struct TextInputNodeTag;
 struct ToggleNodeTag;
+struct WaterFlowNodeTag;
 #[cfg(feature = "webview")]
 struct WebViewHostNodeTag;
 
@@ -3794,9 +4409,13 @@ fn node_widget_tag(kind: NodeKind) -> advanced::widget::Tag {
         NodeKind::Checkbox => advanced::widget::Tag::of::<CheckboxNodeTag>(),
         NodeKind::Column => advanced::widget::Tag::of::<ColumnNodeTag>(),
         NodeKind::DatePicker => advanced::widget::Tag::of::<DatePickerNodeTag>(),
+        NodeKind::FlowItem => advanced::widget::Tag::of::<FlowItemNodeTag>(),
+        NodeKind::Grid => advanced::widget::Tag::of::<GridNodeTag>(),
+        NodeKind::GridItem => advanced::widget::Tag::of::<GridItemNodeTag>(),
         NodeKind::Image => advanced::widget::Tag::of::<ImageNodeTag>(),
         NodeKind::List => advanced::widget::Tag::of::<ListNodeTag>(),
         NodeKind::ListItem => advanced::widget::Tag::of::<ListItemNodeTag>(),
+        NodeKind::ListItemGroup => advanced::widget::Tag::of::<ListItemGroupNodeTag>(),
         NodeKind::Progress => advanced::widget::Tag::of::<ProgressNodeTag>(),
         NodeKind::Radio => advanced::widget::Tag::of::<RadioNodeTag>(),
         NodeKind::Refresh => advanced::widget::Tag::of::<RefreshNodeTag>(),
@@ -3809,6 +4428,7 @@ fn node_widget_tag(kind: NodeKind) -> advanced::widget::Tag {
         NodeKind::TextArea => advanced::widget::Tag::of::<TextAreaNodeTag>(),
         NodeKind::TextInput => advanced::widget::Tag::of::<TextInputNodeTag>(),
         NodeKind::Toggle => advanced::widget::Tag::of::<ToggleNodeTag>(),
+        NodeKind::WaterFlow => advanced::widget::Tag::of::<WaterFlowNodeTag>(),
         #[cfg(feature = "webview")]
         NodeKind::WebViewHost => advanced::widget::Tag::of::<WebViewHostNodeTag>(),
     }
@@ -4010,6 +4630,7 @@ where
         patch_effects,
         exit_effect,
         mut state_bound,
+        virtual_adapter,
         #[cfg(feature = "webview")]
             webview: _,
         children,
@@ -4049,6 +4670,7 @@ where
             patch_effects,
             exit_effect,
             state_bound,
+            virtual_adapter,
             #[cfg(feature = "webview")]
             webview: None,
             children: compiled_children,
@@ -4274,6 +4896,7 @@ struct NodeSignature {
     attach_effect_count: usize,
     patch_effect_count: usize,
     has_long_press: bool,
+    virtual_adapter_kind: Option<VirtualContainerKind>,
 }
 
 fn node_signature<Message, AppTheme>(node: &Node<Message, AppTheme>) -> NodeSignature {
@@ -4283,6 +4906,7 @@ fn node_signature<Message, AppTheme>(node: &Node<Message, AppTheme>) -> NodeSign
         attach_effect_count: node.attach_effects.len(),
         patch_effect_count: node.patch_effects.len(),
         has_long_press: node.long_press_handler.is_some(),
+        virtual_adapter_kind: node.virtual_adapter.as_ref().map(|spec| spec.kind),
     }
 }
 
@@ -4293,6 +4917,7 @@ fn mounted_signature(mounted: &MountedRenderNode) -> NodeSignature {
         attach_effect_count: mounted.attach_effect_count,
         patch_effect_count: mounted.patch_effect_count,
         has_long_press: mounted.has_long_press,
+        virtual_adapter_kind: mounted.virtual_adapter_kind,
     }
 }
 
@@ -4515,6 +5140,253 @@ fn realize_attached_node(node: &mut ArkUINode, mounted: &mut MountedRenderNode) 
     Ok(())
 }
 
+fn set_node_object_attribute(
+    node: &mut ArkUINode,
+    attr: ArkUINodeAttributeType,
+    value: &ArkUINode,
+) -> ArkUIResult<()> {
+    RuntimeNode(node).set_attribute(
+        attr,
+        ArkUINodeAttributeItem::Object(value.raw_handle().cast::<c_void>()),
+    )
+}
+
+fn mount_detached_element<Message, AppTheme>(
+    element: Element<Message, AppTheme>,
+) -> ArkUIResult<(ArkUINode, MountedNode)>
+where
+    Message: Send + 'static,
+    AppTheme: 'static,
+{
+    let mut tree = arkit_core::advanced::tree_of(&element);
+    let mut state_cache = StateCache::default();
+    let compiled = compile_element(
+        element,
+        &mut tree,
+        &mut state_cache,
+        &Renderer::default(),
+        true,
+    );
+    let root = compose_compiled_overlays(compiled);
+    let (node, render) = mount_node(root)?;
+    Ok((node, MountedNode::new(tree, render)))
+}
+
+fn wrap_virtual_item<Message, AppTheme>(
+    kind: VirtualContainerKind,
+    index: u32,
+    item: Element<Message, AppTheme>,
+) -> Element<Message, AppTheme>
+where
+    Message: 'static,
+    AppTheme: 'static,
+{
+    match kind {
+        VirtualContainerKind::List | VirtualContainerKind::ListItemGroup => list_item_component()
+            .key(format!("virtual-list-item-{index}"))
+            .child(item)
+            .into(),
+        VirtualContainerKind::Grid => grid_item_component()
+            .key(format!("virtual-grid-item-{index}"))
+            .child(item)
+            .into(),
+        VirtualContainerKind::WaterFlow => flow_item_component()
+            .key(format!("virtual-flow-item-{index}"))
+            .child(item)
+            .into(),
+    }
+}
+
+fn mount_virtual_item<Message, AppTheme>(
+    kind: VirtualContainerKind,
+    index: u32,
+    render_item: &Rc<dyn Fn(u32) -> Element<Message, AppTheme>>,
+) -> ArkUIResult<VirtualMountedItem>
+where
+    Message: Send + 'static,
+    AppTheme: 'static,
+{
+    let item = wrap_virtual_item(kind, index, render_item(index));
+    let (node, mounted) = mount_detached_element(item)?;
+    Ok(VirtualMountedItem { node, mounted })
+}
+
+fn cleanup_virtual_item(mut item: VirtualMountedItem) {
+    item.mounted.cleanup_recursive();
+    let _ = item.node.dispose();
+}
+
+fn cleanup_virtual_adapter_state<Message, AppTheme>(
+    state: &Rc<RefCell<VirtualAdapterState<Message, AppTheme>>>,
+) {
+    let mut state = state.borrow_mut();
+    if let Some(adapter) = state.adapter.take() {
+        adapter.dispose();
+    }
+    let items = std::mem::take(&mut state.mounted_items);
+    for (_, item) in items {
+        cleanup_virtual_item(item);
+    }
+}
+
+fn adapter_attr(kind: VirtualContainerKind) -> ArkUINodeAttributeType {
+    match kind {
+        VirtualContainerKind::List => ArkUINodeAttributeType::ListNodeAdapter,
+        VirtualContainerKind::Grid => ArkUINodeAttributeType::GridNodeAdapter,
+        VirtualContainerKind::WaterFlow => ArkUINodeAttributeType::WaterFlowNodeAdapter,
+        VirtualContainerKind::ListItemGroup => ArkUINodeAttributeType::ListItemGroupNodeAdapter,
+    }
+}
+
+fn set_adapter_attribute(
+    node: &mut ArkUINode,
+    kind: VirtualContainerKind,
+    adapter: &NodeAdapter,
+) -> ArkUIResult<()> {
+    RuntimeNode(node).set_attribute(adapter_attr(kind), adapter.into())
+}
+
+fn handle_node_adapter_event<Message, AppTheme>(
+    state: &Rc<RefCell<VirtualAdapterState<Message, AppTheme>>>,
+    event: &mut NodeAdapterEvent,
+) where
+    Message: Send + 'static,
+    AppTheme: 'static,
+{
+    match event.event_type() {
+        NodeAdapterEventType::OnGetNodeId => {
+            let index = event.item_index();
+            let node_id = state.borrow().node_id(index);
+            if let Err(error) = event.set_node_id(node_id) {
+                ohos_hilog_binding::error(format!(
+                    "renderer error: failed to set virtual item node id: {error}"
+                ));
+            }
+        }
+        NodeAdapterEventType::OnAddNodeToAdapter => {
+            let index = event.item_index();
+            let (kind, render_item) = {
+                let state = state.borrow();
+                (state.kind, state.render_item.clone())
+            };
+            match mount_virtual_item(kind, index, &render_item) {
+                Ok(mut item) => {
+                    if let Err(error) = event.set_item(&item.node) {
+                        ohos_hilog_binding::error(format!(
+                            "renderer error: failed to set virtual adapter item: {error}"
+                        ));
+                        cleanup_virtual_item(item);
+                        return;
+                    }
+                    if let Err(error) = realize_attached_mount(&mut item.node, &mut item.mounted) {
+                        ohos_hilog_binding::error(format!(
+                            "renderer error: failed to realize virtual adapter item: {error}"
+                        ));
+                    }
+                    if let Some(previous) = state.borrow_mut().mounted_items.insert(index, item) {
+                        cleanup_virtual_item(previous);
+                    }
+                }
+                Err(error) => {
+                    ohos_hilog_binding::error(format!(
+                        "renderer error: failed to mount virtual adapter item: {error}"
+                    ));
+                }
+            }
+        }
+        NodeAdapterEventType::OnRemoveNodeFromAdapter => {
+            let index = event.item_index();
+            if let Some(item) = state.borrow_mut().mounted_items.remove(&index) {
+                cleanup_virtual_item(item);
+            }
+        }
+        NodeAdapterEventType::WillAttachToNode | NodeAdapterEventType::WillDetachFromNode => {}
+    }
+}
+
+fn mount_virtual_adapter<Message, AppTheme>(
+    node: &mut ArkUINode,
+    spec: Option<VirtualAdapterSpec<Message, AppTheme>>,
+) -> ArkUIResult<Option<Box<dyn MountedVirtualAdapter>>>
+where
+    Message: Send + 'static,
+    AppTheme: 'static,
+{
+    let Some(spec) = spec else {
+        return Ok(None);
+    };
+    let state = Rc::new(RefCell::new(VirtualAdapterState::new(
+        spec.kind,
+        spec.total_count,
+        spec.render_item,
+    )));
+    let mut adapter = NodeAdapter::new()?;
+    adapter.set_total_node_count(spec.total_count)?;
+    let event_state = state.clone();
+    adapter.register_event_receiver(move |event| {
+        handle_node_adapter_event(&event_state, event);
+    })?;
+    set_adapter_attribute(node, spec.kind, &adapter)?;
+    state.borrow_mut().adapter = Some(adapter);
+    Ok(Some(Box::new(MountedVirtualAdapterState { state })))
+}
+
+fn patch_virtual_adapter<Message, AppTheme>(
+    node: &mut ArkUINode,
+    mounted: &mut MountedRenderNode,
+    spec: Option<VirtualAdapterSpec<Message, AppTheme>>,
+) -> ArkUIResult<()>
+where
+    Message: Send + 'static,
+    AppTheme: 'static,
+{
+    match (mounted.virtual_adapter.as_mut(), spec) {
+        (Some(adapter), Some(spec)) if mounted.virtual_adapter_kind == Some(spec.kind) => {
+            let Some(adapter) = adapter
+                .as_any_mut()
+                .downcast_mut::<MountedVirtualAdapterState<Message, AppTheme>>()
+            else {
+                let kind = spec.kind;
+                if let Some(adapter) = mounted.virtual_adapter.take() {
+                    adapter.cleanup();
+                }
+                mounted.virtual_adapter = mount_virtual_adapter(node, Some(spec))?;
+                mounted.virtual_adapter_kind = Some(kind);
+                return Ok(());
+            };
+            let mut state = adapter.state.borrow_mut();
+            let previous_total = state.total_count;
+            state.total_count = spec.total_count;
+            state.render_item = spec.render_item;
+            if let Some(native_adapter) = state.adapter.as_mut() {
+                if previous_total != spec.total_count {
+                    native_adapter.set_total_node_count(spec.total_count)?;
+                }
+                native_adapter.reload_all_items()?;
+            }
+        }
+        (Some(_), Some(spec)) => {
+            if let Some(adapter) = mounted.virtual_adapter.take() {
+                adapter.cleanup();
+            }
+            mounted.virtual_adapter_kind = Some(spec.kind);
+            mounted.virtual_adapter = mount_virtual_adapter(node, Some(spec))?;
+        }
+        (Some(_), None) => {
+            if let Some(adapter) = mounted.virtual_adapter.take() {
+                adapter.cleanup();
+            }
+            mounted.virtual_adapter_kind = None;
+        }
+        (None, Some(spec)) => {
+            mounted.virtual_adapter_kind = Some(spec.kind);
+            mounted.virtual_adapter = mount_virtual_adapter(node, Some(spec))?;
+        }
+        (None, None) => {}
+    }
+    Ok(())
+}
+
 fn mount_node<Message, AppTheme>(
     element: Element<Message, AppTheme>,
 ) -> ArkUIResult<(ArkUINode, MountedRenderNode)>
@@ -4535,6 +5407,7 @@ where
         patch_effects,
         exit_effect,
         state_bound: _,
+        virtual_adapter,
         #[cfg(feature = "webview")]
             webview: _,
         children,
@@ -4572,6 +5445,8 @@ where
         }
         None => (None, None),
     };
+    let virtual_adapter_kind = virtual_adapter.as_ref().map(|spec| spec.kind);
+    let virtual_adapter = mount_virtual_adapter(&mut node, virtual_adapter)?;
 
     let mut mounted_children = Vec::with_capacity(children.len());
     for child in children {
@@ -4602,6 +5477,8 @@ where
             pending_patch_attrs,
             attach_effects,
             patch_effects,
+            virtual_adapter_kind,
+            virtual_adapter,
             mounted_children,
         ),
     ))
@@ -4629,6 +5506,7 @@ where
         patch_effects,
         exit_effect,
         state_bound: _,
+        virtual_adapter,
         #[cfg(feature = "webview")]
             webview: _,
         children,
@@ -4672,6 +5550,8 @@ where
         (None, None) => {}
     }
     mounted.has_long_press = long_press_handler.is_some();
+
+    patch_virtual_adapter(node, mounted, virtual_adapter)?;
 
     reconcile_children(node, mounted, children)
 }
@@ -4924,6 +5804,80 @@ mod tests {
         let node = list_item_component::<(), arkit_core::Theme>();
 
         assert_eq!(node.kind, NodeKind::ListItem);
+    }
+
+    #[test]
+    fn grid_and_water_flow_components_use_native_nodes() {
+        assert_eq!(
+            grid_component::<(), arkit_core::Theme>().kind,
+            NodeKind::Grid
+        );
+        assert_eq!(
+            grid_item_component::<(), arkit_core::Theme>().kind,
+            NodeKind::GridItem
+        );
+        assert_eq!(
+            water_flow_component::<(), arkit_core::Theme>().kind,
+            NodeKind::WaterFlow
+        );
+        assert_eq!(
+            flow_item_component::<(), arkit_core::Theme>().kind,
+            NodeKind::FlowItem
+        );
+        assert_eq!(
+            list_item_group_component::<(), arkit_core::Theme>().kind,
+            NodeKind::ListItemGroup
+        );
+    }
+
+    #[test]
+    fn virtual_components_attach_native_adapter_specs() {
+        let list = virtual_list_component::<(), arkit_core::Theme, _>(10, |_| text("row").into());
+        let grid = virtual_grid_component::<(), arkit_core::Theme, _>(20, |_| text("cell").into());
+        let flow =
+            virtual_water_flow_component::<(), arkit_core::Theme, _>(30, |_| text("flow").into());
+
+        assert_eq!(list.kind, NodeKind::List);
+        assert_eq!(
+            list.virtual_adapter.as_ref().map(|spec| spec.kind),
+            Some(VirtualContainerKind::List)
+        );
+        assert_eq!(grid.kind, NodeKind::Grid);
+        assert_eq!(
+            grid.virtual_adapter.as_ref().map(|spec| spec.kind),
+            Some(VirtualContainerKind::Grid)
+        );
+        assert_eq!(flow.kind, NodeKind::WaterFlow);
+        assert_eq!(
+            flow.virtual_adapter.as_ref().map(|spec| spec.kind),
+            Some(VirtualContainerKind::WaterFlow)
+        );
+    }
+
+    #[test]
+    fn grouped_virtual_list_uses_sticky_native_groups() {
+        let groups = vec![VirtualListGroup::new("a", 3), VirtualListGroup::new("b", 4)];
+        let node = into_node(grouped_virtual_list::<(), arkit_core::Theme, _, _>(
+            groups,
+            |_| text("header").into(),
+            |_, _| text("item").into(),
+        ));
+
+        assert_eq!(node.kind, NodeKind::List);
+        assert_eq!(
+            node.attr_f32(ArkUINodeAttributeType::ListSticky),
+            Some(i32::from(ListStickyStyle::Header) as f32)
+        );
+        let children = node.children;
+        assert_eq!(children.len(), 2);
+        for child in children {
+            let child = into_node(child);
+            assert_eq!(child.kind, NodeKind::ListItemGroup);
+            assert_eq!(
+                child.virtual_adapter.as_ref().map(|spec| spec.kind),
+                Some(VirtualContainerKind::ListItemGroup)
+            );
+        }
     }
 
     #[test]
