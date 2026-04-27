@@ -2,6 +2,7 @@ use super::super::layout::fixed_width;
 use super::shared::{top_center_canvas, DemoContext};
 use crate::prelude::*;
 use crate::Message;
+use arkit::router::RouterMessage;
 use arkit_shadcn as shadcn;
 
 pub(crate) struct ContextMenuExample {
@@ -47,7 +48,7 @@ impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for 
                             shadcn::MenuEntry::action("Back")
                                 .inset()
                                 .shortcut("CMD+[")
-                                .on_select_message(Message::Back),
+                                .on_select_message(Message::Router(RouterMessage::back())),
                             shadcn::MenuEntry::action("Forward")
                                 .inset()
                                 .shortcut("CMD+]")

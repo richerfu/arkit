@@ -4,7 +4,7 @@ pub mod router;
 pub use arkit_core::advanced;
 pub use arkit_core::theme;
 pub use arkit_core::{window, Horizontal, Length, Padding, Settings, Size, Theme, Vertical};
-pub use arkit_derive::{entry, StructuredRoute};
+pub use arkit_derive::entry;
 pub use arkit_runtime::{Application, Program, Subscription, SubscriptionHandle, Task};
 pub use arkit_widget::ListVisibleContentChangeEvent;
 pub use arkit_widget::Renderer;
@@ -93,6 +93,7 @@ pub mod widget {
 }
 
 pub mod prelude {
+    pub use crate::router::RouterNavigationExt;
     pub use crate::widget::*;
     pub use crate::ListVisibleContentChangeEvent;
     pub use crate::{
@@ -104,9 +105,9 @@ pub mod prelude {
         ModalPresentation, NativeOverlayPlacement, NodeCustomEvent, NodeCustomEventType,
         NodeEventType, ObjectFit, OverlayDismissMode, OverlayStrategy, Padding, Program,
         ProgressLinearStyle, ProgressType, Renderer, ScrollOffset, ScrollViewport, Settings,
-        ShadowStyle, Size, StructuredRoute, Subscription, SubscriptionHandle, Task, TextAlignment,
-        TextLayoutLine, TextLayoutSnapshot, Theme, UiState, Vertical, VirtualListGroup,
-        VirtualVisibleRange, Visibility, WaterFlowScrollIndexEvent,
+        ShadowStyle, Size, Subscription, SubscriptionHandle, Task, TextAlignment, TextLayoutLine,
+        TextLayoutSnapshot, Theme, UiState, Vertical, VirtualListGroup, VirtualVisibleRange,
+        Visibility, WaterFlowScrollIndexEvent,
     };
     #[cfg(feature = "webview")]
     pub use crate::{

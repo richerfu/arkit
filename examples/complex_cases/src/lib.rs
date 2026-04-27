@@ -48,10 +48,16 @@ impl AppState {
 fn update(state: &mut AppState, message: Message) -> Task<Message> {
     match message {
         Message::Select(case) => {
+            if state.active == case {
+                return Task::none();
+            }
             state.active = case;
             state.visible_range = VirtualVisibleRange::default();
         }
         Message::VisibleRange(range) => {
+            if state.visible_range == range {
+                return Task::none();
+            }
             state.visible_range = range;
         }
         Message::Refresh => {

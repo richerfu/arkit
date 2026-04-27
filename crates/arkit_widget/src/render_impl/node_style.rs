@@ -190,7 +190,15 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
         self.builder_attr(ArkUINodeAttributeType::FocusOnTouch, value)
     }
 
-    pub fn border_radius(self, value: impl EdgeAttributeValue) -> Self {
+    pub fn border_radius(mut self, value: impl EdgeAttributeValue) -> Self {
+        if self.kind == NodeKind::Button
+            && self
+                .attr_value(ArkUINodeAttributeType::ButtonType)
+                .is_none()
+        {
+            self = self.button_type(ButtonType::Normal);
+        }
+
         self.builder_attr(ArkUINodeAttributeType::BorderRadius, value.edge_values())
     }
 

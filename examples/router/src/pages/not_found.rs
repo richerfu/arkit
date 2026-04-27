@@ -1,15 +1,15 @@
 use crate::components::PageShell;
 use crate::Message;
 use arkit::prelude::*;
-use arkit::router::{FallbackRouteContext, FallbackRoutePage};
+use arkit::router::RouteContext;
 use arkit::Element;
 
 pub(crate) struct NotFoundPage {
     path: String,
 }
 
-impl FallbackRoutePage<Message> for NotFoundPage {
-    fn from_route(context: FallbackRouteContext) -> Self {
+impl NotFoundPage {
+    pub(crate) fn new(context: RouteContext) -> Self {
         Self {
             path: context.raw().path().to_string(),
         }

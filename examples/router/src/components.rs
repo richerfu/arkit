@@ -49,15 +49,12 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for PageShe
 
 pub(crate) struct NavButton {
     label: &'static str,
-    on_press: std::rc::Rc<dyn Fn()>,
+    message: Message,
 }
 
 impl NavButton {
-    pub(crate) fn new(label: &'static str, on_press: impl Fn() + 'static) -> Self {
-        Self {
-            label,
-            on_press: std::rc::Rc::new(on_press),
-        }
+    pub(crate) fn new(label: &'static str, message: Message) -> Self {
+        Self { label, message }
     }
 }
 
@@ -67,7 +64,6 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for NavButt
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
     ) -> Option<Element<Message>> {
-        let on_press = self.on_press.clone();
         Some(
             button(self.label)
                 .margin([12.0, 8.0, 0.0, 0.0])
@@ -75,7 +71,7 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for NavButt
                 .background_color(0xFF111827)
                 .font_color(0xFFFFFFFF)
                 .border_radius(6.0)
-                .on_click(move || on_press())
+                .on_press(self.message.clone())
                 .into(),
         )
     }

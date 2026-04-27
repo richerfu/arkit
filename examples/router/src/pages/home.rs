@@ -1,19 +1,15 @@
 use crate::components::{NavButton, PageShell};
-use crate::routes::{SettingsRoute, UserNavigationState, UserRoute};
+use crate::routes::UserNavigationState;
 use crate::Message;
 use arkit::prelude::*;
-use arkit::router::{RouteContext, RoutePage};
-use arkit::{router::Router, Element};
+use arkit::router::RouterMessage;
+use arkit::Element;
 
-pub(crate) struct HomePage {
-    router: Router,
-}
+pub(crate) struct HomePage;
 
-impl RoutePage<Message, crate::routes::HomeRoute> for HomePage {
-    fn from_route(context: RouteContext<crate::routes::HomeRoute>) -> Self {
-        Self {
-            router: context.router().clone(),
-        }
+impl HomePage {
+    pub(crate) fn new(_context: arkit::router::RouteContext) -> Self {
+        Self
     }
 }
 
@@ -30,24 +26,20 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for HomePag
                     .font_size(15.0)
                     .font_color(0xFF334155)
                     .into(),
-                Element::new(NavButton::new("Open user 42", {
-                    let router = self.router.clone();
-                    move || {
-                        let _ = router.navigate_with_state(
-                            UserRoute { id: 42 },
-                            UserNavigationState {
-                                source: String::from("home page"),
-                                scroll_offset: 320,
-                            },
-                        );
-                    }
-                })),
-                Element::new(NavButton::new("Settings", {
-                    let router = self.router.clone();
-                    move || {
-                        let _ = router.navigate(SettingsRoute);
-                    }
-                })),
+                Element::new(NavButton::new(
+                    "Open user 42",
+                    Message::Router(RouterMessage::push_with_state(
+                        "/users/42",
+                        UserNavigationState {
+                            source: String::from("home page"),
+                            scroll_offset: 320,
+                        },
+                    )),
+                )),
+                Element::new(NavButton::new(
+                    "Settings",
+                    Message::Router(RouterMessage::push("/settings")),
+                )),
             ],
         )))
     }

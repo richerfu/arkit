@@ -7,6 +7,18 @@ where
     Message: Send + 'static,
     AppTheme: 'static,
 {
+    let (tree, root) = compile_detached_element_root(element);
+    let (node, render) = mount_node(root)?;
+    Ok((node, MountedNode::new(tree, render)))
+}
+
+pub(super) fn compile_detached_element_root<Message, AppTheme>(
+    element: Element<Message, AppTheme>,
+) -> (advanced::widget::Tree, Element<Message, AppTheme>)
+where
+    Message: 'static,
+    AppTheme: 'static,
+{
     let mut tree = arkit_core::advanced::tree_of(&element);
     let mut state_cache = StateCache::default();
     let compiled = compile_element(
@@ -16,9 +28,12 @@ where
         &Renderer::default(),
         true,
     );
-    let root = compose_compiled_overlays(compiled);
-    let (node, render) = mount_node(root)?;
-    Ok((node, MountedNode::new(tree, render)))
+    if !compiled.overlays.is_empty() {
+        ohos_hilog_binding::warn(
+            "renderer warning: detached virtual/list slot overlays are ignored".to_string(),
+        );
+    }
+    (tree, compiled.body)
 }
 
 pub(super) fn mount_node<Message, AppTheme>(

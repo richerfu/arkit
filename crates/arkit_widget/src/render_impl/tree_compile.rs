@@ -64,9 +64,45 @@ pub(super) fn sync_child_trees<Message, AppTheme>(
     tree.replace_children(next_trees);
 }
 
+fn sync_composite_child_tree<'a, Message, AppTheme>(
+    tree: &'a mut advanced::widget::Tree,
+    index: usize,
+    element: &Element<Message, AppTheme>,
+    state_cache: &mut StateCache,
+) -> &'a mut advanced::widget::Tree
+where
+    Message: 'static,
+    AppTheme: 'static,
+{
+    while tree.children().len() <= index {
+        tree.children_mut()
+            .push(arkit_core::advanced::tree_of(element));
+    }
+
+    let child_tree = tree
+        .child_mut(index)
+        .expect("composite child tree was just initialized");
+    sync_element_tree(element, child_tree, state_cache);
+    child_tree
+}
+
+fn prune_composite_children(
+    tree: &mut advanced::widget::Tree,
+    keep: usize,
+    state_cache: &mut StateCache,
+) {
+    if tree.children().len() <= keep {
+        return;
+    }
+
+    for child_tree in tree.children_mut().split_off(keep) {
+        state_cache.store(child_tree);
+    }
+}
+
 pub(super) struct CompiledElement<Message, AppTheme = arkit_core::Theme> {
-    body: Element<Message, AppTheme>,
-    overlays: Vec<Element<Message, AppTheme>>,
+    pub(super) body: Element<Message, AppTheme>,
+    pub(super) overlays: Vec<Element<Message, AppTheme>>,
 }
 
 pub(super) fn bind_node_state(
@@ -292,24 +328,22 @@ where
         .body(tree, renderer)
         .unwrap_or_else(|| panic!("composite widget did not provide a body element"));
     let compiled_body = {
-        let body_tree = tree
-            .child_mut(0)
-            .unwrap_or_else(|| panic!("composite widget body child was not initialized"));
-        sync_element_tree(&body, body_tree, state_cache);
+        let body_tree = sync_composite_child_tree(tree, 0, &body, state_cache);
         compile_element(body, body_tree, state_cache, renderer, bind_state)
     };
 
     let overlay = widget.overlay(tree, renderer);
     let mut overlays = compiled_body.overlays;
     if let Some(overlay) = overlay {
-        let overlay_tree = tree
-            .child_mut(1)
-            .unwrap_or_else(|| panic!("composite widget overlay child was not initialized"));
-        sync_element_tree(&overlay, overlay_tree, state_cache);
-        let compiled_overlay =
-            compile_element(overlay, overlay_tree, state_cache, renderer, bind_state);
+        let compiled_overlay = {
+            let overlay_tree = sync_composite_child_tree(tree, 1, &overlay, state_cache);
+            compile_element(overlay, overlay_tree, state_cache, renderer, bind_state)
+        };
+        prune_composite_children(tree, 2, state_cache);
         overlays.push(compiled_overlay.body);
         overlays.extend(compiled_overlay.overlays);
+    } else {
+        prune_composite_children(tree, 1, state_cache);
     }
 
     CompiledElement {
@@ -325,18 +359,18 @@ where
     Message: 'static,
     AppTheme: 'static,
 {
-    if compiled.overlays.is_empty() {
-        return compiled.body;
-    }
-
-    let mut children = vec![compiled.body];
-
-    children.push(
+    let overlay_hit_test = if compiled.overlays.is_empty() {
+        HitTestBehavior::Transparent
+    } else {
+        HitTestBehavior::Default
+    };
+    let children = vec![
+        compiled.body,
         stack_component::<Message, AppTheme>()
             .percent_width(1.0)
             .percent_height(1.0)
             .attr(ArkUINodeAttributeType::Clip, false)
-            .hit_test_behavior(HitTestBehavior::Default)
+            .hit_test_behavior(overlay_hit_test)
             .attr(
                 ArkUINodeAttributeType::Alignment,
                 i32::from(Alignment::TopStart),
@@ -344,7 +378,7 @@ where
             .attr(ArkUINodeAttributeType::ZIndex, 10_000_i32)
             .children(compiled.overlays)
             .into(),
-    );
+    ];
 
     stack_component::<Message, AppTheme>()
         .percent_width(1.0)

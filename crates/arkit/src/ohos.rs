@@ -1,8 +1,11 @@
 use std::any::Any;
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
+use std::future::Future;
+use std::pin::Pin;
 use std::rc::{Rc, Weak};
 use std::sync::mpsc;
+use std::thread;
 
 use arkit_core::{theme, window};
 use arkit_runtime::{
@@ -174,24 +177,49 @@ struct TaskRunner<Message>
 where
     Message: Send + 'static,
 {
-    runtime: tokio::runtime::Runtime,
+    task_sender: tokio::sync::mpsc::UnboundedSender<BoxedTaskFuture<Message>>,
+    _worker: thread::JoinHandle<()>,
     sender: mpsc::Sender<Message>,
     waker: OpenHarmonyWaker,
 }
+
+type BoxedTaskFuture<Message> = Pin<Box<dyn Future<Output = Message> + Send + 'static>>;
 
 impl<Message> TaskRunner<Message>
 where
     Message: Send + 'static,
 {
     fn new(sender: mpsc::Sender<Message>, waker: OpenHarmonyWaker) -> Result<Self> {
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .thread_name("arkit-task")
-            .enable_all()
-            .build()
+        let (task_sender, mut task_receiver) =
+            tokio::sync::mpsc::unbounded_channel::<BoxedTaskFuture<Message>>();
+        let background_sender = sender.clone();
+        let background_waker = waker.clone();
+        let worker = thread::Builder::new()
+            .name(String::from("arkit-task"))
+            .spawn(move || {
+                let runtime = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("arkit task runtime");
+
+                runtime.block_on(async move {
+                    while let Some(future) = task_receiver.recv().await {
+                        let sender = background_sender.clone();
+                        let waker = background_waker.clone();
+                        tokio::spawn(async move {
+                            let message = future.await;
+                            if sender.send(message).is_ok() {
+                                waker.wake();
+                            }
+                        });
+                    }
+                });
+            })
             .map_err(|error| Error::from_reason(error.to_string()))?;
 
         Ok(Self {
-            runtime,
+            task_sender,
+            _worker: worker,
             sender,
             waker,
         })
@@ -204,14 +232,20 @@ where
             match action {
                 TaskAction::Ready(action) => action(&mut ready),
                 TaskAction::Future(future) => {
-                    let sender = self.sender.clone();
-                    let waker = self.waker.clone();
-                    self.runtime.spawn(async move {
-                        let message = future.await;
-                        if sender.send(message).is_ok() {
-                            waker.wake();
-                        }
-                    });
+                    if let Err(error) = self.task_sender.send(future) {
+                        let sender = self.sender.clone();
+                        let waker = self.waker.clone();
+                        thread::spawn(move || {
+                            let runtime = tokio::runtime::Builder::new_current_thread()
+                                .enable_all()
+                                .build()
+                                .expect("arkit fallback task runtime");
+                            let message = runtime.block_on(error.0);
+                            if sender.send(message).is_ok() {
+                                waker.wake();
+                            }
+                        });
+                    }
                 }
             }
         }

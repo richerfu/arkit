@@ -1,5 +1,35 @@
 use super::*;
 
+struct BodyOnlyWidget;
+
+impl advanced::Widget<(), arkit_core::Theme, Renderer> for BodyOnlyWidget {
+    fn body(
+        &self,
+        _tree: &mut advanced::widget::Tree,
+        _renderer: &Renderer,
+    ) -> Option<Element<()>> {
+        Some(text("body").into())
+    }
+}
+
+#[test]
+fn composite_widget_body_tree_is_initialized_lazily() {
+    let element = Element::new(BodyOnlyWidget);
+    let mut tree = arkit_core::advanced::tree_of(&element);
+    assert!(tree.children().is_empty());
+
+    let mut state_cache = StateCache::default();
+    let _compiled = compile_element(
+        element,
+        &mut tree,
+        &mut state_cache,
+        &Renderer::default(),
+        false,
+    );
+
+    assert_eq!(tree.children().len(), 1);
+}
+
 #[test]
 fn desired_attrs_preserve_last_set_order() {
     let attrs = desired_attrs(
@@ -90,6 +120,30 @@ fn label_button_uses_native_button() {
         node.attr_f32(ArkUINodeAttributeType::BorderRadius),
         Some(8.0)
     );
+    assert_eq!(
+        node.attr_f32(ArkUINodeAttributeType::ButtonType),
+        Some(i32::from(ButtonType::Normal) as f32)
+    );
+}
+
+#[test]
+fn native_button_keeps_default_type_until_custom_radius_is_set() {
+    let node = button::<(), arkit_core::Theme>("OK");
+
+    assert_eq!(node.kind(), NodeKind::Button);
+    assert_eq!(node.attr_f32(ArkUINodeAttributeType::ButtonType), None);
+}
+
+#[test]
+fn explicit_button_type_is_not_overwritten_by_border_radius() {
+    let node = button::<(), arkit_core::Theme>("OK")
+        .button_type(ButtonType::RoundedRectangle)
+        .border_radius(8.0);
+
+    assert_eq!(
+        node.attr_f32(ArkUINodeAttributeType::ButtonType),
+        Some(i32::from(ButtonType::RoundedRectangle) as f32)
+    );
 }
 
 #[test]
@@ -151,6 +205,46 @@ fn virtual_components_attach_native_adapter_specs() {
     assert_eq!(
         flow.virtual_adapter_kind(),
         Some(VirtualContainerKind::WaterFlow)
+    );
+}
+
+#[test]
+fn detached_virtual_items_preserve_native_item_roots() {
+    let cases = [
+        (VirtualContainerKind::List, NodeKind::ListItem),
+        (VirtualContainerKind::Grid, NodeKind::GridItem),
+        (VirtualContainerKind::WaterFlow, NodeKind::FlowItem),
+        (VirtualContainerKind::ListItemGroup, NodeKind::ListItem),
+    ];
+
+    for (container, expected) in cases {
+        let item = wrap_virtual_item(container, 7, text::<(), arkit_core::Theme>("item").into());
+        let (_, root) = compile_detached_element_root(item);
+        let node = into_node(root);
+
+        assert_eq!(node.kind(), expected);
+    }
+}
+
+#[test]
+fn virtual_adapter_count_change_uses_incremental_updates() {
+    assert_eq!(
+        virtual_adapter_count_change(10, 10),
+        VirtualAdapterCountChange::Unchanged
+    );
+    assert_eq!(
+        virtual_adapter_count_change(10, 14),
+        VirtualAdapterCountChange::Insert {
+            start: 10,
+            count: 4
+        }
+    );
+    assert_eq!(
+        virtual_adapter_count_change(14, 10),
+        VirtualAdapterCountChange::Remove {
+            start: 10,
+            count: 4
+        }
     );
 }
 
@@ -287,7 +381,7 @@ fn build_initial_webview_style_only_preserves_explicit_style_fields() {
 
 #[cfg(feature = "webview")]
 #[test]
-fn compose_compiled_overlays_skips_wrapper_without_overlays() {
+fn compose_compiled_overlays_keeps_stable_wrapper_without_overlays() {
     let node = into_node(compose_compiled_overlays(CompiledElement::<
         (),
         arkit_core::Theme,
@@ -296,7 +390,13 @@ fn compose_compiled_overlays_skips_wrapper_without_overlays() {
         overlays: Vec::new(),
     }));
 
-    assert_eq!(node.kind(), NodeKind::Column);
+    assert_eq!(node.kind(), NodeKind::Stack);
+    assert_eq!(node.children.len(), 2);
+    assert_eq!(
+        into_node(node.children.into_iter().nth(1).expect("overlay layer"))
+            .attr_f32(ArkUINodeAttributeType::HitTestBehavior),
+        Some(i32::from(HitTestBehavior::Transparent) as f32)
+    );
 }
 
 #[cfg(feature = "webview")]
@@ -311,6 +411,12 @@ fn compose_compiled_overlays_keeps_stack_wrapper_with_overlays() {
     }));
 
     assert_eq!(node.kind(), NodeKind::Stack);
+    assert_eq!(node.children.len(), 2);
+    assert_eq!(
+        into_node(node.children.into_iter().nth(1).expect("overlay layer"))
+            .attr_f32(ArkUINodeAttributeType::HitTestBehavior),
+        Some(i32::from(HitTestBehavior::Default) as f32)
+    );
 }
 
 #[cfg(feature = "webview")]

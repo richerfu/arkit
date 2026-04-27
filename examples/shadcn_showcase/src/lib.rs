@@ -4,7 +4,10 @@ use arkit::ohos_arkui_binding::common::node::ArkUINode;
 use arkit::ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
 use arkit::ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
 use arkit::ohos_arkui_binding::types::curve::Curve;
-use arkit::router::{Route as RouterRoute, RouteTransitionDirection, Router, StructuredRoute};
+use arkit::router::{
+    Navigation, NavigationEvent, Route as RouterRoute, RouteDefinition, RouteTransitionDirection,
+    Router, RouterMessage, RouterNavigationExt,
+};
 use arkit::{application, Element as ArkElement, Task};
 use arkit_animation::{Motion, MotionExt};
 use arkit_shadcn::theme::{ColorTokens, RadiusTokens, ThemeMode, ThemePreset};
@@ -29,16 +32,6 @@ enum Route {
     Component { slug: String },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, arkit::StructuredRoute)]
-#[route(path = "/", name = "home")]
-struct HomeRoute;
-
-#[derive(Debug, Clone, PartialEq, Eq, arkit::StructuredRoute)]
-#[route(path = "/components/:slug", name = "component")]
-struct ComponentRoute {
-    slug: String,
-}
-
 impl Route {
     fn key(&self) -> String {
         match self {
@@ -48,25 +41,30 @@ impl Route {
     }
 
     fn from_router_route(route: &RouterRoute) -> Option<Self> {
-        if HomeRoute::from_route(route).is_some() {
+        if route.pattern() == "/" {
             return Some(Route::Home);
         }
 
-        ComponentRoute::from_route(route).map(|route| Route::Component { slug: route.slug })
+        if route.pattern() == "/components/:slug" {
+            return route.param("slug").map(|slug| Route::Component {
+                slug: slug.to_string(),
+            });
+        }
+
+        None
     }
 
-    fn push(&self, router: &Router) -> Result<RouterRoute, arkit::router::RouteError> {
+    fn router_message(&self) -> RouterMessage {
         match self {
-            Route::Home => router.push(HomeRoute),
-            Route::Component { slug } => router.push(ComponentRoute { slug: slug.clone() }),
+            Route::Home => RouterMessage::push("/"),
+            Route::Component { slug } => RouterMessage::push(format!("/components/{slug}")),
         }
     }
 }
 
 #[derive(Debug, Clone)]
 enum Message {
-    Navigate(Route),
-    Back,
+    Router(RouterMessage),
     ButtonPreviewPressed(String),
     SetHomeSearch(String),
     SetPage(i32),
@@ -126,9 +124,13 @@ pub(crate) struct ShowcaseState {
 impl Default for ShowcaseState {
     fn default() -> Self {
         let router = Router::new("/");
-        router.register::<HomeRoute>().expect("register home route");
         router
-            .register::<ComponentRoute>()
+            .register_definition(RouteDefinition::new("/").expect("home route"))
+            .expect("register home route");
+        router
+            .register_definition(
+                RouteDefinition::new("/components/:slug").expect("component route"),
+            )
             .expect("register component route");
 
         Self {
@@ -263,46 +265,11 @@ fn custom_theme_colors(mode: ThemeMode) -> ColorTokens {
 
 fn update(state: &mut ShowcaseState, message: Message) -> Task<Message> {
     match message {
-        Message::Navigate(route) => {
-            if route != state.route {
-                state.reset_component_demo_state();
-                match route.push(&state.router) {
-                    Ok(resolved) => {
-                        state
-                            .route_transition_direction
-                            .set(RouteTransitionDirection::Forward);
-                        state.route = Route::from_router_route(&resolved).unwrap_or(route);
-                    }
-                    Err(error) => {
-                        ohos_hilog_binding::error(format!("navigation failed: {error}"));
-                    }
-                }
-            }
+        Message::Router(RouterMessage::Event(event)) => {
+            return handle_navigation_event(state, event);
         }
-        Message::Back => {
-            if state.router.can_go_back() {
-                state.reset_component_demo_state();
-                if state.router.back() {
-                    state
-                        .route_transition_direction
-                        .set(RouteTransitionDirection::Backward);
-                    let current = state.router.current_route();
-                    state.route = Route::from_router_route(&current).unwrap_or(Route::Home);
-                }
-            } else if state.route != Route::Home {
-                state.reset_component_demo_state();
-                match state.router.replace(HomeRoute) {
-                    Ok(resolved) => {
-                        state
-                            .route_transition_direction
-                            .set(RouteTransitionDirection::Replace);
-                        state.route = Route::from_router_route(&resolved).unwrap_or(Route::Home);
-                    }
-                    Err(error) => {
-                        ohos_hilog_binding::error(format!("navigation failed: {error}"));
-                    }
-                }
-            }
+        Message::Router(message) => {
+            return state.router.handle(message, Message::Router);
         }
         Message::ButtonPreviewPressed(label) => {
             state.button_preview_feedback =
@@ -345,6 +312,42 @@ fn update(state: &mut ShowcaseState, message: Message) -> Task<Message> {
     }
 
     Task::none()
+}
+
+fn handle_navigation_event(state: &mut ShowcaseState, event: NavigationEvent) -> Task<Message> {
+    match event.result {
+        Ok(resolved) => {
+            let route = Route::from_router_route(&resolved).unwrap_or(Route::Home);
+            if route != state.route {
+                state.reset_component_demo_state();
+            }
+
+            state
+                .route_transition_direction
+                .set(navigation_direction(&event.navigation));
+            state.route = route;
+        }
+        Err(error) => {
+            if matches!(event.navigation, Navigation::Back) && state.route != Route::Home {
+                state.reset_component_demo_state();
+                return state
+                    .router
+                    .handle(RouterMessage::replace("/"), Message::Router);
+            }
+
+            ohos_hilog_binding::error(format!("navigation failed: {error}"));
+        }
+    }
+
+    Task::none()
+}
+
+fn navigation_direction(navigation: &Navigation) -> RouteTransitionDirection {
+    match navigation {
+        Navigation::Push(_) => RouteTransitionDirection::Forward,
+        Navigation::Back => RouteTransitionDirection::Backward,
+        Navigation::Replace(_) | Navigation::Reset(_) => RouteTransitionDirection::Replace,
+    }
 }
 
 fn route_motion() -> Motion {

@@ -1,19 +1,14 @@
 use crate::components::{NavButton, PageShell};
-use crate::routes::{HomeRoute, SettingsRoute};
 use crate::Message;
 use arkit::prelude::*;
-use arkit::router::{RouteContext, RoutePage, Router};
+use arkit::router::{RouteContext, RouterMessage};
 use arkit::Element;
 
-pub(crate) struct SettingsPage {
-    router: Router,
-}
+pub(crate) struct SettingsPage;
 
-impl RoutePage<Message, SettingsRoute> for SettingsPage {
-    fn from_route(context: RouteContext<SettingsRoute>) -> Self {
-        Self {
-            router: context.router().clone(),
-        }
+impl SettingsPage {
+    pub(crate) fn new(_context: RouteContext) -> Self {
+        Self
     }
 }
 
@@ -30,12 +25,10 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for Setting
                     .font_size(15.0)
                     .font_color(0xFF334155)
                     .into(),
-                Element::new(NavButton::new("Home", {
-                    let router = self.router.clone();
-                    move || {
-                        let _ = router.navigate(HomeRoute);
-                    }
-                })),
+                Element::new(NavButton::new(
+                    "Home",
+                    Message::Router(RouterMessage::push("/")),
+                )),
             ],
         )))
     }

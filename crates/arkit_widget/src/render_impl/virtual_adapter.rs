@@ -51,6 +51,30 @@ pub(super) struct VirtualAdapterSpec<Message, AppTheme = arkit_core::Theme> {
     pub(super) render_item: Rc<dyn Fn(u32) -> Element<Message, AppTheme>>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum VirtualAdapterCountChange {
+    Unchanged,
+    Insert { start: u32, count: u32 },
+    Remove { start: u32, count: u32 },
+}
+
+pub(super) fn virtual_adapter_count_change(
+    previous_total: u32,
+    next_total: u32,
+) -> VirtualAdapterCountChange {
+    match previous_total.cmp(&next_total) {
+        std::cmp::Ordering::Less => VirtualAdapterCountChange::Insert {
+            start: previous_total,
+            count: next_total - previous_total,
+        },
+        std::cmp::Ordering::Greater => VirtualAdapterCountChange::Remove {
+            start: next_total,
+            count: previous_total - next_total,
+        },
+        std::cmp::Ordering::Equal => VirtualAdapterCountChange::Unchanged,
+    }
+}
+
 pub(super) trait MountedVirtualAdapter {
     fn as_any_mut(&mut self) -> &mut dyn Any;
     fn cleanup(self: Box<Self>);
@@ -233,6 +257,37 @@ where
     Ok(Some(Box::new(MountedVirtualAdapterState { state })))
 }
 
+pub(super) fn apply_virtual_adapter_count_change(
+    adapter: &mut NodeAdapter,
+    change: VirtualAdapterCountChange,
+    next_total: u32,
+) -> ArkUIResult<()> {
+    match change {
+        VirtualAdapterCountChange::Unchanged => Ok(()),
+        VirtualAdapterCountChange::Insert { start, count } => {
+            adapter.set_total_node_count(next_total)?;
+            if let Err(error) = adapter.insert_item(start, count) {
+                ohos_hilog_binding::error(format!(
+                    "renderer error: failed to insert virtual adapter items: {error}"
+                ));
+                adapter.reload_all_items()?;
+            }
+            Ok(())
+        }
+        VirtualAdapterCountChange::Remove { start, count } => {
+            if let Err(error) = adapter.remove_item(start, count) {
+                ohos_hilog_binding::error(format!(
+                    "renderer error: failed to remove virtual adapter items: {error}"
+                ));
+                adapter.set_total_node_count(next_total)?;
+                adapter.reload_all_items()?;
+                return Ok(());
+            }
+            adapter.set_total_node_count(next_total)
+        }
+    }
+}
+
 pub(super) fn patch_virtual_adapter<Message, AppTheme>(
     node: &mut ArkUINode,
     mounted: &mut MountedRenderNode,
@@ -258,13 +313,11 @@ where
             };
             let mut state = adapter.state.borrow_mut();
             let previous_total = state.total_count;
+            let count_change = virtual_adapter_count_change(previous_total, spec.total_count);
             state.total_count = spec.total_count;
             state.render_item = spec.render_item;
             if let Some(native_adapter) = state.adapter.as_mut() {
-                if previous_total != spec.total_count {
-                    native_adapter.set_total_node_count(spec.total_count)?;
-                }
-                native_adapter.reload_all_items()?;
+                apply_virtual_adapter_count_change(native_adapter, count_change, spec.total_count)?;
             }
         }
         (Some(_), Some(spec)) => {

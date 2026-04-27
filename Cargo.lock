@@ -892,6 +892,7 @@ dependencies = [
  "napi-build-ohos",
  "napi-derive-ohos",
  "napi-ohos",
+ "tokio",
 ]
 
 [[package]]

@@ -151,7 +151,6 @@ fn button_host<Message, AppTheme>(
         .padding(Padding::ZERO)
         .border_width(0.0)
         .border_color(TRANSPARENT)
-        .align_self(ItemAlignment::Start)
 }
 
 fn apply_button_size<Message, AppTheme>(
@@ -426,6 +425,12 @@ enum ButtonContent {
     Icon,
 }
 
+#[derive(Debug, Clone, Copy)]
+enum ButtonWidth {
+    Length(arkit::Length),
+    Percent(f32),
+}
+
 pub struct Button<Message = ()> {
     content: ButtonContent,
     label: Option<String>,
@@ -434,7 +439,7 @@ pub struct Button<Message = ()> {
     size: ButtonSize,
     disabled: bool,
     key: Option<String>,
-    width: Option<arkit::Length>,
+    width: Option<ButtonWidth>,
     height: Option<arkit::Length>,
     padding: Option<arkit::Padding>,
     on_press: std::cell::RefCell<Option<Message>>,
@@ -503,12 +508,12 @@ impl<Message> Button<Message> {
     }
 
     pub fn width(mut self, width: impl Into<arkit::Length>) -> Self {
-        self.width = Some(width.into());
+        self.width = Some(ButtonWidth::Length(width.into()));
         self
     }
 
     pub fn percent_width(mut self, value: f32) -> Self {
-        self.width = Some(arkit::Length::FillPortion((value * 1000.0) as u16));
+        self.width = Some(ButtonWidth::Percent(value));
         self
     }
 
@@ -551,7 +556,10 @@ impl<Message: Clone + Send + 'static> Button<Message> {
             button = button.key(key);
         }
         if let Some(width) = self.width {
-            button = button.width(width);
+            button = match width {
+                ButtonWidth::Length(width) => button.width(width),
+                ButtonWidth::Percent(width) => button.percent_width(width),
+            };
         }
         if let Some(height) = self.height {
             button = button.height(height);

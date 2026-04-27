@@ -1,4 +1,5 @@
 use crate::prelude::*;
+use arkit::router::RouterMessage;
 use arkit_icon as lucide;
 use arkit_shadcn as shadcn;
 use shadcn::theme::{ThemeMode, ThemePreset};
@@ -69,7 +70,7 @@ fn plain_back_button() -> Element {
         .width(36.0)
         .height(36.0)
         .padding(arkit::Padding::ZERO)
-        .on_press(Message::Back)
+        .on_press(Message::Router(RouterMessage::back()))
         .into()
 }
 
@@ -406,7 +407,7 @@ pub(crate) fn component_list_cell(slug: &str, title: &str, first: bool, last: bo
         .border_color(shadcn::theme::colors().border)
         .border_radius(border_radius)
         .background_color(shadcn::theme::colors().card)
-        .on_press(Message::Navigate(Route::Component { slug }))
+        .on_press(Message::Router(Route::Component { slug }.router_message()))
         .children(vec![
             arkit::text(title)
                 .font_size(shadcn::theme::typography::MD)
