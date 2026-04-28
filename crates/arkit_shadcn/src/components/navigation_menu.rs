@@ -1,6 +1,7 @@
+use super::button::button;
 use super::*;
 
-pub fn navigation_menu(items: Vec<Element>) -> Element {
+fn navigation_menu(items: Vec<Element>) -> Element {
     shadow_sm(
         arkit::column_component::<(), arkit::Theme>()
             .padding(spacing::SM)
@@ -15,7 +16,7 @@ pub fn navigation_menu(items: Vec<Element>) -> Element {
     .into()
 }
 
-pub fn navigation_item(title: impl Into<String>, active: bool) -> Element {
+fn navigation_item(title: impl Into<String>, active: bool) -> Element {
     let variant = if active {
         ButtonVariant::Secondary
     } else {

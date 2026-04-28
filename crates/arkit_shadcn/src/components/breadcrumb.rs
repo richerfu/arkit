@@ -1,6 +1,6 @@
 use super::*;
 
-pub fn breadcrumb(items: Vec<String>) -> Element {
+fn breadcrumb(items: Vec<String>) -> Element {
     let mut children = Vec::new();
     let total = items.len();
     for (index, item) in items.into_iter().enumerate() {
@@ -29,6 +29,6 @@ pub fn breadcrumb(items: Vec<String>) -> Element {
         .into()
 }
 
-pub fn breadcrumb_item(title: impl Into<String>) -> Element {
+fn breadcrumb_item(title: impl Into<String>) -> Element {
     muted_text(title).into()
 }

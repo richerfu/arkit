@@ -82,11 +82,11 @@ fn badge_shell<Message: 'static>(
         .into()
 }
 
-pub fn badge<Message: 'static>(label: impl Into<String>) -> Element<Message> {
+fn badge<Message: 'static>(label: impl Into<String>) -> Element<Message> {
     badge_with_variant(label, BadgeVariant::Default)
 }
 
-pub fn badge_with_variant<Message: 'static>(
+fn badge_with_variant<Message: 'static>(
     label: impl Into<String>,
     variant: BadgeVariant,
 ) -> Element<Message> {
@@ -100,7 +100,7 @@ pub fn badge_with_variant<Message: 'static>(
     )
 }
 
-pub fn badge_with_icon<Message: 'static>(
+fn badge_with_icon<Message: 'static>(
     label: impl Into<String>,
     icon_name: impl Into<String>,
     variant: BadgeVariant,
@@ -124,7 +124,7 @@ pub fn badge_with_icon<Message: 'static>(
     )
 }
 
-pub fn badge_with_icon_colors<Message: 'static>(
+fn badge_with_icon_colors<Message: 'static>(
     label: impl Into<String>,
     icon_name: impl Into<String>,
     background: u32,
@@ -148,7 +148,7 @@ pub fn badge_with_icon_colors<Message: 'static>(
     )
 }
 
-pub fn pill_badge_with_variant<Message: 'static>(
+fn pill_badge_with_variant<Message: 'static>(
     label: impl Into<String>,
     variant: BadgeVariant,
 ) -> Element<Message> {
@@ -171,3 +171,69 @@ pub fn pill_badge_with_variant<Message: 'static>(
         .children(vec![badge_label_text(label, foreground)])
         .into()
 }
+
+// Struct component API
+pub struct Badge<Message = ()> {
+    label: String,
+    variant: BadgeVariant,
+    icon_name: Option<String>,
+    colors: Option<(u32, u32)>,
+    pill: bool,
+    _marker: std::marker::PhantomData<Message>,
+}
+
+impl<Message> Badge<Message> {
+    pub fn new(label: impl Into<String>) -> Self {
+        Self {
+            label: label.into(),
+            variant: BadgeVariant::Default,
+            icon_name: None,
+            colors: None,
+            pill: false,
+            _marker: std::marker::PhantomData,
+        }
+    }
+
+    pub fn variant(mut self, variant: BadgeVariant) -> Self {
+        self.variant = variant;
+        self
+    }
+
+    pub fn icon(mut self, icon_name: impl Into<String>) -> Self {
+        self.icon_name = Some(icon_name.into());
+        self
+    }
+
+    pub fn icon_colors(
+        mut self,
+        icon_name: impl Into<String>,
+        background: u32,
+        foreground: u32,
+    ) -> Self {
+        self.icon_name = Some(icon_name.into());
+        self.colors = Some((background, foreground));
+        self
+    }
+
+    pub fn pill(mut self, pill: bool) -> Self {
+        self.pill = pill;
+        self
+    }
+}
+
+impl_component_widget!(Badge<Message>, Message, |value: &Badge<Message>| {
+    if value.pill {
+        pill_badge_with_variant(value.label.clone(), value.variant)
+    } else if let Some((background, foreground)) = value.colors {
+        badge_with_icon_colors(
+            value.label.clone(),
+            value.icon_name.clone().unwrap_or_default(),
+            background,
+            foreground,
+        )
+    } else if let Some(icon_name) = value.icon_name.clone() {
+        badge_with_icon(value.label.clone(), icon_name, value.variant)
+    } else {
+        badge_with_variant(value.label.clone(), value.variant)
+    }
+});

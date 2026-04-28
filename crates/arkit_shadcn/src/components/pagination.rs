@@ -1,7 +1,8 @@
+use super::button::button;
 use super::*;
 use std::rc::Rc;
 
-pub fn pagination<Message>(
+fn pagination<Message>(
     page: i32,
     total_pages: i32,
     on_page_change: impl Fn(i32) -> Message + 'static,
@@ -53,7 +54,7 @@ where
         .into()
 }
 
-pub fn pagination_item<Message>(
+fn pagination_item<Message>(
     page_num: i32,
     current: i32,
     on_page_change: Rc<dyn Fn(i32) -> Message>,

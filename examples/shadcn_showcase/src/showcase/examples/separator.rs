@@ -3,38 +3,60 @@ use super::shared::DemoContext;
 use crate::prelude::*;
 use arkit_shadcn as shadcn;
 
-pub(crate) fn render(_ctx: DemoContext) -> Element {
-    component_canvas(
-        fixed_width(
-            v_stack(
-                vec![
+pub(crate) struct SeparatorExample {
+    ctx: DemoContext,
+}
+
+impl SeparatorExample {
+    pub(crate) fn new(ctx: DemoContext) -> Self {
+        Self { ctx }
+    }
+}
+
+impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for SeparatorExample {
+    fn body(
+        &self,
+        _tree: &mut arkit::advanced::widget::Tree,
+        _renderer: &arkit::Renderer,
+    ) -> Option<Element> {
+        let _ctx = self.ctx.clone();
+        Some({
+            component_canvas(
+                fixed_width(
                     v_stack(
                         vec![
-                            shadcn::text_sm_medium("Radix Primitives"),
-                            shadcn::text_with_variant(
-                                "An open-source UI component library.",
-                                shadcn::TextVariant::Muted,
+                            v_stack(
+                                vec![
+                                    shadcn::Text::small_medium("Radix Primitives").into(),
+                                    shadcn::Text::with_variant(
+                                        "An open-source UI component library.",
+                                        shadcn::TextVariant::Muted,
+                                    )
+                                    .into(),
+                                ],
+                                4.0,
                             ),
-                        ],
-                        4.0,
-                    ),
-                    shadcn::separator(),
-                    h_stack(
-                        vec![
-                            shadcn::text_sm("Blog"),
-                            shadcn::separator_vertical(20.0),
-                            shadcn::text_sm("Docs"),
-                            shadcn::separator_vertical(20.0),
-                            shadcn::text_sm("Source"),
+                            shadcn::Separator::new().into(),
+                            h_stack(
+                                vec![
+                                    shadcn::Text::small("Blog").into(),
+                                    shadcn::Separator::vertical(20.0).into(),
+                                    shadcn::Text::small("Docs").into(),
+                                    shadcn::Separator::vertical(20.0).into(),
+                                    shadcn::Text::small("Source").into(),
+                                ],
+                                16.0,
+                            ),
                         ],
                         16.0,
                     ),
-                ],
-                16.0,
-            ),
-            320.0,
-        ),
-        true,
-        24.0,
-    )
+                    320.0,
+                ),
+                true,
+                24.0,
+            )
+        })
+    }
 }
+
+// struct component render

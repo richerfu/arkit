@@ -459,14 +459,6 @@ impl<Message: 'static, AppTheme: 'static> advanced::Widget<Message, AppTheme, cr
             .take(trigger_width)
             .map(|panel| floating_portal_layer(panel, &state, self.on_dismiss.clone()))
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-        self
-    }
 }
 
 struct ModalOverlayWidget<Message, AppTheme = crate::Theme> {
@@ -518,14 +510,6 @@ impl<Message: 'static, AppTheme: 'static> advanced::Widget<Message, AppTheme, cr
             .borrow_mut()
             .take()
             .map(|panel| modal_layer(panel, self.spec, self.on_dismiss.clone()))
-    }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
-        self
     }
 }
 

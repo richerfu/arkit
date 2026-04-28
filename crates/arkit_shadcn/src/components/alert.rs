@@ -34,7 +34,7 @@ struct AlertTone {
     icon_color: u32,
 }
 
-pub fn alert_root<Message: 'static>(
+fn alert_root<Message: 'static>(
     icon_name: impl Into<String>,
     variant: AlertVariant,
     children: Vec<Element<Message>>,
@@ -77,7 +77,7 @@ pub fn alert_root<Message: 'static>(
         .into()
 }
 
-pub fn alert_title<Message: 'static>(
+fn alert_title<Message: 'static>(
     content: impl Into<String>,
     variant: AlertVariant,
 ) -> TextElement<Message> {
@@ -94,7 +94,7 @@ pub fn alert_title<Message: 'static>(
         .padding([0.0, 0.0, 0.0, ALERT_CONTENT_LEFT])
 }
 
-pub fn alert_description<Message: 'static>(
+fn alert_description<Message: 'static>(
     content: impl Into<String>,
     variant: AlertVariant,
 ) -> TextElement<Message> {
@@ -109,7 +109,7 @@ pub fn alert_description<Message: 'static>(
         .padding([0.0, 0.0, ALERT_DESCRIPTION_BOTTOM, ALERT_CONTENT_LEFT])
 }
 
-pub fn alert_list<Message: 'static>(
+fn alert_list<Message: 'static>(
     items: Vec<impl Into<String>>,
     variant: AlertVariant,
 ) -> Element<Message> {
@@ -155,3 +155,110 @@ fn alert_tone(variant: AlertVariant) -> AlertTone {
         },
     }
 }
+
+// Struct component API
+pub struct Alert<Message = ()> {
+    icon_name: String,
+    variant: AlertVariant,
+    children: std::cell::RefCell<Option<Vec<Element<Message>>>>,
+}
+
+impl<Message> Alert<Message> {
+    pub fn new(
+        icon_name: impl Into<String>,
+        variant: AlertVariant,
+        children: Vec<Element<Message>>,
+    ) -> Self {
+        Self {
+            icon_name: icon_name.into(),
+            variant,
+            children: std::cell::RefCell::new(Some(children)),
+        }
+    }
+}
+
+impl_component_widget!(Alert<Message>, Message, |value: &Alert<Message>| {
+    alert_root(
+        value.icon_name.clone(),
+        value.variant,
+        super::take_component_slot(&value.children, "alert children"),
+    )
+});
+
+pub struct AlertTitle<Message = ()> {
+    content: String,
+    variant: AlertVariant,
+    _marker: std::marker::PhantomData<Message>,
+}
+
+impl<Message> AlertTitle<Message> {
+    pub fn new(content: impl Into<String>, variant: AlertVariant) -> Self {
+        Self {
+            content: content.into(),
+            variant,
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<Message: 'static> From<AlertTitle<Message>> for arkit::TextElement<Message> {
+    fn from(value: AlertTitle<Message>) -> Self {
+        alert_title(value.content, value.variant)
+    }
+}
+
+impl_component_widget!(AlertTitle<Message>, Message, |value: &AlertTitle<
+    Message,
+>| {
+    alert_title(value.content.clone(), value.variant).into()
+});
+
+pub struct AlertDescription<Message = ()> {
+    content: String,
+    variant: AlertVariant,
+    _marker: std::marker::PhantomData<Message>,
+}
+
+impl<Message> AlertDescription<Message> {
+    pub fn new(content: impl Into<String>, variant: AlertVariant) -> Self {
+        Self {
+            content: content.into(),
+            variant,
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<Message: 'static> From<AlertDescription<Message>> for arkit::TextElement<Message> {
+    fn from(value: AlertDescription<Message>) -> Self {
+        alert_description(value.content, value.variant)
+    }
+}
+
+impl_component_widget!(
+    AlertDescription<Message>,
+    Message,
+    |value: &AlertDescription<Message>| {
+        alert_description(value.content.clone(), value.variant).into()
+    }
+);
+
+pub struct AlertList<Message = ()> {
+    items: Vec<String>,
+    variant: AlertVariant,
+    _marker: std::marker::PhantomData<Message>,
+}
+
+impl<Message> AlertList<Message> {
+    pub fn new<T: Into<String>>(items: Vec<T>, variant: AlertVariant) -> Self {
+        Self {
+            items: items.into_iter().map(Into::into).collect(),
+            variant,
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
+impl_component_widget!(AlertList<Message>, Message, |value: &AlertList<Message>| {
+    alert_list(value.items.clone(), value.variant)
+});

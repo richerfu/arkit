@@ -3,40 +3,71 @@ use super::shared::DemoContext;
 use crate::prelude::*;
 use arkit_shadcn as shadcn;
 
-pub(crate) fn render(_ctx: DemoContext) -> Element {
-    component_canvas(
-        h_stack(
-            vec![
-                shadcn::avatar_ring(
-                    Some(String::from("https://github.com/mrzachnugent.png")),
-                    "ZN",
-                ),
-                shadcn::avatar_ring_with_radius(
-                    Some(String::from("https://github.com/shadcn.png")),
-                    "CN",
-                    shadcn::theme::radii().lg,
-                ),
+pub(crate) struct AvatarExample {
+    ctx: DemoContext,
+}
+
+impl AvatarExample {
+    pub(crate) fn new(ctx: DemoContext) -> Self {
+        Self { ctx }
+    }
+}
+
+impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for AvatarExample {
+    fn body(
+        &self,
+        _tree: &mut arkit::advanced::widget::Tree,
+        _renderer: &arkit::Renderer,
+    ) -> Option<Element> {
+        let _ctx = self.ctx.clone();
+        Some({
+            component_canvas(
                 h_stack(
                     vec![
-                        shadcn::avatar_ring(
+                        shadcn::Avatar::new(
                             Some(String::from("https://github.com/mrzachnugent.png")),
                             "ZN",
-                        ),
-                        shadcn::avatar_ring(
-                            Some(String::from("https://github.com/leerob.png")),
-                            "LR",
-                        ),
-                        shadcn::avatar_ring(
-                            Some(String::from("https://github.com/evilrabbit.png")),
-                            "ER",
+                        )
+                        .ring(true)
+                        .into(),
+                        shadcn::Avatar::new(
+                            Some(String::from("https://github.com/shadcn.png")),
+                            "CN",
+                        )
+                        .ring(true)
+                        .radius(shadcn::theme::radii().lg)
+                        .into(),
+                        h_stack(
+                            vec![
+                                shadcn::Avatar::new(
+                                    Some(String::from("https://github.com/mrzachnugent.png")),
+                                    "ZN",
+                                )
+                                .ring(true)
+                                .into(),
+                                shadcn::Avatar::new(
+                                    Some(String::from("https://github.com/leerob.png")),
+                                    "LR",
+                                )
+                                .ring(true)
+                                .into(),
+                                shadcn::Avatar::new(
+                                    Some(String::from("https://github.com/evilrabbit.png")),
+                                    "ER",
+                                )
+                                .ring(true)
+                                .into(),
+                            ],
+                            -8.0,
                         ),
                     ],
-                    -8.0,
+                    48.0,
                 ),
-            ],
-            48.0,
-        ),
-        true,
-        24.0,
-    )
+                true,
+                24.0,
+            )
+        })
+    }
 }
+
+// struct component render

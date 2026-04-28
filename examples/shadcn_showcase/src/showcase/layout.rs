@@ -1,4 +1,5 @@
 use crate::prelude::*;
+use arkit::router::RouterMessage;
 use arkit_icon as lucide;
 use arkit_shadcn as shadcn;
 use shadcn::theme::{ThemeMode, ThemePreset};
@@ -64,12 +65,12 @@ fn nav_title_text(title: impl Into<String>, home: bool) -> Element {
 }
 
 fn plain_back_button() -> Element {
-    shadcn::icon_button("chevron-left")
+    shadcn::Button::icon("chevron-left")
         .theme(shadcn::ButtonVariant::Ghost)
         .width(36.0)
         .height(36.0)
         .padding(arkit::Padding::ZERO)
-        .on_press(Message::Back)
+        .on_press(Message::Router(RouterMessage::back()))
         .into()
 }
 
@@ -119,26 +120,26 @@ fn theme_menu_button(state: ThemeMenuState) -> Element {
     };
 
     let mut items = vec![
-        shadcn::dropdown_label("Appearance"),
-        shadcn::dropdown_radio_item(
+        shadcn::MenuEntry::label("Appearance"),
+        shadcn::MenuEntry::radio(
             "Light",
             theme_mode_key(ThemeMode::Light),
             theme_mode_key(state.mode),
             |_| Message::SetThemeMode(ThemeMode::Light),
         ),
-        shadcn::dropdown_radio_item(
+        shadcn::MenuEntry::radio(
             "Dark",
             theme_mode_key(ThemeMode::Dark),
             theme_mode_key(state.mode),
             |_| Message::SetThemeMode(ThemeMode::Dark),
         ),
-        shadcn::dropdown_separator(),
-        shadcn::dropdown_label("Theme"),
+        shadcn::MenuEntry::separator(),
+        shadcn::MenuEntry::label("Theme"),
     ];
 
     items.extend(THEME_PRESETS.iter().map(|preset| {
         let preset = *preset;
-        shadcn::dropdown_radio_item(
+        shadcn::MenuEntry::radio(
             theme_preset_label(preset),
             theme_preset_key(preset),
             selected_preset.clone(),
@@ -146,14 +147,14 @@ fn theme_menu_button(state: ThemeMenuState) -> Element {
         )
     }));
     items.extend([
-        shadcn::dropdown_separator(),
-        shadcn::dropdown_radio_item("Custom", "custom", selected_preset, |_| {
+        shadcn::MenuEntry::separator(),
+        shadcn::MenuEntry::radio("Custom", "custom", selected_preset, |_| {
             Message::SetCustomTheme(true)
         }),
     ]);
 
-    shadcn::dropdown_menu_aligned(
-        shadcn::icon_button(theme_menu_icon(state.mode))
+    shadcn::DropdownMenu::new(
+        shadcn::Button::icon(theme_menu_icon(state.mode))
             .theme(shadcn::ButtonVariant::Ghost)
             .width(36.0)
             .height(36.0)
@@ -161,10 +162,11 @@ fn theme_menu_button(state: ThemeMenuState) -> Element {
             .on_press(Message::SetThemeMenuOpen(!state.open))
             .into(),
         items,
-        state.open,
-        Message::SetThemeMenuOpen,
-        FloatingAlign::End,
     )
+    .open(state.open)
+    .on_open_change(Message::SetThemeMenuOpen)
+    .align(FloatingAlign::End)
+    .into()
 }
 
 fn constrained_width(child: Element, width: f32) -> Element {
@@ -405,7 +407,7 @@ pub(crate) fn component_list_cell(slug: &str, title: &str, first: bool, last: bo
         .border_color(shadcn::theme::colors().border)
         .border_radius(border_radius)
         .background_color(shadcn::theme::colors().card)
-        .on_press(Message::Navigate(Route::Component { slug }))
+        .on_press(Message::Router(Route::Component { slug }.router_message()))
         .children(vec![
             arkit::text(title)
                 .font_size(shadcn::theme::typography::MD)

@@ -4,24 +4,45 @@ use crate::prelude::*;
 use crate::Message;
 use arkit_shadcn as shadcn;
 
-pub(crate) fn render(ctx: DemoContext) -> Element {
-    component_canvas(
-        fixed_width(
-            shadcn::hover_card_with_width(
-                shadcn::button("@expo")
-                    .theme(shadcn::ButtonVariant::Link)
-                    .on_press(Message::SetToggleState(!ctx.toggle_state))
-                    .into(),
-                vec![arkit::row_component()
-                    .percent_width(1.0)
-                    .align_items_top()
-                    .children(vec![
-                        shadcn::avatar(Some(String::from("https://github.com/expo.png")), "E"),
-                        arkit::row_component()
-                            .layout_weight(1.0_f32)
-                            .margin([0.0, 0.0, 0.0, 16.0])
-                            .children(vec![v_stack(
-                                vec![
+pub(crate) struct HoverCardExample {
+    ctx: DemoContext,
+}
+
+impl HoverCardExample {
+    pub(crate) fn new(ctx: DemoContext) -> Self {
+        Self { ctx }
+    }
+}
+
+impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for HoverCardExample {
+    fn body(
+        &self,
+        _tree: &mut arkit::advanced::widget::Tree,
+        _renderer: &arkit::Renderer,
+    ) -> Option<Element> {
+        let ctx = self.ctx.clone();
+        Some({
+            component_canvas(
+                fixed_width(
+                    shadcn::HoverCard::new(
+                        shadcn::Button::new("@expo")
+                            .theme(shadcn::ButtonVariant::Link)
+                            .on_press(Message::SetToggleState(!ctx.toggle_state))
+                            .into(),
+                        vec![arkit::row_component()
+                            .percent_width(1.0)
+                            .align_items_top()
+                            .children(vec![
+                                shadcn::Avatar::new(
+                                    Some(String::from("https://github.com/expo.png")),
+                                    "E",
+                                )
+                                .into(),
+                                arkit::row_component()
+                                    .layout_weight(1.0_f32)
+                                    .margin([0.0, 0.0, 0.0, 16.0])
+                                    .children(vec![v_stack(
+                                        vec![
                                     arkit::text("@expo")
                                         .font_size(shadcn::theme::typography::SM)
                                         .font_weight(FontWeight::W600)
@@ -41,18 +62,23 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                                         .line_height(16.0)
                                         .into(),
                                 ],
-                                4.0,
-                            )])
-                            .into(),
-                    ])
-                    .into()],
-                ctx.toggle_state,
-                Message::SetToggleState,
-                320.0,
-            ),
-            320.0,
-        ),
-        true,
-        24.0,
-    )
+                                        4.0,
+                                    )])
+                                    .into(),
+                            ])
+                            .into()],
+                    )
+                    .open(ctx.toggle_state)
+                    .on_open_change(Message::SetToggleState)
+                    .width(320.0)
+                    .into(),
+                    320.0,
+                ),
+                true,
+                24.0,
+            )
+        })
+    }
 }
+
+// struct component render

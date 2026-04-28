@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 const DRAWER_MAX_WIDTH: f32 = 640.0;
 
-pub fn drawer<Message>(
+fn drawer<Message>(
     title: impl Into<String>,
     open: bool,
     on_open_change: impl Fn(bool) -> Message + 'static,

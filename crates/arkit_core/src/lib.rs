@@ -393,7 +393,27 @@ pub mod advanced {
         }
     }
 
-    pub trait Widget<Message, AppTheme = Theme, Renderer = ()> {
+    #[doc(hidden)]
+    pub trait WidgetDowncast {
+        fn widget_as_any(&self) -> &dyn Any;
+
+        fn widget_into_any(self: Box<Self>) -> Box<dyn Any>;
+    }
+
+    impl<T> WidgetDowncast for T
+    where
+        T: Any,
+    {
+        fn widget_as_any(&self) -> &dyn Any {
+            self
+        }
+
+        fn widget_into_any(self: Box<Self>) -> Box<dyn Any> {
+            self
+        }
+    }
+
+    pub trait Widget<Message, AppTheme = Theme, Renderer = ()>: WidgetDowncast {
         fn tag(&self) -> widget::Tag
         where
             Self: 'static,
@@ -456,10 +476,14 @@ pub mod advanced {
             None
         }
 
-        fn as_any(&self) -> &dyn Any;
+        fn as_any(&self) -> &dyn Any {
+            self.widget_as_any()
+        }
 
         #[doc(hidden)]
-        fn into_any(self: Box<Self>) -> Box<dyn Any>;
+        fn into_any(self: Box<Self>) -> Box<dyn Any> {
+            self.widget_into_any()
+        }
     }
 
     pub fn tree_of<Message: 'static, AppTheme: 'static, Renderer: 'static>(

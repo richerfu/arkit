@@ -3,104 +3,124 @@ use crate::prelude::*;
 use crate::Message;
 use arkit_shadcn as shadcn;
 
-pub(crate) fn render(ctx: DemoContext) -> Element {
-    top_center_canvas(
-        shadcn::menubar_with_menus(
-            vec![
-                shadcn::menubar_menu(
-                    "File",
-                    vec![
-                        shadcn::dropdown_item_with_shortcut("New Tab", "⌘T"),
-                        shadcn::dropdown_item_with_shortcut("New Window", "⌘N"),
-                        shadcn::disabled_dropdown_item("New Incognito Window"),
-                        shadcn::dropdown_separator(),
-                        shadcn::dropdown_submenu(
-                            "Share",
-                            vec![
-                                shadcn::dropdown_item("Email link"),
-                                shadcn::dropdown_item("Messages"),
-                                shadcn::dropdown_item("Notes"),
-                            ],
-                        ),
-                        shadcn::dropdown_separator(),
-                        shadcn::dropdown_item_with_shortcut("Print...", "⌘P"),
-                    ],
-                ),
-                shadcn::menubar_menu(
-                    "Edit",
-                    vec![
-                        shadcn::dropdown_item_with_shortcut("Undo", "⌘Z"),
-                        shadcn::dropdown_item_with_shortcut("Redo", "⇧⌘Z"),
-                        shadcn::dropdown_separator(),
-                        shadcn::dropdown_submenu(
-                            "Find",
-                            vec![
-                                shadcn::dropdown_item("Search the web"),
-                                shadcn::dropdown_separator(),
-                                shadcn::dropdown_item("Find..."),
-                                shadcn::dropdown_item("Find Next"),
-                                shadcn::dropdown_item("Find Previous"),
-                            ],
-                        ),
-                        shadcn::dropdown_separator(),
-                        shadcn::dropdown_item("Cut"),
-                        shadcn::dropdown_item("Copy"),
-                        shadcn::dropdown_item("Paste"),
-                    ],
-                ),
-                shadcn::menubar_menu(
-                    "View",
-                    vec![
-                        shadcn::dropdown_checkbox_item(
-                            "Always Show Bookmarks Bar",
-                            ctx.context_bookmarks,
-                            Message::SetContextBookmarks,
-                        ),
-                        shadcn::dropdown_checkbox_item(
-                            "Always Show Full URLs",
-                            ctx.context_full_urls,
-                            Message::SetContextFullUrls,
-                        ),
-                        shadcn::dropdown_separator(),
-                        shadcn::dropdown_item_with_shortcut("Reload", "⌘R"),
-                        shadcn::dropdown_separator(),
-                        shadcn::dropdown_item_with_shortcut("Toggle Fullscreen", ""),
-                        shadcn::dropdown_separator(),
-                        shadcn::dropdown_item("Hide Sidebar"),
-                    ],
-                ),
-                shadcn::menubar_menu(
-                    "Profiles",
-                    vec![
-                        shadcn::dropdown_radio_item(
-                            "Andy",
-                            "andy",
-                            ctx.context_person.clone(),
-                            Message::SetContextPerson,
-                        ),
-                        shadcn::dropdown_radio_item(
-                            "Benoit",
-                            "benoit",
-                            ctx.context_person.clone(),
-                            Message::SetContextPerson,
-                        ),
-                        shadcn::dropdown_radio_item(
-                            "Luis",
-                            "luis",
-                            ctx.context_person,
-                            Message::SetContextPerson,
-                        ),
-                        shadcn::dropdown_separator(),
-                        shadcn::dropdown_item("Edit..."),
-                        shadcn::dropdown_separator(),
-                        shadcn::dropdown_item("Add Profile..."),
-                    ],
-                ),
-            ],
-            ctx.menubar_active,
-            Message::SetMenubarActive,
-        ),
-        [16.0, 16.0, 16.0, 16.0],
-        true,
-    )
+pub(crate) struct MenubarExample {
+    ctx: DemoContext,
 }
+
+impl MenubarExample {
+    pub(crate) fn new(ctx: DemoContext) -> Self {
+        Self { ctx }
+    }
+}
+
+impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for MenubarExample {
+    fn body(
+        &self,
+        _tree: &mut arkit::advanced::widget::Tree,
+        _renderer: &arkit::Renderer,
+    ) -> Option<Element> {
+        let ctx = self.ctx.clone();
+        Some({
+            top_center_canvas(
+                shadcn::Menubar::new(vec![
+                    shadcn::MenubarMenuSpec::new(
+                        "File",
+                        vec![
+                            shadcn::MenuEntry::action("New Tab").shortcut("⌘T"),
+                            shadcn::MenuEntry::action("New Window").shortcut("⌘N"),
+                            shadcn::MenuEntry::action("New Incognito Window"),
+                            shadcn::MenuEntry::separator(),
+                            shadcn::MenuEntry::submenu(
+                                "Share",
+                                vec![
+                                    shadcn::MenuEntry::action("Email link"),
+                                    shadcn::MenuEntry::action("Messages"),
+                                    shadcn::MenuEntry::action("Notes"),
+                                ],
+                            ),
+                            shadcn::MenuEntry::separator(),
+                            shadcn::MenuEntry::action("Print...").shortcut("⌘P"),
+                        ],
+                    ),
+                    shadcn::MenubarMenuSpec::new(
+                        "Edit",
+                        vec![
+                            shadcn::MenuEntry::action("Undo").shortcut("⌘Z"),
+                            shadcn::MenuEntry::action("Redo").shortcut("⇧⌘Z"),
+                            shadcn::MenuEntry::separator(),
+                            shadcn::MenuEntry::submenu(
+                                "Find",
+                                vec![
+                                    shadcn::MenuEntry::action("Search the web"),
+                                    shadcn::MenuEntry::separator(),
+                                    shadcn::MenuEntry::action("Find..."),
+                                    shadcn::MenuEntry::action("Find Next"),
+                                    shadcn::MenuEntry::action("Find Previous"),
+                                ],
+                            ),
+                            shadcn::MenuEntry::separator(),
+                            shadcn::MenuEntry::action("Cut"),
+                            shadcn::MenuEntry::action("Copy"),
+                            shadcn::MenuEntry::action("Paste"),
+                        ],
+                    ),
+                    shadcn::MenubarMenuSpec::new(
+                        "View",
+                        vec![
+                            shadcn::MenuEntry::checkbox(
+                                "Always Show Bookmarks Bar",
+                                ctx.context_bookmarks,
+                                Message::SetContextBookmarks,
+                            ),
+                            shadcn::MenuEntry::checkbox(
+                                "Always Show Full URLs",
+                                ctx.context_full_urls,
+                                Message::SetContextFullUrls,
+                            ),
+                            shadcn::MenuEntry::separator(),
+                            shadcn::MenuEntry::action("Reload").shortcut("⌘R"),
+                            shadcn::MenuEntry::separator(),
+                            shadcn::MenuEntry::action("Toggle Fullscreen").shortcut(""),
+                            shadcn::MenuEntry::separator(),
+                            shadcn::MenuEntry::action("Hide Sidebar"),
+                        ],
+                    ),
+                    shadcn::MenubarMenuSpec::new(
+                        "Profiles",
+                        vec![
+                            shadcn::MenuEntry::radio(
+                                "Andy",
+                                "andy",
+                                ctx.context_person.clone(),
+                                Message::SetContextPerson,
+                            ),
+                            shadcn::MenuEntry::radio(
+                                "Benoit",
+                                "benoit",
+                                ctx.context_person.clone(),
+                                Message::SetContextPerson,
+                            ),
+                            shadcn::MenuEntry::radio(
+                                "Luis",
+                                "luis",
+                                ctx.context_person,
+                                Message::SetContextPerson,
+                            ),
+                            shadcn::MenuEntry::separator(),
+                            shadcn::MenuEntry::action("Edit..."),
+                            shadcn::MenuEntry::separator(),
+                            shadcn::MenuEntry::action("Add Profile..."),
+                        ],
+                    ),
+                ])
+                .active(ctx.menubar_active)
+                .on_active_change(Message::SetMenubarActive)
+                .into(),
+                [16.0, 16.0, 16.0, 16.0],
+                true,
+            )
+        })
+    }
+}
+
+// struct component render

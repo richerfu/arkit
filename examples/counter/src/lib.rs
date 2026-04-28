@@ -29,44 +29,60 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
 }
 
 fn view(state: &AppState) -> Element<Message> {
-    column_component()
-        .percent_width(1.0)
-        .percent_height(1.0)
-        .align_items_center()
-        .justify_content_center()
-        .padding(24.0)
-        .children(vec![
-            text("arkit counter")
-                .font_size(28.0)
-                .font_weight(FontWeight::W600)
-                .line_height(32.0)
-                .into(),
-            row_component()
-                .margin_top(12.0)
-                .children(vec![text(format!("value = {}", state.value))
-                    .font_size(18.0)
-                    .line_height(24.0)
-                    .into()])
-                .into(),
-            row_component()
-                .margin_top(20.0)
+    Element::new(CounterView { value: state.value })
+}
+
+struct CounterView {
+    value: i32,
+}
+
+impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for CounterView {
+    fn body(
+        &self,
+        _tree: &mut arkit::advanced::widget::Tree,
+        _renderer: &arkit::Renderer,
+    ) -> Option<Element<Message>> {
+        Some(
+            column_component()
+                .percent_width(1.0)
+                .percent_height(1.0)
                 .align_items_center()
+                .justify_content_center()
+                .padding(24.0)
                 .children(vec![
-                    button("decrement")
-                        .padding([8.0, 12.0, 8.0, 12.0])
-                        .on_press(Message::Decrement)
+                    text("arkit counter")
+                        .font_size(28.0)
+                        .font_weight(FontWeight::W600)
+                        .line_height(32.0)
                         .into(),
                     row_component()
-                        .margin_left(12.0)
-                        .children(vec![button("increment")
-                            .padding([8.0, 12.0, 8.0, 12.0])
-                            .on_press(Message::Increment)
+                        .margin_top(12.0)
+                        .children(vec![text(format!("value = {}", self.value))
+                            .font_size(18.0)
+                            .line_height(24.0)
                             .into()])
+                        .into(),
+                    row_component()
+                        .margin_top(20.0)
+                        .align_items_center()
+                        .children(vec![
+                            button("decrement")
+                                .padding([8.0, 12.0, 8.0, 12.0])
+                                .on_press(Message::Decrement)
+                                .into(),
+                            row_component()
+                                .margin_left(12.0)
+                                .children(vec![button("increment")
+                                    .padding([8.0, 12.0, 8.0, 12.0])
+                                    .on_press(Message::Increment)
+                                    .into()])
+                                .into(),
+                        ])
                         .into(),
                 ])
                 .into(),
-        ])
-        .into()
+        )
+    }
 }
 
 #[entry]

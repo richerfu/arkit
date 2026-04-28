@@ -1,8 +1,8 @@
 use super::*;
 use std::rc::Rc;
 
-pub(crate) type FloatingSide = arkit::FloatingSide;
-pub(crate) type FloatingAlign = arkit::FloatingAlign;
+pub type FloatingSide = arkit::FloatingSide;
+pub type FloatingAlign = arkit::FloatingAlign;
 pub(crate) type FloatingSurfaceRegistry = arkit_widget::FloatingSurfaceRegistry;
 
 const FLOATING_SIDE_OFFSET_VP: f32 = spacing::XXS;

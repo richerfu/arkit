@@ -1,6 +1,6 @@
 use super::*;
 
-pub fn input_otp<Message>(
+fn input_otp<Message>(
     value: impl Into<String>,
     digits: usize,
     on_input: impl Fn(String) -> Message + Clone + 'static,

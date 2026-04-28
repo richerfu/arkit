@@ -4,6 +4,6 @@ mod examples;
 mod home;
 mod layout;
 
-pub(crate) use component::component_page;
+pub(crate) use component::ComponentPage;
 pub(crate) use examples::DemoContext;
-pub(crate) use home::catalog_home;
+pub(crate) use home::CatalogHome;

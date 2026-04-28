@@ -4,41 +4,55 @@ use crate::prelude::*;
 use crate::Message;
 use arkit_shadcn as shadcn;
 
-pub(crate) fn render(ctx: DemoContext) -> Element {
-    let card_checked = ctx.checkbox_card;
-    component_canvas(
+pub(crate) struct CheckboxExample {
+    ctx: DemoContext,
+}
+
+impl CheckboxExample {
+    pub(crate) fn new(ctx: DemoContext) -> Self {
+        Self { ctx }
+    }
+}
+
+impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for CheckboxExample {
+    fn body(
+        &self,
+        _tree: &mut arkit::advanced::widget::Tree,
+        _renderer: &arkit::Renderer,
+    ) -> Option<Element> {
+        let ctx = self.ctx.clone();
+        Some({
+            let card_checked = ctx.checkbox_card;
+            component_canvas(
         fixed_width(
             v_stack(
                 vec![
                     h_stack(
                         vec![
-                            shadcn::checkbox(
-                                "",
-                                ctx.checkbox_first,
-                                Message::SetCheckboxFirst,
-                            ),
-                            shadcn::label("Accept terms and conditions").into(),
+                            shadcn::Checkbox::new("")
+                                .checked(ctx.checkbox_first)
+                                .on_change(Message::SetCheckboxFirst)
+                                .into(),
+                            shadcn::Label::new("Accept terms and conditions").into(),
                         ],
                         12.0,
                     ),
                     arkit::row_component()
                         .align_items_top()
                         .children(vec![
-                            shadcn::checkbox(
-                                "",
-                                ctx.checkbox_second,
-                                Message::SetCheckboxSecond,
-                            ),
+                            shadcn::Checkbox::new("")
+                                .checked(ctx.checkbox_second)
+                                .on_change(Message::SetCheckboxSecond)
+                                .into(),
                             arkit::row_component()
                                 .margin([0.0, 0.0, 0.0, 12.0])
                                 .layout_weight(1.0_f32)
                                 .children(vec![v_stack(
                                     vec![
-                                        shadcn::label("Accept terms and conditions").into(),
-                                        shadcn::text_variant(
+                                        shadcn::Label::new("Accept terms and conditions").into(),
+                                        shadcn::Text::muted(
                                             "By clicking this checkbox, you agree to the terms and conditions.",
-                                            true,
-                                        ),
+                                        ).into(),
                                     ],
                                     8.0,
                                 )])
@@ -48,10 +62,12 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                     arkit::row_component()
                         .align_items_top()
                         .children(vec![
-                            shadcn::disabled_checkbox("", false),
+                            shadcn::Checkbox::new("").disabled(true).into(),
                             arkit::row_component()
                                 .margin([0.0, 0.0, 0.0, 12.0])
-                                .children(vec![shadcn::label("Enable notifications")
+                                .children(vec![arkit::text("Enable notifications")
+                                    .font_size(shadcn::theme::typography::SM)
+                                    .font_color(shadcn::theme::colors().foreground)
                                     .opacity(0.5_f32)
                                     .into()])
                                 .into(),
@@ -81,12 +97,11 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                         .children(vec![arkit::row_component()
                             .align_items_top()
                             .children(vec![
-                                shadcn::checkbox_with_checked_color(
-                                    "",
-                                    card_checked,
-                                    Message::SetCheckboxCard,
-                                    0xFF2563EB,
-                                ),
+                                shadcn::Checkbox::new("")
+                                    .checked(card_checked)
+                                    .on_change(Message::SetCheckboxCard)
+                                    .checked_color(0xFF2563EB)
+                                    .into(),
                                 arkit::row_component()
                                     .margin([0.0, 0.0, 0.0, 12.0])
                                     .layout_weight(1.0_f32)
@@ -100,10 +115,9 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
                                                 .font_color(shadcn::theme::colors().foreground,)
                                                 .line_height(14.0,)
                                                 .into(),
-                                            shadcn::text_variant(
+                                            shadcn::Text::muted(
                                                 "You can enable or disable notifications at any time.",
-                                                true,
-                                            ),
+                                            ).into(),
                                         ])
                                         .into()])
                                     .into(),
@@ -118,4 +132,8 @@ pub(crate) fn render(ctx: DemoContext) -> Element {
         true,
         32.0,
     )
+        })
+    }
 }
+
+// struct component render

@@ -4,11 +4,12 @@ use arkit::ohos_arkui_binding::common::node::ArkUINode;
 use arkit::ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
 use arkit::ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
 use arkit::ohos_arkui_binding::types::curve::Curve;
+use arkit::router::{
+    Navigation, NavigationEvent, Route as RouterRoute, RouteDefinition, RouteTransitionDirection,
+    Router, RouterMessage, RouterNavigationExt,
+};
 use arkit::{application, Element as ArkElement, Task};
 use arkit_animation::{Motion, MotionExt};
-use arkit_router::{
-    Route as RouterRoute, RouteDefinition, RouteTransitionDirection, Router, StructuredRoute,
-};
 use arkit_shadcn::theme::{ColorTokens, RadiusTokens, ThemeMode, ThemePreset};
 use std::cell::Cell;
 use std::rc::Rc;
@@ -18,10 +19,9 @@ mod showcase;
 pub(crate) mod prelude {
     pub(crate) type Element = arkit::Element<crate::Message>;
     pub(crate) use arkit::prelude::*;
-    pub(crate) use arkit_shadcn::ButtonStyleExt;
 }
 
-use showcase::{catalog_home, component_page, DemoContext};
+use showcase::{CatalogHome, ComponentPage, DemoContext};
 
 const ROUTE_TRANSITION_DISTANCE: f32 = 28.0;
 const ROUTE_TRANSITION_DURATION_MS: i32 = 180;
@@ -34,55 +34,45 @@ enum Route {
 
 impl Route {
     fn key(&self) -> String {
-        self.path()
-    }
-
-    fn from_router_route(route: &RouterRoute) -> Option<Self> {
-        <Self as StructuredRoute>::from_route(route)
-    }
-}
-
-impl StructuredRoute for Route {
-    fn definitions() -> Vec<RouteDefinition> {
-        vec![
-            RouteDefinition::named("home", "/").expect("home route definition"),
-            RouteDefinition::named("component", "/components/:slug")
-                .expect("component route definition"),
-        ]
-    }
-
-    fn path(&self) -> String {
         match self {
             Route::Home => "/".to_string(),
             Route::Component { slug } => format!("/components/{slug}"),
         }
     }
 
-    fn from_route(route: &RouterRoute) -> Option<Self> {
-        match route.name()? {
-            "home" => Some(Route::Home),
-            "component" => Some(Route::Component {
-                slug: route.param("slug")?.to_string(),
-            }),
-            _ => None,
+    fn from_router_route(route: &RouterRoute) -> Option<Self> {
+        if route.pattern() == "/" {
+            return Some(Route::Home);
+        }
+
+        if route.pattern() == "/components/:slug" {
+            return route.param("slug").map(|slug| Route::Component {
+                slug: slug.to_string(),
+            });
+        }
+
+        None
+    }
+
+    fn router_message(&self) -> RouterMessage {
+        match self {
+            Route::Home => RouterMessage::push("/"),
+            Route::Component { slug } => RouterMessage::push(format!("/components/{slug}")),
         }
     }
 }
 
 #[derive(Debug, Clone)]
 enum Message {
-    Navigate(Route),
-    Back,
+    Router(RouterMessage),
     ButtonPreviewPressed(String),
     SetHomeSearch(String),
-    SetActiveTab(usize),
     SetPage(i32),
     SetRadioChoice(String),
     SetSelectChoice(String),
     SetQuery(String),
     SetToggleState(bool),
     SetContextMenuOpen(bool),
-    SetDropdownMenuOpen(bool),
     SetPopoverOpen(bool),
     SetTooltipOpen(bool),
     SetSelectOpen(bool),
@@ -107,14 +97,12 @@ pub(crate) struct ShowcaseState {
     route_transition_direction: Rc<Cell<RouteTransitionDirection>>,
     home_search: String,
     button_preview_feedback: Option<String>,
-    active_tab: usize,
     page: i32,
     radio_choice: String,
     select_choice: String,
     query: String,
     toggle_state: bool,
     context_menu_open: bool,
-    dropdown_menu_open: bool,
     popover_open: bool,
     tooltip_open: bool,
     select_open: bool,
@@ -137,8 +125,13 @@ impl Default for ShowcaseState {
     fn default() -> Self {
         let router = Router::new("/");
         router
-            .register_structured::<Route>()
-            .expect("register showcase routes");
+            .register_definition(RouteDefinition::new("/").expect("home route"))
+            .expect("register home route");
+        router
+            .register_definition(
+                RouteDefinition::new("/components/:slug").expect("component route"),
+            )
+            .expect("register component route");
 
         Self {
             router,
@@ -146,14 +139,12 @@ impl Default for ShowcaseState {
             route_transition_direction: Rc::new(Cell::new(RouteTransitionDirection::None)),
             home_search: String::new(),
             button_preview_feedback: None,
-            active_tab: 0,
             page: 1,
             radio_choice: String::from("Default"),
             select_choice: String::from("Apple"),
             query: String::new(),
             toggle_state: false,
             context_menu_open: false,
-            dropdown_menu_open: false,
             popover_open: false,
             tooltip_open: false,
             select_open: false,
@@ -181,7 +172,6 @@ impl ShowcaseState {
 
     fn demo_context(&self) -> DemoContext {
         DemoContext {
-            active_tab: self.active_tab,
             page: self.page,
             button_preview_feedback: self.button_preview_feedback.clone(),
             radio_choice: self.radio_choice.clone(),
@@ -189,7 +179,6 @@ impl ShowcaseState {
             query: self.query.clone(),
             toggle_state: self.toggle_state,
             context_menu_open: self.context_menu_open,
-            dropdown_menu_open: self.dropdown_menu_open,
             popover_open: self.popover_open,
             tooltip_open: self.tooltip_open,
             select_open: self.select_open,
@@ -210,7 +199,6 @@ impl ShowcaseState {
     }
 
     fn reset_component_demo_state(&mut self) {
-        self.active_tab = 0;
         self.page = 1;
         self.button_preview_feedback = None;
         self.radio_choice = String::from("Default");
@@ -218,7 +206,6 @@ impl ShowcaseState {
         self.query.clear();
         self.toggle_state = false;
         self.context_menu_open = false;
-        self.dropdown_menu_open = false;
         self.popover_open = false;
         self.tooltip_open = false;
         self.select_open = false;
@@ -278,48 +265,11 @@ fn custom_theme_colors(mode: ThemeMode) -> ColorTokens {
 
 fn update(state: &mut ShowcaseState, message: Message) -> Task<Message> {
     match message {
-        Message::Navigate(route) => {
-            if route != state.route {
-                state.reset_component_demo_state();
-                match state.router.push_structured(route.clone()) {
-                    Ok(resolved) => {
-                        state
-                            .route_transition_direction
-                            .set(RouteTransitionDirection::Forward);
-                        state.route = Route::from_router_route(&resolved).unwrap_or(route);
-                    }
-                    Err(error) => {
-                        ohos_hilog_binding::error(format!("navigation failed: {error}"));
-                    }
-                }
-            }
+        Message::Router(RouterMessage::Event(event)) => {
+            return handle_navigation_event(state, event);
         }
-        Message::Back => {
-            if state.router.can_go_back() {
-                state.reset_component_demo_state();
-                if state.router.back() {
-                    state
-                        .route_transition_direction
-                        .set(RouteTransitionDirection::Backward);
-                    state.route = state
-                        .router
-                        .current_structured::<Route>()
-                        .unwrap_or(Route::Home);
-                }
-            } else if state.route != Route::Home {
-                state.reset_component_demo_state();
-                match state.router.replace_structured(Route::Home) {
-                    Ok(resolved) => {
-                        state
-                            .route_transition_direction
-                            .set(RouteTransitionDirection::Replace);
-                        state.route = Route::from_router_route(&resolved).unwrap_or(Route::Home);
-                    }
-                    Err(error) => {
-                        ohos_hilog_binding::error(format!("navigation failed: {error}"));
-                    }
-                }
-            }
+        Message::Router(message) => {
+            return state.router.handle(message, Message::Router);
         }
         Message::ButtonPreviewPressed(label) => {
             state.button_preview_feedback =
@@ -327,14 +277,12 @@ fn update(state: &mut ShowcaseState, message: Message) -> Task<Message> {
             ohos_hilog_binding::info(format!("button preview pressed: {label}"));
         }
         Message::SetHomeSearch(value) => state.home_search = value,
-        Message::SetActiveTab(value) => state.active_tab = value,
         Message::SetPage(value) => state.page = value.max(1),
         Message::SetRadioChoice(value) => state.radio_choice = value,
         Message::SetSelectChoice(value) => state.select_choice = value,
         Message::SetQuery(value) => state.query = value,
         Message::SetToggleState(value) => state.toggle_state = value,
         Message::SetContextMenuOpen(value) => state.context_menu_open = value,
-        Message::SetDropdownMenuOpen(value) => state.dropdown_menu_open = value,
         Message::SetPopoverOpen(value) => state.popover_open = value,
         Message::SetTooltipOpen(value) => state.tooltip_open = value,
         Message::SetSelectOpen(value) => state.select_open = value,
@@ -364,6 +312,42 @@ fn update(state: &mut ShowcaseState, message: Message) -> Task<Message> {
     }
 
     Task::none()
+}
+
+fn handle_navigation_event(state: &mut ShowcaseState, event: NavigationEvent) -> Task<Message> {
+    match event.result {
+        Ok(resolved) => {
+            let route = Route::from_router_route(&resolved).unwrap_or(Route::Home);
+            if route != state.route {
+                state.reset_component_demo_state();
+            }
+
+            state
+                .route_transition_direction
+                .set(navigation_direction(&event.navigation));
+            state.route = route;
+        }
+        Err(error) => {
+            if matches!(event.navigation, Navigation::Back) && state.route != Route::Home {
+                state.reset_component_demo_state();
+                return state
+                    .router
+                    .handle(RouterMessage::replace("/"), Message::Router);
+            }
+
+            ohos_hilog_binding::error(format!("navigation failed: {error}"));
+        }
+    }
+
+    Task::none()
+}
+
+fn navigation_direction(navigation: &Navigation) -> RouteTransitionDirection {
+    match navigation {
+        Navigation::Push(_) => RouteTransitionDirection::Forward,
+        Navigation::Back => RouteTransitionDirection::Backward,
+        Navigation::Replace(_) | Navigation::Reset(_) => RouteTransitionDirection::Replace,
+    }
 }
 
 fn route_motion() -> Motion {
@@ -423,8 +407,10 @@ fn route_page(
 fn view(state: &ShowcaseState) -> ArkElement<Message> {
     arkit_shadcn::theme::with_theme(state.theme(), || {
         let content = match &state.route {
-            Route::Home => catalog_home(state),
-            Route::Component { slug } => component_page(slug.clone(), state.demo_context()),
+            Route::Home => ArkElement::new(CatalogHome::new(state)),
+            Route::Component { slug } => {
+                ArkElement::new(ComponentPage::new(slug.clone(), state.demo_context()))
+            }
         };
 
         route_page(

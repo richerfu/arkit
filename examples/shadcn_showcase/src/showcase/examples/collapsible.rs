@@ -16,26 +16,48 @@ fn repo_row(name: &str) -> Element {
             shadcn::theme::radii().md,
             shadcn::theme::radii().md,
         ])
-        .children(vec![shadcn::text_sm(name)])
+        .children(vec![shadcn::Text::small(name).into()])
         .into()
 }
 
-pub(crate) fn render(ctx: DemoContext) -> Element {
-    component_canvas(
-        fixed_width(
-            shadcn::collapsible(
-                "@peduarte starred 3 repositories",
-                ctx.toggle_state,
-                Message::SetToggleState,
-                vec![
-                    repo_row("@radix-ui/primitives"),
-                    repo_row("@radix-ui/react"),
-                    repo_row("@stitches/core"),
-                ],
-            ),
-            350.0,
-        ),
-        true,
-        32.0,
-    )
+pub(crate) struct CollapsibleExample {
+    ctx: DemoContext,
 }
+
+impl CollapsibleExample {
+    pub(crate) fn new(ctx: DemoContext) -> Self {
+        Self { ctx }
+    }
+}
+
+impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for CollapsibleExample {
+    fn body(
+        &self,
+        _tree: &mut arkit::advanced::widget::Tree,
+        _renderer: &arkit::Renderer,
+    ) -> Option<Element> {
+        let ctx = self.ctx.clone();
+        Some({
+            component_canvas(
+                fixed_width(
+                    shadcn::Collapsible::new(
+                        "@peduarte starred 3 repositories",
+                        vec![
+                            repo_row("@radix-ui/primitives"),
+                            repo_row("@radix-ui/react"),
+                            repo_row("@stitches/core"),
+                        ],
+                    )
+                    .open(ctx.toggle_state)
+                    .on_open_change(Message::SetToggleState)
+                    .into(),
+                    350.0,
+                ),
+                true,
+                32.0,
+            )
+        })
+    }
+}
+
+// struct component render

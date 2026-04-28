@@ -26,12 +26,12 @@ fn base_text<Message: 'static>(content: impl Into<String>) -> TextElement<Messag
         .text_align(TextAlignment::Start)
 }
 
-pub fn text<Message: 'static>(content: impl Into<String>) -> Element<Message> {
+fn text<Message: 'static>(content: impl Into<String>) -> Element<Message> {
     text_with_variant(content, TextVariant::Default)
 }
 
 /// Equivalent to Tailwind `text-sm` (no extra weight / leading utilities).
-pub fn text_sm<Message: 'static>(content: impl Into<String>) -> Element<Message> {
+fn text_sm<Message: 'static>(content: impl Into<String>) -> Element<Message> {
     arkit::text::<Message, arkit::Theme>(content)
         .font_size(typography::SM)
         .font_color(colors().foreground)
@@ -41,7 +41,7 @@ pub fn text_sm<Message: 'static>(content: impl Into<String>) -> Element<Message>
 }
 
 /// Equivalent to Tailwind `text-sm font-medium` (default `text-sm` line height).
-pub fn text_sm_medium<Message: 'static>(content: impl Into<String>) -> Element<Message> {
+pub(super) fn text_sm_medium<Message: 'static>(content: impl Into<String>) -> Element<Message> {
     arkit::text::<Message, arkit::Theme>(content)
         .font_size(typography::SM)
         .font_weight(FontWeight::W500)
@@ -51,7 +51,7 @@ pub fn text_sm_medium<Message: 'static>(content: impl Into<String>) -> Element<M
         .into()
 }
 
-pub fn text_with_variant<Message: 'static>(
+fn text_with_variant<Message: 'static>(
     content: impl Into<String>,
     variant: TextVariant,
 ) -> Element<Message> {
@@ -143,7 +143,7 @@ pub fn text_with_variant<Message: 'static>(
     }
 }
 
-pub fn text_variant<Message: 'static>(content: impl Into<String>, muted: bool) -> Element<Message> {
+fn text_variant<Message: 'static>(content: impl Into<String>, muted: bool) -> Element<Message> {
     text_with_variant(
         content,
         if muted {
@@ -153,3 +153,45 @@ pub fn text_variant<Message: 'static>(content: impl Into<String>, muted: bool) -
         },
     )
 }
+
+// Struct component API
+pub struct Text<Message = ()> {
+    content: String,
+    variant: TextVariant,
+    _marker: std::marker::PhantomData<Message>,
+}
+
+impl<Message> Text<Message> {
+    pub fn new(content: impl Into<String>) -> Self {
+        Self {
+            content: content.into(),
+            variant: TextVariant::P,
+            _marker: std::marker::PhantomData,
+        }
+    }
+
+    pub fn small(content: impl Into<String>) -> Self {
+        Self::new(content).variant(TextVariant::Small)
+    }
+
+    pub fn small_medium(content: impl Into<String>) -> Self {
+        Self::new(content).variant(TextVariant::Small)
+    }
+
+    pub fn with_variant(content: impl Into<String>, variant: TextVariant) -> Self {
+        Self::new(content).variant(variant)
+    }
+
+    pub fn muted(content: impl Into<String>) -> Self {
+        Self::new(content).variant(TextVariant::Muted)
+    }
+
+    pub fn variant(mut self, variant: TextVariant) -> Self {
+        self.variant = variant;
+        self
+    }
+}
+
+impl_component_widget!(Text<Message>, Message, |value: &Text<Message>| {
+    text_with_variant(value.content.clone(), value.variant)
+});

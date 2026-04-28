@@ -1,6 +1,6 @@
 use super::*;
 
-pub fn skeleton<Message: 'static>(width: f32, height: f32) -> Element<Message> {
+fn skeleton<Message: 'static>(width: f32, height: f32) -> Element<Message> {
     let skeleton_radius = if (width - height).abs() < f32::EPSILON && width >= 40.0 {
         radii().full
     } else {
@@ -19,3 +19,24 @@ pub fn skeleton<Message: 'static>(width: f32, height: f32) -> Element<Message> {
         ])
         .into()
 }
+
+// Struct component API
+pub struct Skeleton<Message = ()> {
+    width: f32,
+    height: f32,
+    _marker: std::marker::PhantomData<Message>,
+}
+
+impl<Message> Skeleton<Message> {
+    pub fn new(width: f32, height: f32) -> Self {
+        Self {
+            width,
+            height,
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
+impl_component_widget!(Skeleton<Message>, Message, |value: &Skeleton<Message>| {
+    skeleton(value.width, value.height)
+});

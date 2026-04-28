@@ -1,3 +1,4 @@
+use super::label::label;
 use super::*;
 use arkit_icon as lucide;
 use std::rc::Rc;
@@ -86,7 +87,7 @@ fn checkbox_impl<Message: 'static>(
     root.into()
 }
 
-pub fn checkbox_message<Message>(
+fn checkbox_message<Message>(
     label: impl Into<String>,
     checked: bool,
     on_toggle: impl Fn(bool) -> Message + 'static,
@@ -105,7 +106,7 @@ where
     )
 }
 
-pub fn checkbox_with_checked_color_message<Message>(
+fn checkbox_with_checked_color_message<Message>(
     label: impl Into<String>,
     checked: bool,
     on_toggle: impl Fn(bool) -> Message + 'static,
@@ -125,7 +126,7 @@ where
     )
 }
 
-pub fn disabled_checkbox<Message: 'static>(
+fn disabled_checkbox<Message: 'static>(
     label: impl Into<String>,
     checked: bool,
 ) -> Element<Message> {
@@ -138,4 +139,100 @@ pub fn disabled_checkbox<Message: 'static>(
             disabled: true,
         },
     )
+}
+
+// Struct component API
+pub struct Checkbox<Message = ()> {
+    label: String,
+    checked: Option<bool>,
+    default_checked: bool,
+    checked_color: Option<u32>,
+    disabled: bool,
+    on_change: Option<std::rc::Rc<dyn Fn(bool) -> Message>>,
+}
+
+impl<Message> Checkbox<Message> {
+    pub fn new(label: impl Into<String>) -> Self {
+        Self {
+            label: label.into(),
+            checked: None,
+            default_checked: false,
+            checked_color: None,
+            disabled: false,
+            on_change: None,
+        }
+    }
+
+    pub fn checked(mut self, checked: bool) -> Self {
+        self.checked = Some(checked);
+        self
+    }
+
+    pub fn default_checked(mut self, checked: bool) -> Self {
+        self.default_checked = checked;
+        self
+    }
+
+    pub fn checked_color(mut self, color: u32) -> Self {
+        self.checked_color = Some(color);
+        self
+    }
+
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
+    pub fn on_change(mut self, handler: impl Fn(bool) -> Message + 'static) -> Self {
+        self.on_change = Some(std::rc::Rc::new(handler));
+        self
+    }
+
+    pub fn on_toggle(self, handler: impl Fn(bool) -> Message + 'static) -> Self {
+        self.on_change(handler)
+    }
+}
+
+impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer>
+    for Checkbox<Message>
+{
+    fn body(
+        &self,
+        tree: &mut arkit::advanced::widget::Tree,
+        _renderer: &arkit::Renderer,
+    ) -> Option<Element<Message>> {
+        let state = super::widget_state(tree, || self.default_checked);
+        let is_controlled = self.checked.is_some();
+        let checked = self.checked.unwrap_or_else(|| *state.borrow());
+        let style = CheckboxStyle {
+            checked_color: self.checked_color.unwrap_or_else(|| colors().primary),
+            disabled: self.disabled,
+        };
+
+        if self.disabled {
+            return Some(checkbox_impl(self.label.clone(), checked, None, style));
+        }
+
+        let handler = self.on_change.clone();
+        Some(checkbox_impl(
+            self.label.clone(),
+            checked,
+            Some(std::rc::Rc::new(move |value| {
+                if !is_controlled {
+                    *state.borrow_mut() = value;
+                    super::request_widget_rerender();
+                }
+                if let Some(handler) = handler.as_ref() {
+                    dispatch_message(handler(value));
+                }
+            })),
+            style,
+        ))
+    }
+}
+
+impl<Message: Send + 'static> From<Checkbox<Message>> for Element<Message> {
+    fn from(value: Checkbox<Message>) -> Self {
+        Element::new(value)
+    }
 }

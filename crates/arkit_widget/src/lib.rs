@@ -39,11 +39,11 @@ pub use render_impl::{
     text_input_component, toggle, toggle_component, virtual_grid, virtual_grid_component,
     virtual_list, virtual_list_component, virtual_water_flow, virtual_water_flow_component,
     water_flow_component, Attribute as ArkUINodeAttributeType,
-    AttributeValue as ArkUINodeAttributeItem, BorderStyle, ButtonType, Element, FontStyle,
-    GridScrollIndexEvent, HitTestBehavior, ItemAlignment, JustifyContent, ListScrollIndexEvent,
-    ListStickyStyle, MountedNode, Node, ObjectFit, ProgressLinearStyle, ProgressType, Renderer,
-    ScrollOffset, ScrollViewport, TextLayoutLine, TextLayoutSnapshot, UiState, VirtualListGroup,
-    VirtualVisibleRange, Visibility, WaterFlowScrollIndexEvent,
+    AttributeValue as ArkUINodeAttributeItem, BorderStyle, ButtonType, Component, Element,
+    FontStyle, GridScrollIndexEvent, HitTestBehavior, ItemAlignment, JustifyContent,
+    ListScrollIndexEvent, ListStickyStyle, MountedNode, Node, ObjectFit, ProgressLinearStyle,
+    ProgressType, Renderer, ScrollOffset, ScrollViewport, TextLayoutLine, TextLayoutSnapshot,
+    UiState, VirtualListGroup, VirtualVisibleRange, Visibility, WaterFlowScrollIndexEvent,
 };
 #[cfg(feature = "webview")]
 pub use render_impl::{
@@ -56,31 +56,57 @@ pub enum LifecycleEvent {
     Unmount,
 }
 
-pub type ButtonElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
-pub type CalendarPickerElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
-pub type CheckboxElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
-pub type ContainerElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
-pub type DatePickerElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
-pub type FlowItemElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
-pub type GridElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
-pub type GridItemElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
-pub type ListElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
-pub type ListItemElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
-pub type ListItemGroupElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
-pub type ProgressElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
-pub type RadioElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
-pub type RefreshElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
-pub type RowElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
-pub type ScrollElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
-pub type SliderElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
-pub type SwiperElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
-pub type TextAreaElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
-pub type TextElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
-pub type TextInputElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
-pub type ToggleElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
-pub type WaterFlowElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
+pub type ButtonElement<Message = (), AppTheme = Theme> =
+    render_impl::ButtonElement<Message, AppTheme>;
+pub type CalendarPickerElement<Message = (), AppTheme = Theme> =
+    render_impl::CalendarPickerElement<Message, AppTheme>;
+pub type CheckboxElement<Message = (), AppTheme = Theme> =
+    render_impl::CheckboxElement<Message, AppTheme>;
+pub type ColumnElement<Message = (), AppTheme = Theme> =
+    render_impl::ColumnElement<Message, AppTheme>;
+pub type ContainerElement<Message = (), AppTheme = Theme> =
+    render_impl::ContainerElement<Message, AppTheme>;
+pub type DatePickerElement<Message = (), AppTheme = Theme> =
+    render_impl::DatePickerElement<Message, AppTheme>;
+pub type FlowItemElement<Message = (), AppTheme = Theme> =
+    render_impl::FlowItemElement<Message, AppTheme>;
+pub type GridElement<Message = (), AppTheme = Theme> = render_impl::GridElement<Message, AppTheme>;
+pub type GridItemElement<Message = (), AppTheme = Theme> =
+    render_impl::GridItemElement<Message, AppTheme>;
+pub type ImageElement<Message = (), AppTheme = Theme> =
+    render_impl::ImageElement<Message, AppTheme>;
+pub type ListElement<Message = (), AppTheme = Theme> = render_impl::ListElement<Message, AppTheme>;
+pub type ListItemElement<Message = (), AppTheme = Theme> =
+    render_impl::ListItemElement<Message, AppTheme>;
+pub type ListItemGroupElement<Message = (), AppTheme = Theme> =
+    render_impl::ListItemGroupElement<Message, AppTheme>;
+pub type ProgressElement<Message = (), AppTheme = Theme> =
+    render_impl::ProgressElement<Message, AppTheme>;
+pub type RadioElement<Message = (), AppTheme = Theme> =
+    render_impl::RadioElement<Message, AppTheme>;
+pub type RefreshElement<Message = (), AppTheme = Theme> =
+    render_impl::RefreshElement<Message, AppTheme>;
+pub type RowElement<Message = (), AppTheme = Theme> = render_impl::RowElement<Message, AppTheme>;
+pub type ScrollElement<Message = (), AppTheme = Theme> =
+    render_impl::ScrollElement<Message, AppTheme>;
+pub type SliderElement<Message = (), AppTheme = Theme> =
+    render_impl::SliderElement<Message, AppTheme>;
+pub type StackElement<Message = (), AppTheme = Theme> =
+    render_impl::StackElement<Message, AppTheme>;
+pub type SwiperElement<Message = (), AppTheme = Theme> =
+    render_impl::SwiperElement<Message, AppTheme>;
+pub type TextAreaElement<Message = (), AppTheme = Theme> =
+    render_impl::TextAreaElement<Message, AppTheme>;
+pub type TextElement<Message = (), AppTheme = Theme> = render_impl::TextElement<Message, AppTheme>;
+pub type TextInputElement<Message = (), AppTheme = Theme> =
+    render_impl::TextInputElement<Message, AppTheme>;
+pub type ToggleElement<Message = (), AppTheme = Theme> =
+    render_impl::ToggleElement<Message, AppTheme>;
+pub type WaterFlowElement<Message = (), AppTheme = Theme> =
+    render_impl::WaterFlowElement<Message, AppTheme>;
 #[cfg(feature = "webview")]
-pub type WebViewElement<Message = (), AppTheme = Theme> = Node<Message, AppTheme>;
+pub type WebViewElement<Message = (), AppTheme = Theme> =
+    render_impl::WebViewElement<Message, AppTheme>;
 
 pub fn observe_layout_size<Message, AppTheme>(
     element: Element<Message, AppTheme>,

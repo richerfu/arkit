@@ -18,6 +18,7 @@ dependencies = [
  "arkit_core",
  "arkit_derive",
  "arkit_futures",
+ "arkit_router",
  "arkit_runtime",
  "arkit_widget",
  "napi-derive-ohos",
@@ -882,6 +883,17 @@ name = "regex-syntax"
 version = "0.8.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc897dd8d9e8bd1ed8cdad82b5966c3e0ecae09fb1907d58efaa013543185d0a"
+
+[[package]]
+name = "router_example"
+version = "0.1.0"
+dependencies = [
+ "arkit",
+ "napi-build-ohos",
+ "napi-derive-ohos",
+ "napi-ohos",
+ "tokio",
+]
 
 [[package]]
 name = "rust-embed"

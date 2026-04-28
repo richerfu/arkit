@@ -1,3 +1,4 @@
+use super::label::label;
 use super::*;
 use std::rc::Rc;
 
@@ -79,7 +80,7 @@ fn radio_group_impl<Message: 'static>(
         .into()
 }
 
-pub fn radio_group_message<Message>(
+fn radio_group_message<Message>(
     options: Vec<String>,
     selected: impl Into<String>,
     on_select: impl Fn(String) -> Message + 'static,
@@ -90,4 +91,75 @@ where
     radio_group_impl(options, selected, move |value| {
         dispatch_message(on_select(value))
     })
+}
+
+// Struct component API
+pub struct RadioGroup<Message = ()> {
+    options: Vec<String>,
+    selected: Option<String>,
+    default_selected: String,
+    on_select: Option<std::rc::Rc<dyn Fn(String) -> Message>>,
+}
+
+impl<Message> RadioGroup<Message> {
+    pub fn new(options: Vec<String>) -> Self {
+        Self {
+            options,
+            selected: None,
+            default_selected: String::new(),
+            on_select: None,
+        }
+    }
+
+    pub fn selected(mut self, selected: impl Into<String>) -> Self {
+        self.selected = Some(selected.into());
+        self
+    }
+
+    pub fn default_selected(mut self, selected: impl Into<String>) -> Self {
+        self.default_selected = selected.into();
+        self
+    }
+
+    pub fn on_select(mut self, handler: impl Fn(String) -> Message + 'static) -> Self {
+        self.on_select = Some(std::rc::Rc::new(handler));
+        self
+    }
+}
+
+impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer>
+    for RadioGroup<Message>
+{
+    fn body(
+        &self,
+        tree: &mut arkit::advanced::widget::Tree,
+        _renderer: &arkit::Renderer,
+    ) -> Option<Element<Message>> {
+        let state = super::widget_state(tree, || self.default_selected.clone());
+        let is_controlled = self.selected.is_some();
+        let selected = self
+            .selected
+            .clone()
+            .unwrap_or_else(|| state.borrow().clone());
+        let on_select = self.on_select.clone();
+        Some(radio_group_impl(
+            self.options.clone(),
+            selected,
+            move |value| {
+                if !is_controlled {
+                    *state.borrow_mut() = value.clone();
+                    super::request_widget_rerender();
+                }
+                if let Some(on_select) = on_select.as_ref() {
+                    dispatch_message(on_select(value));
+                }
+            },
+        ))
+    }
+}
+
+impl<Message: Send + 'static> From<RadioGroup<Message>> for Element<Message> {
+    fn from(value: RadioGroup<Message>) -> Self {
+        Element::new(value)
+    }
 }

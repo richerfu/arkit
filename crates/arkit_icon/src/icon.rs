@@ -198,7 +198,8 @@ fn build_icon_node<Message: 'static, AppTheme: 'static>(
         })
         .attr(ArkUINodeAttributeType::ImageAlt, alt)
         .width(size)
-        .height(size))
+        .height(size)
+        .into())
 }
 
 fn icon_to_arkui_error(error: IconError) -> ArkUIError {

@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 const COMBOBOX_PANEL_FALLBACK_WIDTH: f32 = 240.0;
 
-pub fn combobox<Message>(
+fn combobox<Message>(
     options: Vec<String>,
     selected: impl Into<String> + 'static,
     open: bool,

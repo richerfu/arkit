@@ -1,7 +1,7 @@
 use arkit::entry;
 use arkit::internal::dispatch;
 use arkit::prelude::*;
-use arkit::{application, Element, Node, Task, WebViewController};
+use arkit::{application, Element, Task, WebViewController};
 
 const RUST_URL: &str = "https://www.rust-lang.org";
 const DOCS_URL: &str = "https://docs.rs";
@@ -111,100 +111,173 @@ fn update(state: &mut AppState, message: Message) -> Task<Message> {
 }
 
 fn view(state: &AppState) -> Element<Message> {
-    column_component()
-        .percent_width(1.0)
-        .percent_height(1.0)
-        .background_color(0xFFF6F7FB)
-        .children(vec![
-            column_component()
-                .padding(16.0)
-                .background_color(0xFFFFFFFF)
-                .children(vec![
-                    text("arkit webview example")
-                        .font_size(24.0)
-                        .font_weight(FontWeight::W700)
-                        .line_height(28.0)
-                        .into(),
-                    text(format!("title: {}", state.title))
-                        .margin_top(8.0)
-                        .font_size(14.0)
-                        .line_height(18.0)
-                        .font_color(0xFF334155)
-                        .into(),
-                    text(format!("url: {}", state.current_url))
-                        .margin_top(4.0)
-                        .font_size(13.0)
-                        .line_height(18.0)
-                        .font_color(0xFF64748B)
-                        .into(),
-                    text(format!("status: {}", state.status))
-                        .margin_top(4.0)
-                        .font_size(13.0)
-                        .line_height(18.0)
-                        .font_color(0xFF0F766E)
-                        .into(),
-                    toolbar_button(
-                        &format!("Tap Probe {}", state.probe_taps),
-                        Message::ProbeTap,
-                    )
-                    .margin_top(12.0)
-                    .background_color(0xFF0F766E)
-                    .into(),
-                    row_component()
-                        .margin_top(12.0)
-                        .children(vec![
-                            toolbar_button("Reload", Message::Reload).into(),
-                            toolbar_button("Focus", Message::Focus)
-                                .margin_left(8.0)
-                                .into(),
-                            toolbar_button("Eval JS", Message::EvalScript)
-                                .margin_left(8.0)
-                                .into(),
-                            toolbar_button(
-                                if state.visible { "Hide" } else { "Show" },
-                                Message::ToggleVisible,
-                            )
-                            .margin_left(8.0)
-                            .into(),
-                        ])
-                        .into(),
-                    row_component()
-                        .margin_top(8.0)
-                        .children(vec![
-                            toolbar_button("rust-lang.org", Message::LoadRust).into(),
-                            toolbar_button("docs.rs", Message::LoadDocs)
-                                .margin_left(8.0)
-                                .into(),
-                        ])
-                        .into(),
-                ])
-                .into(),
-            container(
-                web_view(state.controller.clone(), state.current_url.clone())
-                    .background_color(0xFFFFFFFF)
-                    .on_title_change(|title| dispatch(Message::TitleChanged(title))),
-            )
-            .padding(16.0)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into(),
-        ])
-        .into()
+    Element::new(WebviewExampleView {
+        state: state.clone(),
+    })
 }
 
-fn toolbar_button(label: &str, message: Message) -> Node<Message> {
-    container(
-        text(label)
-            .font_color(0xFFFFFFFF)
-            .font_size(13.0)
-            .line_height(16.0),
-    )
-    .align_items_center()
-    .justify_content_center()
-    .padding([10.0, 14.0, 10.0, 14.0])
-    .border_radius(10.0)
-    .background_color(0xFF111827)
-    .on_press(message)
+struct WebviewExampleView {
+    state: AppState,
+}
+
+impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for WebviewExampleView {
+    fn body(
+        &self,
+        _tree: &mut arkit::advanced::widget::Tree,
+        _renderer: &arkit::Renderer,
+    ) -> Option<Element<Message>> {
+        let state = &self.state;
+        Some(
+            column_component()
+                .percent_width(1.0)
+                .percent_height(1.0)
+                .background_color(0xFFF6F7FB)
+                .children(vec![
+                    column_component()
+                        .padding(16.0)
+                        .background_color(0xFFFFFFFF)
+                        .children(vec![
+                            text("arkit webview example")
+                                .font_size(24.0)
+                                .font_weight(FontWeight::W700)
+                                .line_height(28.0)
+                                .into(),
+                            text(format!("title: {}", state.title))
+                                .margin_top(8.0)
+                                .font_size(14.0)
+                                .line_height(18.0)
+                                .font_color(0xFF334155)
+                                .into(),
+                            text(format!("url: {}", state.current_url))
+                                .margin_top(4.0)
+                                .font_size(13.0)
+                                .line_height(18.0)
+                                .font_color(0xFF64748B)
+                                .into(),
+                            text(format!("status: {}", state.status))
+                                .margin_top(4.0)
+                                .font_size(13.0)
+                                .line_height(18.0)
+                                .font_color(0xFF0F766E)
+                                .into(),
+                            Element::new(
+                                ToolbarButton::new(
+                                    format!("Tap Probe {}", state.probe_taps),
+                                    Message::ProbeTap,
+                                )
+                                .background_color(0xFF0F766E)
+                                .margin_top(12.0),
+                            ),
+                            row_component()
+                                .margin_top(12.0)
+                                .children(vec![
+                                    Element::new(ToolbarButton::new("Reload", Message::Reload)),
+                                    Element::new(
+                                        ToolbarButton::new("Focus", Message::Focus)
+                                            .margin_left(8.0),
+                                    ),
+                                    Element::new(
+                                        ToolbarButton::new("Eval JS", Message::EvalScript)
+                                            .margin_left(8.0),
+                                    ),
+                                    Element::new(
+                                        ToolbarButton::new(
+                                            if state.visible { "Hide" } else { "Show" },
+                                            Message::ToggleVisible,
+                                        )
+                                        .margin_left(8.0),
+                                    ),
+                                ])
+                                .into(),
+                            row_component()
+                                .margin_top(8.0)
+                                .children(vec![
+                                    Element::new(ToolbarButton::new(
+                                        "rust-lang.org",
+                                        Message::LoadRust,
+                                    )),
+                                    Element::new(
+                                        ToolbarButton::new("docs.rs", Message::LoadDocs)
+                                            .margin_left(8.0),
+                                    ),
+                                ])
+                                .into(),
+                        ])
+                        .into(),
+                    container(
+                        web_view(state.controller.clone(), state.current_url.clone())
+                            .background_color(0xFFFFFFFF)
+                            .on_title_change(|title| dispatch(Message::TitleChanged(title))),
+                    )
+                    .padding(16.0)
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .into(),
+                ])
+                .into(),
+        )
+    }
+}
+
+struct ToolbarButton {
+    label: String,
+    message: Message,
+    background_color: u32,
+    margin_top: f32,
+    margin_left: f32,
+}
+
+impl ToolbarButton {
+    fn new(label: impl Into<String>, message: Message) -> Self {
+        Self {
+            label: label.into(),
+            message,
+            background_color: 0xFF111827,
+            margin_top: 0.0,
+            margin_left: 0.0,
+        }
+    }
+
+    fn background_color(mut self, color: u32) -> Self {
+        self.background_color = color;
+        self
+    }
+
+    fn margin_top(mut self, value: f32) -> Self {
+        self.margin_top = value;
+        self
+    }
+
+    fn margin_left(mut self, value: f32) -> Self {
+        self.margin_left = value;
+        self
+    }
+}
+
+impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for ToolbarButton {
+    fn body(
+        &self,
+        _tree: &mut arkit::advanced::widget::Tree,
+        _renderer: &arkit::Renderer,
+    ) -> Option<Element<Message>> {
+        Some(
+            container(
+                text(self.label.clone())
+                    .font_color(0xFFFFFFFF)
+                    .font_size(13.0)
+                    .line_height(16.0),
+            )
+            .align_items_center()
+            .justify_content_center()
+            .padding([10.0, 14.0, 10.0, 14.0])
+            .border_radius(10.0)
+            .background_color(self.background_color)
+            .margin_top(self.margin_top)
+            .margin_left(self.margin_left)
+            .on_press(self.message.clone())
+            .into(),
+        )
+    }
 }
 
 #[entry]

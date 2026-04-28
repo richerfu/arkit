@@ -4,64 +4,86 @@ use crate::prelude::*;
 use crate::Message;
 use arkit_shadcn as shadcn;
 
-pub(crate) fn render(ctx: DemoContext) -> Element {
-    top_center_canvas(
+pub(crate) struct AccordionExample {
+    ctx: DemoContext,
+}
+
+impl AccordionExample {
+    pub(crate) fn new(ctx: DemoContext) -> Self {
+        Self { ctx }
+    }
+}
+
+impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for AccordionExample {
+    fn body(
+        &self,
+        _tree: &mut arkit::advanced::widget::Tree,
+        _renderer: &arkit::Renderer,
+    ) -> Option<Element> {
+        let ctx = self.ctx.clone();
+        Some({
+            top_center_canvas(
         max_width(
-            shadcn::accordion_single_controlled(
+            shadcn::Accordion::single(
                 vec![
-                    shadcn::accordion_item_parts(
+                    shadcn::AccordionItemSpec::new(
+                        "Product Information",
                         "item-1",
-                        shadcn::accordion_trigger(shadcn::text_sm_medium("Product Information")),
-                        shadcn::accordion_content(vec![v_stack(
+                        vec![v_stack(
                             vec![
-                                shadcn::text_sm(
+                                shadcn::Text::small(
                                     "Our flagship product combines cutting-edge technology with sleek design. Built with premium materials, it offers unparalleled performance and reliability.",
-                                ),
-                                shadcn::text_sm(
+                                ).into(),
+                                shadcn::Text::small(
                                     "Key features include advanced processing capabilities, and an intuitive user interface designed for both beginners and experts.",
-                                ),
+                                ).into(),
                             ],
                             16.0,
-                        )]),
+                        )],
                     ),
-                    shadcn::accordion_item_parts(
+                    shadcn::AccordionItemSpec::new(
+                        "Shipping Details",
                         "item-2",
-                        shadcn::accordion_trigger(shadcn::text_sm_medium("Shipping Details")),
-                        shadcn::accordion_content(vec![v_stack(
+                        vec![v_stack(
                             vec![
-                                shadcn::text_sm(
+                                shadcn::Text::small(
                                     "We offer worldwide shipping through trusted courier partners. Standard delivery takes 3-5 business days, while express shipping ensures delivery within 1-2 business days.",
-                                ),
-                                shadcn::text_sm(
+                                ).into(),
+                                shadcn::Text::small(
                                     "All orders are carefully packaged and fully insured. Track your shipment in real-time through our dedicated tracking portal.",
-                                ),
+                                ).into(),
                             ],
                             16.0,
-                        )]),
+                        )],
                     ),
-                    shadcn::accordion_item_parts(
+                    shadcn::AccordionItemSpec::new(
+                        "Return Policy",
                         "item-3",
-                        shadcn::accordion_trigger(shadcn::text_sm_medium("Return Policy")),
-                        shadcn::accordion_content(vec![v_stack(
+                        vec![v_stack(
                             vec![
-                                shadcn::text_sm(
+                                shadcn::Text::small(
                                     "We stand behind our products with a comprehensive 30-day return policy. If you're not completely satisfied, simply return the item in its original condition.",
-                                ),
-                                shadcn::text_sm(
+                                ).into(),
+                                shadcn::Text::small(
                                     "Our hassle-free return process includes free return shipping and full refunds processed within 48 hours of receiving the returned item.",
-                                ),
+                                ).into(),
                             ],
                             16.0,
-                        )]),
+                        )],
                     ),
                 ],
-                ctx.accordion_single_open.clone(),
-                true,
-                Message::SetAccordionSingleOpen,
-            ),
+            )
+            .value(ctx.accordion_single_open.clone())
+            .collapsible(true)
+            .on_value_change(Message::SetAccordionSingleOpen)
+            .into(),
             512.0,
         ),
         [0.0, 24.0, 0.0, 24.0],
         false,
     )
+        })
+    }
 }
+
+// struct component render

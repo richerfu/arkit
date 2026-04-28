@@ -5,7 +5,12 @@ use std::rc::Rc;
 
 const SELECT_PANEL_FALLBACK_WIDTH: f32 = 180.0;
 
-pub fn select<Message: 'static>(
+struct SelectTreeState {
+    selected: String,
+    open: bool,
+}
+
+fn select<Message: 'static>(
     options: Vec<String>,
     selected: impl Into<String>,
     open: bool,
@@ -167,7 +172,7 @@ pub fn select<Message: 'static>(
     )
 }
 
-pub fn select_message<Message>(
+fn select_message<Message>(
     options: Vec<String>,
     selected: impl Into<String>,
     open: bool,
@@ -184,4 +189,115 @@ where
         move |value| dispatch_message(on_open_change(value)),
         move |value| dispatch_message(on_select(value)),
     )
+}
+
+// Struct component API
+pub struct Select<Message = ()> {
+    options: Vec<String>,
+    selected: Option<String>,
+    default_selected: String,
+    open: Option<bool>,
+    default_open: bool,
+    on_open_change: Option<std::rc::Rc<dyn Fn(bool) -> Message>>,
+    on_select: Option<std::rc::Rc<dyn Fn(String) -> Message>>,
+}
+
+impl<Message> Select<Message> {
+    pub fn new(options: Vec<String>) -> Self {
+        Self {
+            options,
+            selected: None,
+            default_selected: String::new(),
+            open: None,
+            default_open: false,
+            on_open_change: None,
+            on_select: None,
+        }
+    }
+
+    pub fn selected(mut self, selected: impl Into<String>) -> Self {
+        self.selected = Some(selected.into());
+        self
+    }
+
+    pub fn default_selected(mut self, selected: impl Into<String>) -> Self {
+        self.default_selected = selected.into();
+        self
+    }
+
+    pub fn open(mut self, open: bool) -> Self {
+        self.open = Some(open);
+        self
+    }
+
+    pub fn default_open(mut self, open: bool) -> Self {
+        self.default_open = open;
+        self
+    }
+
+    pub fn on_open_change(mut self, handler: impl Fn(bool) -> Message + 'static) -> Self {
+        self.on_open_change = Some(std::rc::Rc::new(handler));
+        self
+    }
+
+    pub fn on_select(mut self, handler: impl Fn(String) -> Message + 'static) -> Self {
+        self.on_select = Some(std::rc::Rc::new(handler));
+        self
+    }
+}
+
+impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer>
+    for Select<Message>
+{
+    fn body(
+        &self,
+        tree: &mut arkit::advanced::widget::Tree,
+        _renderer: &arkit::Renderer,
+    ) -> Option<Element<Message>> {
+        let state = super::widget_state(tree, || SelectTreeState {
+            selected: self.default_selected.clone(),
+            open: self.default_open,
+        });
+        let selected_controlled = self.selected.is_some();
+        let open_controlled = self.open.is_some();
+        let selected = self.selected.clone().unwrap_or_else(|| {
+            let state = state.borrow();
+            state.selected.clone()
+        });
+        let open = self.open.unwrap_or_else(|| state.borrow().open);
+        let on_open_change = self.on_open_change.clone();
+        let on_select = self.on_select.clone();
+        let state_for_open = state.clone();
+        let state_for_select = state.clone();
+
+        Some(select(
+            self.options.clone(),
+            selected,
+            open,
+            move |value| {
+                if !open_controlled {
+                    state_for_open.borrow_mut().open = value;
+                    super::request_widget_rerender();
+                }
+                if let Some(on_open_change) = on_open_change.as_ref() {
+                    dispatch_message(on_open_change(value));
+                }
+            },
+            move |value| {
+                if !selected_controlled {
+                    state_for_select.borrow_mut().selected = value.clone();
+                    super::request_widget_rerender();
+                }
+                if let Some(on_select) = on_select.as_ref() {
+                    dispatch_message(on_select(value));
+                }
+            },
+        ))
+    }
+}
+
+impl<Message: Send + 'static> From<Select<Message>> for Element<Message> {
+    fn from(value: Select<Message>) -> Self {
+        Element::new(value)
+    }
 }

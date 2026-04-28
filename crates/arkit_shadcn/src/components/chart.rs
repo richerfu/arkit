@@ -1,6 +1,7 @@
+use super::card::card;
 use super::*;
 
-pub fn chart(values: Vec<f32>) -> Element {
+fn chart(values: Vec<f32>) -> Element {
     let palette = [
         colors().chart_1,
         colors().chart_2,
@@ -45,6 +46,6 @@ pub fn chart(values: Vec<f32>) -> Element {
     )
 }
 
-pub fn chart_card(title: impl Into<String>, values: Vec<f32>) -> Element {
+fn chart_card(title: impl Into<String>, values: Vec<f32>) -> Element {
     card(vec![title_text(title).into(), chart(values)])
 }

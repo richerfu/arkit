@@ -38,47 +38,69 @@ use crate::prelude::*;
 use arkit_shadcn as shadcn;
 pub(crate) use shared::DemoContext;
 
-pub(crate) fn render(slug: &str, ctx: DemoContext) -> Element {
-    match slug {
-        "accordion" => accordion::render(ctx),
-        "alert" => alert::render(ctx),
-        "alert-dialog" => alert_dialog::render(ctx),
-        "aspect-ratio" => aspect_ratio::render(ctx),
-        "avatar" => avatar::render(ctx),
-        "badge" => badge::render(ctx),
-        "button" => button::render(ctx),
-        "card" => card::render(ctx),
-        "checkbox" => checkbox::render(ctx),
-        "collapsible" => collapsible::render(ctx),
-        "context-menu" => context_menu::render(ctx),
-        "dialog" => dialog::render(ctx),
-        "dropdown-menu" => dropdown_menu::render(ctx),
-        "hover-card" => hover_card::render(ctx),
-        "icon" => icon::render(ctx),
-        "input" => input::render(ctx),
-        "label" => label::render(ctx),
-        "menubar" => menubar::render(ctx),
-        "popover" => popover::render(ctx),
-        "progress" => progress::render(ctx),
-        "radio-group" => radio_group::render(ctx),
-        "select" => select::render(ctx),
-        "separator" => separator::render(ctx),
-        "skeleton" => skeleton::render(ctx),
-        "switch" => switch::render(ctx),
-        "tabs" => tabs::render(ctx),
-        "text" => text::render(ctx),
-        "textarea" => textarea::render(ctx),
-        "toggle" => toggle::render(ctx),
-        "toggle-group" => toggle_group::render(ctx),
-        "tooltip" => tooltip::render(ctx),
-        "table" => table::render(ctx),
-        _ => component_canvas(
-            shadcn::card(vec![
-                shadcn::card_title("Route Not Found"),
-                shadcn::card_description("Please return to list and retry."),
-            ]),
-            true,
-            24.0,
-        ),
+pub(crate) struct ExampleRenderer {
+    slug: String,
+    ctx: DemoContext,
+}
+
+impl ExampleRenderer {
+    pub(crate) fn new(slug: impl Into<String>, ctx: DemoContext) -> Self {
+        Self {
+            slug: slug.into(),
+            ctx,
+        }
+    }
+}
+
+impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for ExampleRenderer {
+    fn body(
+        &self,
+        _tree: &mut arkit::advanced::widget::Tree,
+        _renderer: &arkit::Renderer,
+    ) -> Option<Element> {
+        let ctx = self.ctx.clone();
+        Some(match self.slug.as_str() {
+            "accordion" => Element::new(accordion::AccordionExample::new(ctx)),
+            "alert" => Element::new(alert::AlertExample::new(ctx)),
+            "alert-dialog" => Element::new(alert_dialog::AlertDialogExample::new(ctx)),
+            "aspect-ratio" => Element::new(aspect_ratio::AspectRatioExample::new(ctx)),
+            "avatar" => Element::new(avatar::AvatarExample::new(ctx)),
+            "badge" => Element::new(badge::BadgeExample::new(ctx)),
+            "button" => Element::new(button::ButtonExample::new(ctx)),
+            "card" => Element::new(card::CardExample::new(ctx)),
+            "checkbox" => Element::new(checkbox::CheckboxExample::new(ctx)),
+            "collapsible" => Element::new(collapsible::CollapsibleExample::new(ctx)),
+            "context-menu" => Element::new(context_menu::ContextMenuExample::new(ctx)),
+            "dialog" => Element::new(dialog::DialogExample::new(ctx)),
+            "dropdown-menu" => Element::new(dropdown_menu::DropdownMenuExample::new(ctx)),
+            "hover-card" => Element::new(hover_card::HoverCardExample::new(ctx)),
+            "icon" => Element::new(icon::IconExample::new(ctx)),
+            "input" => Element::new(input::InputExample::new(ctx)),
+            "label" => Element::new(label::LabelExample::new(ctx)),
+            "menubar" => Element::new(menubar::MenubarExample::new(ctx)),
+            "popover" => Element::new(popover::PopoverExample::new(ctx)),
+            "progress" => Element::new(progress::ProgressExample::new(ctx)),
+            "radio-group" => Element::new(radio_group::RadioGroupExample::new(ctx)),
+            "select" => Element::new(select::SelectExample::new(ctx)),
+            "separator" => Element::new(separator::SeparatorExample::new(ctx)),
+            "skeleton" => Element::new(skeleton::SkeletonExample::new(ctx)),
+            "switch" => Element::new(switch::SwitchExample::new(ctx)),
+            "tabs" => Element::new(tabs::TabsExample::new(ctx)),
+            "text" => Element::new(text::TextExample::new(ctx)),
+            "textarea" => Element::new(textarea::TextareaExample::new(ctx)),
+            "toggle" => Element::new(toggle::ToggleExample::new(ctx)),
+            "toggle-group" => Element::new(toggle_group::ToggleGroupExample::new(ctx)),
+            "tooltip" => Element::new(tooltip::TooltipExample::new(ctx)),
+            "table" => Element::new(table::TableExample::new(ctx)),
+            _ => component_canvas(
+                shadcn::Card::new(vec![
+                    shadcn::CardTitle::new("Route Not Found").into(),
+                    shadcn::CardDescription::new("Please return to list and retry.").into(),
+                ])
+                .into(),
+                true,
+                24.0,
+            ),
+        })
     }
 }

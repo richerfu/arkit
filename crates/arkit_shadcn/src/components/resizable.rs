@@ -1,6 +1,7 @@
+use super::separator::separator_vertical;
 use super::*;
 
-pub fn resizable(left: Element, right: Element) -> Element {
+fn resizable(left: Element, right: Element) -> Element {
     arkit::row_component()
         .percent_width(1.0)
         .children(inline(
