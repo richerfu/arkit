@@ -1,0 +1,8 @@
+[package]
+name = "arkit_i18n"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+arkit_i18n_macros.workspace = true

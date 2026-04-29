@@ -27,9 +27,9 @@ pub use render_impl::ListVisibleContentChangeEvent;
 pub use render_impl::{
     button, button_component, calendar_picker, calendar_picker_component, checkbox,
     checkbox_component, column, column_component, container, date_picker, date_picker_component,
-    flow_item, flow_item_component, grid, grid_component, grid_item, grid_item_component,
-    grouped_virtual_list, image, image_component, list, list_component, list_item,
-    list_item_component, list_item_group_component, mount,
+    flex, flex_component, flow_item, flow_item_component, grid, grid_component, grid_item,
+    grid_item_component, grouped_virtual_list, image, image_component, list, list_component,
+    list_item, list_item_component, list_item_group_component, mount,
     observe_layout_frame as observe_layout_frame_impl,
     observe_layout_size as observe_layout_size_impl,
     observe_text_layout as observe_text_layout_impl, patch, progress, progress_component, radio,
@@ -40,10 +40,11 @@ pub use render_impl::{
     virtual_list, virtual_list_component, virtual_water_flow, virtual_water_flow_component,
     water_flow_component, Attribute as ArkUINodeAttributeType,
     AttributeValue as ArkUINodeAttributeItem, BorderStyle, ButtonType, Component, Element,
-    FontStyle, GridScrollIndexEvent, HitTestBehavior, ItemAlignment, JustifyContent,
-    ListScrollIndexEvent, ListStickyStyle, MountedNode, Node, ObjectFit, ProgressLinearStyle,
-    ProgressType, Renderer, ScrollOffset, ScrollViewport, TextLayoutLine, TextLayoutSnapshot,
-    UiState, VirtualListGroup, VirtualVisibleRange, Visibility, WaterFlowScrollIndexEvent,
+    FlexDirection, FlexOptions, FlexWrap, FontStyle, GridScrollIndexEvent, HitTestBehavior,
+    ItemAlignment, JustifyContent, ListScrollIndexEvent, ListStickyStyle, MountedNode, Node,
+    ObjectFit, ProgressLinearStyle, ProgressType, Renderer, ScrollOffset, ScrollViewport,
+    TextLayoutLine, TextLayoutSnapshot, UiState, VirtualListGroup, VirtualVisibleRange, Visibility,
+    WaterFlowScrollIndexEvent,
 };
 #[cfg(feature = "webview")]
 pub use render_impl::{
@@ -68,6 +69,7 @@ pub type ContainerElement<Message = (), AppTheme = Theme> =
     render_impl::ContainerElement<Message, AppTheme>;
 pub type DatePickerElement<Message = (), AppTheme = Theme> =
     render_impl::DatePickerElement<Message, AppTheme>;
+pub type FlexElement<Message = (), AppTheme = Theme> = render_impl::FlexElement<Message, AppTheme>;
 pub type FlowItemElement<Message = (), AppTheme = Theme> =
     render_impl::FlowItemElement<Message, AppTheme>;
 pub type GridElement<Message = (), AppTheme = Theme> = render_impl::GridElement<Message, AppTheme>;

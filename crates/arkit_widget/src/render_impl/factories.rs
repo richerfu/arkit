@@ -318,6 +318,19 @@ pub fn column<Message: 'static, AppTheme: 'static>(
         .into()
 }
 
+pub fn flex_component<Message, AppTheme>() -> FlexElement<Message, AppTheme> {
+    Component::from_node(Node::new(NodeKind::Flex))
+}
+
+pub fn flex<Message: 'static, AppTheme: 'static>(
+    children: Vec<Element<Message, AppTheme>>,
+) -> Element<Message, AppTheme> {
+    flex_component()
+        .percent_width(1.0)
+        .children(children)
+        .into()
+}
+
 pub fn row_component<Message, AppTheme>() -> RowElement<Message, AppTheme> {
     Component::from_node(Node::new(NodeKind::Row))
 }

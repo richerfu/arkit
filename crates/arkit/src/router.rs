@@ -4,7 +4,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::str::FromStr;
 
-use crate::{advanced, Element, Renderer, Task, Theme};
+use crate::{advanced, BackPressDecision, Element, Renderer, Task, Theme};
 
 type BoxRouteGuardFuture = Pin<Box<dyn Future<Output = RouteGuardDecision> + Send + 'static>>;
 
@@ -169,11 +169,18 @@ impl<Message: 'static> Routes<Message> {
         self
     }
 
-    pub fn fallback<F>(self, path: impl Into<String>, render: F) -> Self
+    pub fn fallback<F>(mut self, path: impl Into<String>, render: F) -> Self
     where
         F: Fn(RouteContext) -> Element<Message> + 'static,
     {
-        self.route(path, render)
+        self.nodes.push(RouteNode {
+            path: path.into(),
+            full_pattern: String::new(),
+            kind: RouteNodeKind::Fallback(Box::new(render)),
+            guards: Vec::new(),
+            children: Vec::new(),
+        });
+        self
     }
 }
 
@@ -193,6 +200,7 @@ struct RouteNode<Message> {
 
 enum RouteNodeKind<Message> {
     Leaf(Box<dyn Fn(RouteContext) -> Element<Message>>),
+    Fallback(Box<dyn Fn(RouteContext) -> Element<Message>>),
     Layout(Box<dyn Fn(RouteContext, Outlet<Message>) -> Element<Message>>),
     Scope,
 }
@@ -200,6 +208,11 @@ enum RouteNodeKind<Message> {
 enum RouteGuardRegistration {
     Sync(Box<dyn Fn(RouteGuardContext) -> RouteGuardDecision + Send + Sync>),
     Async(Box<dyn Fn(RouteGuardContext) -> BoxRouteGuardFuture + Send + Sync>),
+}
+
+enum RouteRegistration {
+    Definition(RouteDefinition),
+    Fallback(RouteDefinition),
 }
 
 pub struct RouterOutlet<Message> {
@@ -215,13 +228,22 @@ struct RouteOutletPage<Message> {
 
 impl<Message: 'static> RouterOutlet<Message> {
     pub fn new(router: Router, routes: Routes<Message>) -> Self {
-        let mut definitions = Vec::new();
-        let routes = compile_nodes(routes.nodes, "/", &router, &[], &mut definitions);
+        let mut registrations = Vec::new();
+        let routes = compile_nodes(routes.nodes, "/", &router, &[], &mut registrations);
 
-        for definition in definitions {
-            router
-                .register_definition(definition)
-                .expect("route registered by RouterOutlet");
+        for registration in registrations {
+            match registration {
+                RouteRegistration::Definition(definition) => {
+                    router
+                        .register_definition(definition)
+                        .expect("route registered by RouterOutlet");
+                }
+                RouteRegistration::Fallback(definition) => {
+                    router
+                        .register_fallback_definition(definition)
+                        .expect("fallback route registered by RouterOutlet");
+                }
+            }
         }
 
         Self {
@@ -310,7 +332,7 @@ fn compile_nodes<Message>(
     parent_pattern: &str,
     router: &Router,
     active_guards: &[GuardRef],
-    definitions: &mut Vec<RouteDefinition>,
+    registrations: &mut Vec<RouteRegistration>,
 ) -> Vec<RouteNode<Message>> {
     nodes
         .into_iter()
@@ -333,16 +355,23 @@ fn compile_nodes<Message>(
                 &full_pattern,
                 router,
                 &guard_chain,
-                definitions,
+                registrations,
             );
             node.full_pattern = full_pattern;
 
-            if matches!(node.kind, RouteNodeKind::Leaf(_)) {
-                definitions.push(
-                    RouteDefinition::new(node.full_pattern.clone())
-                        .expect("route registered by RouterOutlet")
-                        .with_guard_chain(guard_chain),
-                );
+            if matches!(
+                &node.kind,
+                RouteNodeKind::Leaf(_) | RouteNodeKind::Fallback(_)
+            ) {
+                let definition = RouteDefinition::new(node.full_pattern.clone())
+                    .expect("route registered by RouterOutlet")
+                    .with_guard_chain(guard_chain);
+                let registration = if matches!(&node.kind, RouteNodeKind::Fallback(_)) {
+                    RouteRegistration::Fallback(definition)
+                } else {
+                    RouteRegistration::Definition(definition)
+                };
+                registrations.push(registration);
             }
 
             node
@@ -371,7 +400,7 @@ fn render_node<Message: 'static>(
     key: RouteStateKey,
 ) -> Option<RouteOutletPage<Message>> {
     match &node.kind {
-        RouteNodeKind::Leaf(render) => {
+        RouteNodeKind::Leaf(render) | RouteNodeKind::Fallback(render) => {
             if route.pattern() != node.full_pattern {
                 return None;
             }
@@ -483,6 +512,13 @@ pub trait RouterNavigationExt {
     ) -> Task<Message>
     where
         Message: Send + 'static;
+
+    fn handle_system_back<Message>(
+        &self,
+        map: impl FnOnce(RouterMessage) -> Message + Send + 'static,
+    ) -> BackPressDecision<Message>
+    where
+        Message: Send + 'static;
 }
 
 impl RouterNavigationExt for Router {
@@ -517,6 +553,20 @@ impl RouterNavigationExt for Router {
             RouterMessage::Event(_) => Task::none(),
         }
     }
+
+    fn handle_system_back<Message>(
+        &self,
+        map: impl FnOnce(RouterMessage) -> Message + Send + 'static,
+    ) -> BackPressDecision<Message>
+    where
+        Message: Send + 'static,
+    {
+        if self.can_go_back() {
+            BackPressDecision::task(self.handle(RouterMessage::back(), map))
+        } else {
+            BackPressDecision::pass_through()
+        }
+    }
 }
 
 #[cfg(test)]
@@ -538,6 +588,23 @@ mod tests {
         );
 
         assert!(advanced::Widget::body(&outlet, &mut tree, &Renderer).is_some());
+    }
+
+    #[test]
+    fn outlet_fallback_does_not_shadow_root_route() {
+        let router = Router::new("/");
+        let _outlet = RouterOutlet::new(
+            router.clone(),
+            Routes::new()
+                .route("/", text_page("home"))
+                .fallback("*rest", text_page("not-found")),
+        );
+
+        assert_eq!(router.current_route().pattern(), "/");
+
+        let unknown = router.resolve("/missing/page").expect("fallback route");
+        assert_eq!(unknown.pattern(), "/*rest");
+        assert_eq!(unknown.param("rest"), Some("missing/page"));
     }
 
     #[test]
@@ -572,12 +639,15 @@ mod tests {
             },
         );
 
-        let mut definitions = Vec::new();
+        let mut registrations = Vec::new();
         let router = Router::new("/");
-        let nodes = compile_nodes(routes.nodes, "/", &router, &[], &mut definitions);
-        let patterns = definitions
+        let nodes = compile_nodes(routes.nodes, "/", &router, &[], &mut registrations);
+        let patterns = registrations
             .iter()
-            .map(|definition| definition.pattern().to_string())
+            .map(|registration| match registration {
+                RouteRegistration::Definition(definition)
+                | RouteRegistration::Fallback(definition) => definition.pattern().to_string(),
+            })
             .collect::<Vec<_>>();
         assert_eq!(patterns, vec!["/users/:id/settings", "/settings"]);
         assert_eq!(nodes[0].children[0].full_pattern, "/users/:id/settings");
@@ -628,5 +698,87 @@ mod tests {
             panic!("expected navigation event");
         };
         assert_eq!(event.result.as_ref().expect("route").path(), "/about");
+    }
+
+    #[test]
+    fn system_back_passes_through_when_router_cannot_go_back() {
+        let router = Router::new("/");
+
+        let decision = router.handle_system_back(|message| message);
+
+        assert!(!decision.is_intercepted());
+    }
+
+    #[test]
+    fn system_back_dispatches_router_back_when_stack_can_go_back() {
+        let router = Router::new("/");
+        router
+            .register_definition(RouteDefinition::new("/").expect("home"))
+            .expect("register home");
+        router
+            .register_definition(RouteDefinition::new("/about").expect("about"))
+            .expect("register about");
+
+        router
+            .handle(RouterMessage::push("/about"), |message| message)
+            .into_messages();
+
+        let BackPressDecision::Intercept(task) = router.handle_system_back(|message| message)
+        else {
+            panic!("router should intercept system back when history is available");
+        };
+
+        let messages = task.into_messages();
+        assert_eq!(router.current_path(), "/");
+        let RouterMessage::Event(event) = &messages[0] else {
+            panic!("expected navigation event");
+        };
+        assert!(matches!(event.navigation, Navigation::Back));
+        assert_eq!(event.result.as_ref().expect("route").path(), "/");
+    }
+
+    #[test]
+    fn system_back_supports_async_router_guards() {
+        let router = Router::new("/");
+        router
+            .register_definition(RouteDefinition::new("/").expect("home"))
+            .expect("register home");
+        router
+            .register_definition(RouteDefinition::new("/about").expect("about"))
+            .expect("register about");
+
+        router
+            .handle(RouterMessage::push("/about"), |message| message)
+            .into_messages();
+        router.add_async_guard(|_| async { RouteGuardDecision::Allow });
+
+        let BackPressDecision::Intercept(task) = router.handle_system_back(|message| message)
+        else {
+            panic!("router should intercept async guarded back navigation");
+        };
+
+        let mut actions = task.into_actions();
+        assert_eq!(actions.len(), 1);
+        let arkit_runtime::TaskAction::Future(future) = actions.remove(0) else {
+            panic!("async guarded back should run as a task future");
+        };
+
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("test tokio runtime");
+        let RouterMessage::Complete(result) = runtime.block_on(future) else {
+            panic!("async guarded back should complete navigation");
+        };
+
+        let messages = router
+            .handle(RouterMessage::Complete(result), |message| message)
+            .into_messages();
+        assert_eq!(router.current_path(), "/");
+        let RouterMessage::Event(event) = &messages[0] else {
+            panic!("expected completed navigation event");
+        };
+        assert!(matches!(event.navigation, Navigation::Back));
+        assert_eq!(event.result.as_ref().expect("route").path(), "/");
     }
 }

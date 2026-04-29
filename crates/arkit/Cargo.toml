@@ -17,6 +17,7 @@ webview = [
 arkit_core.workspace = true
 arkit_derive.workspace = true
 arkit_futures.workspace = true
+arkit_i18n.workspace = true
 arkit_router.workspace = true
 arkit_runtime.workspace = true
 arkit_widget.workspace = true
