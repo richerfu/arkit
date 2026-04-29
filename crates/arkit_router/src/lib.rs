@@ -571,14 +571,25 @@ impl Router {
     /// Register a fallback route that matches when no registered pattern matches.
     /// The pattern must contain a wildcard segment (e.g., `"*404"` or `"/*rest"`).
     pub fn register_fallback(&self, pattern: impl Into<String>) -> Result<(), RouteError> {
-        let pattern = normalize_path(pattern.into())?;
+        self.register_fallback_definition(RouteDefinition::new(pattern)?)
+    }
+
+    #[doc(hidden)]
+    pub fn register_fallback_definition(
+        &self,
+        definition: RouteDefinition,
+    ) -> Result<(), RouteError> {
+        let pattern = definition.pattern;
+        let name = definition.name;
+        let guard_chain = definition.guard_chain;
         let segments = parse_pattern_segments(&pattern)?;
         *self.inner.fallback.borrow_mut() = Some(RouteRecord {
             pattern,
-            name: Some("__fallback__".to_string()),
+            name: name.or_else(|| Some("__fallback__".to_string())),
             segments,
-            guard_chain: Vec::new(),
+            guard_chain,
         });
+        self.refresh_stack_routes();
         Ok(())
     }
 

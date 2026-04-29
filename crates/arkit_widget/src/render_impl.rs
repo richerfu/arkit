@@ -31,9 +31,9 @@ use ohos_arkui_binding::component::attribute::{
     ArkUIAttributeBasic, ArkUICommonAttribute, ArkUIEvent, ArkUIGesture,
 };
 use ohos_arkui_binding::component::built_in_component::{
-    Button, CalendarPicker, Checkbox, Column, DatePicker, FlowItem, Grid, GridItem, Image, List,
-    ListItem, ListItemGroup, Progress, Radio, Refresh, Row, Scroll, Slider, Stack, Swiper, Text,
-    TextArea, TextInput, Toggle, WaterFlow,
+    Button, CalendarPicker, Checkbox, Column, DatePicker, Flex, FlowItem, Grid, GridItem, Image,
+    List, ListItem, ListItemGroup, Progress, Radio, Refresh, Row, Scroll, Slider, Stack, Swiper,
+    Text, TextArea, TextInput, Toggle, WaterFlow,
 };
 use ohos_arkui_binding::event::inner_event::Event as ArkEvent;
 use ohos_arkui_binding::gesture::gesture_data::GestureEventData;
@@ -93,10 +93,11 @@ mod component;
 pub use component::WebViewElement;
 pub use component::{
     ButtonElement, CalendarPickerElement, CheckboxElement, ColumnElement, Component,
-    ContainerElement, DatePickerElement, FlowItemElement, GridElement, GridItemElement,
-    ImageElement, ListElement, ListItemElement, ListItemGroupElement, ProgressElement,
-    RadioElement, RefreshElement, RowElement, ScrollElement, SliderElement, StackElement,
-    SwiperElement, TextAreaElement, TextElement, TextInputElement, ToggleElement, WaterFlowElement,
+    ContainerElement, DatePickerElement, FlexElement, FlowItemElement, GridElement,
+    GridItemElement, ImageElement, ListElement, ListItemElement, ListItemGroupElement,
+    ProgressElement, RadioElement, RefreshElement, RowElement, ScrollElement, SliderElement,
+    StackElement, SwiperElement, TextAreaElement, TextElement, TextInputElement, ToggleElement,
+    WaterFlowElement,
 };
 
 #[path = "render_impl/factories.rs"]

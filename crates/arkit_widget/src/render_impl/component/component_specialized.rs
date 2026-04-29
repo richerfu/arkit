@@ -109,6 +109,30 @@ impl<Message, AppTheme, Kind> Component<Message, AppTheme, Kind> {
         self.map_node(|node| node.justify_content_end())
     }
 
+    pub fn flex_options(self, value: FlexOptions) -> Self {
+        self.map_node(|node| node.flex_options(value))
+    }
+
+    pub fn flex_direction(self, value: FlexDirection) -> Self {
+        self.map_node(|node| node.flex_direction(value))
+    }
+
+    pub fn flex_wrap(self, value: FlexWrap) -> Self {
+        self.map_node(|node| node.flex_wrap(value))
+    }
+
+    pub fn flex_justify_content(self, value: JustifyContent) -> Self {
+        self.map_node(|node| node.flex_justify_content(value))
+    }
+
+    pub fn flex_align_items(self, value: ItemAlignment) -> Self {
+        self.map_node(|node| node.flex_align_items(value))
+    }
+
+    pub fn flex_align_content(self, value: JustifyContent) -> Self {
+        self.map_node(|node| node.flex_align_content(value))
+    }
+
     pub fn align_x(self, alignment: Horizontal) -> Self {
         self.map_node(|node| node.align_x(alignment))
     }

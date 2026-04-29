@@ -185,6 +185,29 @@ fn grid_and_water_flow_components_use_native_nodes() {
 }
 
 #[test]
+fn flex_component_uses_native_flex_node() {
+    let node = flex_component::<(), arkit_core::Theme>();
+
+    assert_eq!(node.kind(), NodeKind::Flex);
+}
+
+#[test]
+fn flex_options_encode_native_flex_option_attribute() {
+    let node: Node<(), arkit_core::Theme> = flex_component::<(), arkit_core::Theme>()
+        .flex_direction(FlexDirection::Column)
+        .flex_wrap(FlexWrap::Wrap)
+        .flex_justify_content(JustifyContent::SpaceBetween)
+        .flex_align_items(ItemAlignment::Stretch)
+        .flex_align_content(JustifyContent::Center)
+        .into();
+
+    assert_eq!(
+        attr_i32_values(&node, ArkUINodeAttributeType::FlexOption),
+        Some(vec![1, 1, 6, 4, 2])
+    );
+}
+
+#[test]
 fn virtual_components_attach_native_adapter_specs() {
     let list = virtual_list_component::<(), arkit_core::Theme, _>(10, |_| text("row").into());
     let grid = virtual_grid_component::<(), arkit_core::Theme, _>(20, |_| text("cell").into());
@@ -206,6 +229,24 @@ fn virtual_components_attach_native_adapter_specs() {
         flow.virtual_adapter_kind(),
         Some(VirtualContainerKind::WaterFlow)
     );
+}
+
+fn attr_i32_values<Message, AppTheme>(
+    node: &Node<Message, AppTheme>,
+    attr: ArkUINodeAttributeType,
+) -> Option<Vec<i32>> {
+    let ArkUINodeAttributeItem::NumberValue(values) = node.attr_value(attr)? else {
+        return None;
+    };
+
+    values
+        .iter()
+        .map(|value| match value {
+            ArkUINodeAttributeNumber::Float(value) => Some(*value as i32),
+            ArkUINodeAttributeNumber::Int(value) => Some(*value),
+            ArkUINodeAttributeNumber::Uint(value) => i32::try_from(*value).ok(),
+        })
+        .collect()
 }
 
 #[test]
@@ -321,9 +362,10 @@ fn text_area_font_size_sets_placeholder_font_size() {
 #[test]
 fn web_view_component_uses_dedicated_host_kind() {
     let controller = WebViewController::with_id("webview-test");
-    let node = web_view_component::<(), arkit_core::Theme>(controller.clone())
+    let node: Node<(), arkit_core::Theme> = web_view_component(controller.clone())
         .javascript_enabled(true)
-        .devtools(true);
+        .devtools(true)
+        .into();
 
     assert_eq!(node.kind(), NodeKind::WebViewHost);
     let spec = node.webview.as_ref().expect("webview spec should exist");
@@ -342,7 +384,7 @@ fn web_view_component_uses_dedicated_host_kind() {
 #[test]
 fn web_view_component_uses_transparent_hit_testing() {
     let controller = WebViewController::with_id("webview-transparent");
-    let node = web_view_component::<(), arkit_core::Theme>(controller);
+    let node: Node<(), arkit_core::Theme> = web_view_component(controller).into();
 
     assert_eq!(
         node.attr_f32(ArkUINodeAttributeType::HitTestBehavior),
@@ -354,7 +396,7 @@ fn web_view_component_uses_transparent_hit_testing() {
 #[test]
 fn web_view_component_clips_to_host_bounds() {
     let controller = WebViewController::with_id("webview-clipped");
-    let node = web_view_component::<(), arkit_core::Theme>(controller);
+    let node: Node<(), arkit_core::Theme> = web_view_component(controller).into();
 
     assert_eq!(node.attr_bool(ArkUINodeAttributeType::Clip), Some(true));
 }
@@ -423,7 +465,7 @@ fn compose_compiled_overlays_keeps_stack_wrapper_with_overlays() {
 #[test]
 fn web_view_constructor_defaults_to_fill_and_url() {
     let controller = WebViewController::with_id("webview-fill");
-    let node = web_view::<(), arkit_core::Theme>(controller, "https://example.com");
+    let node: Node<(), arkit_core::Theme> = web_view(controller, "https://example.com").into();
 
     assert_eq!(node.kind(), NodeKind::WebViewHost);
     assert_eq!(

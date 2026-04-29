@@ -424,4 +424,5 @@ fn view(state: &ShowcaseState) -> ArkElement<Message> {
 #[entry]
 fn app() -> impl arkit::EntryPoint {
     application(ShowcaseState::new, update, view)
+        .on_back_press(|state| state.router.handle_system_back(Message::Router))
 }

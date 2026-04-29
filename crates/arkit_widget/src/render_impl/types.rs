@@ -224,6 +224,42 @@ impl From<ItemAlignment> for i32 {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FlexDirection {
+    Row,
+    Column,
+    RowReverse,
+    ColumnReverse,
+}
+
+impl From<FlexDirection> for i32 {
+    fn from(value: FlexDirection) -> Self {
+        match value {
+            FlexDirection::Row => 0,
+            FlexDirection::Column => 1,
+            FlexDirection::RowReverse => 2,
+            FlexDirection::ColumnReverse => 3,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FlexWrap {
+    NoWrap,
+    Wrap,
+    WrapReverse,
+}
+
+impl From<FlexWrap> for i32 {
+    fn from(value: FlexWrap) -> Self {
+        match value {
+            FlexWrap::NoWrap => 0,
+            FlexWrap::Wrap => 1,
+            FlexWrap::WrapReverse => 2,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Visibility {
     Visible,
     Hidden,
@@ -385,6 +421,92 @@ impl From<JustifyContent> for i32 {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FlexOptions {
+    pub direction: FlexDirection,
+    pub wrap: FlexWrap,
+    pub justify_content: JustifyContent,
+    pub align_items: ItemAlignment,
+    pub align_content: JustifyContent,
+}
+
+impl FlexOptions {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn direction(mut self, value: FlexDirection) -> Self {
+        self.direction = value;
+        self
+    }
+
+    pub fn wrap(mut self, value: FlexWrap) -> Self {
+        self.wrap = value;
+        self
+    }
+
+    pub fn justify_content(mut self, value: JustifyContent) -> Self {
+        self.justify_content = value;
+        self
+    }
+
+    pub fn align_items(mut self, value: ItemAlignment) -> Self {
+        self.align_items = value;
+        self
+    }
+
+    pub fn align_content(mut self, value: JustifyContent) -> Self {
+        self.align_content = value;
+        self
+    }
+
+    pub(super) fn attribute_numbers(self) -> Vec<i32> {
+        vec![
+            i32::from(self.direction),
+            i32::from(self.wrap),
+            i32::from(self.justify_content),
+            i32::from(self.align_items),
+            i32::from(self.align_content),
+        ]
+    }
+
+    pub(super) fn from_attribute_value(value: &ArkUINodeAttributeItem) -> Option<Self> {
+        let ArkUINodeAttributeItem::NumberValue(values) = value else {
+            return None;
+        };
+
+        let mut options = Self::default();
+        if let Some(value) = values.first().and_then(attribute_number_as_i32) {
+            options.direction = flex_direction_from_i32(value)?;
+        }
+        if let Some(value) = values.get(1).and_then(attribute_number_as_i32) {
+            options.wrap = flex_wrap_from_i32(value)?;
+        }
+        if let Some(value) = values.get(2).and_then(attribute_number_as_i32) {
+            options.justify_content = justify_content_from_i32(value)?;
+        }
+        if let Some(value) = values.get(3).and_then(attribute_number_as_i32) {
+            options.align_items = item_alignment_from_i32(value)?;
+        }
+        if let Some(value) = values.get(4).and_then(attribute_number_as_i32) {
+            options.align_content = justify_content_from_i32(value)?;
+        }
+        Some(options)
+    }
+}
+
+impl Default for FlexOptions {
+    fn default() -> Self {
+        Self {
+            direction: FlexDirection::Row,
+            wrap: FlexWrap::NoWrap,
+            justify_content: JustifyContent::Start,
+            align_items: ItemAlignment::Start,
+            align_content: JustifyContent::Start,
+        }
+    }
+}
+
 pub(super) fn padding_edges(value: Padding) -> Vec<f32> {
     vec![value.top, value.right, value.bottom, value.left]
 }
@@ -427,5 +549,56 @@ pub(super) fn clone_attr_value(value: &ArkUINodeAttributeItem) -> ArkUINodeAttri
         ArkUINodeAttributeItem::Composite(value) => {
             ArkUINodeAttributeItem::Composite(value.clone())
         }
+    }
+}
+
+fn attribute_number_as_i32(value: &ArkUINodeAttributeNumber) -> Option<i32> {
+    match value {
+        ArkUINodeAttributeNumber::Float(value) => Some(*value as i32),
+        ArkUINodeAttributeNumber::Int(value) => Some(*value),
+        ArkUINodeAttributeNumber::Uint(value) => i32::try_from(*value).ok(),
+    }
+}
+
+fn flex_direction_from_i32(value: i32) -> Option<FlexDirection> {
+    match value {
+        0 => Some(FlexDirection::Row),
+        1 => Some(FlexDirection::Column),
+        2 => Some(FlexDirection::RowReverse),
+        3 => Some(FlexDirection::ColumnReverse),
+        _ => None,
+    }
+}
+
+fn flex_wrap_from_i32(value: i32) -> Option<FlexWrap> {
+    match value {
+        0 => Some(FlexWrap::NoWrap),
+        1 => Some(FlexWrap::Wrap),
+        2 => Some(FlexWrap::WrapReverse),
+        _ => None,
+    }
+}
+
+fn item_alignment_from_i32(value: i32) -> Option<ItemAlignment> {
+    match value {
+        0 => Some(ItemAlignment::Auto),
+        1 => Some(ItemAlignment::Start),
+        2 => Some(ItemAlignment::Center),
+        3 => Some(ItemAlignment::End),
+        4 => Some(ItemAlignment::Stretch),
+        5 => Some(ItemAlignment::Baseline),
+        _ => None,
+    }
+}
+
+fn justify_content_from_i32(value: i32) -> Option<JustifyContent> {
+    match value {
+        1 => Some(JustifyContent::Start),
+        2 => Some(JustifyContent::Center),
+        3 => Some(JustifyContent::End),
+        6 => Some(JustifyContent::SpaceBetween),
+        7 => Some(JustifyContent::SpaceAround),
+        8 => Some(JustifyContent::SpaceEvenly),
+        _ => None,
     }
 }

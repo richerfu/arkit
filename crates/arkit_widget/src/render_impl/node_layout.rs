@@ -27,14 +27,15 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
     }
 
     pub fn justify_content(self, value: JustifyContent) -> Self {
-        let value = i32::from(value);
+        let encoded = i32::from(value);
         match self.kind {
             NodeKind::Column => self
-                .attr(ArkUINodeAttributeType::ColumnJustifyContent, value)
-                .patch_attr(ArkUINodeAttributeType::ColumnJustifyContent, value),
+                .attr(ArkUINodeAttributeType::ColumnJustifyContent, encoded)
+                .patch_attr(ArkUINodeAttributeType::ColumnJustifyContent, encoded),
             NodeKind::Row => self
-                .attr(ArkUINodeAttributeType::RowJustifyContent, value)
-                .patch_attr(ArkUINodeAttributeType::RowJustifyContent, value),
+                .attr(ArkUINodeAttributeType::RowJustifyContent, encoded)
+                .patch_attr(ArkUINodeAttributeType::RowJustifyContent, encoded),
+            NodeKind::Flex => self.flex_justify_content(value),
             _ => self,
         }
     }
@@ -92,6 +93,7 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
                     ArkUINodeAttributeType::ColumnAlignItems,
                     HorizontalAlignment::Start as i32,
                 ),
+            NodeKind::Flex => self.flex_align_items(ItemAlignment::Start),
             _ => self,
         }
     }
@@ -116,6 +118,7 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
                     ArkUINodeAttributeType::RowAlignItems,
                     VerticalAlignment::Center as i32,
                 ),
+            NodeKind::Flex => self.flex_align_items(ItemAlignment::Center),
             _ => self,
         }
     }
@@ -131,6 +134,7 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
                     ArkUINodeAttributeType::ColumnAlignItems,
                     HorizontalAlignment::End as i32,
                 ),
+            NodeKind::Flex => self.flex_align_items(ItemAlignment::End),
             _ => self,
         }
     }
@@ -163,6 +167,54 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
                 ),
             _ => self,
         }
+    }
+
+    pub fn flex_options(self, value: FlexOptions) -> Self {
+        if self.kind != NodeKind::Flex {
+            return self;
+        }
+
+        self.builder_attr(
+            ArkUINodeAttributeType::FlexOption,
+            value.attribute_numbers(),
+        )
+    }
+
+    pub fn flex_direction(self, value: FlexDirection) -> Self {
+        self.with_flex_options_update(|options| options.direction = value)
+    }
+
+    pub fn flex_wrap(self, value: FlexWrap) -> Self {
+        self.with_flex_options_update(|options| options.wrap = value)
+    }
+
+    pub fn flex_justify_content(self, value: JustifyContent) -> Self {
+        self.with_flex_options_update(|options| options.justify_content = value)
+    }
+
+    pub fn flex_align_items(self, value: ItemAlignment) -> Self {
+        self.with_flex_options_update(|options| options.align_items = value)
+    }
+
+    pub fn flex_align_content(self, value: JustifyContent) -> Self {
+        self.with_flex_options_update(|options| options.align_content = value)
+    }
+
+    fn with_flex_options_update(mut self, update: impl FnOnce(&mut FlexOptions)) -> Self {
+        if self.kind != NodeKind::Flex {
+            return self;
+        }
+
+        let mut options = self
+            .attr_value(ArkUINodeAttributeType::FlexOption)
+            .and_then(FlexOptions::from_attribute_value)
+            .unwrap_or_default();
+        update(&mut options);
+        self = self.builder_attr(
+            ArkUINodeAttributeType::FlexOption,
+            options.attribute_numbers(),
+        );
+        self
     }
 
     pub fn label(self, label: impl Into<String>) -> Self {

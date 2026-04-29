@@ -14,7 +14,7 @@ use arkit_runtime::{
         set_global_dispatcher, set_ui_waker, GlobalRuntimeDispatcher, RuntimeDispatcher,
         RuntimeHandle,
     },
-    Program, SubscriptionHandle, Task, TaskAction,
+    BackPressDecision, Program, SubscriptionHandle, Task, TaskAction,
 };
 use arkit_widget::{mount, patch, realize_attached_mount, Element, MountedNode, Renderer};
 use napi_ohos::{Error, Result};
@@ -453,6 +453,27 @@ where
                 }
             }
         });
+        let back_application = application.clone();
+        let back_runtime = runtime_slot.clone();
+        app.on_back_press_intercept(move || {
+            let decision = {
+                let state = back_application.state.borrow();
+                back_application.program.back_press(&state)
+            };
+
+            match decision {
+                BackPressDecision::PassThrough => false,
+                BackPressDecision::Intercept(task) => {
+                    let messages = back_application.run_task(task);
+                    if back_application.enqueue_many(messages) {
+                        if let Some(runtime) = back_runtime.borrow().clone() {
+                            back_application.schedule_redraw(runtime);
+                        }
+                    }
+                    true
+                }
+            }
+        });
         let runtime_for_dispatch = runtime_slot.clone();
         let app_for_dispatch = Rc::downgrade(&application);
         let emitter: Rc<dyn Fn(P::Message)> = Rc::new(move |message| {
@@ -488,9 +509,10 @@ where
         set_dispatcher(Some(dispatcher.clone()));
         set_global_dispatcher(Some(global_dispatcher));
         let render_state = application.clone();
-        let runtime = match RootRuntime::new(slot, app, move || render_state.render()) {
+        let runtime = match RootRuntime::new(slot, app.clone(), move || render_state.render()) {
             Ok(runtime) => runtime,
             Err(error) => {
+                app.on_back_press_intercept(|| false);
                 set_dispatcher(None);
                 set_global_dispatcher(None);
                 set_ui_waker(None);
@@ -534,6 +556,7 @@ where
     P::Theme: theme::Base + Default + 'static,
 {
     fn drop(&mut self) {
+        self.runtime.app.on_back_press_intercept(|| false);
         set_current_runtime(None);
         set_dispatcher(None);
         set_global_dispatcher(None);

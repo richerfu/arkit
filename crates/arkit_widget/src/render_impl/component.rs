@@ -151,6 +151,7 @@ component_kinds! {
     ContainerKind => ContainerElement,
     ColumnKind => ColumnElement,
     DatePickerKind => DatePickerElement,
+    FlexKind => FlexElement,
     FlowItemKind => FlowItemElement,
     GridKind => GridElement,
     GridItemKind => GridItemElement,

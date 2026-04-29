@@ -84,4 +84,5 @@ fn view(state: &AppState) -> Element<Message> {
 #[entry]
 fn app() -> impl arkit::EntryPoint {
     application(AppState::default, update, view)
+        .on_back_press(|state| state.router.handle_system_back(Message::Router))
 }

@@ -18,6 +18,7 @@ dependencies = [
  "arkit_core",
  "arkit_derive",
  "arkit_futures",
+ "arkit_i18n",
  "arkit_router",
  "arkit_runtime",
  "arkit_widget",
@@ -53,6 +54,22 @@ dependencies = [
 [[package]]
 name = "arkit_futures"
 version = "0.1.0"
+
+[[package]]
+name = "arkit_i18n"
+version = "0.1.0"
+dependencies = [
+ "arkit_i18n_macros",
+]
+
+[[package]]
+name = "arkit_i18n_macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "arkit_icon"
@@ -343,6 +360,17 @@ checksum = "e3ba2a386d7f85a81f119ad7498ebe444d2e22c2af0b86b069416ace48b3311a"
 dependencies = [
  "bytes",
  "itoa",
+]
+
+[[package]]
+name = "i18n_example"
+version = "0.1.0"
+dependencies = [
+ "arkit",
+ "arkit_i18n",
+ "napi-build-ohos",
+ "napi-derive-ohos",
+ "napi-ohos",
 ]
 
 [[package]]

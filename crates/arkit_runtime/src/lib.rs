@@ -254,6 +254,33 @@ impl<Message: Send + 'static> Default for Task<Message> {
     }
 }
 
+pub enum BackPressDecision<Message> {
+    PassThrough,
+    Intercept(Task<Message>),
+}
+
+impl<Message: Send + 'static> BackPressDecision<Message> {
+    pub fn pass_through() -> Self {
+        Self::PassThrough
+    }
+
+    pub fn handled() -> Self {
+        Self::Intercept(Task::none())
+    }
+
+    pub fn task(task: Task<Message>) -> Self {
+        Self::Intercept(task)
+    }
+
+    pub fn message(message: Message) -> Self {
+        Self::Intercept(Task::done(message))
+    }
+
+    pub fn is_intercepted(&self) -> bool {
+        matches!(self, Self::Intercept(_))
+    }
+}
+
 pub trait Program: Sized {
     type State: 'static;
     type Message: Send + 'static;
@@ -271,6 +298,10 @@ pub trait Program: Sized {
     fn subscription(&self, _state: &Self::State) -> Subscription<Self::Message> {
         Subscription::none()
     }
+
+    fn back_press(&self, _state: &Self::State) -> BackPressDecision<Self::Message> {
+        BackPressDecision::PassThrough
+    }
 }
 
 pub struct Application<State, Message, AppTheme = Theme, AppRenderer = ()>
@@ -284,6 +315,7 @@ where
     update: Rc<dyn Fn(&mut State, Message) -> Task<Message>>,
     view: Rc<dyn Fn(&State) -> Element<Message, AppTheme, AppRenderer>>,
     subscription: Rc<dyn Fn(&State) -> Subscription<Message>>,
+    back_press: Rc<dyn Fn(&State) -> BackPressDecision<Message>>,
 }
 
 pub fn application<State, Message, Boot, Update, View, AppTheme, AppRenderer>(
@@ -305,6 +337,7 @@ where
         update: Rc::new(update),
         view: Rc::new(view),
         subscription: Rc::new(|_| Subscription::none()),
+        back_press: Rc::new(|_| BackPressDecision::PassThrough),
     }
 }
 
@@ -322,6 +355,14 @@ where
 
     pub fn subscription(mut self, f: impl Fn(&State) -> Subscription<Message> + 'static) -> Self {
         self.subscription = Rc::new(f);
+        self
+    }
+
+    pub fn on_back_press(
+        mut self,
+        f: impl Fn(&State) -> BackPressDecision<Message> + 'static,
+    ) -> Self {
+        self.back_press = Rc::new(f);
         self
     }
 }
@@ -358,6 +399,10 @@ where
     fn subscription(&self, state: &Self::State) -> Subscription<Self::Message> {
         (self.subscription)(state)
     }
+
+    fn back_press(&self, state: &Self::State) -> BackPressDecision<Self::Message> {
+        (self.back_press)(state)
+    }
 }
 
 #[doc(hidden)]
@@ -375,7 +420,7 @@ mod tests {
     use std::cell::RefCell;
     use std::rc::Rc;
 
-    use super::{Subscription, Task, TaskAction};
+    use super::{application, BackPressDecision, Program, Subscription, Task, TaskAction, Theme};
 
     fn test_runtime() -> tokio::runtime::Runtime {
         tokio::runtime::Builder::new_current_thread()
@@ -430,6 +475,72 @@ mod tests {
     #[should_panic(expected = "Task::into_messages cannot consume async tasks")]
     fn into_messages_rejects_async_tasks() {
         let _ = Task::perform(async { 1 }, |value| value).into_messages();
+    }
+
+    #[test]
+    fn back_press_decision_constructors_match_expected_behavior() {
+        assert!(!BackPressDecision::<i32>::pass_through().is_intercepted());
+        assert!(BackPressDecision::<i32>::handled().is_intercepted());
+
+        let BackPressDecision::Intercept(task) = BackPressDecision::message(7) else {
+            panic!("message decision should intercept");
+        };
+        assert_eq!(task.into_messages(), vec![7]);
+
+        let task = Task::done(9);
+        let BackPressDecision::Intercept(task) = BackPressDecision::task(task) else {
+            panic!("task decision should intercept");
+        };
+        assert_eq!(task.into_messages(), vec![9]);
+    }
+
+    #[test]
+    fn program_default_back_press_passes_through() {
+        struct TestProgram;
+
+        impl Program for TestProgram {
+            type State = ();
+            type Message = ();
+            type Theme = Theme;
+            type Renderer = ();
+
+            fn boot(&self) -> (Self::State, Task<Self::Message>) {
+                ((), Task::none())
+            }
+
+            fn update(
+                &self,
+                _state: &mut Self::State,
+                _message: Self::Message,
+            ) -> Task<Self::Message> {
+                Task::none()
+            }
+
+            fn view(
+                &self,
+                _state: &Self::State,
+                _window: super::window::Id,
+            ) -> super::Element<Self::Message, Self::Theme, Self::Renderer> {
+                unreachable!("view is not used by this test")
+            }
+        }
+
+        assert!(!TestProgram.back_press(&()).is_intercepted());
+    }
+
+    #[test]
+    fn application_back_press_handler_overrides_default() {
+        let app = application::<_, _, _, _, _, Theme, ()>(
+            || 3,
+            |_state, _message: i32| Task::none(),
+            |_state| unreachable!("view is not used by this test"),
+        )
+        .on_back_press(|state| BackPressDecision::message(*state + 4));
+
+        let BackPressDecision::Intercept(task) = Program::back_press(&app, &3) else {
+            panic!("custom back press handler should intercept");
+        };
+        assert_eq!(task.into_messages(), vec![7]);
     }
 
     #[test]

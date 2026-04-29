@@ -152,6 +152,7 @@ pub(super) enum NodeKind {
     Checkbox,
     Column,
     DatePicker,
+    Flex,
     FlowItem,
     Grid,
     GridItem,
