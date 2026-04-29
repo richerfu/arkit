@@ -80,7 +80,9 @@ pub struct FloatingOverlaySpec {
     pub side: FloatingSide,
     pub align: FloatingAlign,
     pub offset_vp: f32,
+    pub estimated_panel_size_vp: Option<LayoutSize>,
     pub match_trigger_width: bool,
+    pub backdrop_color: u32,
     pub dismiss_mode: OverlayDismissMode,
     pub strategy: OverlayStrategy,
 }
@@ -92,7 +94,9 @@ impl Default for FloatingOverlaySpec {
             side: FloatingSide::Bottom,
             align: FloatingAlign::Center,
             offset_vp: 4.0,
+            estimated_panel_size_vp: None,
             match_trigger_width: false,
+            backdrop_color: 0x01000000,
             dismiss_mode: OverlayDismissMode::None,
             strategy: OverlayStrategy::Portal,
         }
@@ -581,17 +585,31 @@ fn clamp_floating_axis(value: f32, min: f32, max: f32) -> f32 {
     }
 }
 
+fn estimated_panel_size(spec: FloatingOverlaySpec) -> Option<LayoutSize> {
+    spec.estimated_panel_size_vp.map(|size| LayoutSize {
+        width: vp_to_px(size.width),
+        height: vp_to_px(size.height),
+    })
+}
+
 fn apply_floating_position(state: &FloatingState) {
     let spec = state.spec.get();
     let trigger = state.trigger_frame.get();
     let panel_size = state.panel_size.get();
+    let panel_size_for_position = panel_size
+        .is_measured()
+        .then_some(panel_size)
+        .or_else(|| estimated_panel_size(spec));
     let container = state.container_offset.get();
-    let ready =
-        spec.open && trigger.is_measured() && panel_size.is_measured() && container.is_measured();
+    let ready = spec.open
+        && trigger.is_measured()
+        && panel_size_for_position.is_some()
+        && container.is_measured();
     let mut surface_frame = LayoutFrame::default();
 
     if let Some(column) = state.nodes.position_column.borrow().as_ref() {
         let position: ArkUINodeAttributeItem = if ready {
+            let panel_size = panel_size_for_position.expect("checked by ready");
             let [px_x, px_y] = floating_position(
                 trigger,
                 panel_size,
@@ -673,7 +691,7 @@ where
             row_component::<Message, AppTheme>()
                 .percent_width(1.0)
                 .percent_height(1.0)
-                .background_color(0x01000000)
+                .background_color(state.spec.get().backdrop_color)
                 .hit_test_behavior(HitTestBehavior::Default)
                 .with_patch(move |node| {
                     backdrop_node.replace(Some(node.borrow_mut().clone()));

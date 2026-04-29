@@ -22,7 +22,9 @@ fn floating_spec(
         side,
         align,
         offset_vp,
+        estimated_panel_size_vp: None,
         match_trigger_width,
+        backdrop_color: 0x01000000,
         dismiss_mode: if on_dismiss {
             if pass_through_dismiss {
                 arkit::OverlayDismissMode::PassThrough

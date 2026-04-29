@@ -192,12 +192,8 @@ pub(super) fn enrich_webview_host<Message, AppTheme>(node: &mut Node<Message, Ap
 
     node.mount_effects.push(Box::new({
         let controller = controller.clone();
-        let node_ref = node_ref.clone();
         move |_node| {
             Ok(Some(Box::new(move || {
-                if let Some(mut host) = node_ref.borrow().as_ref().cloned() {
-                    detach_embedded_webview_node(&mut host, &controller);
-                }
                 unmount_webview(&controller);
             }) as Cleanup))
         }

@@ -387,23 +387,3 @@ pub(super) fn attach_embedded_webview_node(
         .add_existing_child(node)
         .map_err(|error| error.to_string())
 }
-
-#[cfg(feature = "webview")]
-pub(super) fn detach_embedded_webview_node(host: &mut ArkUINode, controller: &WebViewController) {
-    let Some(raw_handle) = controller
-        .inner
-        .embedded_node
-        .borrow()
-        .as_ref()
-        .map(|node| node.raw_handle() as usize)
-    else {
-        return;
-    };
-
-    if let Err(error) = remove_child_by_raw(host, raw_handle) {
-        ohos_hilog_binding::error(format!(
-            "webview error: failed to detach embedded webview '{}': {error}",
-            controller.id()
-        ));
-    }
-}
