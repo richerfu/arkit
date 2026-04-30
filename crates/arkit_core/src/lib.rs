@@ -468,6 +468,18 @@ pub mod advanced {
             None
         }
 
+        #[doc(hidden)]
+        fn cached_body(
+            &self,
+            tree: &mut widget::Tree,
+            renderer: &Renderer,
+        ) -> Option<Body<Message, AppTheme, Renderer>> {
+            self.body(tree, renderer).map(Body::Rebuild)
+        }
+
+        #[doc(hidden)]
+        fn cache_overlay_count(&self, _tree: &mut widget::Tree, _count: usize) {}
+
         fn overlay(
             &self,
             _tree: &mut widget::Tree,
@@ -484,6 +496,12 @@ pub mod advanced {
         fn into_any(self: Box<Self>) -> Box<dyn Any> {
             self.widget_into_any()
         }
+    }
+
+    #[doc(hidden)]
+    pub enum Body<Message, AppTheme = Theme, Renderer = ()> {
+        Rebuild(Element<'static, Message, AppTheme, Renderer>),
+        Retain { overlays: usize },
     }
 
     pub fn tree_of<Message: 'static, AppTheme: 'static, Renderer: 'static>(

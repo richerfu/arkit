@@ -49,6 +49,9 @@ pub(super) fn wrap_component<T>(node: ArkUINode) -> T {
 
 pub(super) fn create_node(kind: NodeKind) -> ArkUIResult<ArkUINode> {
     Ok(match kind {
+        NodeKind::Retained => {
+            panic!("retained renderer node cannot be mounted")
+        }
         NodeKind::Button => Button::new()?.into(),
         NodeKind::CalendarPicker => CalendarPicker::new()?.into(),
         NodeKind::Checkbox => Checkbox::new()?.into(),
@@ -82,6 +85,7 @@ pub(super) fn create_node(kind: NodeKind) -> ArkUIResult<ArkUINode> {
 
 pub(super) fn node_type_id(kind: NodeKind) -> TypeId {
     match kind {
+        NodeKind::Retained => TypeId::of::<RetainedNodeTag>(),
         NodeKind::Button => TypeId::of::<Button>(),
         NodeKind::CalendarPicker => TypeId::of::<CalendarPicker>(),
         NodeKind::Checkbox => TypeId::of::<Checkbox>(),
@@ -114,6 +118,7 @@ pub(super) fn node_type_id(kind: NodeKind) -> TypeId {
 }
 
 pub(super) struct ButtonNodeTag;
+pub(super) struct RetainedNodeTag;
 pub(super) struct CalendarPickerNodeTag;
 pub(super) struct CheckboxNodeTag;
 pub(super) struct ColumnNodeTag;
@@ -144,6 +149,7 @@ pub(super) struct WebViewHostNodeTag;
 
 pub(super) fn node_widget_tag(kind: NodeKind) -> advanced::widget::Tag {
     match kind {
+        NodeKind::Retained => advanced::widget::Tag::of::<RetainedNodeTag>(),
         NodeKind::Button => advanced::widget::Tag::of::<ButtonNodeTag>(),
         NodeKind::CalendarPicker => advanced::widget::Tag::of::<CalendarPickerNodeTag>(),
         NodeKind::Checkbox => advanced::widget::Tag::of::<CheckboxNodeTag>(),

@@ -95,3 +95,18 @@ For webview examples, enable the `webview` feature in the crate dependency:
 ```toml
 arkit = { workspace = true, features = ["webview"] }
 ```
+
+## Documentation
+
+The framework documentation is built with VitePress:
+
+```sh
+pnpm install
+pnpm run docs:dev
+```
+
+Static output:
+
+```sh
+pnpm run docs:build
+```

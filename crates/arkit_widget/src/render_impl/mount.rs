@@ -43,6 +43,11 @@ where
     Message: Send + 'static,
     AppTheme: 'static,
 {
+    let node = prepare_node(into_node(element));
+    if node.kind == NodeKind::Retained {
+        panic!("retained renderer node cannot be mounted");
+    }
+
     let Node {
         kind,
         key,
@@ -60,7 +65,7 @@ where
         #[cfg(feature = "webview")]
             webview: _,
         children,
-    } = prepare_node(into_node(element));
+    } = node;
 
     let mut node = create_node(kind)?;
     let init_attr_keys = attr_types(&init_attrs);
@@ -142,6 +147,11 @@ where
     Message: Send + 'static,
     AppTheme: 'static,
 {
+    let next_node = prepare_node(into_node(element));
+    if next_node.kind == NodeKind::Retained {
+        return Ok(());
+    }
+
     let Node {
         kind,
         key,
@@ -159,7 +169,7 @@ where
         #[cfg(feature = "webview")]
             webview: _,
         children,
-    } = prepare_node(into_node(element));
+    } = next_node;
 
     mounted.tag = node_type_id(kind);
     mounted.key = key;

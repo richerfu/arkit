@@ -267,6 +267,27 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
         }
     }
 
+    pub fn caret_color(self, value: u32) -> Self {
+        match self.kind {
+            NodeKind::TextInput => self
+                .attr(ArkUINodeAttributeType::TextInputCaretColor, value)
+                .patch_attr(ArkUINodeAttributeType::TextInputCaretColor, value),
+            NodeKind::TextArea => self
+                .attr(ArkUINodeAttributeType::TextAreaCaretColor, value)
+                .patch_attr(ArkUINodeAttributeType::TextAreaCaretColor, value),
+            _ => self,
+        }
+    }
+
+    pub fn caret_style(self, width: f32) -> Self {
+        match self.kind {
+            NodeKind::TextInput => self
+                .attr(ArkUINodeAttributeType::TextInputCaretStyle, width)
+                .patch_attr(ArkUINodeAttributeType::TextInputCaretStyle, width),
+            _ => self,
+        }
+    }
+
     pub fn checked(self, value: bool) -> Self {
         match self.kind {
             NodeKind::Checkbox => self

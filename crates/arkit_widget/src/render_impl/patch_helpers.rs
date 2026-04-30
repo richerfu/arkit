@@ -231,6 +231,10 @@ pub(super) fn complete_exiting_child(
         .borrow_mut()
         .retain(|exit| exit.raw_handle != raw_handle);
 
+    if let Some(mounted) = mounted.borrow_mut().take() {
+        mounted.cleanup_recursive();
+    }
+
     match remove_child_by_raw(&mut parent, raw_handle) {
         Ok(Some(removed)) => {
             let mut removed = removed.borrow().clone();
@@ -243,10 +247,6 @@ pub(super) fn complete_exiting_child(
             ));
         }
     }
-
-    if let Some(mounted) = mounted.borrow_mut().take() {
-        mounted.cleanup_recursive();
-    }
 }
 
 pub(super) fn remove_or_exit_child(
@@ -256,12 +256,12 @@ pub(super) fn remove_or_exit_child(
     pending_exits: Rc<RefCell<Vec<PendingExit>>>,
 ) -> ArkUIResult<()> {
     let Some(exit_effect) = mounted.exit_effect.take() else {
+        mounted.cleanup_recursive();
         let removed = parent.remove_child(index)?;
         if let Some(removed) = removed {
             let mut removed = removed.borrow().clone();
             let _ = removed.dispose();
         }
-        mounted.cleanup_recursive();
         return Ok(());
     };
 

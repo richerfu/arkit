@@ -145,10 +145,7 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
         };
 
         if let Some(attr) = placeholder_attr {
-            node.builder_attr(
-                attr,
-                ArkUINodeAttributeItem::NumberValue(vec![ArkUINodeAttributeNumber::Float(value)]),
-            )
+            node.builder_attr(attr, placeholder_font_value(value))
         } else {
             node
         }
@@ -316,4 +313,14 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
         }));
         self
     }
+}
+
+fn placeholder_font_value(size: f32) -> ArkUINodeAttributeItem {
+    ArkUINodeCompositeAttributeItem::new()
+        .with_number_values(vec![
+            ArkUINodeAttributeNumber::Float(size),
+            ArkUINodeAttributeNumber::Int(i32::from(FontStyle::Normal)),
+            ArkUINodeAttributeNumber::Int(font_weight_value(FontWeight::Normal)),
+        ])
+        .into()
 }

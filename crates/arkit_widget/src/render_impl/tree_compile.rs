@@ -105,6 +105,14 @@ pub(super) struct CompiledElement<Message, AppTheme = arkit_core::Theme> {
     pub(super) overlays: Vec<Element<Message, AppTheme>>,
 }
 
+pub(super) fn retained_element<Message, AppTheme>() -> Element<Message, AppTheme>
+where
+    Message: 'static,
+    AppTheme: 'static,
+{
+    Node::new(NodeKind::Retained).into()
+}
+
 pub(super) fn bind_node_state(
     kind: NodeKind,
     event_handlers: &mut Vec<EventHandlerSpec>,
@@ -325,8 +333,17 @@ where
     }
 
     let body = widget
-        .body(tree, renderer)
+        .cached_body(tree, renderer)
         .unwrap_or_else(|| panic!("composite widget did not provide a body element"));
+    let body = match body {
+        advanced::Body::Rebuild(body) => body,
+        advanced::Body::Retain { overlays } => {
+            return CompiledElement {
+                body: retained_element(),
+                overlays: (0..overlays).map(|_| retained_element()).collect(),
+            };
+        }
+    };
     let compiled_body = {
         let body_tree = sync_composite_child_tree(tree, 0, &body, state_cache);
         compile_element(body, body_tree, state_cache, renderer, bind_state)
@@ -345,6 +362,7 @@ where
     } else {
         prune_composite_children(tree, 1, state_cache);
     }
+    widget.cache_overlay_count(tree, overlays.len());
 
     CompiledElement {
         body: compiled_body.body,

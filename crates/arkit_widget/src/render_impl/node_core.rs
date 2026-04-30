@@ -184,9 +184,14 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
                     ArkUINodeAttributeNumber::Uint(value) => *value as f32,
                 })
             }
-            ArkUINodeAttributeItem::String(_)
-            | ArkUINodeAttributeItem::Object(_)
-            | ArkUINodeAttributeItem::Composite(_) => None,
+            ArkUINodeAttributeItem::Composite(value) => {
+                value.number_values.first().map(|value| match value {
+                    ArkUINodeAttributeNumber::Float(value) => *value,
+                    ArkUINodeAttributeNumber::Int(value) => *value as f32,
+                    ArkUINodeAttributeNumber::Uint(value) => *value as f32,
+                })
+            }
+            ArkUINodeAttributeItem::String(_) | ArkUINodeAttributeItem::Object(_) => None,
         })
     }
 

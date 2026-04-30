@@ -12,6 +12,41 @@ impl advanced::Widget<(), arkit_core::Theme, Renderer> for BodyOnlyWidget {
     }
 }
 
+struct BodyWithOverlayWidget;
+
+impl advanced::Widget<(), arkit_core::Theme, Renderer> for BodyWithOverlayWidget {
+    fn body(
+        &self,
+        _tree: &mut advanced::widget::Tree,
+        _renderer: &Renderer,
+    ) -> Option<Element<()>> {
+        Some(text("body").into())
+    }
+
+    fn overlay(
+        &self,
+        _tree: &mut advanced::widget::Tree,
+        _renderer: &Renderer,
+    ) -> Option<Element<()>> {
+        Some(text("overlay").into())
+    }
+}
+
+fn counted_lazy(calls: Rc<Cell<u32>>, dependency: u32) -> Element<()> {
+    lazy::<(), arkit_core::Theme, _, _, Element<()>>(dependency, move |value| {
+        calls.set(calls.get() + 1);
+        text(format!("value {value}")).into()
+    })
+    .into()
+}
+
+fn overlay_lazy(dependency: u32) -> Element<()> {
+    lazy::<(), arkit_core::Theme, _, _, Element<()>>(dependency, |_| {
+        Element::new(BodyWithOverlayWidget)
+    })
+    .into()
+}
+
 #[test]
 fn composite_widget_body_tree_is_initialized_lazily() {
     let element = Element::new(BodyOnlyWidget);
@@ -28,6 +63,130 @@ fn composite_widget_body_tree_is_initialized_lazily() {
     );
 
     assert_eq!(tree.children().len(), 1);
+}
+
+#[test]
+fn lazy_builds_body_on_first_compile() {
+    let calls = Rc::new(Cell::new(0));
+    let element = counted_lazy(calls.clone(), 1);
+    let mut tree = arkit_core::advanced::tree_of(&element);
+    let mut state_cache = StateCache::default();
+    let compiled = compile_element(
+        element,
+        &mut tree,
+        &mut state_cache,
+        &Renderer::default(),
+        false,
+    );
+
+    assert_eq!(calls.get(), 1);
+    assert_eq!(into_node(compiled.body).kind(), NodeKind::Text);
+    assert_eq!(tree.children().len(), 1);
+}
+
+#[test]
+fn lazy_factory_infers_from_element_context() {
+    let element: Element<()> = lazy(1_u32, |_| text("body")).into();
+    let mut tree = arkit_core::advanced::tree_of(&element);
+    let mut state_cache = StateCache::default();
+    let compiled = compile_element(
+        element,
+        &mut tree,
+        &mut state_cache,
+        &Renderer::default(),
+        false,
+    );
+
+    assert_eq!(into_node(compiled.body).kind(), NodeKind::Text);
+}
+
+#[test]
+fn lazy_retains_body_when_dependency_hash_is_unchanged() {
+    let calls = Rc::new(Cell::new(0));
+    let mut tree = {
+        let element = counted_lazy(calls.clone(), 1);
+        let mut tree = arkit_core::advanced::tree_of(&element);
+        let mut state_cache = StateCache::default();
+        let _ = compile_element(
+            element,
+            &mut tree,
+            &mut state_cache,
+            &Renderer::default(),
+            false,
+        );
+        tree
+    };
+    let child_tag = tree.children()[0].tag();
+    let mut state_cache = StateCache::default();
+
+    let compiled = compile_element(
+        counted_lazy(calls.clone(), 1),
+        &mut tree,
+        &mut state_cache,
+        &Renderer::default(),
+        false,
+    );
+
+    assert_eq!(calls.get(), 1);
+    assert_eq!(into_node(compiled.body).kind(), NodeKind::Retained);
+    assert_eq!(tree.children().len(), 1);
+    assert_eq!(tree.children()[0].tag(), child_tag);
+}
+
+#[test]
+fn lazy_rebuilds_body_when_dependency_hash_changes() {
+    let calls = Rc::new(Cell::new(0));
+    let element = counted_lazy(calls.clone(), 1);
+    let mut tree = arkit_core::advanced::tree_of(&element);
+    let mut state_cache = StateCache::default();
+    let _ = compile_element(
+        element,
+        &mut tree,
+        &mut state_cache,
+        &Renderer::default(),
+        false,
+    );
+
+    let compiled = compile_element(
+        counted_lazy(calls.clone(), 2),
+        &mut tree,
+        &mut state_cache,
+        &Renderer::default(),
+        false,
+    );
+
+    assert_eq!(calls.get(), 2);
+    assert_eq!(into_node(compiled.body).kind(), NodeKind::Text);
+}
+
+#[test]
+fn lazy_retains_overlay_slots_when_dependency_hash_is_unchanged() {
+    let element = overlay_lazy(1);
+    let mut tree = arkit_core::advanced::tree_of(&element);
+    let mut state_cache = StateCache::default();
+    let compiled = compile_element(
+        element,
+        &mut tree,
+        &mut state_cache,
+        &Renderer::default(),
+        false,
+    );
+    assert_eq!(compiled.overlays.len(), 1);
+
+    let retained = compile_element(
+        overlay_lazy(1),
+        &mut tree,
+        &mut state_cache,
+        &Renderer::default(),
+        false,
+    );
+
+    assert_eq!(into_node(retained.body).kind(), NodeKind::Retained);
+    assert_eq!(retained.overlays.len(), 1);
+    assert_eq!(
+        into_node(retained.overlays.into_iter().next().expect("overlay")).kind(),
+        NodeKind::Retained
+    );
 }
 
 #[test]
@@ -229,6 +388,15 @@ fn virtual_components_attach_native_adapter_specs() {
         flow.virtual_adapter_kind(),
         Some(VirtualContainerKind::WaterFlow)
     );
+}
+
+#[test]
+fn mounted_virtual_reload_ranges_are_compact_and_bounded() {
+    assert_eq!(
+        mounted_reload_ranges([5, 1, 2, 1, 4, 9], 6),
+        vec![(1, 2), (4, 2)]
+    );
+    assert_eq!(mounted_reload_ranges([3, 4], 3), Vec::<(u32, u32)>::new());
 }
 
 fn attr_i32_values<Message, AppTheme>(

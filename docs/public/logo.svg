@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="Arkit">
+  <rect width="48" height="48" rx="10" fill="#18181b"/>
+  <path d="M14 34 24 10l10 24h-5l-2-5h-6l-2 5h-5Zm9-10h3l-1.5-4-1.5 4Z" fill="#fafafa"/>
+  <path d="M11 38h26" stroke="#22c55e" stroke-width="3" stroke-linecap="round"/>
+</svg>

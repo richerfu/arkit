@@ -75,6 +75,36 @@ pub(super) fn virtual_adapter_count_change(
     }
 }
 
+pub(super) fn mounted_reload_ranges(
+    mounted_indices: impl IntoIterator<Item = u32>,
+    next_total: u32,
+) -> Vec<(u32, u32)> {
+    let mut indices: Vec<u32> = mounted_indices
+        .into_iter()
+        .filter(|index| *index < next_total)
+        .collect();
+    indices.sort_unstable();
+    indices.dedup();
+
+    let mut ranges = Vec::new();
+    let mut iter = indices.into_iter();
+    let Some(mut start) = iter.next() else {
+        return ranges;
+    };
+    let mut end = start + 1;
+    for index in iter {
+        if index == end {
+            end += 1;
+        } else {
+            ranges.push((start, end - start));
+            start = index;
+            end = index + 1;
+        }
+    }
+    ranges.push((start, end - start));
+    ranges
+}
+
 pub(super) trait MountedVirtualAdapter {
     fn as_any_mut(&mut self) -> &mut dyn Any;
     fn cleanup(self: Box<Self>);
@@ -142,16 +172,20 @@ pub(super) fn cleanup_virtual_item(mut item: VirtualMountedItem) {
     let _ = item.node.dispose();
 }
 
+pub(super) fn cleanup_virtual_item_state(item: VirtualMountedItem) {
+    item.mounted.cleanup_recursive();
+}
+
 pub(super) fn cleanup_virtual_adapter_state<Message, AppTheme>(
     state: &Rc<RefCell<VirtualAdapterState<Message, AppTheme>>>,
 ) {
     let mut state = state.borrow_mut();
-    if let Some(adapter) = state.adapter.take() {
-        adapter.dispose();
-    }
     let items = std::mem::take(&mut state.mounted_items);
     for (_, item) in items {
-        cleanup_virtual_item(item);
+        cleanup_virtual_item_state(item);
+    }
+    if let Some(adapter) = state.adapter.take() {
+        adapter.dispose();
     }
 }
 
@@ -210,7 +244,7 @@ pub(super) fn handle_node_adapter_event<Message, AppTheme>(
                         ));
                     }
                     if let Some(previous) = state.borrow_mut().mounted_items.insert(index, item) {
-                        cleanup_virtual_item(previous);
+                        cleanup_virtual_item_state(previous);
                     }
                 }
                 Err(error) => {
@@ -223,7 +257,7 @@ pub(super) fn handle_node_adapter_event<Message, AppTheme>(
         NodeAdapterEventType::OnRemoveNodeFromAdapter => {
             let index = event.item_index();
             if let Some(item) = state.borrow_mut().mounted_items.remove(&index) {
-                cleanup_virtual_item(item);
+                cleanup_virtual_item_state(item);
             }
         }
         NodeAdapterEventType::WillAttachToNode | NodeAdapterEventType::WillDetachFromNode => {}
@@ -288,6 +322,34 @@ pub(super) fn apply_virtual_adapter_count_change(
     }
 }
 
+pub(super) fn patch_mounted_virtual_items<Message, AppTheme>(
+    kind: VirtualContainerKind,
+    render_item: Rc<dyn Fn(u32) -> Element<Message, AppTheme>>,
+    mounted_items: &mut HashMap<u32, VirtualMountedItem>,
+    mounted_indices: Vec<u32>,
+    next_total: u32,
+) -> ArkUIResult<()>
+where
+    Message: Send + 'static,
+    AppTheme: 'static,
+{
+    for index in mounted_indices {
+        if index >= next_total {
+            continue;
+        }
+        if let Some(item) = mounted_items.get_mut(&index) {
+            let next = wrap_virtual_item(kind, index, render_item(index));
+            if let Err(error) = patch(next, &mut item.node, &mut item.mounted) {
+                ohos_hilog_binding::error(format!(
+                    "renderer error: failed to patch virtual adapter item {index}: {error}"
+                ));
+                return Err(error);
+            }
+        }
+    }
+    Ok(())
+}
+
 pub(super) fn patch_virtual_adapter<Message, AppTheme>(
     node: &mut ArkUINode,
     mounted: &mut MountedRenderNode,
@@ -311,13 +373,56 @@ where
                 mounted.virtual_adapter_kind = Some(kind);
                 return Ok(());
             };
-            let mut state = adapter.state.borrow_mut();
-            let previous_total = state.total_count;
-            let count_change = virtual_adapter_count_change(previous_total, spec.total_count);
-            state.total_count = spec.total_count;
-            state.render_item = spec.render_item;
-            if let Some(native_adapter) = state.adapter.as_mut() {
-                apply_virtual_adapter_count_change(native_adapter, count_change, spec.total_count)?;
+            let state_ref = adapter.state.clone();
+            let (count_change, mounted_indices, next_total, mut native_adapter) = {
+                let mut state = state_ref.borrow_mut();
+                let previous_total = state.total_count;
+                let count_change = virtual_adapter_count_change(previous_total, spec.total_count);
+                let mounted_indices: Vec<u32> = state.mounted_items.keys().copied().collect();
+                state.total_count = spec.total_count;
+                state.render_item = spec.render_item;
+                (
+                    count_change,
+                    mounted_indices,
+                    state.total_count,
+                    state.adapter.take(),
+                )
+            };
+            let reload_ranges = mounted_reload_ranges(mounted_indices, next_total);
+            let mut failed_reload_ranges = Vec::new();
+            let mut adapter_result = Ok(());
+            if let Some(native_adapter) = native_adapter.as_mut() {
+                if let Err(error) =
+                    apply_virtual_adapter_count_change(native_adapter, count_change, next_total)
+                {
+                    adapter_result = Err(error);
+                } else {
+                    for (start, count) in reload_ranges {
+                        if let Err(error) = native_adapter.reload_item(start, count) {
+                            ohos_hilog_binding::error(format!(
+                                "renderer error: failed to reload virtual adapter items: {error}"
+                            ));
+                            failed_reload_ranges.push((start, count));
+                        }
+                    }
+                }
+            }
+            {
+                state_ref.borrow_mut().adapter = native_adapter;
+            }
+            adapter_result?;
+            let mut state = state_ref.borrow_mut();
+            let kind = state.kind;
+            let total_count = state.total_count;
+            let render_item = state.render_item.clone();
+            for (start, count) in failed_reload_ranges {
+                patch_mounted_virtual_items(
+                    kind,
+                    render_item.clone(),
+                    &mut state.mounted_items,
+                    (start..start + count).collect(),
+                    total_count,
+                )?;
             }
         }
         (Some(_), Some(spec)) => {

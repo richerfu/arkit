@@ -22,7 +22,9 @@ use ohos_arkui_binding::api::attribute_option::{
     NodeAdapter, NodeAdapterEvent, ProgressLinearStyleOption, TextLayoutManager,
 };
 use ohos_arkui_binding::api::node_custom_event::NodeCustomEvent;
-use ohos_arkui_binding::common::attribute::{ArkUINodeAttributeItem, ArkUINodeAttributeNumber};
+use ohos_arkui_binding::common::attribute::{
+    ArkUINodeAttributeItem, ArkUINodeAttributeNumber, ArkUINodeCompositeAttributeItem,
+};
 use ohos_arkui_binding::common::error::ArkUIResult;
 use ohos_arkui_binding::common::node::ArkUINode;
 #[cfg(feature = "webview")]
@@ -99,6 +101,10 @@ pub use component::{
     StackElement, SwiperElement, TextAreaElement, TextElement, TextInputElement, ToggleElement,
     WaterFlowElement,
 };
+
+#[path = "render_impl/lazy.rs"]
+mod lazy;
+pub use lazy::{lazy, Lazy};
 
 #[path = "render_impl/factories.rs"]
 mod factories;

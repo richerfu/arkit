@@ -158,6 +158,14 @@ impl<Message, AppTheme, Kind> Component<Message, AppTheme, Kind> {
         self.map_node(|node| node.line_height(value))
     }
 
+    pub fn caret_color(self, value: u32) -> Self {
+        self.map_node(|node| node.caret_color(value))
+    }
+
+    pub fn caret_style(self, width: f32) -> Self {
+        self.map_node(|node| node.caret_style(width))
+    }
+
     pub fn text_align(self, value: TextAlignment) -> Self {
         self.map_node(|node| node.text_align(value))
     }

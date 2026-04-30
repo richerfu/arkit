@@ -147,6 +147,7 @@ pub(super) fn long_press_gesture_callback(event: GestureEventData) {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum NodeKind {
+    Retained,
     Button,
     CalendarPicker,
     Checkbox,

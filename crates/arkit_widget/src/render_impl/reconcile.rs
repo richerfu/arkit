@@ -31,42 +31,37 @@ where
     let next_len = next_nodes.len();
     let pending_exits = mounted.exiting_children.clone();
     let mounted_children = &mut mounted.children;
-    let old_len = mounted_children.len();
-    let mut prefix = 0;
 
-    while prefix < next_len && prefix < old_len {
-        let next_key = match next_nodes[prefix].key.clone() {
-            Some(key) => Some((node_type_id(next_nodes[prefix].kind), key)),
-            None => None,
-        };
-        let current_key = child_key(&mounted_children[prefix]);
-        let matches = if next_key.is_none() && current_key.is_none() {
-            can_reuse(&next_nodes[prefix], &mounted_children[prefix])
-        } else {
-            next_key == current_key && can_reuse(&next_nodes[prefix], &mounted_children[prefix])
-        };
-        if !matches {
-            break;
+    for (index, child) in next_nodes.into_iter().enumerate() {
+        if child.kind == NodeKind::Retained {
+            if index >= mounted_children.len() {
+                panic!("retained renderer child has no mounted subtree at index {index}");
+            }
+            continue;
         }
-        prefix += 1;
-    }
 
-    for i in 0..prefix {
-        let child_handle = parent.children()[i].clone();
-        let mut child_node = child_handle.borrow_mut();
-        patch_node(
-            next_nodes.remove(0).into(),
-            &mut child_node,
-            &mut mounted_children[i],
-        )?;
-    }
+        let next_key = child.key.clone().map(|key| (node_type_id(child.kind), key));
+        let current_key = mounted_children.get(index).and_then(child_key);
+        let matches = mounted_children.get(index).is_some_and(|mounted_child| {
+            if next_key.is_none() && current_key.is_none() {
+                can_reuse(&child, mounted_child)
+            } else {
+                next_key == current_key && can_reuse(&child, mounted_child)
+            }
+        });
 
-    if prefix == old_len && prefix == next_len {
-        return Ok(());
-    }
+        if matches {
+            let child_handle = parent.children()[index].clone();
+            let mut child_node = child_handle.borrow_mut();
+            patch_node(child.into(), &mut child_node, &mut mounted_children[index])?;
+            continue;
+        }
 
-    for (offset, child) in next_nodes.into_iter().enumerate() {
-        let index = prefix + offset;
+        if index < mounted_children.len() {
+            let mounted = mounted_children.remove(index);
+            remove_or_exit_child(parent, index, mounted, pending_exits.clone())?;
+        }
+
         let (child_node, mut child_meta) = mount_node(child.into())?;
         attach_child_at(parent, child_node, index)?;
         if let Some(child_handle) = parent.children().get(index) {
