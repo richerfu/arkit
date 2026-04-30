@@ -1,5 +1,7 @@
+use std::cell::RefCell;
 use std::error::Error as StdError;
 use std::fmt::{Display, Formatter};
+use std::rc::Rc;
 use std::str;
 use std::sync::{Mutex, OnceLock};
 
@@ -22,6 +24,10 @@ pub const DEFAULT_ICON_COLOR: u32 = 0xFF171717;
 static DISPLAY_SCALE: OnceLock<f32> = OnceLock::new();
 static SVG_CACHE: OnceLock<Mutex<std::collections::BTreeMap<IconCacheKey, String>>> =
     OnceLock::new();
+thread_local! {
+    static NATIVE_ICON_CACHE: RefCell<std::collections::BTreeMap<IconCacheKey, Rc<NativeIconImage>>> =
+        RefCell::new(std::collections::BTreeMap::new());
+}
 
 #[derive(Debug)]
 pub enum IconError {
@@ -185,11 +191,12 @@ fn build_icon_node<Message: 'static, AppTheme: 'static>(
     };
     let size = spec.size;
     let alt = spec.name.clone();
+    let cache_key = IconCacheKey::from(spec);
 
     Ok(arkit::image_component()
         .key(spec.render_key())
         .native_with_cleanup(move |image| {
-            let native = NativeIconImage::decode(svg, size).map_err(icon_to_arkui_error)?;
+            let native = cached_native_icon(cache_key, svg, size).map_err(icon_to_arkui_error)?;
             image.set_attribute(
                 ArkUINodeAttributeType::ImageSrc,
                 native.drawable().map_err(icon_to_arkui_error)?.into(),
@@ -200,6 +207,22 @@ fn build_icon_node<Message: 'static, AppTheme: 'static>(
         .width(size)
         .height(size)
         .into())
+}
+
+fn cached_native_icon(
+    cache_key: IconCacheKey,
+    svg: String,
+    size: f32,
+) -> Result<Rc<NativeIconImage>, IconError> {
+    NATIVE_ICON_CACHE.with(|cache| {
+        if let Some(native) = { cache.borrow().get(&cache_key).cloned() } {
+            return Ok(native);
+        }
+
+        let native = Rc::new(NativeIconImage::decode(svg, size)?);
+        cache.borrow_mut().insert(cache_key, native.clone());
+        Ok(native)
+    })
 }
 
 fn icon_to_arkui_error(error: IconError) -> ArkUIError {

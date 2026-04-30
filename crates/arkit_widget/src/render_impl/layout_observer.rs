@@ -1,4 +1,9 @@
 use super::*;
+use std::collections::BTreeMap;
+use std::sync::{Mutex, OnceLock};
+
+static LAYOUT_SIZE_CACHE: OnceLock<Mutex<BTreeMap<usize, LayoutSize>>> = OnceLock::new();
+static LAYOUT_FRAME_CACHE: OnceLock<Mutex<BTreeMap<usize, LayoutFrame>>> = OnceLock::new();
 
 pub(crate) fn read_layout_frame(node: &ArkUINode) -> Option<LayoutFrame> {
     let size = read_layout_size(node)?;
@@ -26,13 +31,17 @@ where
     let on_change = Rc::new(on_change) as Rc<dyn Fn(LayoutSize)>;
 
     into_node(element)
+        .with_cleanup(|node| {
+            let key = layout_observer_key(node);
+            Ok(move || clear_layout_observer_cache(key))
+        })
         .with_patch({
             let node_ref = node_ref.clone();
             let on_change = on_change.clone();
             move |node| {
                 let runtime = node.borrow_mut().clone();
                 if let Some(size) = read_layout_size(&runtime) {
-                    on_change(size);
+                    emit_layout_size_if_changed(&runtime, size, &on_change);
                 }
                 node_ref.replace(Some(runtime));
                 Ok(())
@@ -41,7 +50,7 @@ where
         .on_event_no_param(NodeEventType::EventOnAreaChange, move || {
             if let Some(node) = node_ref.borrow().as_ref() {
                 if let Some(size) = read_layout_size(node) {
-                    on_change(size);
+                    emit_layout_size_if_changed(node, size, &on_change);
                 }
             }
         })
@@ -293,13 +302,17 @@ where
     let on_change = Rc::new(on_change) as Rc<dyn Fn(LayoutFrame)>;
 
     into_node(element)
+        .with_cleanup(|node| {
+            let key = layout_observer_key(node);
+            Ok(move || clear_layout_observer_cache(key))
+        })
         .with_patch({
             let node_ref = node_ref.clone();
             let on_change = on_change.clone();
             move |node| {
                 let runtime = node.borrow_mut().clone();
                 if let Some(frame) = read_layout_frame(&runtime) {
-                    on_change(frame);
+                    emit_layout_frame_if_changed(&runtime, frame, &on_change);
                 }
                 node_ref.replace(Some(runtime));
                 Ok(())
@@ -308,9 +321,94 @@ where
         .on_event_no_param(NodeEventType::EventOnAreaChange, move || {
             if let Some(node) = node_ref.borrow().as_ref() {
                 if let Some(frame) = read_layout_frame(node) {
-                    on_change(frame);
+                    emit_layout_frame_if_changed(node, frame, &on_change);
                 }
             }
         })
         .into()
+}
+
+fn emit_layout_size_if_changed(
+    node: &ArkUINode,
+    next: LayoutSize,
+    on_change: &Rc<dyn Fn(LayoutSize)>,
+) {
+    let key = layout_observer_key(node);
+    if let Ok(mut cache) = LAYOUT_SIZE_CACHE
+        .get_or_init(default_layout_size_cache)
+        .lock()
+    {
+        if cache
+            .get(&key)
+            .is_some_and(|previous| layout_size_close(*previous, next))
+        {
+            return;
+        }
+        cache.insert(key, next);
+    }
+    on_change(next);
+}
+
+fn emit_layout_frame_if_changed(
+    node: &ArkUINode,
+    next: LayoutFrame,
+    on_change: &Rc<dyn Fn(LayoutFrame)>,
+) {
+    let key = layout_observer_key(node);
+    if let Ok(mut cache) = LAYOUT_FRAME_CACHE
+        .get_or_init(default_layout_frame_cache)
+        .lock()
+    {
+        if cache
+            .get(&key)
+            .is_some_and(|previous| layout_frame_close(*previous, next))
+        {
+            return;
+        }
+        cache.insert(key, next);
+    }
+    on_change(next);
+}
+
+fn layout_observer_key(node: &ArkUINode) -> usize {
+    node.raw_handle() as usize
+}
+
+fn default_layout_size_cache() -> Mutex<BTreeMap<usize, LayoutSize>> {
+    Mutex::new(BTreeMap::new())
+}
+
+fn default_layout_frame_cache() -> Mutex<BTreeMap<usize, LayoutFrame>> {
+    Mutex::new(BTreeMap::new())
+}
+
+fn clear_layout_observer_cache(key: usize) {
+    if let Some(cache) = LAYOUT_SIZE_CACHE.get() {
+        if let Ok(mut cache) = cache.lock() {
+            cache.remove(&key);
+        }
+    }
+    if let Some(cache) = LAYOUT_FRAME_CACHE.get() {
+        if let Ok(mut cache) = cache.lock() {
+            cache.remove(&key);
+        }
+    }
+}
+
+fn layout_size_close(previous: LayoutSize, next: LayoutSize) -> bool {
+    (previous.width - next.width).abs() < 0.5 && (previous.height - next.height).abs() < 0.5
+}
+
+fn layout_frame_close(previous: LayoutFrame, next: LayoutFrame) -> bool {
+    layout_size_close(
+        LayoutSize {
+            width: previous.width,
+            height: previous.height,
+        },
+        LayoutSize {
+            width: next.width,
+            height: next.height,
+        },
+    ) && (previous.x - next.x).abs() < 0.5
+        && (previous.y - next.y).abs() < 0.5
 }
