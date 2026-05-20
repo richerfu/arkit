@@ -312,12 +312,12 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
         &self,
         tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element<Message>> {
+    ) -> Element<Message> {
         let state = super::widget_state(tree, || self.default_value.clone());
         let is_controlled = self.value.is_some();
         let value = self.value.clone().unwrap_or_else(|| state.borrow().clone());
         let handler = self.on_value_change.clone();
-        Some(render_single_items(
+        render_single_items(
             super::take_component_slot(&self.items, "accordion items"),
             value,
             self.collapsible,
@@ -330,7 +330,7 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
                     dispatch_message(handler(value));
                 }
             })),
-        ))
+        )
     }
 }
 

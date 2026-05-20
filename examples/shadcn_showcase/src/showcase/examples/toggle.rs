@@ -19,9 +19,9 @@ impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for 
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element> {
+    ) -> Element {
         let ctx = self.ctx.clone();
-        Some({
+        {
             component_canvas(
                 shadcn::Toggle::icon("bold")
                     .checked(ctx.toggle_state)
@@ -30,7 +30,7 @@ impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for 
                 true,
                 24.0,
             )
-        })
+        }
     }
 }
 

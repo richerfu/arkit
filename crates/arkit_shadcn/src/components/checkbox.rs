@@ -200,7 +200,7 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
         &self,
         tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element<Message>> {
+    ) -> Element<Message> {
         let state = super::widget_state(tree, || self.default_checked);
         let is_controlled = self.checked.is_some();
         let checked = self.checked.unwrap_or_else(|| *state.borrow());
@@ -210,11 +210,11 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
         };
 
         if self.disabled {
-            return Some(checkbox_impl(self.label.clone(), checked, None, style));
+            return checkbox_impl(self.label.clone(), checked, None, style);
         }
 
         let handler = self.on_change.clone();
-        Some(checkbox_impl(
+        checkbox_impl(
             self.label.clone(),
             checked,
             Some(std::rc::Rc::new(move |value| {
@@ -227,7 +227,7 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
                 }
             })),
             style,
-        ))
+        )
     }
 }
 

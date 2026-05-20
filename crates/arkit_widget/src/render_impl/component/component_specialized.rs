@@ -21,6 +21,10 @@ impl<Message, AppTheme, Kind> Component<Message, AppTheme, Kind> {
         self.map_node(|node| node.list_cached_count(value))
     }
 
+    pub fn virtual_adapter_reload_mounted_items(self, value: bool) -> Self {
+        self.map_node(|node| node.virtual_adapter_reload_mounted_items(value))
+    }
+
     pub fn grid_column_template(self, value: impl Into<String>) -> Self {
         self.map_node(|node| node.grid_column_template(value))
     }

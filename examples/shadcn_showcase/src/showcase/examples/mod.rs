@@ -57,9 +57,9 @@ impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for 
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element> {
+    ) -> Element {
         let ctx = self.ctx.clone();
-        Some(match self.slug.as_str() {
+        match self.slug.as_str() {
             "accordion" => Element::new(accordion::AccordionExample::new(ctx)),
             "alert" => Element::new(alert::AlertExample::new(ctx)),
             "alert-dialog" => Element::new(alert_dialog::AlertDialogExample::new(ctx)),
@@ -101,6 +101,6 @@ impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for 
                 true,
                 24.0,
             ),
-        })
+        }
     }
 }

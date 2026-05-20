@@ -3,24 +3,16 @@ use super::*;
 struct BodyOnlyWidget;
 
 impl advanced::Widget<(), arkit_core::Theme, Renderer> for BodyOnlyWidget {
-    fn body(
-        &self,
-        _tree: &mut advanced::widget::Tree,
-        _renderer: &Renderer,
-    ) -> Option<Element<()>> {
-        Some(text("body").into())
+    fn body(&self, _tree: &mut advanced::widget::Tree, _renderer: &Renderer) -> Element<()> {
+        text("body").into()
     }
 }
 
 struct BodyWithOverlayWidget;
 
 impl advanced::Widget<(), arkit_core::Theme, Renderer> for BodyWithOverlayWidget {
-    fn body(
-        &self,
-        _tree: &mut advanced::widget::Tree,
-        _renderer: &Renderer,
-    ) -> Option<Element<()>> {
-        Some(text("body").into())
+    fn body(&self, _tree: &mut advanced::widget::Tree, _renderer: &Renderer) -> Element<()> {
+        text("body").into()
     }
 
     fn overlay(

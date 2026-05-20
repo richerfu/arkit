@@ -161,8 +161,16 @@ impl<Message, AppTheme> Node<Message, AppTheme> {
         self.virtual_adapter = Some(VirtualAdapterSpec {
             kind,
             total_count,
+            reload_mounted_items: true,
             render_item,
         });
+        self
+    }
+
+    pub fn virtual_adapter_reload_mounted_items(mut self, value: bool) -> Self {
+        if let Some(adapter) = self.virtual_adapter.as_mut() {
+            adapter.reload_mounted_items = value;
+        }
         self
     }
 

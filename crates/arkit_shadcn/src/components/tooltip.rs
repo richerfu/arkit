@@ -86,7 +86,7 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
         &self,
         tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element<Message>> {
+    ) -> Element<Message> {
         let state = super::widget_state(tree, || self.default_open);
         let is_controlled = self.open.is_some();
         let open = self.open.unwrap_or_else(|| *state.borrow());
@@ -108,7 +108,7 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
                 .into();
         }
 
-        Some(tooltip(trigger, self.content.clone(), open, move |value| {
+        tooltip(trigger, self.content.clone(), open, move |value| {
             if !is_controlled {
                 *state.borrow_mut() = value;
                 super::request_widget_rerender();
@@ -116,7 +116,7 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
             if let Some(on_open_change) = on_open_change.as_ref() {
                 dispatch_message(on_open_change(value));
             }
-        }))
+        })
     }
 }
 

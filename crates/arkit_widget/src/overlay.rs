@@ -411,7 +411,7 @@ impl<Message: 'static, AppTheme: 'static> advanced::Widget<Message, AppTheme, cr
         &self,
         tree: &mut advanced::widget::Tree,
         _renderer: &crate::Renderer,
-    ) -> Option<Element<Message, AppTheme>> {
+    ) -> Element<Message, AppTheme> {
         let state = Self::state_from_tree(tree);
         let mut spec = self.spec;
         spec.open = spec.open && self.panel.has_content();
@@ -429,7 +429,7 @@ impl<Message: 'static, AppTheme: 'static> advanced::Widget<Message, AppTheme, cr
             .take()
             .expect("floating overlay trigger was already consumed");
 
-        Some(observe_layout_frame_impl(trigger, true, {
+        observe_layout_frame_impl(trigger, true, {
             let state = state.clone();
             move |frame| {
                 let changed = state.trigger_frame.set_if_changed(frame);
@@ -438,7 +438,7 @@ impl<Message: 'static, AppTheme: 'static> advanced::Widget<Message, AppTheme, cr
                     request_runtime_rerender();
                 }
             }
-        }))
+        })
     }
 
     fn overlay(
@@ -498,8 +498,8 @@ impl<Message: 'static, AppTheme: 'static> advanced::Widget<Message, AppTheme, cr
         &self,
         _tree: &mut advanced::widget::Tree,
         _renderer: &crate::Renderer,
-    ) -> Option<Element<Message, AppTheme>> {
-        Some(overlay_placeholder())
+    ) -> Element<Message, AppTheme> {
+        overlay_placeholder()
     }
 
     fn overlay(

@@ -17,8 +17,8 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for Setting
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element<Message>> {
-        Some(Element::new(PageShell::new(
+    ) -> Element<Message> {
+        Element::new(PageShell::new(
             "Settings",
             vec![
                 text("SettingsPage is bound to SettingsRoute.")
@@ -30,6 +30,6 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for Setting
                     Message::Router(RouterMessage::push("/")),
                 )),
             ],
-        )))
+        ))
     }
 }

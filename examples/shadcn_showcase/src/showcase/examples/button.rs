@@ -17,9 +17,9 @@ impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for 
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element> {
+    ) -> Element {
         let ctx = self.ctx.clone();
-        Some({
+        {
             let mut children = vec![button_carousel(ctx.page).into()];
             if let Some(feedback) = ctx.button_preview_feedback {
                 children.push(
@@ -43,7 +43,7 @@ impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for 
                     .children(children)
                     .into(),
             )
-        })
+        }
     }
 }
 

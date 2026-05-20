@@ -19,9 +19,9 @@ impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for 
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element> {
+    ) -> Element {
         let ctx = self.ctx.clone();
-        Some({
+        {
             top_center_canvas(
         max_width(
             shadcn::Accordion::single(
@@ -82,7 +82,7 @@ impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for 
         [0.0, 24.0, 0.0, 24.0],
         false,
     )
-        })
+        }
     }
 }
 

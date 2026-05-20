@@ -264,18 +264,20 @@ impl<Message: 'static> advanced::Widget<Message, Theme, Renderer> for RouterOutl
         advanced::widget::State::new(Box::new(RouterOutletState::default()))
     }
 
-    fn body(
-        &self,
-        tree: &mut advanced::widget::Tree,
-        _renderer: &Renderer,
-    ) -> Option<Element<Message>> {
+    fn body(&self, tree: &mut advanced::widget::Tree, _renderer: &Renderer) -> Element<Message> {
         tree.state()
             .get_or_insert_with(RouterOutletState::default)
             .ensure_subscription(&self.router);
 
         let route = self.router.current_route();
-        let page = render_nodes(&self.routes, &self.router, &route, self.key)?;
-        Some(keyed_element(page.key, page.element))
+        render_nodes(&self.routes, &self.router, &route, self.key)
+            .map(|page| keyed_element(page.key, page.element))
+            .unwrap_or_else(|| {
+                crate::column_component::<Message, Theme>()
+                    .width(0.0)
+                    .height(0.0)
+                    .into()
+            })
     }
 }
 
@@ -587,7 +589,7 @@ mod tests {
             Routes::new().route("/", text_page("home")),
         );
 
-        assert!(advanced::Widget::body(&outlet, &mut tree, &Renderer).is_some());
+        let _body = advanced::Widget::body(&outlet, &mut tree, &Renderer);
     }
 
     #[test]
@@ -624,7 +626,7 @@ mod tests {
             Routes::new().route("/users/:id/settings", text_page("settings")),
         )));
 
-        assert!(advanced::Widget::body(&outlet, &mut tree, &Renderer).is_some());
+        let _body = advanced::Widget::body(&outlet, &mut tree, &Renderer);
     }
 
     #[test]

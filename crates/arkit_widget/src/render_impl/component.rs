@@ -110,6 +110,14 @@ impl<Message: 'static, AppTheme: 'static, Kind: 'static>
     fn layout(&self) -> arkit_core::layout::Node {
         advanced::Widget::layout(&self.node)
     }
+
+    fn body(
+        &self,
+        _tree: &mut advanced::widget::Tree,
+        _renderer: &Renderer,
+    ) -> Element<Message, AppTheme> {
+        panic!("renderer component should be compiled directly")
+    }
 }
 
 macro_rules! component_kinds {

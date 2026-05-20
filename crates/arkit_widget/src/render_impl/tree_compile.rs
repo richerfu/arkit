@@ -332,9 +332,7 @@ where
         return compile_node(node, tree, state_cache, renderer, bind_state);
     }
 
-    let body = widget
-        .cached_body(tree, renderer)
-        .unwrap_or_else(|| panic!("composite widget did not provide a body element"));
+    let body = widget.cached_body(tree, renderer);
     let body = match body {
         advanced::Body::Rebuild(body) => body,
         advanced::Body::Retain { overlays } => {

@@ -80,38 +80,36 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for AsyncTa
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element<Message>> {
-        Some(
-            column_component()
-                .percent_width(1.0)
-                .percent_height(1.0)
-                .align_items_center()
-                .justify_content_center()
-                .padding(24.0)
-                .children(vec![
-                    text("arkit async task")
-                        .font_size(28.0)
-                        .font_weight(FontWeight::W600)
-                        .line_height(32.0)
-                        .into(),
-                    text(self.status())
-                        .margin_top(12.0)
-                        .font_size(18.0)
-                        .line_height(24.0)
-                        .into(),
-                    text(format!("latest request = {}", self.request_id))
-                        .margin_top(8.0)
-                        .font_size(14.0)
-                        .line_height(20.0)
-                        .into(),
-                    button("start async task")
-                        .margin_top(20.0)
-                        .padding([8.0, 12.0, 8.0, 12.0])
-                        .on_press(Message::Start)
-                        .into(),
-                ])
-                .into(),
-        )
+    ) -> Element<Message> {
+        column_component()
+            .percent_width(1.0)
+            .percent_height(1.0)
+            .align_items_center()
+            .justify_content_center()
+            .padding(24.0)
+            .children(vec![
+                text("arkit async task")
+                    .font_size(28.0)
+                    .font_weight(FontWeight::W600)
+                    .line_height(32.0)
+                    .into(),
+                text(self.status())
+                    .margin_top(12.0)
+                    .font_size(18.0)
+                    .line_height(24.0)
+                    .into(),
+                text(format!("latest request = {}", self.request_id))
+                    .margin_top(8.0)
+                    .font_size(14.0)
+                    .line_height(20.0)
+                    .into(),
+                button("start async task")
+                    .margin_top(20.0)
+                    .padding([8.0, 12.0, 8.0, 12.0])
+                    .on_press(Message::Start)
+                    .into(),
+            ])
+            .into()
     }
 }
 

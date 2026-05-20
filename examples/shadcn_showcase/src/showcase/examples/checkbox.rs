@@ -19,9 +19,9 @@ impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for 
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element> {
+    ) -> Element {
         let ctx = self.ctx.clone();
-        Some({
+        {
             let card_checked = ctx.checkbox_card;
             component_canvas(
         fixed_width(
@@ -132,7 +132,7 @@ impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for 
         true,
         32.0,
     )
-        })
+        }
     }
 }
 

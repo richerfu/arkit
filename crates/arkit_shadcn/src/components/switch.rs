@@ -62,7 +62,7 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
         &self,
         tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element<Message>> {
+    ) -> Element<Message> {
         let state = super::widget_state(tree, || self.default_checked);
         let is_controlled = self.checked.is_some();
         let checked = self.checked.unwrap_or_else(|| *state.borrow());
@@ -78,7 +78,7 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
                 dispatch_message(handler(next));
             }
         });
-        Some(element.into())
+        element.into()
     }
 }
 

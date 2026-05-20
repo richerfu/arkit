@@ -53,7 +53,7 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element<Message>> {
+    ) -> Element<Message> {
         let mut textarea = textarea::<Message>(self.placeholder.clone());
         if let Some(value) = self.value.clone() {
             textarea = textarea.value(value);
@@ -64,7 +64,7 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
         if let Some(width) = self.percent_width {
             textarea = textarea.percent_width(width);
         }
-        Some(textarea.into())
+        textarea.into()
     }
 }
 

@@ -19,6 +19,7 @@ pub(super) struct VirtualAdapterState<Message, AppTheme = arkit_core::Theme> {
     pub(super) id: i32,
     pub(super) kind: VirtualContainerKind,
     pub(super) total_count: u32,
+    pub(super) reload_mounted_items: bool,
     pub(super) render_item: Rc<dyn Fn(u32) -> Element<Message, AppTheme>>,
     pub(super) adapter: Option<NodeAdapter>,
     pub(super) mounted_items: HashMap<u32, VirtualMountedItem>,
@@ -28,12 +29,14 @@ impl<Message, AppTheme> VirtualAdapterState<Message, AppTheme> {
     pub(super) fn new(
         kind: VirtualContainerKind,
         total_count: u32,
+        reload_mounted_items: bool,
         render_item: Rc<dyn Fn(u32) -> Element<Message, AppTheme>>,
     ) -> Self {
         Self {
             id: NEXT_VIRTUAL_ADAPTER_ID.fetch_add(1, Ordering::Relaxed),
             kind,
             total_count,
+            reload_mounted_items,
             render_item,
             adapter: None,
             mounted_items: HashMap::new(),
@@ -48,6 +51,7 @@ impl<Message, AppTheme> VirtualAdapterState<Message, AppTheme> {
 pub(super) struct VirtualAdapterSpec<Message, AppTheme = arkit_core::Theme> {
     pub(super) kind: VirtualContainerKind,
     pub(super) total_count: u32,
+    pub(super) reload_mounted_items: bool,
     pub(super) render_item: Rc<dyn Fn(u32) -> Element<Message, AppTheme>>,
 }
 
@@ -278,6 +282,7 @@ where
     let state = Rc::new(RefCell::new(VirtualAdapterState::new(
         spec.kind,
         spec.total_count,
+        spec.reload_mounted_items,
         spec.render_item,
     )));
     let mut adapter = NodeAdapter::new()?;
@@ -374,21 +379,31 @@ where
                 return Ok(());
             };
             let state_ref = adapter.state.clone();
-            let (count_change, mounted_indices, next_total, mut native_adapter) = {
+            let (
+                count_change,
+                mounted_indices,
+                next_total,
+                reload_mounted_items,
+                mut native_adapter,
+            ) = {
                 let mut state = state_ref.borrow_mut();
                 let previous_total = state.total_count;
                 let count_change = virtual_adapter_count_change(previous_total, spec.total_count);
                 let mounted_indices: Vec<u32> = state.mounted_items.keys().copied().collect();
                 state.total_count = spec.total_count;
+                state.reload_mounted_items = spec.reload_mounted_items;
                 state.render_item = spec.render_item;
                 (
                     count_change,
                     mounted_indices,
                     state.total_count,
+                    state.reload_mounted_items,
                     state.adapter.take(),
                 )
             };
-            let reload_ranges = mounted_reload_ranges(mounted_indices, next_total);
+            let reload_ranges = reload_mounted_items
+                .then(|| mounted_reload_ranges(mounted_indices, next_total))
+                .unwrap_or_default();
             let mut failed_reload_ranges = Vec::new();
             let mut adapter_result = Ok(());
             if let Some(native_adapter) = native_adapter.as_mut() {

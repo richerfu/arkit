@@ -18,9 +18,9 @@ impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for 
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element> {
+    ) -> Element {
         let ctx = self.ctx.clone();
-        Some({
+        {
             top_center_canvas(
                 shadcn::Menubar::new(vec![
                     shadcn::MenubarMenuSpec::new(
@@ -119,7 +119,7 @@ impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for 
                 [16.0, 16.0, 16.0, 16.0],
                 true,
             )
-        })
+        }
     }
 }
 

@@ -91,27 +91,26 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for Complex
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element<Message>> {
+    ) -> Element<Message> {
         let state = &self.state;
-        Some(
-            column_component()
-                .percent_width(1.0)
-                .percent_height(1.0)
-                .background_color(0xfff8fafc)
-                .children(vec![
-                    Element::new(Toolbar {
-                        active: state.active,
-                    }),
-                    Element::new(StatusBar {
-                        total_count: state.total_count,
-                        visible_range: state.visible_range.clone(),
-                    }),
-                    Element::new(Content {
-                        state: state.clone(),
-                    }),
-                ])
-                .into(),
-        )
+
+        column_component()
+            .percent_width(1.0)
+            .percent_height(1.0)
+            .background_color(0xfff8fafc)
+            .children(vec![
+                Element::new(Toolbar {
+                    active: state.active,
+                }),
+                Element::new(StatusBar {
+                    total_count: state.total_count,
+                    visible_range: state.visible_range.clone(),
+                }),
+                Element::new(Content {
+                    state: state.clone(),
+                }),
+            ])
+            .into()
     }
 }
 
@@ -124,7 +123,7 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for Toolbar
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element<Message>> {
+    ) -> Element<Message> {
         let case_button = |label: &'static str, case: Case| {
             let background = if case == self.active {
                 0xff111827
@@ -146,22 +145,20 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for Toolbar
                 .on_press(Message::Select(case))
         };
 
-        Some(
-            row_component()
-                .percent_width(1.0)
-                .padding([16.0, 16.0, 8.0, 16.0])
-                .children(vec![
-                    case_button("List", Case::List).into(),
-                    case_button("Grid", Case::Grid).margin_left(8.0).into(),
-                    case_button("WaterFlow", Case::WaterFlow)
-                        .margin_left(8.0)
-                        .into(),
-                    case_button("Grouped", Case::Grouped)
-                        .margin_left(8.0)
-                        .into(),
-                ])
-                .into(),
-        )
+        row_component()
+            .percent_width(1.0)
+            .padding([16.0, 16.0, 8.0, 16.0])
+            .children(vec![
+                case_button("List", Case::List).into(),
+                case_button("Grid", Case::Grid).margin_left(8.0).into(),
+                case_button("WaterFlow", Case::WaterFlow)
+                    .margin_left(8.0)
+                    .into(),
+                case_button("Grouped", Case::Grouped)
+                    .margin_left(8.0)
+                    .into(),
+            ])
+            .into()
     }
 }
 
@@ -175,27 +172,25 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for StatusB
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element<Message>> {
-        Some(
-            row_component()
-                .percent_width(1.0)
-                .padding([0.0, 16.0, 12.0, 16.0])
-                .children(vec![
-                    text(format!("total {}", self.total_count))
-                        .font_size(13.0)
-                        .font_color(0xff475569)
-                        .into(),
-                    text(format!(
-                        "visible {}..{}",
-                        self.visible_range.first_index, self.visible_range.last_index
-                    ))
-                    .margin_left(16.0)
+    ) -> Element<Message> {
+        row_component()
+            .percent_width(1.0)
+            .padding([0.0, 16.0, 12.0, 16.0])
+            .children(vec![
+                text(format!("total {}", self.total_count))
                     .font_size(13.0)
                     .font_color(0xff475569)
                     .into(),
-                ])
+                text(format!(
+                    "visible {}..{}",
+                    self.visible_range.first_index, self.visible_range.last_index
+                ))
+                .margin_left(16.0)
+                .font_size(13.0)
+                .font_color(0xff475569)
                 .into(),
-        )
+            ])
+            .into()
     }
 }
 
@@ -208,9 +203,9 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for Content
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element<Message>> {
+    ) -> Element<Message> {
         let state = &self.state;
-        Some(match state.active {
+        match state.active {
             Case::List => refresh_component()
                 .percent_width(1.0)
                 .layout_weight(1.0)
@@ -260,7 +255,7 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for Content
                 |group| Element::new(GroupHeader { group }),
                 |group, index| Element::new(GroupRow { group, index }),
             ),
-        })
+        }
     }
 }
 
@@ -273,33 +268,32 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for ListRow
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element<Message>> {
+    ) -> Element<Message> {
         let index = self.index;
-        Some(
-            row_component()
-                .percent_width(1.0)
-                .height(64.0)
-                .align_items_center()
-                .padding([0.0, 16.0, 0.0, 16.0])
-                .background_color(if index % 2 == 0 {
-                    0xffffffff
-                } else {
-                    0xfff1f5f9
-                })
-                .children(vec![
-                    text(format!("#{:05}", index))
-                        .font_size(16.0)
-                        .font_weight(FontWeight::W600)
-                        .font_color(0xff111827)
-                        .into(),
-                    text(format!("native adapter row {}", index))
-                        .margin_left(16.0)
-                        .font_size(14.0)
-                        .font_color(0xff64748b)
-                        .into(),
-                ])
-                .into(),
-        )
+
+        row_component()
+            .percent_width(1.0)
+            .height(64.0)
+            .align_items_center()
+            .padding([0.0, 16.0, 0.0, 16.0])
+            .background_color(if index % 2 == 0 {
+                0xffffffff
+            } else {
+                0xfff1f5f9
+            })
+            .children(vec![
+                text(format!("#{:05}", index))
+                    .font_size(16.0)
+                    .font_weight(FontWeight::W600)
+                    .font_color(0xff111827)
+                    .into(),
+                text(format!("native adapter row {}", index))
+                    .margin_left(16.0)
+                    .font_size(14.0)
+                    .font_color(0xff64748b)
+                    .into(),
+            ])
+            .into()
     }
 }
 
@@ -318,28 +312,27 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for GridTil
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element<Message>> {
+    ) -> Element<Message> {
         let index = self.index;
-        Some(
-            column_component()
-                .height(96.0)
-                .border_radius(8.0)
-                .background_color(0xffffffff)
-                .padding(12.0)
-                .children(vec![
-                    text(format!("Grid {}", index))
-                        .font_size(15.0)
-                        .font_weight(FontWeight::W600)
-                        .font_color(0xff111827)
-                        .into(),
-                    text(format!("cell {}", index % 12))
-                        .margin_top(8.0)
-                        .font_size(13.0)
-                        .font_color(0xff64748b)
-                        .into(),
-                ])
-                .into(),
-        )
+
+        column_component()
+            .height(96.0)
+            .border_radius(8.0)
+            .background_color(0xffffffff)
+            .padding(12.0)
+            .children(vec![
+                text(format!("Grid {}", index))
+                    .font_size(15.0)
+                    .font_weight(FontWeight::W600)
+                    .font_color(0xff111827)
+                    .into(),
+                text(format!("cell {}", index % 12))
+                    .margin_top(8.0)
+                    .font_size(13.0)
+                    .font_color(0xff64748b)
+                    .into(),
+            ])
+            .into()
     }
 }
 
@@ -352,33 +345,32 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for FlowTil
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element<Message>> {
+    ) -> Element<Message> {
         let index = self.index;
         let height = 88.0 + ((index % 5) as f32 * 18.0);
-        Some(
-            column_component()
-                .height(height)
-                .border_radius(8.0)
-                .background_color(if index % 2 == 0 {
-                    0xffffffff
-                } else {
-                    0xffeef2ff
-                })
-                .padding(12.0)
-                .children(vec![
-                    text(format!("Flow {}", index))
-                        .font_size(15.0)
-                        .font_weight(FontWeight::W600)
-                        .font_color(0xff111827)
-                        .into(),
-                    text(format!("height {}", height as i32))
-                        .margin_top(8.0)
-                        .font_size(13.0)
-                        .font_color(0xff64748b)
-                        .into(),
-                ])
-                .into(),
-        )
+
+        column_component()
+            .height(height)
+            .border_radius(8.0)
+            .background_color(if index % 2 == 0 {
+                0xffffffff
+            } else {
+                0xffeef2ff
+            })
+            .padding(12.0)
+            .children(vec![
+                text(format!("Flow {}", index))
+                    .font_size(15.0)
+                    .font_weight(FontWeight::W600)
+                    .font_color(0xff111827)
+                    .into(),
+                text(format!("height {}", height as i32))
+                    .margin_top(8.0)
+                    .font_size(13.0)
+                    .font_color(0xff64748b)
+                    .into(),
+            ])
+            .into()
     }
 }
 
@@ -391,21 +383,19 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for GroupHe
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element<Message>> {
-        Some(
-            row_component()
-                .percent_width(1.0)
-                .height(44.0)
-                .align_items_center()
-                .background_color(0xffe2e8f0)
-                .padding([0.0, 16.0, 0.0, 16.0])
-                .children(vec![text(format!("Group {}", self.group))
-                    .font_size(15.0)
-                    .font_weight(FontWeight::W600)
-                    .font_color(0xff0f172a)
-                    .into()])
-                .into(),
-        )
+    ) -> Element<Message> {
+        row_component()
+            .percent_width(1.0)
+            .height(44.0)
+            .align_items_center()
+            .background_color(0xffe2e8f0)
+            .padding([0.0, 16.0, 0.0, 16.0])
+            .children(vec![text(format!("Group {}", self.group))
+                .font_size(15.0)
+                .font_weight(FontWeight::W600)
+                .font_color(0xff0f172a)
+                .into()])
+            .into()
     }
 }
 
@@ -419,23 +409,21 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for GroupRo
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element<Message>> {
-        Some(
-            row_component()
-                .percent_width(1.0)
-                .height(56.0)
-                .align_items_center()
-                .padding([0.0, 16.0, 0.0, 16.0])
-                .background_color(0xffffffff)
-                .children(vec![text(format!(
-                    "Group {} item {}",
-                    self.group, self.index
-                ))
-                .font_size(14.0)
-                .font_color(0xff334155)
-                .into()])
-                .into(),
-        )
+    ) -> Element<Message> {
+        row_component()
+            .percent_width(1.0)
+            .height(56.0)
+            .align_items_center()
+            .padding([0.0, 16.0, 0.0, 16.0])
+            .background_color(0xffffffff)
+            .children(vec![text(format!(
+                "Group {} item {}",
+                self.group, self.index
+            ))
+            .font_size(14.0)
+            .font_color(0xff334155)
+            .into()])
+            .into()
     }
 }
 

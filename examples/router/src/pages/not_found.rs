@@ -21,10 +21,10 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for NotFoun
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element<Message>> {
-        Some(Element::new(PageShell::new(
+    ) -> Element<Message> {
+        Element::new(PageShell::new(
             "Not Found",
             vec![text(self.path.clone()).into()],
-        )))
+        ))
     }
 }

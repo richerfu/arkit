@@ -19,9 +19,9 @@ impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for 
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element> {
+    ) -> Element {
         let ctx = self.ctx.clone();
-        Some({
+        {
             arkit::stack_component()
                 .percent_width(1.0)
                 .percent_height(1.0)
@@ -86,7 +86,7 @@ impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for 
                     .into(),
                 ])
                 .into()
-        })
+        }
     }
 }
 

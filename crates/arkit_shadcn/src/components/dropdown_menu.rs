@@ -194,7 +194,7 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
         &self,
         tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element<Message>> {
+    ) -> Element<Message> {
         let state = super::widget_state(tree, || self.default_open);
         let is_controlled = self.open.is_some();
         let open = self.open.unwrap_or_else(|| *state.borrow());
@@ -216,7 +216,7 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
                 .into();
         }
 
-        Some(menu_popup(
+        menu_popup(
             trigger,
             self.items.clone(),
             open,
@@ -235,7 +235,7 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
                 submenu_width: SUBMENU_PANEL_WIDTH,
                 side_offset_vp: spacing::XXS,
             },
-        ))
+        )
     }
 }
 
