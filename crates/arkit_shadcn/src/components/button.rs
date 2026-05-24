@@ -585,8 +585,8 @@ impl<Message: Clone + Send + 'static>
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element<Message>> {
-        Some(self.render())
+    ) -> Element<Message> {
+        self.render()
     }
 }
 

@@ -104,12 +104,12 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
         &self,
         tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element<Message>> {
+    ) -> Element<Message> {
         let state = super::widget_state(tree, || self.default_open);
         let is_controlled = self.open.is_some();
         let open = self.open.unwrap_or_else(|| *state.borrow());
         let handler = self.on_open_change.clone();
-        Some(super::dialog::modal_overlay(
+        super::dialog::modal_overlay(
             open,
             alert_dialog_with_message(
                 self.title.clone(),
@@ -125,7 +125,7 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
                     dispatch_message(handler(false));
                 }
             })),
-        ))
+        )
     }
 }
 

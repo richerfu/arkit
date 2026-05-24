@@ -20,13 +20,13 @@ impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for 
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element> {
+    ) -> Element {
         let name = self.name.clone();
         let ctx = self.ctx.clone();
         let title = component_title(&name);
         let demo_name = name.clone();
 
-        Some(arkit::column(vec![
+        arkit::column(vec![
             nav_bar(
                 title,
                 true,
@@ -38,6 +38,6 @@ impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for 
                 },
             ),
             Element::new(ExampleRenderer::new(demo_name, ctx)),
-        ]))
+        ])
     }
 }

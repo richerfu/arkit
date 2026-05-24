@@ -323,7 +323,7 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
         &self,
         tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element<Message>> {
+    ) -> Element<Message> {
         let state = super::widget_state(tree, || self.default_selected.clone());
         let is_controlled = self.selected.is_some();
         let selected = self
@@ -331,19 +331,15 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
             .clone()
             .unwrap_or_else(|| state.borrow().clone());
         let on_change = self.on_change.clone();
-        Some(toggle_group_icons_multi(
-            self.options.clone(),
-            selected,
-            move |value| {
-                if !is_controlled {
-                    *state.borrow_mut() = value.clone();
-                    super::request_widget_rerender();
-                }
-                if let Some(on_change) = on_change.as_ref() {
-                    dispatch_message(on_change(value));
-                }
-            },
-        ))
+        toggle_group_icons_multi(self.options.clone(), selected, move |value| {
+            if !is_controlled {
+                *state.borrow_mut() = value.clone();
+                super::request_widget_rerender();
+            }
+            if let Some(on_change) = on_change.as_ref() {
+                dispatch_message(on_change(value));
+            }
+        })
     }
 }
 

@@ -32,8 +32,8 @@ impl<Message: 'static> arkit::advanced::Widget<Message, arkit::Theme, arkit::Ren
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element<Message>> {
-        Some(progress::<Message>(self.value, self.total).into())
+    ) -> Element<Message> {
+        progress::<Message>(self.value, self.total).into()
     }
 }
 

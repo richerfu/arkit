@@ -71,7 +71,7 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element<Message>> {
+    ) -> Element<Message> {
         let mut input = input::<Message>(self.placeholder.clone());
         if let Some(value) = self.value.clone() {
             input = input.value(value);
@@ -88,7 +88,7 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
         if let Some(handler) = self.on_input.clone() {
             input = input.on_input(move |value| handler(value));
         }
-        Some(input.into())
+        input.into()
     }
 }
 

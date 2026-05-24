@@ -69,8 +69,8 @@ macro_rules! impl_component_widget {
                 &self,
                 _tree: &mut arkit::advanced::widget::Tree,
                 _renderer: &arkit::Renderer,
-            ) -> Option<Element<$message>> {
-                Some($render(self))
+            ) -> Element<$message> {
+                $render(self)
             }
         }
 

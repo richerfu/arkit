@@ -24,7 +24,7 @@ impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for 
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element> {
+    ) -> Element {
         let search = self.search.clone();
         let keyword = search.to_lowercase();
         let filtered = SHOWCASE_COMPONENTS
@@ -49,7 +49,7 @@ impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for 
                 .collect::<Vec<_>>()
         };
 
-        Some(arkit::column(vec![
+        arkit::column(vec![
             nav_bar("Showcase", false, self.theme),
             arkit::scroll_component()
                 .width(Length::Fill)
@@ -82,6 +82,6 @@ impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for 
                     512.0,
                 )])
                 .into(),
-        ]))
+        ])
     }
 }

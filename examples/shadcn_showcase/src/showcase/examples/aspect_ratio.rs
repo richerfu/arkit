@@ -18,9 +18,9 @@ impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for 
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element> {
+    ) -> Element {
         let _ctx = self.ctx.clone();
-        Some({
+        {
             component_canvas_with(
                 arkit::stack_component()
                     .percent_width(1.0)
@@ -49,7 +49,7 @@ impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for 
                 true,
                 [0.0, 24.0, 0.0, 24.0],
             )
-        })
+        }
     }
 }
 

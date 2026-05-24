@@ -18,15 +18,15 @@ impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for 
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element> {
+    ) -> Element {
         let _ctx = self.ctx.clone();
-        Some({
+        {
             component_canvas(
                 fixed_width(shadcn::Progress::new(66.0, 100.0).into(), 288.0),
                 true,
                 24.0,
             )
-        })
+        }
     }
 }
 

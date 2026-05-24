@@ -18,8 +18,8 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for HomePag
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element<Message>> {
-        Some(Element::new(PageShell::new(
+    ) -> Element<Message> {
+        Element::new(PageShell::new(
             "Home",
             vec![
                 text("This page is produced by HomePage from HomeRoute.")
@@ -41,6 +41,6 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for HomePag
                     Message::Router(RouterMessage::push("/settings")),
                 )),
             ],
-        )))
+        ))
     }
 }

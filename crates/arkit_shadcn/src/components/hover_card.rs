@@ -124,7 +124,7 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
         &self,
         tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element<Message>> {
+    ) -> Element<Message> {
         let state = super::widget_state(tree, || self.default_open);
         let is_controlled = self.open.is_some();
         let open = self.open.unwrap_or_else(|| *state.borrow());
@@ -146,7 +146,7 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
                 .into();
         }
 
-        Some(hover_card_with_width(
+        hover_card_with_width(
             trigger,
             super::take_component_slot(&self.content, "hover card content"),
             open,
@@ -160,7 +160,7 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
                 }
             },
             self.width.unwrap_or(HOVER_CARD_DEFAULT_WIDTH),
-        ))
+        )
     }
 }
 

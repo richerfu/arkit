@@ -253,7 +253,7 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
         &self,
         tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element<Message>> {
+    ) -> Element<Message> {
         let state = super::widget_state(tree, || SelectTreeState {
             selected: self.default_selected.clone(),
             open: self.default_open,
@@ -270,7 +270,7 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
         let state_for_open = state.clone();
         let state_for_select = state.clone();
 
-        Some(select(
+        select(
             self.options.clone(),
             selected,
             open,
@@ -292,7 +292,7 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
                     dispatch_message(on_select(value));
                 }
             },
-        ))
+        )
     }
 }
 

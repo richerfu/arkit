@@ -149,12 +149,12 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
         &self,
         tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element<Message>> {
+    ) -> Element<Message> {
         let state = super::widget_state(tree, || self.default_active);
         let is_controlled = self.active.is_some();
         let active = self.active.unwrap_or_else(|| *state.borrow());
         let on_change = self.on_change.clone();
-        Some(tabs(
+        tabs(
             self.labels.clone(),
             active,
             move |value| {
@@ -167,7 +167,7 @@ impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, ark
                 }
             },
             super::take_component_slot(&self.panels, "tabs panels"),
-        ))
+        )
     }
 }
 

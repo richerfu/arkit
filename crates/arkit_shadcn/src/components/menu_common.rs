@@ -302,7 +302,7 @@ impl<Message: 'static> advanced::Widget<Message, arkit::Theme, arkit::Renderer>
         &self,
         tree: &mut advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element<Message>> {
+    ) -> Element<Message> {
         let state = tree
             .state()
             .downcast_mut::<MenuPopupTreeState>()
@@ -342,7 +342,7 @@ impl<Message: 'static> advanced::Widget<Message, arkit::Theme, arkit::Renderer>
             )
         });
 
-        Some(floating_panel_aligned_with_builder(
+        floating_panel_aligned_with_builder(
             trigger,
             self.open,
             FloatingSide::Bottom,
@@ -353,7 +353,7 @@ impl<Message: 'static> advanced::Widget<Message, arkit::Theme, arkit::Renderer>
             false,
             vec![root_surfaces.clone()],
             Some(root_surfaces),
-        ))
+        )
     }
 }
 
@@ -380,7 +380,7 @@ impl<Message: 'static> advanced::Widget<Message, arkit::Theme, arkit::Renderer>
         &self,
         tree: &mut advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element<Message>> {
+    ) -> Element<Message> {
         let _state = tree
             .state()
             .downcast_mut::<MenuSubmenuTreeState>()
@@ -433,22 +433,20 @@ impl<Message: 'static> advanced::Widget<Message, arkit::Theme, arkit::Renderer>
             column_children.push(sub_content.into());
         }
 
-        Some(
-            arkit::column_component::<Message, arkit::Theme>()
-                .attr(
-                    ArkUINodeAttributeType::WidthLayoutpolicy,
-                    FIX_AT_IDEAL_SIZE_POLICY,
-                )
-                .constraint_size(
-                    menu_subtree_min_width(&self.context.style),
-                    MENU_PANEL_MAX_SIZE,
-                    0.0,
-                    MENU_PANEL_MAX_SIZE,
-                )
-                .align_items_start()
-                .children(column_children)
-                .into(),
-        )
+        arkit::column_component::<Message, arkit::Theme>()
+            .attr(
+                ArkUINodeAttributeType::WidthLayoutpolicy,
+                FIX_AT_IDEAL_SIZE_POLICY,
+            )
+            .constraint_size(
+                menu_subtree_min_width(&self.context.style),
+                MENU_PANEL_MAX_SIZE,
+                0.0,
+                MENU_PANEL_MAX_SIZE,
+            )
+            .align_items_start()
+            .children(column_children)
+            .into()
     }
 }
 

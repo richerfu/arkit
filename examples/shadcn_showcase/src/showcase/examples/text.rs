@@ -16,9 +16,9 @@ impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer> for 
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element> {
+    ) -> Element {
         let ctx = self.ctx.clone();
-        Some(no_padding_center_canvas(text_carousel(ctx.page)))
+        no_padding_center_canvas(text_carousel(ctx.page))
     }
 }
 

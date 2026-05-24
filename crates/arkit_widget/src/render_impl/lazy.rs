@@ -88,7 +88,7 @@ where
         &self,
         tree: &mut advanced::widget::Tree,
         _renderer: &Renderer,
-    ) -> Option<advanced::Body<Message, AppTheme, Renderer>> {
+    ) -> advanced::Body<Message, AppTheme, Renderer> {
         let hash = dependency_hash(&self.dependency);
         let should_rebuild = {
             let state = lazy_state(tree, hash);
@@ -97,7 +97,7 @@ where
 
         if !should_rebuild {
             let overlays = lazy_state(tree, hash).overlay_count;
-            return Some(advanced::Body::Retain { overlays });
+            return advanced::Body::Retain { overlays };
         }
 
         let body = (self.view)(&self.dependency).into();
@@ -105,7 +105,15 @@ where
         state.dependency_hash = hash;
         state.rendered = true;
         state.rebuild = false;
-        Some(advanced::Body::Rebuild(body))
+        advanced::Body::Rebuild(body)
+    }
+
+    fn body(
+        &self,
+        _tree: &mut advanced::widget::Tree,
+        _renderer: &Renderer,
+    ) -> Element<Message, AppTheme> {
+        (self.view)(&self.dependency).into()
     }
 
     fn cache_overlay_count(&self, tree: &mut advanced::widget::Tree, count: usize) {

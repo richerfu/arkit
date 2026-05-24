@@ -462,19 +462,17 @@ pub mod advanced {
 
         fn body(
             &self,
-            _tree: &mut widget::Tree,
-            _renderer: &Renderer,
-        ) -> Option<Element<'static, Message, AppTheme, Renderer>> {
-            None
-        }
+            tree: &mut widget::Tree,
+            renderer: &Renderer,
+        ) -> Element<'static, Message, AppTheme, Renderer>;
 
         #[doc(hidden)]
         fn cached_body(
             &self,
             tree: &mut widget::Tree,
             renderer: &Renderer,
-        ) -> Option<Body<Message, AppTheme, Renderer>> {
-            self.body(tree, renderer).map(Body::Rebuild)
+        ) -> Body<Message, AppTheme, Renderer> {
+            Body::Rebuild(self.body(tree, renderer))
         }
 
         #[doc(hidden)]

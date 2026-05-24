@@ -42,6 +42,14 @@ impl<Message: 'static, AppTheme: 'static> advanced::Widget<Message, AppTheme, Re
     fn layout(&self) -> arkit_core::layout::Node {
         arkit_core::layout::Node::new(Size::new(0.0, 0.0))
     }
+
+    fn body(
+        &self,
+        _tree: &mut advanced::widget::Tree,
+        _renderer: &Renderer,
+    ) -> Element<Message, AppTheme> {
+        panic!("renderer node should be compiled directly")
+    }
 }
 
 impl<Message, AppTheme> From<Node<Message, AppTheme>> for Element<Message, AppTheme>

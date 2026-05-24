@@ -24,8 +24,8 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for UserLay
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element<Message>> {
-        Some(Element::new(PageShell::new(
+    ) -> Element<Message> {
+        Element::new(PageShell::new(
             "User Layout",
             vec![
                 text(format!("layout param id = {}", self.id))
@@ -37,7 +37,7 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for UserLay
                     .take()
                     .expect("UserLayout outlet consumed once"),
             ],
-        )))
+        ))
     }
 }
 
@@ -75,8 +75,8 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for UserPag
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element<Message>> {
-        Some(Element::new(PageShell::new(
+    ) -> Element<Message> {
+        Element::new(PageShell::new(
             "User",
             vec![
                 text(format!("typed param id = {}", self.id))
@@ -112,7 +112,7 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for UserPag
                     Message::Router(RouterMessage::back()),
                 )),
             ],
-        )))
+        ))
     }
 }
 
@@ -133,8 +133,8 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for UserSet
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element<Message>> {
-        Some(Element::new(PageShell::new(
+    ) -> Element<Message> {
+        Element::new(PageShell::new(
             "User Settings",
             vec![
                 text(format!("nested settings for user {}", self.id))
@@ -146,6 +146,6 @@ impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for UserSet
                     Message::Router(RouterMessage::push(format!("/users/{}", self.id))),
                 )),
             ],
-        )))
+        ))
     }
 }

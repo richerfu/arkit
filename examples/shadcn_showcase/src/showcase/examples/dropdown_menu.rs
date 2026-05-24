@@ -20,9 +20,9 @@ impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer>
         &self,
         _tree: &mut arkit::advanced::widget::Tree,
         _renderer: &arkit::Renderer,
-    ) -> Option<Element> {
+    ) -> Element {
         let _ctx = self.ctx.clone();
-        Some({
+        {
             top_center_canvas(
                 fixed_width(
                     shadcn::DropdownMenu::new(
@@ -63,7 +63,7 @@ impl arkit::advanced::Widget<crate::Message, arkit::Theme, arkit::Renderer>
                 [24.0, 24.0, 24.0, 24.0],
                 true,
             )
-        })
+        }
     }
 }
 
