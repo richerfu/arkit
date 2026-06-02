@@ -7,7 +7,7 @@ use std::rc::{Rc, Weak};
 use std::sync::mpsc;
 use std::thread;
 
-use arkit_core::{theme, window};
+use arkit_core::theme;
 use arkit_runtime::{
     internal::{
         clear_ui_loop_effects, run_ui_loop_effects, set_current_runtime, set_dispatcher,
@@ -41,7 +41,7 @@ where
     app: OpenHarmonyApp,
     root: RefCell<RootNode>,
     mounted: RefCell<Option<MountedRoot>>,
-    render: Option<Rc<dyn Fn() -> Element<Message, AppTheme>>>,
+    render: Rc<dyn Fn() -> Element<Message, AppTheme>>,
 }
 
 impl<Message, AppTheme> RootRuntime<Message, AppTheme>
@@ -53,43 +53,19 @@ where
     where
         F: Fn() -> Element<Message, AppTheme> + 'static,
     {
+        let render = Rc::new(render);
         let runtime = Self {
             app,
             root: RefCell::new(RootNode::new(slot)),
             mounted: RefCell::new(None),
-            render: Some(Rc::new(render)),
+            render: render.clone(),
         };
-        runtime.mount_root((runtime.render.as_ref().expect("render closure"))())?;
+        runtime.mount_root(render())?;
         Ok(runtime)
-    }
-
-    fn new_static(
-        slot: ArkUIHandle,
-        app: OpenHarmonyApp,
-        tree: Element<Message, AppTheme>,
-    ) -> Result<Self> {
-        let runtime = Self {
-            app,
-            root: RefCell::new(RootNode::new(slot)),
-            mounted: RefCell::new(None),
-            render: None,
-        };
-        runtime.mount_root(tree)?;
-        Ok(runtime)
-    }
-
-    fn rerender<F>(&self, render: F) -> Result<()>
-    where
-        F: FnOnce() -> Element<Message, AppTheme>,
-    {
-        self.patch_root(render())
     }
 
     fn request_rerender(&self) -> Result<()> {
-        let Some(render) = self.render.clone() else {
-            return Ok(());
-        };
-        self.rerender(move || render())
+        self.patch_root((self.render)())
     }
 
     fn mount_root(&self, tree: Element<Message, AppTheme>) -> Result<()> {
@@ -115,7 +91,7 @@ where
         let patch_result = patch(tree, &mut current.node, &mut current.mounted);
         if patch_result.is_err() {
             drop(mounted);
-            return self.mount_root((self.render.as_ref().expect("render closure"))());
+            return self.mount_root((self.render)());
         }
         map_arkui_result(patch_result)
     }
@@ -142,24 +118,6 @@ pub trait MountedEntryHandle {
 
 pub trait EntryPoint {
     fn mount(self, slot: ArkUIHandle, app: OpenHarmonyApp) -> Result<Box<dyn MountedEntryHandle>>;
-}
-
-struct StaticRuntimeHandle<Message, AppTheme>
-where
-    Message: Send + 'static,
-    AppTheme: theme::Base + Default + 'static,
-{
-    runtime: RootRuntime<Message, AppTheme>,
-}
-
-impl<Message, AppTheme> MountedEntryHandle for StaticRuntimeHandle<Message, AppTheme>
-where
-    Message: Send + 'static,
-    AppTheme: theme::Base + Default + 'static,
-{
-    fn unmount(&self) -> Result<()> {
-        self.runtime.unmount()
-    }
 }
 
 pub struct ApplicationRuntime<P>
@@ -294,10 +252,8 @@ where
     }
 
     fn render(&self) -> Element<P::Message, P::Theme> {
-        {
-            let state = self.state.borrow();
-            self.program.view(&state, window::Id::MAIN)
-        }
+        let state = self.state.borrow();
+        self.program.view(&state)
     }
 
     fn enqueue(&self, message: P::Message) -> bool {
@@ -565,18 +521,6 @@ where
     }
 }
 
-pub fn mount_application<P>(
-    slot: ArkUIHandle,
-    app: OpenHarmonyApp,
-    program: P,
-) -> Result<ApplicationRuntime<P>>
-where
-    P: Program<Renderer = Renderer> + 'static,
-    P::Theme: theme::Base + Default + 'static,
-{
-    ApplicationRuntime::new(slot, app, program)
-}
-
 pub fn mount_entry(
     slot: ArkUIHandle,
     app: OpenHarmonyApp,
@@ -591,6 +535,6 @@ where
     P::Theme: theme::Base + Default + 'static,
 {
     fn mount(self, slot: ArkUIHandle, app: OpenHarmonyApp) -> Result<Box<dyn MountedEntryHandle>> {
-        Ok(Box::new(mount_application(slot, app, self)?))
+        Ok(Box::new(ApplicationRuntime::new(slot, app, self)?))
     }
 }

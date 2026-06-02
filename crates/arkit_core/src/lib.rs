@@ -181,95 +181,8 @@ impl Default for Settings {
     }
 }
 
-pub mod window {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-    pub struct Id(pub u64);
-
-    impl Id {
-        pub const MAIN: Self = Self(0);
-    }
-
-    #[derive(Debug, Clone)]
-    pub struct Settings {
-        pub title: String,
-    }
-
-    impl Default for Settings {
-        fn default() -> Self {
-            Self {
-                title: String::from("arkit"),
-            }
-        }
-    }
-}
-
-pub mod mouse {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-    pub enum Interaction {
-        #[default]
-        Idle,
-        Pointer,
-    }
-
-    #[derive(Debug, Clone, Copy, Default)]
-    pub struct Cursor;
-}
-
-pub mod event {
-    #[derive(Debug, Clone, Copy, Default)]
-    pub enum Event {
-        #[default]
-        None,
-    }
-}
-
-pub mod clipboard {
-    pub trait Clipboard {
-        fn read(&self) -> Option<String> {
-            None
-        }
-
-        fn write(&mut self, _contents: String) {}
-    }
-
-    #[derive(Default)]
-    pub struct Null;
-
-    impl Clipboard for Null {}
-}
-
-pub mod layout {
-    use crate::Size;
-
-    #[derive(Debug, Clone, Copy, Default)]
-    pub struct Node {
-        pub size: Size<f32>,
-    }
-
-    impl Node {
-        pub fn new(size: Size<f32>) -> Self {
-            Self { size }
-        }
-    }
-
-    #[derive(Debug, Clone, Copy)]
-    pub struct Layout<'a> {
-        node: &'a Node,
-    }
-
-    impl<'a> Layout<'a> {
-        pub fn new(node: &'a Node) -> Self {
-            Self { node }
-        }
-
-        pub fn size(&self) -> Size<f32> {
-            self.node.size
-        }
-    }
-}
-
 pub mod advanced {
-    use super::{clipboard, event, layout, mouse, theme, Element, Length, Size, Theme};
+    use super::{theme, Element, Length, Size, Theme};
     use std::any::Any;
 
     pub mod widget {
@@ -443,21 +356,6 @@ pub mod advanced {
 
         fn size_hint(&self) -> Size<Length> {
             Size::new(Length::Shrink, Length::Shrink)
-        }
-
-        fn layout(&self) -> layout::Node {
-            layout::Node::default()
-        }
-
-        fn update(
-            &mut self,
-            _tree: &mut widget::Tree,
-            _event: &event::Event,
-            _layout: layout::Layout<'_>,
-            _cursor: mouse::Cursor,
-            _clipboard: &mut dyn clipboard::Clipboard,
-            _shell: &mut Shell<'_, Message>,
-        ) {
         }
 
         fn body(

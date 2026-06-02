@@ -3,9 +3,7 @@ use std::rc::Rc;
 
 use crate::advanced;
 use crate::internal::{current_runtime, queue_ui_loop};
-use crate::render_impl::{
-    observe_layout_frame as observe_layout_frame_impl, read_layout_frame, read_layout_size,
-};
+use crate::render_impl::{observe_layout_frame_enabled, read_layout_frame, read_layout_size};
 use crate::{
     column_component, row_component, stack_component, Alignment, ArkUINodeAttributeItem,
     ArkUINodeAttributeType, Direction, Element, HitTestBehavior, NodeEventType,
@@ -429,7 +427,7 @@ impl<Message: 'static, AppTheme: 'static> advanced::Widget<Message, AppTheme, cr
             .take()
             .expect("floating overlay trigger was already consumed");
 
-        observe_layout_frame_impl(trigger, true, {
+        observe_layout_frame_enabled(trigger, true, {
             let state = state.clone();
             move |frame| {
                 let changed = state.trigger_frame.set_if_changed(frame);

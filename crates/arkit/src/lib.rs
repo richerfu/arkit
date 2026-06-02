@@ -6,7 +6,7 @@ pub mod router;
 
 pub use arkit_core::advanced;
 pub use arkit_core::theme;
-pub use arkit_core::{window, Horizontal, Length, Padding, Settings, Size, Theme, Vertical};
+pub use arkit_core::{Horizontal, Length, Padding, Settings, Size, Theme, Vertical};
 pub use arkit_derive::entry;
 pub use arkit_runtime::{
     Application, BackPressDecision, Program, Subscription, SubscriptionHandle, Task,
@@ -46,8 +46,8 @@ pub use arkit_widget::{
     WebViewStyle, Webview,
 };
 pub use ohos::{
-    mount_application, mount_entry, napi_derive_ohos, napi_ohos, ohos_arkui_binding,
-    openharmony_ability, ApplicationRuntime, EntryPoint, MountedEntryHandle,
+    mount_entry, napi_derive_ohos, napi_ohos, ohos_arkui_binding, openharmony_ability,
+    ApplicationRuntime, EntryPoint, MountedEntryHandle,
 };
 
 pub fn application<State, Message, Boot, Update, View>(
@@ -104,7 +104,7 @@ pub mod prelude {
     pub use crate::widget::*;
     pub use crate::ListVisibleContentChangeEvent;
     pub use crate::{
-        application, entry, observe_text_layout, run, window, ArkEvent, ArkUINodeAttributeItem,
+        application, entry, observe_text_layout, run, ArkEvent, ArkUINodeAttributeItem,
         ArkUINodeAttributeType, BackPressDecision, BorderStyle, ButtonType, Element, FlexDirection,
         FlexOptions, FlexWrap, FloatingAlign, FloatingOverlaySpec, FloatingSide, FontStyle,
         FontWeight, GridScrollIndexEvent, HitTestBehavior, Horizontal, ItemAlignment,

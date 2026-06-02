@@ -24,7 +24,7 @@ dependencies = [
  "arkit_widget",
  "napi-derive-ohos",
  "napi-ohos",
- "ohos-arkui-binding 0.1.0",
+ "ohos-arkui-binding 0.2.0",
  "openharmony-ability",
  "tokio",
 ]
@@ -112,7 +112,7 @@ dependencies = [
  "arkit_runtime",
  "http",
  "napi-ohos",
- "ohos-arkui-binding 0.1.0",
+ "ohos-arkui-binding 0.2.0",
  "ohos-display-binding 0.0.1 (git+https://github.com/ohos-rs/ohos-native-bindings.git?branch=feat-component)",
  "ohos-hilog-binding",
  "openharmony-ability",
@@ -474,33 +474,33 @@ dependencies = [
 [[package]]
 name = "ohos-arkui-binding"
 version = "0.1.0"
-dependencies = [
- "bitflags",
- "napi-ohos",
- "napi-sys-ohos",
- "ohos-arkui-input-binding",
- "ohos-arkui-sys 0.0.1",
- "ohos-drawing-binding",
- "ohos-image-binding",
- "ohos-image-native-binding",
- "ohos-udmf-binding",
- "ohos-xcomponent-binding 0.2.0",
- "ohos_enum_macro 0.1.0",
-]
-
-[[package]]
-name = "ohos-arkui-binding"
-version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9352f0db69271fc23fb565ad1f034c2118a9ea9c727ece344834b451fe2c2865"
 dependencies = [
  "bitflags",
  "napi-ohos",
  "napi-sys-ohos",
- "ohos-arkui-sys 0.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "ohos-xcomponent-binding 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "ohos-xcomponent-sys 0.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ohos-arkui-sys 0.0.1",
+ "ohos-xcomponent-binding 0.2.0",
+ "ohos-xcomponent-sys 0.0.2",
  "ohos_enum_macro 0.0.2",
+]
+
+[[package]]
+name = "ohos-arkui-binding"
+version = "0.2.0"
+dependencies = [
+ "bitflags",
+ "napi-ohos",
+ "napi-sys-ohos",
+ "ohos-arkui-input-binding",
+ "ohos-arkui-sys 0.1.0",
+ "ohos-drawing-binding",
+ "ohos-enum-derive",
+ "ohos-image-binding",
+ "ohos-image-native-binding",
+ "ohos-udmf-binding",
+ "ohos-xcomponent-binding 0.3.0",
 ]
 
 [[package]]
@@ -508,7 +508,7 @@ name = "ohos-arkui-input-binding"
 version = "0.1.0"
 dependencies = [
  "ohos-arkui-input-sys",
- "ohos_enum_macro 0.1.0",
+ "ohos-enum-derive",
 ]
 
 [[package]]
@@ -518,21 +518,21 @@ version = "0.1.0"
 [[package]]
 name = "ohos-arkui-sys"
 version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a19176486bbe46d33830aca4213b07bb46c745200118e57106639db4962e1c3"
+dependencies = [
+ "napi-sys-ohos",
+]
+
+[[package]]
+name = "ohos-arkui-sys"
+version = "0.1.0"
 dependencies = [
  "napi-sys-ohos",
  "ohos-arkui-input-sys",
  "ohos-image-native-sys",
  "ohos-native-drawing-sys",
  "ohos-udmf-sys",
-]
-
-[[package]]
-name = "ohos-arkui-sys"
-version = "0.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1a19176486bbe46d33830aca4213b07bb46c745200118e57106639db4962e1c3"
-dependencies = [
- "napi-sys-ohos",
 ]
 
 [[package]]
@@ -567,10 +567,20 @@ source = "git+https://github.com/ohos-rs/ohos-native-bindings.git?branch=feat-co
 
 [[package]]
 name = "ohos-drawing-binding"
+version = "0.2.0"
+dependencies = [
+ "ohos-enum-derive",
+ "ohos-native-drawing-sys",
+]
+
+[[package]]
+name = "ohos-enum-derive"
 version = "0.1.0"
 dependencies = [
- "ohos-native-drawing-sys",
- "ohos_enum_macro 0.1.0",
+ "convert_case 0.6.0",
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -588,13 +598,13 @@ source = "git+https://github.com/ohos-rs/ohos-native-bindings.git?branch=feat-co
 
 [[package]]
 name = "ohos-image-binding"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "napi-ohos",
  "napi-sys-ohos",
+ "ohos-enum-derive",
  "ohos-image-sys",
- "ohos-resource-manager-sys 0.2.0",
- "ohos_enum_macro 0.1.0",
+ "ohos-resource-manager-sys 0.3.0",
 ]
 
 [[package]]
@@ -603,11 +613,11 @@ version = "0.0.1"
 dependencies = [
  "libc",
  "napi-sys-ohos",
+ "ohos-enum-derive",
  "ohos-image-native-sys",
  "ohos-native-buffer-binding",
  "ohos-native-buffer-sys",
- "ohos-resource-manager-sys 0.2.0",
- "ohos_enum_macro 0.1.0",
+ "ohos-resource-manager-sys 0.3.0",
 ]
 
 [[package]]
@@ -616,7 +626,7 @@ version = "0.0.1"
 dependencies = [
  "napi-sys-ohos",
  "ohos-native-buffer-sys",
- "ohos-resource-manager-sys 0.2.0",
+ "ohos-resource-manager-sys 0.3.0",
 ]
 
 [[package]]
@@ -624,7 +634,7 @@ name = "ohos-image-sys"
 version = "0.0.1"
 dependencies = [
  "napi-sys-ohos",
- "ohos-resource-manager-sys 0.2.0",
+ "ohos-resource-manager-sys 0.3.0",
 ]
 
 [[package]]
@@ -645,7 +655,7 @@ checksum = "225be105b169f45a2bca86498988c1877568d82542c013b345d605eb915e48ae"
 
 [[package]]
 name = "ohos-native-buffer-binding"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "ohos-native-buffer-sys",
  "ohos-native-window-sys",
@@ -653,11 +663,11 @@ dependencies = [
 
 [[package]]
 name = "ohos-native-buffer-sys"
-version = "0.0.1"
+version = "0.1.0"
 
 [[package]]
 name = "ohos-native-drawing-sys"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "ohos-image-native-sys",
  "ohos-image-sys",
@@ -665,7 +675,7 @@ dependencies = [
 
 [[package]]
 name = "ohos-native-window-sys"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "ohos-native-buffer-sys",
 ]
@@ -677,14 +687,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "33793d5fc06cf356b3d25aa6228785e62c9f2a0e913a2c285b1eb8efb7185b5e"
 dependencies = [
  "napi-ohos",
- "ohos-resource-manager-sys 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "ohos-resource-manager-sys"
-version = "0.2.0"
-dependencies = [
- "napi-sys-ohos",
+ "ohos-resource-manager-sys 0.2.0",
 ]
 
 [[package]]
@@ -697,12 +700,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ohos-resource-manager-sys"
+version = "0.3.0"
+dependencies = [
+ "napi-sys-ohos",
+]
+
+[[package]]
 name = "ohos-udmf-binding"
 version = "0.0.1"
 dependencies = [
+ "ohos-enum-derive",
  "ohos-image-native-binding",
  "ohos-udmf-sys",
- "ohos_enum_macro 0.1.0",
 ]
 
 [[package]]
@@ -732,37 +742,28 @@ checksum = "aa646f3223c2bc90a400641c3a5cda4b350387ffda1a904b8bfb3db92b81ecbc"
 [[package]]
 name = "ohos-xcomponent-binding"
 version = "0.2.0"
-dependencies = [
- "napi-derive-ohos",
- "napi-ohos",
- "napi-sys-ohos",
- "ohos-arkui-input-binding",
- "ohos-xcomponent-sys 0.0.2",
- "ohos_enum_macro 0.1.0",
- "raw-window-handle",
-]
-
-[[package]]
-name = "ohos-xcomponent-binding"
-version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c5a9bb0fd157dc702863fe6b5e15b91a4ffdc08b4c47d57d080adcc73c36fa8"
 dependencies = [
  "napi-derive-ohos",
  "napi-ohos",
  "napi-sys-ohos",
- "ohos-xcomponent-sys 0.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ohos-xcomponent-sys 0.0.2",
  "ohos_enum_macro 0.0.2",
  "raw-window-handle",
 ]
 
 [[package]]
-name = "ohos-xcomponent-sys"
-version = "0.0.2"
+name = "ohos-xcomponent-binding"
+version = "0.3.0"
 dependencies = [
- "ohos-accessibility-sys",
- "ohos-arkui-input-sys",
- "ohos-arkui-sys 0.0.1",
+ "napi-derive-ohos",
+ "napi-ohos",
+ "napi-sys-ohos",
+ "ohos-arkui-input-binding",
+ "ohos-enum-derive",
+ "ohos-xcomponent-sys 0.1.0",
+ "raw-window-handle",
 ]
 
 [[package]]
@@ -771,7 +772,16 @@ version = "0.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5613209329ff61bc8695871ef985d57fc59ea4d55263e2c2395d8810d063575e"
 dependencies = [
- "ohos-arkui-sys 0.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ohos-arkui-sys 0.0.1",
+]
+
+[[package]]
+name = "ohos-xcomponent-sys"
+version = "0.1.0"
+dependencies = [
+ "ohos-accessibility-sys",
+ "ohos-arkui-input-sys",
+ "ohos-arkui-sys 0.1.0",
 ]
 
 [[package]]
@@ -792,17 +802,6 @@ name = "ohos_enum_macro"
 version = "0.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4bacd60b52be93024c446f27645d795ab71eb2243bb4c5d87b6238a35341fbd"
-dependencies = [
- "convert_case 0.6.0",
- "proc-macro2",
- "quote",
- "regex",
- "syn",
-]
-
-[[package]]
-name = "ohos_enum_macro"
-version = "0.1.0"
 dependencies = [
  "convert_case 0.6.0",
  "proc-macro2",
@@ -845,12 +844,12 @@ dependencies = [
  "http",
  "napi-derive-ohos",
  "napi-ohos",
- "ohos-arkui-binding 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ohos-arkui-binding 0.1.0",
  "ohos-display-binding 0.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "ohos-ime-binding",
  "ohos-resource-manager-binding",
  "ohos-web-binding",
- "ohos-xcomponent-binding 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ohos-xcomponent-binding 0.2.0",
 ]
 
 [[package]]

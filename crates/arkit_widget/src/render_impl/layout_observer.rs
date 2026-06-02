@@ -285,7 +285,20 @@ fn utf16_offset_to_byte_offset(text: &str, target: usize) -> Option<usize> {
     (units == target).then_some(text.len())
 }
 
+/// 观察布局帧变化，始终启用。如需条件启用，使用 [`observe_layout_frame_enabled`]。
 pub fn observe_layout_frame<Message, AppTheme>(
+    element: Element<Message, AppTheme>,
+    on_change: impl Fn(LayoutFrame) + 'static,
+) -> Element<Message, AppTheme>
+where
+    Message: 'static,
+    AppTheme: 'static,
+{
+    observe_layout_frame_enabled(element, true, on_change)
+}
+
+/// 根据 `enabled` 条件观察布局帧变化。
+pub fn observe_layout_frame_enabled<Message, AppTheme>(
     element: Element<Message, AppTheme>,
     enabled: bool,
     on_change: impl Fn(LayoutFrame) + 'static,

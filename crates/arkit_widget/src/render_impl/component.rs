@@ -107,10 +107,6 @@ impl<Message: 'static, AppTheme: 'static, Kind: 'static>
         advanced::Widget::size_hint(&self.node)
     }
 
-    fn layout(&self) -> arkit_core::layout::Node {
-        advanced::Widget::layout(&self.node)
-    }
-
     fn body(
         &self,
         _tree: &mut advanced::widget::Tree,

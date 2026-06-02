@@ -53,43 +53,30 @@ use openharmony_ability::{get_helper, get_main_thread_env, WebViewInitData};
 #[cfg(feature = "webview")]
 pub use openharmony_ability::{DownloadStartResult, WebViewStyle, Webview};
 
-#[path = "render_impl/types.rs"]
 mod types;
 pub use types::*;
 #[allow(unused_imports)]
 use types::*;
 
-#[path = "render_impl/runtime.rs"]
 mod runtime;
 use runtime::*;
 
-#[path = "render_impl/mounted.rs"]
 mod mounted;
 pub use mounted::MountedNode;
 use mounted::*;
 
-#[path = "render_impl/virtual_adapter.rs"]
 mod virtual_adapter;
 use virtual_adapter::*;
 
-#[path = "render_impl/node_core.rs"]
 mod node_core;
 pub use node_core::Node;
 
-#[path = "render_impl/node_effects.rs"]
 mod node_effects;
-#[path = "render_impl/node_events.rs"]
 mod node_events;
-#[path = "render_impl/node_layout.rs"]
 mod node_layout;
-#[path = "render_impl/node_specialized.rs"]
 mod node_specialized;
-#[path = "render_impl/node_style.rs"]
 mod node_style;
-#[path = "render_impl/node_widget.rs"]
-mod node_widget;
 
-#[path = "render_impl/component.rs"]
 mod component;
 #[cfg(feature = "webview")]
 pub use component::WebViewElement;
@@ -102,20 +89,16 @@ pub use component::{
     WaterFlowElement,
 };
 
-#[path = "render_impl/lazy.rs"]
 mod lazy;
 pub use lazy::{lazy, Lazy};
 
-#[path = "render_impl/factories.rs"]
 mod factories;
 pub use factories::*;
 
-#[path = "render_impl/layout_observer.rs"]
 mod layout_observer;
 pub use layout_observer::*;
 
 #[cfg(feature = "webview")]
-#[path = "render_impl/webview_controller.rs"]
 mod webview_controller;
 #[cfg(feature = "webview")]
 use webview_controller::*;
@@ -123,41 +106,28 @@ use webview_controller::*;
 pub use webview_controller::{web_view, web_view_component, WebViewController};
 
 #[cfg(feature = "webview")]
-#[path = "render_impl/webview_native.rs"]
 mod webview_native;
 #[cfg(feature = "webview")]
 use webview_native::*;
 
 #[cfg(feature = "webview")]
-#[path = "render_impl/webview_sync.rs"]
 mod webview_sync;
 #[cfg(feature = "webview")]
 use webview_sync::*;
 
-#[path = "render_impl/native_node.rs"]
 mod native_node;
 use native_node::*;
 
-#[path = "render_impl/tree_compile.rs"]
-mod tree_compile;
-use tree_compile::*;
-
-#[path = "render_impl/patch_helpers.rs"]
 mod patch_helpers;
 use patch_helpers::*;
 
-#[path = "render_impl/mount.rs"]
-mod mount;
-use mount::*;
-pub use mount::{mount, patch, realize_attached_mount};
+mod tree_compile;
+use tree_compile::*;
 
-#[path = "render_impl/reconcile.rs"]
-mod reconcile;
-use reconcile::*;
+pub use mounted::{mount, patch, realize_attached_mount};
 
 pub use ohos_arkui_binding::common::attribute::ArkUINodeAttributeItem as AttributeValue;
 pub use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType as Attribute;
 
 #[cfg(test)]
-#[path = "render_impl/tests.rs"]
 mod tests;

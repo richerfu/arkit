@@ -6,7 +6,7 @@ use std::rc::Rc;
 use std::sync::{Arc, LazyLock, Mutex};
 
 pub use arkit_core::theme;
-pub use arkit_core::{window, Theme};
+pub use arkit_core::Theme;
 pub use arkit_futures::{Subscription, SubscriptionHandle};
 
 pub type Element<Message, AppTheme = Theme, AppRenderer = ()> =
@@ -289,11 +289,7 @@ pub trait Program: Sized {
 
     fn boot(&self) -> (Self::State, Task<Self::Message>);
     fn update(&self, state: &mut Self::State, message: Self::Message) -> Task<Self::Message>;
-    fn view(
-        &self,
-        state: &Self::State,
-        window: window::Id,
-    ) -> Element<Self::Message, Self::Theme, Self::Renderer>;
+    fn view(&self, state: &Self::State) -> Element<Self::Message, Self::Theme, Self::Renderer>;
 
     fn subscription(&self, _state: &Self::State) -> Subscription<Self::Message> {
         Subscription::none()
@@ -388,11 +384,7 @@ where
         (self.update)(state, message)
     }
 
-    fn view(
-        &self,
-        state: &Self::State,
-        _window: window::Id,
-    ) -> Element<Self::Message, Self::Theme, Self::Renderer> {
+    fn view(&self, state: &Self::State) -> Element<Self::Message, Self::Theme, Self::Renderer> {
         (self.view)(state)
     }
 
@@ -519,7 +511,6 @@ mod tests {
             fn view(
                 &self,
                 _state: &Self::State,
-                _window: super::window::Id,
             ) -> super::Element<Self::Message, Self::Theme, Self::Renderer> {
                 unreachable!("view is not used by this test")
             }

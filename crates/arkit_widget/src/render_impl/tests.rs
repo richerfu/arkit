@@ -1,5 +1,12 @@
 use super::*;
 
+/// 辅助：提取属性列表中的类型序列（用于测试断言）。
+fn attr_types_from(
+    attrs: &[(ArkUINodeAttributeType, ArkUINodeAttributeItem)],
+) -> Vec<ArkUINodeAttributeType> {
+    attrs.iter().map(|(a, _)| *a).collect()
+}
+
 struct BodyOnlyWidget;
 
 impl advanced::Widget<(), arkit_core::Theme, Renderer> for BodyOnlyWidget {
@@ -46,13 +53,7 @@ fn composite_widget_body_tree_is_initialized_lazily() {
     assert!(tree.children().is_empty());
 
     let mut state_cache = StateCache::default();
-    let _compiled = compile_element(
-        element,
-        &mut tree,
-        &mut state_cache,
-        &Renderer::default(),
-        false,
-    );
+    let _compiled = state_cache.compile(element, &mut tree, &Renderer::default(), false);
 
     assert_eq!(tree.children().len(), 1);
 }
@@ -63,13 +64,7 @@ fn lazy_builds_body_on_first_compile() {
     let element = counted_lazy(calls.clone(), 1);
     let mut tree = arkit_core::advanced::tree_of(&element);
     let mut state_cache = StateCache::default();
-    let compiled = compile_element(
-        element,
-        &mut tree,
-        &mut state_cache,
-        &Renderer::default(),
-        false,
-    );
+    let compiled = state_cache.compile(element, &mut tree, &Renderer::default(), false);
 
     assert_eq!(calls.get(), 1);
     assert_eq!(into_node(compiled.body).kind(), NodeKind::Text);
@@ -81,13 +76,7 @@ fn lazy_factory_infers_from_element_context() {
     let element: Element<()> = lazy(1_u32, |_| text("body")).into();
     let mut tree = arkit_core::advanced::tree_of(&element);
     let mut state_cache = StateCache::default();
-    let compiled = compile_element(
-        element,
-        &mut tree,
-        &mut state_cache,
-        &Renderer::default(),
-        false,
-    );
+    let compiled = state_cache.compile(element, &mut tree, &Renderer::default(), false);
 
     assert_eq!(into_node(compiled.body).kind(), NodeKind::Text);
 }
@@ -99,25 +88,14 @@ fn lazy_retains_body_when_dependency_hash_is_unchanged() {
         let element = counted_lazy(calls.clone(), 1);
         let mut tree = arkit_core::advanced::tree_of(&element);
         let mut state_cache = StateCache::default();
-        let _ = compile_element(
-            element,
-            &mut tree,
-            &mut state_cache,
-            &Renderer::default(),
-            false,
-        );
+        let _ = state_cache.compile(element, &mut tree, &Renderer::default(), false);
         tree
     };
     let child_tag = tree.children()[0].tag();
     let mut state_cache = StateCache::default();
 
-    let compiled = compile_element(
-        counted_lazy(calls.clone(), 1),
-        &mut tree,
-        &mut state_cache,
-        &Renderer::default(),
-        false,
-    );
+    let compiled =
+        state_cache.compile(counted_lazy(calls.clone(), 1), &mut tree, &Renderer::default(), false);
 
     assert_eq!(calls.get(), 1);
     assert_eq!(into_node(compiled.body).kind(), NodeKind::Retained);
@@ -131,21 +109,10 @@ fn lazy_rebuilds_body_when_dependency_hash_changes() {
     let element = counted_lazy(calls.clone(), 1);
     let mut tree = arkit_core::advanced::tree_of(&element);
     let mut state_cache = StateCache::default();
-    let _ = compile_element(
-        element,
-        &mut tree,
-        &mut state_cache,
-        &Renderer::default(),
-        false,
-    );
+    let _ = state_cache.compile(element, &mut tree, &Renderer::default(), false);
 
-    let compiled = compile_element(
-        counted_lazy(calls.clone(), 2),
-        &mut tree,
-        &mut state_cache,
-        &Renderer::default(),
-        false,
-    );
+    let compiled =
+        state_cache.compile(counted_lazy(calls.clone(), 2), &mut tree, &Renderer::default(), false);
 
     assert_eq!(calls.get(), 2);
     assert_eq!(into_node(compiled.body).kind(), NodeKind::Text);
@@ -156,22 +123,10 @@ fn lazy_retains_overlay_slots_when_dependency_hash_is_unchanged() {
     let element = overlay_lazy(1);
     let mut tree = arkit_core::advanced::tree_of(&element);
     let mut state_cache = StateCache::default();
-    let compiled = compile_element(
-        element,
-        &mut tree,
-        &mut state_cache,
-        &Renderer::default(),
-        false,
-    );
+    let compiled = state_cache.compile(element, &mut tree, &Renderer::default(), false);
     assert_eq!(compiled.overlays.len(), 1);
 
-    let retained = compile_element(
-        overlay_lazy(1),
-        &mut tree,
-        &mut state_cache,
-        &Renderer::default(),
-        false,
-    );
+    let retained = state_cache.compile(overlay_lazy(1), &mut tree, &Renderer::default(), false);
 
     assert_eq!(into_node(retained.body).kind(), NodeKind::Retained);
     assert_eq!(retained.overlays.len(), 1);
@@ -183,7 +138,7 @@ fn lazy_retains_overlay_slots_when_dependency_hash_is_unchanged() {
 
 #[test]
 fn desired_attrs_preserve_last_set_order() {
-    let attrs = desired_attrs(
+    let attrs = Node::<(), arkit_core::Theme>::desired_attrs(
         vec![
             (ArkUINodeAttributeType::Width, 10.0_f32.into()),
             (ArkUINodeAttributeType::Height, 20.0_f32.into()),
@@ -199,7 +154,7 @@ fn desired_attrs_preserve_last_set_order() {
     );
 
     assert_eq!(
-        attr_types(&attrs),
+        attr_types_from(&attrs),
         vec![
             ArkUINodeAttributeType::Width,
             ArkUINodeAttributeType::BackgroundColor,
@@ -227,7 +182,7 @@ fn visual_clipping_attrs_are_applied_after_size_and_background() {
     ]);
 
     assert_eq!(
-        attr_types(&attrs),
+        attr_types_from(&attrs),
         vec![
             ArkUINodeAttributeType::Height,
             ArkUINodeAttributeType::Padding,
@@ -584,13 +539,13 @@ fn build_initial_webview_style_only_preserves_explicit_style_fields() {
 #[cfg(feature = "webview")]
 #[test]
 fn compose_compiled_overlays_keeps_stable_wrapper_without_overlays() {
-    let node = into_node(compose_compiled_overlays(CompiledElement::<
-        (),
-        arkit_core::Theme,
-    > {
-        body: column_component::<(), arkit_core::Theme>().into(),
-        overlays: Vec::new(),
-    }));
+    let node = into_node(
+        CompiledElement::<(), arkit_core::Theme> {
+            body: column_component::<(), arkit_core::Theme>().into(),
+            overlays: Vec::new(),
+        }
+        .into_root_element(),
+    );
 
     assert_eq!(node.kind(), NodeKind::Stack);
     assert_eq!(node.children.len(), 2);
@@ -604,13 +559,13 @@ fn compose_compiled_overlays_keeps_stable_wrapper_without_overlays() {
 #[cfg(feature = "webview")]
 #[test]
 fn compose_compiled_overlays_keeps_stack_wrapper_with_overlays() {
-    let node = into_node(compose_compiled_overlays(CompiledElement::<
-        (),
-        arkit_core::Theme,
-    > {
-        body: column_component::<(), arkit_core::Theme>().into(),
-        overlays: vec![text::<(), arkit_core::Theme>("overlay").into()],
-    }));
+    let node = into_node(
+        CompiledElement::<(), arkit_core::Theme> {
+            body: column_component::<(), arkit_core::Theme>().into(),
+            overlays: vec![text::<(), arkit_core::Theme>("overlay").into()],
+        }
+        .into_root_element(),
+    );
 
     assert_eq!(node.kind(), NodeKind::Stack);
     assert_eq!(node.children.len(), 2);
