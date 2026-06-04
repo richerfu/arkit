@@ -70,6 +70,7 @@ The complete runnable version is in [examples/counter](examples/counter/src/lib.
 
 - `examples/counter`: minimal state + button update example
 - `examples/async_task`: `Task::perform` example
+- `examples/chart`: native drawing chart example built with `arkit_chart`
 - `examples/webview`: embedded webview example behind the `webview` feature
 - `examples/shadcn_showcase`: UI showcase built with `arkit_shadcn`
 
@@ -77,6 +78,7 @@ The complete runnable version is in [examples/counter](examples/counter/src/lib.
 
 - `crates/arkit`: facade crate and public re-exports
 - `crates/arkit_widget`: widget tree, renderer, overlays, and ArkUI bindings glue
+- `crates/arkit_chart`: native drawing chart widgets with ECharts-like options
 - `crates/arkit_runtime`: application runtime, task execution, and subscriptions
 - `crates/arkit_derive`: `#[entry]` and `#[component]`
 - `crates/arkit_shadcn`: shadcn-style components on top of `arkit`

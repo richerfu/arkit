@@ -308,6 +308,36 @@ pub fn column_component<Message, AppTheme>() -> ColumnElement<Message, AppTheme>
     Component::from_node(Node::new(NodeKind::Column))
 }
 
+pub fn custom_component<Message, AppTheme>() -> CustomElement<Message, AppTheme> {
+    Component::from_node(Node::new(NodeKind::Custom))
+}
+
+pub fn custom_canvas_component<Message, AppTheme>(
+    draw: impl for<'a> Fn(CanvasDrawContext<'a>) + 'static,
+) -> CustomElement<Message, AppTheme> {
+    custom_component()
+        .on_custom_event(NodeCustomEventType::OnDraw, move |event| {
+            let Some(draw_context) = event.draw_context_in_draw() else {
+                return;
+            };
+            let Some(canvas) = draw_context.canvas() else {
+                return;
+            };
+            let canvas =
+                unsafe { ohos_drawing_binding::Canvas::from_raw_borrowed(canvas.as_ptr().cast()) };
+            let size = draw_context.size();
+            draw(CanvasDrawContext {
+                canvas: &canvas,
+                width: size.width as f32,
+                height: size.height as f32,
+            });
+        })
+        .with_patch(|node| {
+            node.mark_dirty(NodeDirtyFlag::NeedRender)?;
+            Ok(())
+        })
+}
+
 pub fn column<Message: 'static, AppTheme: 'static>(
     children: Vec<Element<Message, AppTheme>>,
 ) -> Element<Message, AppTheme> {

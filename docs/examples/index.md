@@ -6,6 +6,7 @@
 | --- | --- |
 | `counter` | 最小 State / Message / update / view。 |
 | `async_task` | `Task::perform` 异步任务。 |
+| `chart` | 原生 drawing 图表、ECharts-like option 和点击命中。 |
 | `router` | 路由注册、页面切换、404 和导航消息。 |
 | `i18n` | typed `.ftl` 国际化。 |
 | `shadcn_showcase` | shadcn 组件库展示。 |

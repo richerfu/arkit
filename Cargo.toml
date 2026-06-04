@@ -8,6 +8,7 @@ members = [
     "crates/arkit_icon",
     "crates/arkit_i18n",
     "crates/arkit_i18n_macros",
+    "crates/arkit_chart",
     "crates/arkit_router",
     "crates/arkit_runtime",
     "crates/arkit_widget",
@@ -30,6 +31,7 @@ arkit_futures = { path = "crates/arkit_futures" }
 arkit_icon = { path = "crates/arkit_icon" }
 arkit_i18n = { path = "crates/arkit_i18n" }
 arkit_i18n_macros = { path = "crates/arkit_i18n_macros" }
+arkit_chart = { path = "crates/arkit_chart" }
 arkit_router = { path = "crates/arkit_router" }
 arkit_runtime = { path = "crates/arkit_runtime" }
 arkit_widget = { path = "crates/arkit_widget" }
@@ -46,5 +48,8 @@ openharmony-ability = { git = "https://github.com/harmony-contrib/openharmony-ab
 openharmony-ability-derive = { git = "https://github.com/harmony-contrib/openharmony-ability.git" }
 
 ohos-arkui-binding = { path = "../ohos-native-bindings/crates/arkui", default-features = false, features = ["napi", "image"] }
+ohos-drawing-binding = { path = "../ohos-native-bindings/crates/drawing" }
 ohos-display-binding = { git = "https://github.com/ohos-rs/ohos-native-bindings.git", branch = "feat-component" }
 ohos-hilog-binding = { git = "https://github.com/ohos-rs/ohos-native-bindings.git", branch = "feat-component" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

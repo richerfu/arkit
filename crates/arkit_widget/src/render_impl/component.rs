@@ -158,6 +158,7 @@ component_kinds! {
     CheckboxKind => CheckboxElement,
     ContainerKind => ContainerElement,
     ColumnKind => ColumnElement,
+    CustomKind => CustomElement,
     DatePickerKind => DatePickerElement,
     FlexKind => FlexElement,
     FlowItemKind => FlowItemElement,

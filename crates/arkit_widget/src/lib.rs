@@ -26,10 +26,11 @@ pub use overlay::{
 pub use render_impl::ListVisibleContentChangeEvent;
 pub use render_impl::{
     button, button_component, calendar_picker, calendar_picker_component, checkbox,
-    checkbox_component, column, column_component, container, date_picker, date_picker_component,
-    flex, flex_component, flow_item, flow_item_component, grid, grid_component, grid_item,
-    grid_item_component, grouped_virtual_list, image, image_component, lazy, list, list_component,
-    list_item, list_item_component, list_item_group_component, mount,
+    checkbox_component, column, column_component, container, custom_canvas_component,
+    custom_component, date_picker, date_picker_component, flex, flex_component, flow_item,
+    flow_item_component, grid, grid_component, grid_item, grid_item_component,
+    grouped_virtual_list, image, image_component, lazy, list, list_component, list_item,
+    list_item_component, list_item_group_component, mount,
     observe_layout_frame as observe_layout_frame_impl,
     observe_layout_size as observe_layout_size_impl,
     observe_text_layout as observe_text_layout_impl, patch, progress, progress_component, radio,
@@ -39,12 +40,12 @@ pub use render_impl::{
     text_input_component, toggle, toggle_component, virtual_grid, virtual_grid_component,
     virtual_list, virtual_list_component, virtual_water_flow, virtual_water_flow_component,
     water_flow_component, Attribute as ArkUINodeAttributeType,
-    AttributeValue as ArkUINodeAttributeItem, BorderStyle, ButtonType, Component, Element,
-    FlexDirection, FlexOptions, FlexWrap, FontStyle, GridScrollIndexEvent, HitTestBehavior,
-    ItemAlignment, JustifyContent, Lazy, ListScrollIndexEvent, ListStickyStyle, MountedNode, Node,
-    ObjectFit, ProgressLinearStyle, ProgressType, Renderer, ScrollOffset, ScrollViewport,
-    TextLayoutLine, TextLayoutSnapshot, UiState, VirtualListGroup, VirtualVisibleRange, Visibility,
-    WaterFlowScrollIndexEvent,
+    AttributeValue as ArkUINodeAttributeItem, BorderStyle, ButtonType, CanvasDrawContext,
+    Component, Element, FlexDirection, FlexOptions, FlexWrap, FontStyle, GridScrollIndexEvent,
+    HitTestBehavior, ItemAlignment, JustifyContent, Lazy, ListScrollIndexEvent, ListStickyStyle,
+    MountedNode, Node, ObjectFit, ProgressLinearStyle, ProgressType, Renderer, ScrollOffset,
+    ScrollViewport, TextLayoutLine, TextLayoutSnapshot, UiState, VirtualListGroup,
+    VirtualVisibleRange, Visibility, WaterFlowScrollIndexEvent,
 };
 #[cfg(feature = "webview")]
 pub use render_impl::{
@@ -67,6 +68,8 @@ pub type ColumnElement<Message = (), AppTheme = Theme> =
     render_impl::ColumnElement<Message, AppTheme>;
 pub type ContainerElement<Message = (), AppTheme = Theme> =
     render_impl::ContainerElement<Message, AppTheme>;
+pub type CustomElement<Message = (), AppTheme = Theme> =
+    render_impl::CustomElement<Message, AppTheme>;
 pub type DatePickerElement<Message = (), AppTheme = Theme> =
     render_impl::DatePickerElement<Message, AppTheme>;
 pub type FlexElement<Message = (), AppTheme = Theme> = render_impl::FlexElement<Message, AppTheme>;
@@ -160,25 +163,26 @@ pub mod prelude {
     pub use crate::ListVisibleContentChangeEvent;
     pub use crate::{
         advanced, button, button_component, calendar_picker, calendar_picker_component, checkbox,
-        checkbox_component, column, column_component, container, date_picker,
-        date_picker_component, flow_item, flow_item_component, grid, grid_component, grid_item,
-        grid_item_component, grouped_virtual_list, image, image_component, lazy, list,
-        list_component, list_item, list_item_component, list_item_group_component, progress,
-        progress_component, radio, radio_component, realize_attached_mount, refresh,
-        refresh_component, row, row_component, scroll, scroll_component, slider, slider_component,
-        stack, stack_component, swiper, swiper_component, text, text_area, text_area_component,
-        text_component, text_input, text_input_component, toggle, toggle_component, virtual_grid,
-        virtual_grid_component, virtual_list, virtual_list_component, virtual_water_flow,
-        virtual_water_flow_component, water_flow_component, ArkEvent, ArkUINodeAttributeItem,
-        ArkUINodeAttributeType, BorderStyle, ButtonType, Element, FloatingAlign,
-        FloatingOverlaySpec, FloatingSide, FontStyle, FontWeight, GridScrollIndexEvent,
-        HitTestBehavior, Horizontal, ItemAlignment, JustifyContent, LayoutFrame, LayoutSize, Lazy,
-        Length, LifecycleEvent, ListScrollIndexEvent, ListStickyStyle, ModalOverlaySpec,
-        ModalPresentation, NativeOverlayPlacement, NodeCustomEvent, NodeCustomEventType,
-        NodeEventType, ObjectFit, OverlayDismissMode, OverlayStrategy, Padding,
-        ProgressLinearStyle, ProgressType, ScrollOffset, ScrollViewport, ShadowStyle, Size,
-        TextAlignment, TextLayoutLine, TextLayoutSnapshot, Theme, UiState, Vertical,
-        VirtualListGroup, VirtualVisibleRange, Visibility, WaterFlowScrollIndexEvent,
+        checkbox_component, column, column_component, container, custom_canvas_component,
+        custom_component, date_picker, date_picker_component, flow_item, flow_item_component, grid,
+        grid_component, grid_item, grid_item_component, grouped_virtual_list, image,
+        image_component, lazy, list, list_component, list_item, list_item_component,
+        list_item_group_component, progress, progress_component, radio, radio_component,
+        realize_attached_mount, refresh, refresh_component, row, row_component, scroll,
+        scroll_component, slider, slider_component, stack, stack_component, swiper,
+        swiper_component, text, text_area, text_area_component, text_component, text_input,
+        text_input_component, toggle, toggle_component, virtual_grid, virtual_grid_component,
+        virtual_list, virtual_list_component, virtual_water_flow, virtual_water_flow_component,
+        water_flow_component, ArkEvent, ArkUINodeAttributeItem, ArkUINodeAttributeType,
+        BorderStyle, ButtonType, CanvasDrawContext, Element, FloatingAlign, FloatingOverlaySpec,
+        FloatingSide, FontStyle, FontWeight, GridScrollIndexEvent, HitTestBehavior, Horizontal,
+        ItemAlignment, JustifyContent, LayoutFrame, LayoutSize, Lazy, Length, LifecycleEvent,
+        ListScrollIndexEvent, ListStickyStyle, ModalOverlaySpec, ModalPresentation,
+        NativeOverlayPlacement, NodeCustomEvent, NodeCustomEventType, NodeEventType, ObjectFit,
+        OverlayDismissMode, OverlayStrategy, Padding, ProgressLinearStyle, ProgressType,
+        ScrollOffset, ScrollViewport, ShadowStyle, Size, TextAlignment, TextLayoutLine,
+        TextLayoutSnapshot, Theme, UiState, Vertical, VirtualListGroup, VirtualVisibleRange,
+        Visibility, WaterFlowScrollIndexEvent,
     };
     #[cfg(feature = "webview")]
     pub use crate::{

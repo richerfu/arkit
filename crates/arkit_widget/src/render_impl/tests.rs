@@ -336,6 +336,20 @@ fn grid_and_water_flow_components_use_native_nodes() {
 }
 
 #[test]
+fn custom_canvas_component_uses_native_custom_node() {
+    let node = custom_canvas_component::<(), arkit_core::Theme>(|_| {});
+
+    assert_eq!(node.kind(), NodeKind::Custom);
+}
+
+#[test]
+fn custom_canvas_component_marks_render_dirty_on_patch() {
+    let node: Node<(), arkit_core::Theme> = custom_canvas_component(|_| {}).into();
+
+    assert!(!node.patch_effects.is_empty());
+}
+
+#[test]
 fn flex_component_uses_native_flex_node() {
     let node = flex_component::<(), arkit_core::Theme>();
 

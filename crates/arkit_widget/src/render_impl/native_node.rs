@@ -56,6 +56,7 @@ pub(super) fn create_node(kind: NodeKind) -> ArkUIResult<ArkUINode> {
         NodeKind::CalendarPicker => CalendarPicker::new()?.into(),
         NodeKind::Checkbox => Checkbox::new()?.into(),
         NodeKind::Column => Column::new()?.into(),
+        NodeKind::Custom => Custom::new()?.into(),
         NodeKind::DatePicker => DatePicker::new()?.into(),
         NodeKind::Flex => Flex::new()?.into(),
         NodeKind::FlowItem => FlowItem::new()?.into(),
@@ -90,6 +91,7 @@ pub(super) fn node_type_id(kind: NodeKind) -> TypeId {
         NodeKind::CalendarPicker => TypeId::of::<CalendarPicker>(),
         NodeKind::Checkbox => TypeId::of::<Checkbox>(),
         NodeKind::Column => TypeId::of::<Column>(),
+        NodeKind::Custom => TypeId::of::<Custom>(),
         NodeKind::DatePicker => TypeId::of::<DatePicker>(),
         NodeKind::Flex => TypeId::of::<Flex>(),
         NodeKind::FlowItem => TypeId::of::<FlowItem>(),
@@ -122,6 +124,7 @@ pub(super) struct RetainedNodeTag;
 pub(super) struct CalendarPickerNodeTag;
 pub(super) struct CheckboxNodeTag;
 pub(super) struct ColumnNodeTag;
+pub(super) struct CustomNodeTag;
 pub(super) struct DatePickerNodeTag;
 pub(super) struct FlexNodeTag;
 pub(super) struct FlowItemNodeTag;
@@ -154,6 +157,7 @@ pub(super) fn node_widget_tag(kind: NodeKind) -> advanced::widget::Tag {
         NodeKind::CalendarPicker => advanced::widget::Tag::of::<CalendarPickerNodeTag>(),
         NodeKind::Checkbox => advanced::widget::Tag::of::<CheckboxNodeTag>(),
         NodeKind::Column => advanced::widget::Tag::of::<ColumnNodeTag>(),
+        NodeKind::Custom => advanced::widget::Tag::of::<CustomNodeTag>(),
         NodeKind::DatePicker => advanced::widget::Tag::of::<DatePickerNodeTag>(),
         NodeKind::Flex => advanced::widget::Tag::of::<FlexNodeTag>(),
         NodeKind::FlowItem => advanced::widget::Tag::of::<FlowItemNodeTag>(),

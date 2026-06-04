@@ -152,6 +152,7 @@ pub(super) enum NodeKind {
     CalendarPicker,
     Checkbox,
     Column,
+    Custom,
     DatePicker,
     Flex,
     FlowItem,

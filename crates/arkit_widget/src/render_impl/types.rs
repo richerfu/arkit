@@ -3,6 +3,25 @@ use super::*;
 pub type Element<Message = (), AppTheme = arkit_core::Theme> =
     arkit_core::Element<'static, Message, AppTheme, Renderer>;
 
+pub struct CanvasDrawContext<'a> {
+    pub canvas: &'a ohos_drawing_binding::Canvas,
+    pub width: f32,
+    pub height: f32,
+}
+
+impl<'a> CanvasDrawContext<'a> {
+    pub fn canvas(&self) -> &'a ohos_drawing_binding::Canvas {
+        self.canvas
+    }
+
+    pub fn size(&self) -> Size<f32> {
+        Size {
+            width: self.width,
+            height: self.height,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct TextLayoutLine {
     pub index: usize,
