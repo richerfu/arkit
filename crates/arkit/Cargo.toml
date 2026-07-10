@@ -14,6 +14,7 @@ arkit_i18n.workspace = true
 arkit_i18n_macros.workspace = true
 arkit_router.workspace = true
 arkit_animation.workspace = true
+arkit_chart.workspace = true
 arkit_shadcn.workspace = true
 arkit_icon.workspace = true
 ohos-arkui-binding.workspace = true

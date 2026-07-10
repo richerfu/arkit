@@ -36,6 +36,7 @@ The complete runnable version is in [examples/counter](examples/counter/src/lib.
 - `arkit_arkui`: owns the HostTree projection, declarative attribute encoding, native node-event/gesture bridge, ArkUI node creation, image resources, and virtual adapters.
 - `arkit_elements`: the ArkUI `dioxus_elements` registry used by `rsx!`.
 - `arkit_hooks`: Dioxus hooks for native-node access, layout, overlays, and virtual lists.
+- `arkit_chart`: ECharts-compatible typed/JSON options rendered by an ArkUI native canvas and updated through Dioxus props.
 - `arkit_router`, `arkit_i18n`, `arkit_animation`, `arkit_icon`, `arkit_shadcn`: Dioxus-native framework capabilities.
 
 There is no parallel Element tree or message/update runtime. Dioxus owns component identity, hooks, diffing, task scheduling, and routing.
@@ -44,6 +45,7 @@ There is no parallel Element tree or message/update runtime. Dioxus owns compone
 
 - `examples/counter`: signals and native events.
 - `examples/async_task`: `use_resource` with a Tokio-backed future.
+- `examples/chart`: native ECharts-compatible chart types and signal-driven realtime updates.
 - `examples/router`: typed `dioxus-router` routes and ArkUI links.
 - `examples/i18n`: reactive locale context.
 - `examples/complex_cases`: ArkUI NodeAdapter virtualization.

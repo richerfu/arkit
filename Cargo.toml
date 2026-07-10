@@ -12,9 +12,11 @@ members = [
     "crates/arkit_i18n",
     "crates/arkit_i18n_macros",
     "crates/arkit_animation",
+    "crates/arkit_chart",
     "crates/arkit_icon",
     "examples/counter",
     "examples/async_task",
+    "examples/chart",
     "examples/complex_cases",
     "examples/i18n",
     "examples/router",
@@ -33,6 +35,7 @@ license = "MIT OR Apache-2.0"
 [workspace.dependencies]
 arkit = { path = "crates/arkit" }
 arkit_animation = { path = "crates/arkit_animation" }
+arkit_chart = { path = "crates/arkit_chart" }
 arkit_derive = { path = "crates/arkit_derive" }
 arkit_icon = { path = "crates/arkit_icon" }
 arkit_i18n = { path = "crates/arkit_i18n" }
@@ -62,12 +65,14 @@ proc-macro2 = "1.0"
 napi-ohos = { version = "1.1", features = ["napi8"] }
 napi-derive-ohos = "1.1"
 napi-build-ohos = "1.1"
+serde_json = "1"
 
 
 # crates.io 0.3.0 does not include the back intercept and embedded webview
 # dispose APIs used by arkit_runtime yet. Keep upstream main until released.
 openharmony-ability = { git = "https://github.com/harmony-contrib/openharmony-ability.git" }
 
-ohos-arkui-binding = { version = "0.2.0", default-features = false, features = ["napi", "image", "api-20"] }
+ohos-arkui-binding = { version = "0.2.0", default-features = false, features = ["napi", "image", "drawing", "api-20"] }
+ohos-drawing-binding = "0.2.0"
 ohos-display-binding = "0.1.0"
 ohos-hilog-binding = "0.2.0"

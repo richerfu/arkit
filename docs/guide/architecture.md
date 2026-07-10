@@ -24,6 +24,7 @@ ArkUI native nodes
 | `arkit_arkui` | HostTree、projection、attributes、native node event/gesture、image、virtual adapter |
 | `arkit_elements` | `rsx!` 使用的 ArkUI element/attribute/event registry |
 | `arkit_hooks` | native node、layout、overlay、virtual list hooks |
+| `arkit_chart` | ECharts-like option、原生 Custom canvas 绘制、图表命中与 tooltip |
 | `arkit_router` | dioxus-router 的 ArkUI 集成 |
 | `arkit_i18n` | locale context 与类型安全消息 |
 | `arkit_shadcn` | Dioxus 组件与 theme context |
@@ -65,4 +66,4 @@ Gesture recognizer、callback context 和目标 native wrapper 由对应 HostNod
 
 ## Escape hatch
 
-业务 UI 默认写 `rsx!`。只有 ArkUI 无法声明式表达的能力才使用 `arkit_hooks` 获取 native node，例如布局观测、NodeAdapter 虚拟化、动画或嵌入 WebView。
+业务 UI 默认写 `rsx!`。只有 ArkUI 无法声明式表达的能力才使用 `arkit_hooks` 获取 native node，例如布局观测、NodeAdapter 虚拟化、动画、原生图表或嵌入 WebView。`arkit_chart` 把 Custom canvas escape hatch 封装在 `ECharts` 组件内，业务代码只传受控 props。

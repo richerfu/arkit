@@ -51,6 +51,14 @@ pub use arkit_animation::{
 // --- Icon ---
 pub use arkit_icon::{has_icon, icon, icon_names};
 
+// --- Native ECharts-compatible charts ---
+pub use arkit_chart as echarts;
+pub use arkit_chart::{
+    Axis, AxisOrientation, AxisType, BasicSeries, ChartEvent, ChartOption, ChartParseError,
+    DataPoint, DataValue, Dataset, Diagnostic, ECharts, EChartsProps, GraphSeries, Grid, Legend,
+    LinkData, MapFeature, MapSeries, NodeData, SankeySeries, Series, Title, Tooltip, VisualStyle,
+};
+
 // --- shadcn component library ---
 pub use arkit_shadcn as shadcn;
 
@@ -146,13 +154,16 @@ pub mod prelude {
         LayoutFrame, LayoutSize, OverlayRoot, VirtualListHandle, VirtualVisibleRange,
     };
 
-    // i18n + router + animation + icon.
+    // i18n + router + animation + icon + charts.
     pub use crate::t;
     pub use crate::{has_icon, icon, icon_names};
     pub use crate::{
         use_animation, use_back_handler, use_i18n, use_i18n_provider, AnimatedOutlet,
-        AnimationControls, I18nContext, Motion, MountTransition, Routable, RouteTransition, Router,
-        TransitionPreset,
+        AnimationControls, Axis, AxisOrientation, AxisType, BasicSeries, ChartEvent, ChartOption,
+        ChartParseError, DataPoint, DataValue, Dataset, Diagnostic, ECharts, EChartsProps,
+        GraphSeries, Grid, I18nContext, Legend, LinkData, MapFeature, MapSeries, Motion,
+        MountTransition, NodeData, Routable, RouteTransition, Router, SankeySeries, Series, Title,
+        Tooltip, TransitionPreset, VisualStyle,
     };
 
     // shadcn components + theme.

@@ -71,6 +71,9 @@ impl LayoutPayload {
 /// Pointer coordinates and target bounds carried by ArkUI input events.
 #[derive(Default, Clone, Copy, Debug, PartialEq)]
 pub struct PointerPayload {
+    /// Native touch phase. Click/drag events that do not expose a touch phase
+    /// use [`PointerAction::Unknown`].
+    pub action: PointerAction,
     /// Pointer x relative to the event target.
     pub x: f32,
     /// Pointer y relative to the event target.
@@ -87,6 +90,17 @@ pub struct PointerPayload {
     pub target_width: f32,
     /// Event target height.
     pub target_height: f32,
+}
+
+/// Platform-neutral pointer phase used by touch-capable components.
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PointerAction {
+    #[default]
+    Unknown,
+    Cancel,
+    Down,
+    Move,
+    Up,
 }
 
 impl PointerPayload {

@@ -42,7 +42,7 @@ use ohos_arkui_binding::types::gesture_event::GestureEventAction;
 // Re-export the shared event-payload types (owned by `arkit_elements`, whose
 // lib name is `dioxus_elements`).
 pub use dioxus_elements::event::{
-    ArkEventData, ArkEventPayload, LayoutPayload, PointerPayload, ScrollIndexPayload,
+    ArkEventData, ArkEventPayload, LayoutPayload, PointerAction, PointerPayload, ScrollIndexPayload,
 };
 
 mod native;
@@ -1607,8 +1607,16 @@ fn extract_payload(
 }
 
 fn extract_pointer_payload(event: &ArkNativeEvent) -> Option<PointerPayload> {
+    use ohos_arkui_binding::arkui_input_binding::UIInputAction;
+
     let input = event.input_event()?;
     Some(PointerPayload {
+        action: match input.action {
+            UIInputAction::Cancel => PointerAction::Cancel,
+            UIInputAction::Down => PointerAction::Down,
+            UIInputAction::Move => PointerAction::Move,
+            UIInputAction::Up => PointerAction::Up,
+        },
         x: input.pointer_x(),
         y: input.pointer_y(),
         window_x: input.pointer_window_x(),

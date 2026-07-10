@@ -23,6 +23,7 @@ version = "0.1.0"
 dependencies = [
  "arkit_animation",
  "arkit_arkui",
+ "arkit_chart",
  "arkit_derive",
  "arkit_hooks",
  "arkit_i18n",
@@ -56,6 +57,19 @@ dependencies = [
  "dioxus-core",
  "ohos-arkui-binding 0.2.0",
  "ohos-hilog-binding",
+]
+
+[[package]]
+name = "arkit_chart"
+version = "0.1.0"
+dependencies = [
+ "arkit_hooks",
+ "arkit_prelude",
+ "arkit_runtime",
+ "ohos-arkui-binding 0.2.0",
+ "ohos-display-binding 0.1.0",
+ "ohos-drawing-binding",
+ "serde_json",
 ]
 
 [[package]]
@@ -234,6 +248,17 @@ name = "cfg-if"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
+
+[[package]]
+name = "chart_example"
+version = "0.1.0"
+dependencies = [
+ "arkit",
+ "napi-build-ohos",
+ "napi-derive-ohos",
+ "napi-ohos",
+ "tokio",
+]
 
 [[package]]
 name = "complex_cases"
@@ -1839,6 +1864,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_json"
+version = "1.0.150"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e8014e44b4736ed0538adeecded0fce2a272f22dc9578a7eb6b2d9993c74cfb9"
+dependencies = [
+ "itoa",
+ "memchr",
+ "serde",
+ "serde_core",
+ "zmij",
+]
+
+[[package]]
 name = "sha2"
 version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2287,3 +2325,9 @@ dependencies = [
  "quote",
  "syn",
 ]
+
+[[package]]
+name = "zmij"
+version = "1.0.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8848ee67ecc8aedbaf3e4122217aff892639231befc6a1b58d29fff4c2cabaa"

@@ -1,0 +1,14 @@
+[package]
+name = "arkit_chart"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+arkit_hooks.workspace = true
+arkit_prelude.workspace = true
+arkit_runtime.workspace = true
+ohos-arkui-binding.workspace = true
+ohos-drawing-binding.workspace = true
+ohos-display-binding.workspace = true
+serde_json.workspace = true
