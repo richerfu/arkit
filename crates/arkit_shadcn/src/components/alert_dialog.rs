@@ -1,136 +1,99 @@
-use super::*;
-use std::rc::Rc;
+//! Alert dialog — centered modal with RN Reusables alert-specific header and
+//! footer semantics. The full-screen modal/backdrop native tree is owned by
+//! `arkit_hooks::use_overlay`, matching Dialog.
 
-fn alert_dialog(
-    title: impl Into<String>,
-    description: impl Into<String>,
-    actions: Vec<Element>,
-) -> Element {
-    alert_dialog_with_message::<()>(title, description, actions)
-}
+use super::dialog::{use_dialog_overlay, DIALOG_MAX_WIDTH};
+use super::floating_layer::SHADOW_SM;
+use crate::theme::*;
+use arkit_prelude::*;
 
-fn alert_dialog_with_message<Message: 'static>(
-    title: impl Into<String>,
-    description: impl Into<String>,
-    actions: Vec<Element<Message>>,
-) -> Element<Message> {
-    shadow_sm(
-        arkit::column_component::<Message, arkit::Theme>()
-            .percent_width(1.0)
-            .max_width_constraint(super::dialog::DIALOG_MAX_WIDTH)
-            .padding([spacing::XXL, spacing::XXL, spacing::XXL, spacing::XXL])
-            .border_radius([radii().lg, radii().lg, radii().lg, radii().lg])
-            .border_width([1.0, 1.0, 1.0, 1.0])
-            .border_color(colors().border)
-            .background_color(colors().background)
-            .children(vec![stack(
-                vec![
-                    super::dialog::dialog_header(title, description),
-                    super::dialog::dialog_footer(actions),
-                ],
-                spacing::LG,
-            )]),
-    )
-    .into()
-}
-
-fn alert_dialog_modal_message<Message>(
-    open: bool,
-    on_open_change: impl Fn(bool) -> Message + 'static,
-    title: impl Into<String>,
-    description: impl Into<String>,
-    actions: Vec<Element<Message>>,
-) -> Element<Message>
-where
-    Message: Send + 'static,
-{
-    super::dialog::modal_overlay(
-        open,
-        alert_dialog_with_message(title, description, actions),
-        Some(Rc::new(move || dispatch_message(on_open_change(false)))),
-    )
-}
-
-fn alert_dialog_actions<Message: 'static>(actions: Vec<Element<Message>>) -> Element<Message> {
-    super::dialog::dialog_footer(actions)
-}
-
-// Struct component API
-pub struct AlertDialog<Message = ()> {
+/// Modal alert dialog.
+#[component]
+pub fn AlertDialog(
     title: String,
     description: String,
     open: Option<bool>,
-    default_open: bool,
-    on_open_change: Option<std::rc::Rc<dyn Fn(bool) -> Message>>,
-    actions: std::cell::RefCell<Option<Vec<Element<Message>>>>,
-}
+    default_open: Option<bool>,
+    on_close: Option<EventHandler<()>>,
+    cancel: Option<Element>,
+    action: Option<Element>,
+    children: Element,
+) -> Element {
+    let theme = use_theme();
+    let mut internal = use_signal(|| default_open.unwrap_or(false));
+    let current = match open {
+        Some(v) => v,
+        None => *internal.read(),
+    };
+    let controlled = open.is_some();
+    let has_cancel = cancel.is_some();
+    let has_action = action.is_some();
 
-impl<Message> AlertDialog<Message> {
-    pub fn new(
-        title: impl Into<String>,
-        description: impl Into<String>,
-        actions: Vec<Element<Message>>,
-    ) -> Self {
-        Self {
-            title: title.into(),
-            description: description.into(),
-            open: None,
-            default_open: false,
-            on_open_change: None,
-            actions: std::cell::RefCell::new(Some(actions)),
+    let close = EventHandler::new(move |_: ()| {
+        if !controlled {
+            internal.set(false);
         }
-    }
+        if let Some(handler) = on_close {
+            handler.call(());
+        }
+    });
 
-    pub fn open(mut self, open: bool) -> Self {
-        self.open = Some(open);
-        self
-    }
-
-    pub fn default_open(mut self, open: bool) -> Self {
-        self.default_open = open;
-        self
-    }
-
-    pub fn on_open_change(mut self, handler: impl Fn(bool) -> Message + 'static) -> Self {
-        self.on_open_change = Some(std::rc::Rc::new(handler));
-        self
-    }
-}
-
-impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer>
-    for AlertDialog<Message>
-{
-    fn body(
-        &self,
-        tree: &mut arkit::advanced::widget::Tree,
-        _renderer: &arkit::Renderer,
-    ) -> Element<Message> {
-        let state = super::widget_state(tree, || self.default_open);
-        let is_controlled = self.open.is_some();
-        let open = self.open.unwrap_or_else(|| *state.borrow());
-        let handler = self.on_open_change.clone();
-        super::dialog::modal_overlay(
-            open,
-            alert_dialog_with_message(
-                self.title.clone(),
-                self.description.clone(),
-                super::take_component_slot(&self.actions, "alert dialog actions"),
-            ),
-            Some(Rc::new(move || {
-                if !is_controlled {
-                    *state.borrow_mut() = false;
-                    super::request_widget_rerender();
+    let panel = rsx! {
+        column {
+            percent_width: 1.0,
+            max_width_constraint: DIALOG_MAX_WIDTH,
+            padding_top: spacing::XXL,
+            padding_right: spacing::XXL,
+            padding_bottom: spacing::XXL,
+            padding_left: spacing::XXL,
+            border_radius: theme.radii.lg,
+            border_width: 1.0,
+            border_color: theme.colors.border,
+            background_color: theme.colors.background,
+            shadow: SHADOW_SM,
+            column {
+                percent_width: 1.0,
+                text {
+                    percent_width: 1.0,
+                    font_size: typography::XL,
+                    font_weight: 600_i32,
+                    font_color: theme.colors.foreground,
+                    line_height: 24.0,
+                    text_align: 0,
+                    "{title}"
                 }
-                if let Some(handler) = handler.as_ref() {
-                    dispatch_message(handler(false));
+                text {
+                    percent_width: 1.0,
+                    margin_top: spacing::SM,
+                    font_size: typography::MD,
+                    font_color: theme.colors.muted_foreground,
+                    line_height: 20.0,
+                    text_align: 0,
+                    "{description}"
                 }
-            })),
-        )
-    }
-}
+            }
+            column {
+                percent_width: 1.0,
+                margin_top: spacing::LG,
+                if let Some(action) = action {
+                    {action}
+                }
+                if has_action && has_cancel {
+                    row {
+                        percent_width: 1.0,
+                        height: spacing::SM,
+                    }
+                }
+                if let Some(cancel) = cancel {
+                    {cancel}
+                }
+                if !has_action && !has_cancel {
+                    {children}
+                }
+            }
+        }
+    };
 
-impl<Message: Send + 'static> From<AlertDialog<Message>> for Element<Message> {
-    fn from(value: AlertDialog<Message>) -> Self {
-        Element::new(value)
-    }
+    use_dialog_overlay(current, panel, close);
+    rsx! {}
 }

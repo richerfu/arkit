@@ -1,6 +1,17 @@
-use super::menu_common::{menu_popup, MenuEntry, MenuStyle};
-use super::*;
-use std::rc::Rc;
+//! Menubar — horizontal row of menus, each opening an anchored overlay
+//! dropdown.
+//!
+//! Ported from the legacy Elm builder `menubar.rs`. Each menu's open state is
+//! held in a `Signal<Option<usize>>`; clicking a trigger toggles that menu and
+//! closes the others. All original entry variants/styles are preserved via
+//! [`crate::components::menu_common`].
+
+use crate::components::menu_common::{
+    menu_closed_panel_height, use_menu_overlay_refresh, MenuEntry, MenuOverlayPassThroughRegion,
+    MenuOverlayPlacement, MenuOverlaySession, MenuStyle,
+};
+use crate::theme::*;
+use arkit_prelude::*;
 
 const MENU_PANEL_WIDTH: f32 = 224.0;
 const SUBMENU_PANEL_WIDTH: f32 = MENU_PANEL_WIDTH - (spacing::XXS * 2.0);
@@ -9,7 +20,8 @@ const MENUBAR_ITEM_TRANSPARENT: u32 = 0x00000000;
 
 pub type MenubarEntry = MenuEntry;
 
-#[derive(Clone)]
+/// A single menu spec: trigger title + entries.
+#[derive(Debug, Clone, PartialEq)]
 pub struct MenubarMenuSpec {
     pub title: String,
     pub items: Vec<MenubarEntry>,
@@ -24,186 +36,196 @@ impl MenubarMenuSpec {
     }
 }
 
-fn menubar_menu(title: impl Into<String>, items: Vec<MenubarEntry>) -> MenubarMenuSpec {
-    MenubarMenuSpec::new(title, items)
-}
-
-fn menubar_trigger_surface<Message: 'static>(
-    title: impl Into<String>,
-    active: bool,
-) -> Element<Message> {
-    arkit::row_component::<Message, arkit::Theme>()
-        .height(28.0)
-        .align_items_center()
-        .justify_content_center()
-        .padding([spacing::XXS, spacing::SM, spacing::XXS, spacing::SM])
-        .border_radius([radii().sm, radii().sm, radii().sm, radii().sm])
-        .background_color(if active {
-            colors().accent
-        } else {
-            MENUBAR_ITEM_TRANSPARENT
-        })
-        .children(vec![arkit::text::<Message, arkit::Theme>(title)
-            .font_size(typography::SM)
-            .font_weight(FontWeight::W500)
-            .font_color(colors().foreground)
-            .line_height(20.0)
-            .into()])
-        .into()
-}
-
-fn menubar_impl<Message>(
-    menus: Vec<MenubarMenuSpec>,
-    active: Option<usize>,
-    on_active_change: impl Fn(Option<usize>) + 'static,
-) -> Element<Message>
-where
-    Message: 'static,
-{
-    let on_active_change = Rc::new(on_active_change);
-
-    let items: Vec<Element<Message>> = menus
-        .into_iter()
-        .enumerate()
-        .map(|(index, spec)| {
-            let is_active = active == Some(index);
-            let on_open = on_active_change.clone();
-            let on_close = on_active_change.clone();
-            let trigger = menubar_trigger_surface::<Message>(spec.title, is_active).into();
-
-            let trigger_with_click: Element<Message> =
-                arkit::row_component::<Message, arkit::Theme>()
-                    .on_click({
-                        let on_open = on_open.clone();
-                        move || {
-                            if is_active {
-                                on_open(None);
-                            } else {
-                                on_open(Some(index));
-                            }
-                        }
-                    })
-                    .children(vec![trigger])
-                    .into();
-
-            menu_popup(
-                trigger_with_click,
-                spec.items,
-                is_active,
-                move |open| {
-                    if open {
-                        on_close(Some(index));
-                    } else {
-                        on_close(None);
-                    }
-                },
-                super::floating_layer::FloatingAlign::Start,
-                MenuStyle {
-                    width: MENU_PANEL_WIDTH,
-                    submenu_width: SUBMENU_PANEL_WIDTH,
-                    side_offset_vp: MENU_PANEL_SIDE_OFFSET,
-                },
-            )
-        })
-        .collect();
-
-    shadow_sm(rounded_menubar_surface(
-        arkit::row_component::<Message, arkit::Theme>().children(inline(items, spacing::XXS)),
-    ))
-    .into()
-}
-
-fn menubar_message<Message>(
-    menus: Vec<MenubarMenuSpec>,
-    active: Option<usize>,
-    on_active_change: impl Fn(Option<usize>) -> Message + 'static,
-) -> Element<Message>
-where
-    Message: Send + 'static,
-{
-    menubar_impl(menus, active, move |value| {
-        dispatch_message(on_active_change(value))
-    })
-}
-
-fn menubar<Message: 'static>(items: Vec<Element<Message>>) -> Element<Message> {
-    shadow_sm(rounded_menubar_surface(
-        arkit::row_component::<Message, arkit::Theme>().children(inline(items, spacing::XXS)),
-    ))
-    .into()
-}
-
-fn menubar_item<Message: 'static>(title: impl Into<String>) -> Element<Message> {
-    menubar_trigger_surface(title, false)
-}
-
-fn menubar_item_active<Message: 'static>(title: impl Into<String>) -> Element<Message> {
-    menubar_trigger_surface(title, true)
-}
-
-// Struct component API
-pub struct Menubar<Message = ()> {
+#[component]
+pub fn Menubar(
     menus: Vec<MenubarMenuSpec>,
     active: Option<Option<usize>>,
     default_active: Option<usize>,
-    on_active_change: Option<std::rc::Rc<dyn Fn(Option<usize>) -> Message>>,
-}
+    on_active_change: Option<EventHandler<Option<usize>>>,
+) -> Element {
+    let theme = use_theme();
+    let menubar_frame = use_signal(arkit_hooks::LayoutFrame::default);
+    let mut internal_active = use_signal(|| default_active);
+    let is_controlled = active.is_some();
+    let current_active = active.unwrap_or_else(|| *internal_active.read());
+    let current_menubar_frame = *menubar_frame.read();
 
-impl<Message> Menubar<Message> {
-    pub fn new(menus: Vec<MenubarMenuSpec>) -> Self {
-        Self {
-            menus,
-            active: None,
-            default_active: None,
-            on_active_change: None,
+    let set_active = EventHandler::new(move |value: Option<usize>| {
+        if !is_controlled {
+            internal_active.set(value);
+        }
+        if let Some(handler) = on_active_change {
+            handler.call(value);
+        }
+    });
+
+    let style = MenuStyle {
+        width: MENU_PANEL_WIDTH,
+        submenu_width: SUBMENU_PANEL_WIDTH,
+        side_offset_vp: MENU_PANEL_SIDE_OFFSET,
+    };
+    let sm = theme.radii.sm;
+    let md = theme.radii.md;
+    let accent = theme.colors.accent;
+    let foreground = theme.colors.foreground;
+    let border = theme.colors.border;
+    let background = theme.colors.background;
+
+    rsx! {
+        row {
+            padding: spacing::XXS,
+            height: 36.0,
+            align_items: "center",
+            border_radius: md,
+            border_width: 1.0,
+            border_color: border,
+            background_color: background,
+            shadow: 1i32,
+            onarea: move |evt: dioxus_core::Event<dioxus_elements::event::AreaData>| {
+                let frame = evt.data().frame;
+                if frame.is_measured() {
+                    let mut menubar_frame = menubar_frame;
+                    menubar_frame.set(arkit_hooks::LayoutFrame {
+                        x: frame.x,
+                        y: frame.y,
+                        width: frame.width,
+                        height: frame.height,
+                    });
+                }
+            },
+            for (index, spec) in menus.iter().enumerate() {
+                MenubarMenu {
+                    index,
+                    title: spec.title.clone(),
+                    items: spec.items.clone(),
+                    active: current_active == Some(index),
+                    pass_through_frame: current_menubar_frame,
+                    style,
+                    theme,
+                    trigger_radius: sm,
+                    active_background: accent,
+                    foreground,
+                    on_active_change: set_active,
+                }
+            }
         }
     }
-
-    pub fn active(mut self, active: Option<usize>) -> Self {
-        self.active = Some(active);
-        self
-    }
-
-    pub fn default_active(mut self, active: Option<usize>) -> Self {
-        self.default_active = active;
-        self
-    }
-
-    pub fn on_active_change(
-        mut self,
-        handler: impl Fn(Option<usize>) -> Message + 'static,
-    ) -> Self {
-        self.on_active_change = Some(std::rc::Rc::new(handler));
-        self
-    }
 }
 
-impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer>
-    for Menubar<Message>
-{
-    fn body(
-        &self,
-        tree: &mut arkit::advanced::widget::Tree,
-        _renderer: &arkit::Renderer,
-    ) -> Element<Message> {
-        let state = super::widget_state(tree, || self.default_active);
-        let is_controlled = self.active.is_some();
-        let active = self.active.unwrap_or_else(|| *state.borrow());
-        let handler = self.on_active_change.clone();
-        menubar_impl(self.menus.clone(), active, move |value| {
-            if !is_controlled {
-                *state.borrow_mut() = value;
-                super::request_widget_rerender();
-            }
-            if let Some(handler) = handler.as_ref() {
-                dispatch_message(handler(value));
-            }
-        })
-    }
-}
+#[component]
+fn MenubarMenu(
+    index: usize,
+    title: String,
+    items: Vec<MenubarEntry>,
+    active: bool,
+    pass_through_frame: arkit_hooks::LayoutFrame,
+    style: MenuStyle,
+    theme: Theme,
+    trigger_radius: f32,
+    active_background: u32,
+    foreground: u32,
+    on_active_change: EventHandler<Option<usize>>,
+) -> Element {
+    let overlay = arkit_hooks::use_overlay();
+    let trigger_frame = use_signal(arkit_hooks::LayoutFrame::default);
+    let mut overlay_session = use_signal(|| None::<MenuOverlaySession>);
 
-impl<Message: Send + 'static> From<Menubar<Message>> for Element<Message> {
-    fn from(value: Menubar<Message>) -> Self {
-        Element::new(value)
+    let dismiss_overlay = overlay.clone();
+    let mut dismiss_session = overlay_session;
+    let dismiss = EventHandler::new(move |_: ()| {
+        on_active_change.call(None);
+        dismiss_session.set(None);
+        dismiss_overlay.dismiss();
+    });
+
+    use_menu_overlay_refresh(
+        overlay.clone(),
+        active,
+        *overlay_session.read(),
+        style,
+        theme,
+        dismiss,
+        items.clone(),
+    );
+
+    let open_overlay = overlay.clone();
+
+    let mut open_menu = move |pointer: Option<dioxus_elements::event::PointerPayload>| {
+        on_active_change.call(Some(index));
+        let entries = items.clone();
+        let frame = *trigger_frame.read();
+        let overlay_frame = open_overlay.overlay_frame();
+        let panel_height = menu_closed_panel_height(&entries);
+        let pass_through_region =
+            MenuOverlayPassThroughRegion::from_frame(pass_through_frame, overlay_frame);
+        let placement = if let Some(placement) = pointer.and_then(|pointer| {
+            MenuOverlayPlacement::from_pointer(
+                pointer,
+                overlay_frame,
+                style.width,
+                panel_height,
+                style.side_offset_vp,
+            )
+        }) {
+            placement
+        } else if frame.is_measured() {
+            MenuOverlayPlacement::from_trigger(
+                frame,
+                overlay_frame,
+                style.width,
+                panel_height,
+                style.side_offset_vp,
+            )
+        } else {
+            MenuOverlayPlacement::fallback()
+        };
+        let session = MenuOverlaySession::new(placement, pass_through_region);
+        overlay_session.set(Some(session));
+        session.show(&open_overlay, style, theme, dismiss, entries);
+    };
+
+    let close_menu = move || {
+        dismiss.call(());
+    };
+
+    rsx! {
+        row {
+            margin_left: if index > 0 { spacing::XXS } else { 0.0 },
+            height: 28.0,
+            align_items: "center",
+            justify_content: "center",
+            padding_top: spacing::XXS,
+            padding_right: spacing::SM,
+            padding_bottom: spacing::XXS,
+            padding_left: spacing::SM,
+            border_radius: trigger_radius,
+            background_color: if active { active_background } else { MENUBAR_ITEM_TRANSPARENT },
+            onarea: move |evt: dioxus_core::Event<dioxus_elements::event::AreaData>| {
+                let frame = evt.data().frame;
+                if frame.is_measured() {
+                    let mut trigger_frame = trigger_frame;
+                    trigger_frame.set(arkit_hooks::LayoutFrame {
+                        x: frame.x,
+                        y: frame.y,
+                        width: frame.width,
+                        height: frame.height,
+                    });
+                }
+            },
+            onclick: move |evt: dioxus_core::Event<dioxus_elements::event::ClickData>| {
+                if active {
+                    close_menu();
+                } else {
+                    open_menu(evt.data().pointer);
+                }
+            },
+            text {
+                font_size: typography::SM,
+                font_weight: 500i32,
+                font_color: foreground,
+                line_height: 20.0,
+                {title}
+            }
+        }
     }
 }

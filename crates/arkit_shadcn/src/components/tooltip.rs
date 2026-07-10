@@ -1,127 +1,191 @@
-use super::floating_layer::floating_panel;
-use super::*;
-use std::rc::Rc;
+//! Tooltip — a small label that appears above a trigger on hover (and toggles
+//! on tap for touch).
+//!
+//! Migrated from the legacy Elm builder API. The trigger opens the tooltip on
+//! hover (`on_hover`) and toggles it on click; the panel renders through the app
+//! overlay root so parent layout cannot clip it. Panel styling preserved:
+//! `px-3 py-1.5`, `md` radius, 1px border, `popover` background,
+//! `popover_foreground` text at native text-base size. Anchored above the
+//! trigger.
 
-fn tooltip<Message: 'static>(
-    trigger: Element<Message>,
-    content: impl Into<String> + 'static,
-    open: bool,
-    on_open_change: impl Fn(bool) + 'static,
-) -> Element<Message> {
-    let content = content.into();
-    let dismiss = { Rc::new(move || on_open_change(false)) };
+use super::floating_layer::{
+    FloatingAlign, FloatingPanelPlacement, FloatingSide, FLOATING_BACKDROP,
+};
+use crate::theme::*;
+use arkit_prelude::*;
+use dioxus_core_macro::component;
 
-    floating_panel(
-        trigger,
-        arkit::row_component::<Message, arkit::Theme>()
-            .padding([8.0, 12.0, 8.0, 12.0])
-            .border_radius([radii().md, radii().md, radii().md, radii().md])
-            .background_color(colors().primary)
-            .children(vec![arkit::text::<Message, arkit::Theme>(content)
-                .font_size(typography::XS)
-                .font_color(colors().primary_foreground)
-                .line_height(16.0)
-                .into()])
-            .into(),
-        open,
-        super::floating_layer::FloatingSide::Top,
-        Some(dismiss),
-    )
-}
+const TOOLTIP_ESTIMATED_HEIGHT: f32 = 36.0;
 
-fn tooltip_message<Message>(
-    trigger: Element<Message>,
-    content: impl Into<String> + 'static,
-    open: bool,
-    on_open_change: impl Fn(bool) -> Message + 'static,
-) -> Element<Message>
-where
-    Message: Send + 'static,
-{
-    tooltip(trigger, content, open, move |value| {
-        dispatch_message(on_open_change(value))
-    })
-}
-
-// Struct component API
-pub struct Tooltip<Message = ()> {
-    trigger: std::cell::RefCell<Option<Element<Message>>>,
+/// Hover/tap tooltip.
+#[component]
+pub fn Tooltip(
+    trigger: Element,
     content: String,
     open: Option<bool>,
-    default_open: bool,
-    on_open_change: Option<std::rc::Rc<dyn Fn(bool) -> Message>>,
-}
+    default_open: Option<bool>,
+    on_close: Option<EventHandler<()>>,
+    on_open_change: Option<EventHandler<bool>>,
+) -> Element {
+    let theme = use_theme();
+    let overlay = arkit_hooks::use_overlay();
+    let trigger_frame = use_signal(arkit_hooks::LayoutFrame::default);
+    arkit_hooks::use_layout_frame(move |frame| {
+        let mut trigger_frame = trigger_frame;
+        trigger_frame.set(frame);
+    });
+    let mut internal = use_signal(|| default_open.unwrap_or(false));
+    let current = match open {
+        Some(v) => v,
+        None => *internal.read(),
+    };
+    let controlled = open.is_some();
+    let panel_width = ((content.chars().count() as f32 * 7.0) + 24.0).clamp(80.0, 240.0);
 
-impl<Message> Tooltip<Message> {
-    pub fn new(trigger: Element<Message>, content: impl Into<String>) -> Self {
-        Self {
-            trigger: std::cell::RefCell::new(Some(trigger)),
-            content: content.into(),
-            open: None,
-            default_open: false,
-            on_open_change: None,
+    let set_open = EventHandler::new(move |next: bool| {
+        if !controlled {
+            internal.set(next);
+        }
+        if let Some(handler) = on_open_change {
+            handler.call(next);
+        }
+        if !next {
+            if let Some(handler) = on_close {
+                handler.call(());
+            }
+        }
+    });
+
+    let show_overlay = overlay.clone();
+    let show_tooltip = EventHandler::new(
+        move |pointer: Option<dioxus_elements::event::PointerPayload>| {
+            if current {
+                return;
+            }
+            set_open.call(true);
+            let label = content.clone();
+            let frame = *trigger_frame.read();
+            let overlay_frame = show_overlay.overlay_frame();
+            let placement = if let Some(placement) = pointer.and_then(|pointer| {
+                FloatingPanelPlacement::from_pointer(
+                    pointer,
+                    overlay_frame,
+                    panel_width,
+                    TOOLTIP_ESTIMATED_HEIGHT,
+                    FloatingSide::Top,
+                    FloatingAlign::Center,
+                    spacing::XXS,
+                )
+            }) {
+                placement
+            } else if frame.is_measured() {
+                FloatingPanelPlacement::from_trigger(
+                    frame,
+                    overlay_frame,
+                    panel_width,
+                    TOOLTIP_ESTIMATED_HEIGHT,
+                    FloatingSide::Top,
+                    FloatingAlign::Center,
+                    spacing::XXS,
+                )
+            } else {
+                FloatingPanelPlacement::fallback()
+            };
+            let dismiss_overlay = show_overlay.clone();
+            let dismiss = EventHandler::new(move |_: ()| {
+                set_open.call(false);
+                dismiss_overlay.dismiss();
+            });
+            show_overlay.show_floating(move || {
+                tooltip_overlay_content(theme, panel_width, placement, dismiss, label)
+            });
+        },
+    );
+
+    let leave_overlay = overlay.clone();
+    let close_tooltip = EventHandler::new(move |_: ()| {
+        if !current {
+            return;
+        }
+        set_open.call(false);
+        leave_overlay.dismiss();
+    });
+
+    let toggle_overlay = overlay.clone();
+    let toggle = move |pointer: Option<dioxus_elements::event::PointerPayload>| {
+        if current {
+            set_open.call(false);
+            toggle_overlay.dismiss();
+        } else {
+            show_tooltip.call(pointer);
+        }
+    };
+
+    rsx! {
+        row {
+            onclick: move |evt: dioxus_core::Event<dioxus_elements::event::ClickData>| {
+                toggle(evt.data().pointer);
+            },
+            on_hover: move |evt| {
+                if evt.data().is_hovering {
+                    show_tooltip.call(None);
+                } else {
+                    close_tooltip.call(());
+                }
+            },
+            {trigger}
         }
     }
-
-    pub fn open(mut self, open: bool) -> Self {
-        self.open = Some(open);
-        self
-    }
-
-    pub fn default_open(mut self, open: bool) -> Self {
-        self.default_open = open;
-        self
-    }
-
-    pub fn on_open_change(mut self, handler: impl Fn(bool) -> Message + 'static) -> Self {
-        self.on_open_change = Some(std::rc::Rc::new(handler));
-        self
-    }
 }
 
-impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer>
-    for Tooltip<Message>
-{
-    fn body(
-        &self,
-        tree: &mut arkit::advanced::widget::Tree,
-        _renderer: &arkit::Renderer,
-    ) -> Element<Message> {
-        let state = super::widget_state(tree, || self.default_open);
-        let is_controlled = self.open.is_some();
-        let open = self.open.unwrap_or_else(|| *state.borrow());
-        let on_open_change = self.on_open_change.clone();
-        let mut trigger = super::take_component_slot(&self.trigger, "tooltip trigger");
-        if !is_controlled {
-            let trigger_state = state.clone();
-            let trigger_handler = on_open_change.clone();
-            trigger = arkit::row_component::<Message, arkit::Theme>()
-                .on_click(move || {
-                    let next = !open;
-                    *trigger_state.borrow_mut() = next;
-                    super::request_widget_rerender();
-                    if let Some(handler) = trigger_handler.as_ref() {
-                        dispatch_message(handler(next));
+fn tooltip_overlay_content(
+    theme: Theme,
+    panel_width: f32,
+    placement: FloatingPanelPlacement,
+    on_dismiss: EventHandler<()>,
+    content: String,
+) -> Element {
+    let top = placement.y.max(0.0);
+    let left = placement.x.max(0.0);
+    rsx! {
+        column {
+            percent_width: 1.0,
+            percent_height: 1.0,
+            align_items: "start",
+            padding_top: top,
+            background_color: FLOATING_BACKDROP,
+            onclick: move |_| on_dismiss.call(()),
+            row {
+                percent_width: 1.0,
+                align_items: "start",
+                arkit_animation::MountTransition {
+                    preset: Some(arkit_animation::TransitionPreset::SlideDown),
+                    duration_ms: Some(120),
+                    row {
+                        onclick: move |evt| evt.stop_propagation(),
+                        margin_left: left,
+                        width: panel_width,
+                        align_items: "center",
+                        justify_content: "center",
+                        padding_top: 6.0,
+                        padding_right: 12.0,
+                        padding_bottom: 6.0,
+                        padding_left: 12.0,
+                        border_radius: theme.radii.md,
+                        border_width: 1.0,
+                        border_color: theme.colors.border,
+                        background_color: theme.colors.popover,
+                        shadow: super::floating_layer::SHADOW_SM,
+                        text {
+                            content: content,
+                            font_size: typography::MD,
+                            font_color: theme.colors.popover_foreground,
+                            line_height: 20.0,
+                            max_lines: 1,
+                        }
                     }
-                })
-                .children(vec![trigger])
-                .into();
+                }
+            }
         }
-
-        tooltip(trigger, self.content.clone(), open, move |value| {
-            if !is_controlled {
-                *state.borrow_mut() = value;
-                super::request_widget_rerender();
-            }
-            if let Some(on_open_change) = on_open_change.as_ref() {
-                dispatch_message(on_open_change(value));
-            }
-        })
-    }
-}
-
-impl<Message: Send + 'static> From<Tooltip<Message>> for Element<Message> {
-    fn from(value: Tooltip<Message>) -> Self {
-        Element::new(value)
     }
 }

@@ -1,8 +1,25 @@
-use super::*;
+//! AspectRatio — shadcn-style aspect-ratio container.
+//!
+//! Migrated from the original Elm builder API to dioxus 0.7 `#[component]` +
+//! `rsx!`. Wraps a single child in a `stack` with the given aspect ratio.
 
-fn aspect_ratio(ratio: f32, child: Element) -> Element {
-    arkit::stack_component()
-        .aspect_ratio(ratio)
-        .children(vec![child])
-        .into()
+use arkit_prelude::*;
+
+/// Props for [`AspectRatio`].
+#[derive(Props, Clone, PartialEq)]
+pub struct AspectRatioProps {
+    pub ratio: f32,
+    pub children: Element,
+}
+
+/// A container that forces a child into a fixed aspect ratio.
+#[component]
+pub fn AspectRatio(props: AspectRatioProps) -> Element {
+    rsx! {
+        stack {
+            percent_width: 1.0,
+            aspect_ratio: props.ratio,
+            {props.children}
+        }
+    }
 }

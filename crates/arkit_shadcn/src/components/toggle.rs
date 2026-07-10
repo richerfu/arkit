@@ -1,10 +1,23 @@
-use super::*;
-use arkit_icon as lucide;
+//! Toggle — shadcn-style two-state button.
+//!
+//! Migrated from the original Elm builder API to dioxus 0.7 `#[component]` +
+//! `rsx!`. Preserves the original variants (`Default`, `Outline`), the default
+//! and icon size styles, the active/inactive visual style mapping, and the
+//! content row (icon + optional label) layout. The size/visual helpers are
+//! `pub(crate)` so [`super::toggle_group`] can reuse them.
+
+use crate::theme::*;
+use arkit_prelude::*;
+
+use super::{ARKUI_BORDER_STYLE_SOLID, ARKUI_BUTTON_TYPE_NORMAL};
 
 pub(crate) const TOGGLE_TRANSPARENT: u32 = 0x00000000;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ToggleVariant {
+/// Toggle visual variant. `Default` is borderless; `Outline` adds an input
+/// border and a small shadow.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ToggleVariant {
+    #[default]
     Default,
     Outline,
 }
@@ -25,6 +38,15 @@ pub(crate) struct ToggleVisualStyle {
     shadow: bool,
 }
 
+pub(crate) struct ToggleSurfaceStyle {
+    pub(crate) active: bool,
+    pub(crate) variant: ToggleVariant,
+    pub(crate) size: ToggleSizeStyle,
+    pub(crate) border_width: f32,
+    pub(crate) border_radius: String,
+    pub(crate) shadow: Option<bool>,
+}
+
 pub(crate) fn toggle_default_size() -> ToggleSizeStyle {
     ToggleSizeStyle {
         height: 40.0,
@@ -43,272 +65,197 @@ pub(crate) fn toggle_icon_size() -> ToggleSizeStyle {
     }
 }
 
-pub(crate) fn toggle_visual_style(variant: ToggleVariant, active: bool) -> ToggleVisualStyle {
+pub(crate) fn toggle_visual_style(
+    variant: ToggleVariant,
+    active: bool,
+    theme: &Theme,
+) -> ToggleVisualStyle {
     match variant {
         ToggleVariant::Default => ToggleVisualStyle {
             background: if active {
-                colors().accent
+                theme.colors.accent
             } else {
                 TOGGLE_TRANSPARENT
             },
             foreground: if active {
-                colors().accent_foreground
+                theme.colors.accent_foreground
             } else {
-                colors().foreground
+                theme.colors.foreground
             },
             border_color: TOGGLE_TRANSPARENT,
             shadow: false,
         },
         ToggleVariant::Outline => ToggleVisualStyle {
             background: if active {
-                colors().accent
+                theme.colors.accent
             } else {
                 TOGGLE_TRANSPARENT
             },
             foreground: if active {
-                colors().accent_foreground
+                theme.colors.accent_foreground
             } else {
-                colors().foreground
+                theme.colors.foreground
             },
-            border_color: colors().input,
+            border_color: theme.colors.input,
             shadow: true,
         },
     }
 }
 
-pub(crate) fn toggle_content_row<Message: 'static>(
+/// Build the inner content row: an optional leading icon followed by an
+/// optional label (the label is inset `8.0` when an icon precedes it).
+pub(crate) fn toggle_content_row(
     label: Option<String>,
-    icon_name: Option<String>,
+    icon: Option<String>,
     foreground: u32,
     icon_size: f32,
-) -> Element<Message> {
-    let mut children = Vec::new();
-
-    if let Some(icon_name) = icon_name {
-        children.push(
-            lucide::icon(icon_name)
-                .size(icon_size)
-                .color(foreground)
-                .render::<Message, arkit::Theme>(),
-        );
+) -> Element {
+    let mut children: Vec<Element> = Vec::new();
+    if let Some(name) = icon {
+        children.push(arkit_icon::icon(name, icon_size, foreground));
     }
-
-    if let Some(label) = label {
-        let text = arkit::text::<Message, arkit::Theme>(label)
-            .font_size(typography::SM)
-            .font_color(foreground)
-            .font_weight(FontWeight::W500)
-            .line_height(20.0)
-            .into();
-
-        if children.is_empty() {
-            children.push(text);
-        } else {
-            children.push(
-                arkit::row_component::<Message, arkit::Theme>()
-                    .margin([0.0, 0.0, 0.0, 8.0])
-                    .children(vec![text])
-                    .into(),
-            );
-        }
-    }
-
-    arkit::row_component::<Message, arkit::Theme>()
-        .align_items_center()
-        .justify_content_center()
-        .children(children)
-        .into()
-}
-
-pub(crate) fn toggle_surface<Message>(
-    content: Element<Message>,
-    active: bool,
-    variant: ToggleVariant,
-    size_style: ToggleSizeStyle,
-    border_width: [f32; 4],
-    border_radius: [f32; 4],
-    shadow_override: Option<bool>,
-) -> ButtonElement<Message> {
-    let visual = toggle_visual_style(variant, active);
-    let mut element = arkit::button_component::<Message, arkit::Theme>()
-        .focusable(false)
-        .focus_on_touch(false)
-        .border_radius(border_radius)
-        .clip(true)
-        .border_style(BorderStyle::Solid)
-        .align_self(ItemAlignment::Start)
-        .alignment(arkit::ohos_arkui_binding::types::alignment::Alignment::Center)
-        .border_width(border_width)
-        .border_color_all(visual.border_color)
-        .padding(size_style.padding)
-        .background_color(visual.background)
-        .height(size_style.height)
-        .children(vec![content]);
-
-    if let Some(width) = size_style.width {
-        element = element.width(width);
-    }
-
-    if shadow_override.unwrap_or(visual.shadow) {
-        shadow_sm(element)
-    } else {
-        element
-    }
-}
-
-fn toggle<Message: Send + 'static>(
-    label: impl Into<String>,
-    state: bool,
-    on_toggle: impl Fn(bool) + 'static,
-) -> Element<Message> {
-    let label_text = label.into();
-    let size_style = toggle_default_size();
-    let visual = toggle_visual_style(ToggleVariant::Default, state);
-
-    toggle_surface(
-        toggle_content_row(
-            Some(label_text),
-            None,
-            visual.foreground,
-            size_style.icon_size,
-        ),
-        state,
-        ToggleVariant::Default,
-        size_style,
-        [0.0, 0.0, 0.0, 0.0],
-        [radii().md, radii().md, radii().md, radii().md],
-        None,
-    )
-    .on_click(move || on_toggle(!state))
-    .into()
-}
-
-fn toggle_message<Message>(
-    label: impl Into<String>,
-    state: bool,
-    on_toggle: impl Fn(bool) -> Message + 'static,
-) -> Element<Message>
-where
-    Message: Send + 'static,
-{
-    toggle(label, state, move |value| {
-        dispatch_message(on_toggle(value))
-    })
-}
-
-fn toggle_icon<Message: Send + 'static>(
-    icon_name: impl Into<String>,
-    state: bool,
-    on_toggle: impl Fn(bool) + 'static,
-) -> Element<Message> {
-    let icon = icon_name.into();
-    let size_style = toggle_icon_size();
-    let visual = toggle_visual_style(ToggleVariant::Default, state);
-
-    toggle_surface(
-        toggle_content_row(None, Some(icon), visual.foreground, size_style.icon_size),
-        state,
-        ToggleVariant::Default,
-        size_style,
-        [0.0, 0.0, 0.0, 0.0],
-        [radii().md, radii().md, radii().md, radii().md],
-        None,
-    )
-    .on_click(move || on_toggle(!state))
-    .into()
-}
-
-fn toggle_icon_message<Message>(
-    icon_name: impl Into<String>,
-    state: bool,
-    on_toggle: impl Fn(bool) -> Message + 'static,
-) -> Element<Message>
-where
-    Message: Send + 'static,
-{
-    toggle_icon(icon_name, state, move |value| {
-        dispatch_message(on_toggle(value))
-    })
-}
-
-// Struct component API
-pub struct Toggle<Message = ()> {
-    label: String,
-    icon: bool,
-    checked: Option<bool>,
-    default_checked: bool,
-    on_change: Option<std::rc::Rc<dyn Fn(bool) -> Message>>,
-}
-
-impl<Message> Toggle<Message> {
-    pub fn new(label: impl Into<String>) -> Self {
-        Self {
-            label: label.into(),
-            icon: false,
-            checked: None,
-            default_checked: false,
-            on_change: None,
-        }
-    }
-
-    pub fn icon(icon: impl Into<String>) -> Self {
-        Self {
-            label: icon.into(),
-            icon: true,
-            checked: None,
-            default_checked: false,
-            on_change: None,
-        }
-    }
-
-    pub fn checked(mut self, checked: bool) -> Self {
-        self.checked = Some(checked);
-        self
-    }
-
-    pub fn default_checked(mut self, checked: bool) -> Self {
-        self.default_checked = checked;
-        self
-    }
-
-    pub fn on_change(mut self, handler: impl Fn(bool) -> Message + 'static) -> Self {
-        self.on_change = Some(std::rc::Rc::new(handler));
-        self
-    }
-}
-
-impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer>
-    for Toggle<Message>
-{
-    fn body(
-        &self,
-        tree: &mut arkit::advanced::widget::Tree,
-        _renderer: &arkit::Renderer,
-    ) -> Element<Message> {
-        let state = super::widget_state(tree, || self.default_checked);
-        let is_controlled = self.checked.is_some();
-        let checked = self.checked.unwrap_or_else(|| *state.borrow());
-        let on_change = self.on_change.clone();
-        let handler = move |value| {
-            if !is_controlled {
-                *state.borrow_mut() = value;
-                super::request_widget_rerender();
-            }
-            if let Some(on_change) = on_change.as_ref() {
-                dispatch_message(on_change(value));
+    if let Some(text) = label {
+        let text_el = rsx! {
+            text {
+                content: text,
+                font_size: typography::SM,
+                font_color: foreground,
+                font_weight: 500,
+                line_height: 20.0,
             }
         };
-
-        if self.icon {
-            toggle_icon(self.label.clone(), checked, handler)
+        if children.is_empty() {
+            children.push(text_el);
         } else {
-            toggle(self.label.clone(), checked, handler)
+            children.push(rsx! { row { margin_left: 8.0, {text_el} } });
+        }
+    }
+    rsx! {
+        row {
+            align_items: "center",
+            justify_content: "center",
+            {children.into_iter()}
         }
     }
 }
 
-impl<Message: Send + 'static> From<Toggle<Message>> for Element<Message> {
-    fn from(value: Toggle<Message>) -> Self {
-        Element::new(value)
+/// Render the toggle surface (a styled button) with the given visual + size
+/// configuration. `on_click` fires on activation. `border_radius` is a
+/// comma-separated `[top, right, bottom, left]` string so callers can express
+/// per-corner radii (used by [`super::toggle_group`]).
+pub(crate) fn toggle_surface(
+    content: Element,
+    style: ToggleSurfaceStyle,
+    on_click: impl FnMut() + 'static,
+    theme: &Theme,
+) -> Element {
+    let visual = toggle_visual_style(style.variant, style.active, theme);
+    let width = style.size.width;
+    let height = style.size.height;
+    let pt = style.size.padding[0];
+    let pr = style.size.padding[1];
+    let pb = style.size.padding[2];
+    let pl = style.size.padding[3];
+    let border_color = visual.border_color;
+    let background = visual.background;
+    let shadow_on = style.shadow.unwrap_or(visual.shadow);
+    let mut on_click = on_click;
+    rsx! {
+        button {
+            button_type: ARKUI_BUTTON_TYPE_NORMAL,
+            focusable: false,
+            focus_on_touch: false,
+            border_radius: style.border_radius,
+            clip: true,
+            border_style: ARKUI_BORDER_STYLE_SOLID,
+            border_width: style.border_width,
+            border_color: border_color,
+            align_self: 1,
+            padding_top: pt,
+            padding_right: pr,
+            padding_bottom: pb,
+            padding_left: pl,
+            background_color: background,
+            height: height,
+            width: width,
+            alignment: 4,
+            shadow: if shadow_on { 1 } else { 0 },
+            onclick: move |_| on_click(),
+            {content}
+        }
+    }
+}
+
+/// Props for [`Toggle`].
+#[derive(Props, Clone, PartialEq)]
+pub struct ToggleProps {
+    /// Text label shown when `icon` is absent.
+    pub label: String,
+    /// When set, renders an icon-only toggle using this lucide icon name.
+    #[props(default)]
+    pub icon: Option<String>,
+    #[props(default)]
+    pub variant: ToggleVariant,
+    /// Controlled value. When `Some`, the toggle is controlled.
+    #[props(default)]
+    pub checked: Option<bool>,
+    #[props(default)]
+    pub default_checked: bool,
+    #[props(default)]
+    pub on_change: EventHandler<bool>,
+}
+
+/// A two-state button. Supports text and icon variants, `Default`/`Outline`
+/// visuals, and controlled/unchecked usage.
+#[component]
+pub fn Toggle(props: ToggleProps) -> Element {
+    let theme = use_theme();
+    let controlled = props.checked.is_some();
+    let mut local = use_signal(|| props.default_checked);
+    let active = props.checked.unwrap_or_else(|| *local.read());
+
+    let is_icon = props.icon.is_some();
+    let size_style = if is_icon {
+        toggle_icon_size()
+    } else {
+        toggle_default_size()
+    };
+    let variant = props.variant;
+    let foreground = toggle_visual_style(variant, active, &theme).foreground;
+    let label_opt = if is_icon {
+        None
+    } else {
+        Some(props.label.clone())
+    };
+    let content = toggle_content_row(
+        label_opt,
+        props.icon.clone(),
+        foreground,
+        size_style.icon_size,
+    );
+
+    let on_change = props.on_change;
+    let r = theme.radii.md;
+    let radius = format!("{r},{r},{r},{r}");
+    rsx! {
+        {toggle_surface(
+            content,
+            ToggleSurfaceStyle {
+                active,
+                variant,
+                size: size_style,
+                border_width: 0.0,
+                border_radius: radius,
+                shadow: None,
+            },
+            move || {
+                let next = !active;
+                if !controlled {
+                    local.set(next);
+                }
+                on_change.call(next);
+            },
+            &theme,
+        )}
     }
 }

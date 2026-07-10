@@ -1,120 +1,110 @@
-use super::scroll_area::scroll_area;
-use super::*;
+//! Table — shadcn-style data table.
+//!
+//! Migrated from the original Elm builder API to dioxus 0.7 `#[component]` +
+//! `rsx!`. Preserves the original rounded card surface (`card` background,
+//! `border`, `sm` radius, clipped), the `40.0`-tall header row with a bottom
+//! separator, and the `8.0`-padded body cells with `SM` text.
+//!
+//! The row separators use ArkUI's four-side border vector so only the bottom
+//! edge is drawn, matching the original reusable implementation.
 
-fn table<Message: 'static>(headers: Vec<String>, rows: Vec<Vec<String>>) -> Element<Message> {
-    let header_row = arkit::row_component::<Message, arkit::Theme>()
-        .percent_width(1.0)
-        .border_width([0.0, 0.0, 1.0, 0.0])
-        .border_color(colors().border)
-        .children(
-            headers
-                .into_iter()
-                .map(|header| {
-                    arkit::row_component::<Message, arkit::Theme>()
-                        .layout_weight(1.0_f32)
-                        .height(40.0)
-                        .align_items_center()
-                        .padding([0.0, 8.0, 0.0, 8.0])
-                        .children(vec![body_text(header)
-                            .font_color(colors().muted_foreground)
-                            .into()])
-                        .into()
-                })
-                .collect(),
-        )
-        .into();
+use crate::theme::*;
+use arkit_prelude::*;
 
-    let total_rows = rows.len();
-    let body_rows = rows
-        .into_iter()
+/// Props for [`Table`].
+#[derive(Props, Clone, PartialEq)]
+pub struct TableProps {
+    pub headers: Vec<String>,
+    pub rows: Vec<Vec<String>>,
+}
+
+/// A rounded, bordered data table with a header row and body rows.
+#[component]
+pub fn Table(props: TableProps) -> Element {
+    let theme = use_theme();
+    let total_rows = props.rows.len();
+
+    let header_cells: Vec<Element> = props
+        .headers
+        .iter()
+        .map(|header| {
+            rsx! {
+                row {
+                    layout_weight: 1.0,
+                    height: 40.0,
+                    align_items: "center",
+                    padding_top: 0.0,
+                    padding_right: 8.0,
+                    padding_bottom: 0.0,
+                    padding_left: 8.0,
+                    text {
+                        content: header.clone(),
+                        font_size: typography::SM,
+                        font_weight: 500,
+                        font_color: theme.colors.muted_foreground,
+                        line_height: 20.0,
+                    }
+                }
+            }
+        })
+        .collect();
+
+    let body_rows: Vec<Element> = props
+        .rows
+        .iter()
         .enumerate()
         .map(|(index, row)| {
-            arkit::row_component::<Message, arkit::Theme>()
-                .percent_width(1.0)
-                .align_items_center()
-                .border_width(if index + 1 == total_rows {
-                    [0.0, 0.0, 0.0, 0.0]
-                } else {
-                    [0.0, 0.0, 1.0, 0.0]
+            let is_last = index + 1 == total_rows;
+            let border_width = if is_last { "0,0,0,0" } else { "0,0,1,0" }.to_string();
+            let cells: Vec<Element> = row
+                .iter()
+                .map(|cell| {
+                    rsx! {
+                        row {
+                            layout_weight: 1.0,
+                            align_items: "center",
+                            padding_top: 8.0,
+                            padding_right: 8.0,
+                            padding_bottom: 8.0,
+                            padding_left: 8.0,
+                            text {
+                                content: cell.clone(),
+                                font_size: typography::SM,
+                                font_color: theme.colors.foreground,
+                                line_height: 20.0,
+                            }
+                        }
+                    }
                 })
-                .border_color(colors().border)
-                .children(
-                    row.into_iter()
-                        .map(|cell| {
-                            arkit::row_component::<Message, arkit::Theme>()
-                                .layout_weight(1.0_f32)
-                                .align_items_center()
-                                .padding([8.0, 8.0, 8.0, 8.0])
-                                .children(vec![arkit::text::<Message, arkit::Theme>(cell)
-                                    .font_size(typography::SM)
-                                    .font_color(colors().foreground)
-                                    .line_height(20.0)
-                                    .into()])
-                                .into()
-                        })
-                        .collect::<Vec<_>>(),
-                )
-                .into()
+                .collect();
+            rsx! {
+                row {
+                    key: "{index}",
+                    percent_width: 1.0,
+                    align_items: "center",
+                    border_width: border_width,
+                    border_color: theme.colors.border,
+                    {cells.into_iter()}
+                }
+            }
         })
-        .collect::<Vec<Element<Message>>>();
+        .collect();
 
-    rounded_table_surface(
-        arkit::column_component::<Message, arkit::Theme>()
-            .percent_width(1.0)
-            .border_width([1.0, 1.0, 1.0, 1.0])
-            .border_color(colors().border)
-            .border_radius([radii().sm, radii().sm, radii().sm, radii().sm])
-            .background_color(colors().card)
-            .children(
-                std::iter::once(header_row)
-                    .chain(body_rows)
-                    .collect::<Vec<_>>(),
-            ),
-    )
-    .into()
-}
-
-fn data_table<Message: 'static>(headers: Vec<String>, rows: Vec<Vec<String>>) -> Element<Message> {
-    table(headers, rows)
-}
-
-fn scrollable_table<Message: 'static>(
-    headers: Vec<String>,
-    rows: Vec<Vec<String>>,
-) -> Element<Message> {
-    scroll_area::<Message>(vec![table(headers, rows)]).into()
-}
-
-fn table_row<Message: 'static>(cells: Vec<String>) -> Element<Message> {
-    arkit::row_component::<Message, arkit::Theme>()
-        .percent_width(1.0)
-        .children(
-            cells
-                .into_iter()
-                .map(body_text::<Message>)
-                .map(Into::into)
-                .collect(),
-        )
-        .into()
-}
-
-// Struct component API
-pub struct Table<Message = ()> {
-    headers: Vec<String>,
-    rows: Vec<Vec<String>>,
-    _marker: std::marker::PhantomData<Message>,
-}
-
-impl<Message> Table<Message> {
-    pub fn new(headers: Vec<String>, rows: Vec<Vec<String>>) -> Self {
-        Self {
-            headers,
-            rows,
-            _marker: std::marker::PhantomData,
+    rsx! {
+        column {
+            percent_width: 1.0,
+            border_width: 1.0,
+            border_color: theme.colors.border,
+            border_radius: theme.radii.sm,
+            background_color: theme.colors.card,
+            clip: true,
+            row {
+                percent_width: 1.0,
+                border_width: "0,0,1,0",
+                border_color: theme.colors.border,
+                {header_cells.into_iter()}
+            }
+            {body_rows.into_iter()}
         }
     }
 }
-
-impl_component_widget!(Table<Message>, Message, |value: &Table<Message>| {
-    table(value.headers.clone(), value.rows.clone())
-});

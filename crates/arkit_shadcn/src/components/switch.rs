@@ -1,89 +1,55 @@
-use super::*;
+//! Switch — shadcn-style toggle switch.
+//!
+//! Migrated from the original Elm builder API to dioxus 0.7 `#[component]` +
+//! `rsx!`. Preserves the original styling: 32x18.4 native `Toggle` with
+//! `primary` selected color, `input` unselected color, `background` switch
+//! point, transparent 1px border, `full` radius, `shadow-sm`. Supports
+//! controlled (`checked`) and uncontrolled (`default_checked`) usage.
 
-fn switch<Message: 'static>(state: bool) -> ToggleElement<Message> {
-    shadow_sm(
-        arkit::toggle_component::<Message, arkit::Theme>()
-            .checked(state)
-            .toggle_selected_color(colors().primary)
-            .toggle_unselected_color(colors().input)
-            .toggle_switch_point_color(colors().background)
-            .border_style(BorderStyle::Solid)
-            // RN: `border border-transparent shadow-sm`.
-            .border_width([1.0, 1.0, 1.0, 1.0])
-            .border_color(0x00000000)
-            .border_radius([radii().full, radii().full, radii().full, radii().full])
-            .clip(true)
-            .width(32.0)
-            .height(18.4),
-    )
+use crate::theme::*;
+use arkit_prelude::*;
+
+const SWITCH_WIDTH: f32 = 32.0;
+const SWITCH_HEIGHT: f32 = 18.4;
+
+/// Props for [`Switch`].
+#[derive(Props, Clone, PartialEq)]
+pub struct SwitchProps {
+    pub checked: Option<bool>,
+    pub default_checked: Option<bool>,
+    pub on_change: Option<EventHandler<bool>>,
 }
 
-// Struct component API
-pub struct Switch<Message = ()> {
-    checked: Option<bool>,
-    default_checked: bool,
-    on_change: Option<std::rc::Rc<dyn Fn(bool) -> Message>>,
-}
+/// A toggle switch.
+#[component]
+pub fn Switch(props: SwitchProps) -> Element {
+    let theme = use_theme();
+    let mut internal = use_signal(|| props.default_checked.unwrap_or(false));
+    let controlled = props.checked.is_some();
+    let current = props.checked.unwrap_or_else(|| *internal.read());
+    let on_change = props.on_change;
 
-impl<Message> Switch<Message> {
-    pub fn new(checked: bool) -> Self {
-        Self {
-            checked: Some(checked),
-            default_checked: checked,
-            on_change: None,
+    rsx! {
+        toggle {
+            checked: current,
+            toggle_selected_color: theme.colors.primary,
+            toggle_unselected_color: theme.colors.input,
+            toggle_switch_point_color: theme.colors.background,
+            border_width: 1.0,
+            border_color: 0x00000000,
+            border_radius: theme.radii.full,
+            clip: true,
+            width: SWITCH_WIDTH,
+            height: SWITCH_HEIGHT,
+            onclick: move |_| {
+                let next = !current;
+                if !controlled {
+                    internal.set(next);
+                }
+                if let Some(handler) = on_change {
+                    handler.call(next);
+                }
+            },
         }
-    }
-
-    pub fn checked(mut self, checked: bool) -> Self {
-        self.checked = Some(checked);
-        self
-    }
-
-    pub fn default_checked(mut self, checked: bool) -> Self {
-        self.checked = None;
-        self.default_checked = checked;
-        self
-    }
-
-    pub fn on_change(mut self, handler: impl Fn(bool) -> Message + 'static) -> Self {
-        self.on_change = Some(std::rc::Rc::new(handler));
-        self
-    }
-
-    pub fn on_toggle(self, handler: impl Fn(bool) -> Message + 'static) -> Self {
-        self.on_change(handler)
-    }
-}
-
-impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer>
-    for Switch<Message>
-{
-    fn body(
-        &self,
-        tree: &mut arkit::advanced::widget::Tree,
-        _renderer: &arkit::Renderer,
-    ) -> Element<Message> {
-        let state = super::widget_state(tree, || self.default_checked);
-        let is_controlled = self.checked.is_some();
-        let checked = self.checked.unwrap_or_else(|| *state.borrow());
-        let handler = self.on_change.clone();
-
-        let element = switch::<Message>(checked).on_click(move || {
-            let next = !checked;
-            if !is_controlled {
-                *state.borrow_mut() = next;
-                super::request_widget_rerender();
-            }
-            if let Some(handler) = handler.as_ref() {
-                dispatch_message(handler(next));
-            }
-        });
-        element.into()
-    }
-}
-
-impl<Message: Send + 'static> From<Switch<Message>> for Element<Message> {
-    fn from(value: Switch<Message>) -> Self {
-        Element::new(value)
     }
 }

@@ -1,19 +1,28 @@
 [workspace]
 members = [
     "crates/arkit",
-    "crates/arkit_core",
-    "crates/arkit_animation",
     "crates/arkit_derive",
-    "crates/arkit_futures",
-    "crates/arkit_icon",
+    "crates/arkit_runtime",
+    "crates/arkit_arkui",
+    "crates/arkit_elements",
+    "crates/arkit_prelude",
+    "crates/arkit_hooks",
+    "crates/arkit_shadcn",
+    "crates/arkit_router",
     "crates/arkit_i18n",
     "crates/arkit_i18n_macros",
-    "crates/arkit_router",
-    "crates/arkit_runtime",
-    "crates/arkit_widget",
-    "crates/arkit_shadcn",
-    "examples/*",
+    "crates/arkit_animation",
+    "crates/arkit_icon",
+    "examples/counter",
+    "examples/async_task",
+    "examples/complex_cases",
+    "examples/i18n",
+    "examples/router",
+    "examples/shadcn_showcase",
+    "examples/webview",
 ]
+# `app/` is an OpenHarmony application shell (ArkTS + hvigor), not a Rust crate.
+exclude = ["app"]
 resolver = "2"
 
 [workspace.package]
@@ -23,28 +32,42 @@ license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
 arkit = { path = "crates/arkit" }
-arkit_core = { path = "crates/arkit_core" }
 arkit_animation = { path = "crates/arkit_animation" }
 arkit_derive = { path = "crates/arkit_derive" }
-arkit_futures = { path = "crates/arkit_futures" }
 arkit_icon = { path = "crates/arkit_icon" }
 arkit_i18n = { path = "crates/arkit_i18n" }
 arkit_i18n_macros = { path = "crates/arkit_i18n_macros" }
 arkit_router = { path = "crates/arkit_router" }
 arkit_runtime = { path = "crates/arkit_runtime" }
-arkit_widget = { path = "crates/arkit_widget" }
 arkit_shadcn = { path = "crates/arkit_shadcn" }
+arkit_arkui = { path = "crates/arkit_arkui" }
+arkit_elements = { path = "crates/arkit_elements" }
+arkit_prelude = { path = "crates/arkit_prelude" }
+arkit_hooks = { path = "crates/arkit_hooks" }
 rust-embed = { version = "8.11.0", features = ["debug-embed"] }
 tokio = { version = "1.52", features = ["rt-multi-thread", "sync", "time"] }
+
+# Dioxus 0.7 — reuse its VirtualDom, diff/reconcile, signals, hooks, and router
+# directly rather than maintaining parallel framework primitives.
+dioxus = { version = "0.7", default-features = false, features = ["signals", "hooks", "macro"] }
+dioxus-core = "0.7"
+dioxus-signals = "0.7"
+dioxus-hooks = "0.7"
+dioxus-core-macro = "0.7"
+dioxus-router = "0.7"
 
 syn = { version = "2.0", features = ["full"] }
 quote = "1.0"
 proc-macro2 = "1.0"
+napi-ohos = { version = "1.1", features = ["napi8"] }
+napi-derive-ohos = "1.1"
+napi-build-ohos = "1.1"
 
 
+# crates.io 0.3.0 does not include the back intercept and embedded webview
+# dispose APIs used by arkit_runtime yet. Keep upstream main until released.
 openharmony-ability = { git = "https://github.com/harmony-contrib/openharmony-ability.git" }
-openharmony-ability-derive = { git = "https://github.com/harmony-contrib/openharmony-ability.git" }
 
-ohos-arkui-binding = { path = "../ohos-native-bindings/crates/arkui", default-features = false, features = ["napi", "image"] }
-ohos-display-binding = { git = "https://github.com/ohos-rs/ohos-native-bindings.git", branch = "feat-component" }
-ohos-hilog-binding = { git = "https://github.com/ohos-rs/ohos-native-bindings.git", branch = "feat-component" }
+ohos-arkui-binding = { version = "0.2.0", default-features = false, features = ["napi", "image", "api-20"] }
+ohos-display-binding = "0.1.0"
+ohos-hilog-binding = "0.2.0"

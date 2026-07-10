@@ -1,127 +1,111 @@
+//! Dioxus VirtualDom host for OpenHarmony/ArkUI.
+//!
+//! [`ArkRuntime`] owns a dioxus [`VirtualDom`] and an [`ArkUIRenderer`], wiring
+//! the dioxus wake/render loop into the OpenHarmony UI loop.
+//!
+//! ## Lifecycle
+//! 1. `ArkRuntime::from_virtual_dom(slot, app, dom)` installs the renderer and
+//!    event sink, rebuilds the VirtualDom, and wires the OpenHarmony loop.
+//! 2. Native events (registered by the renderer) call [`EventSink::dispatch`],
+//!    which queues owned event data and wakes the OpenHarmony UI loop.
+//! 3. Each UI tick forwards queued events into `Runtime::handle_event`, drains
+//!    the resulting dioxus scheduler work with `render_immediate`, and then
+//!    re-arms the scheduler wait. Native callbacks never re-enter a render.
+//! 4. `unmount` detaches the renderer root from the slot.
+
 use std::any::Any;
 use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::future::Future;
-use std::pin::Pin;
+use std::panic::{self, AssertUnwindSafe};
 use std::rc::Rc;
-use std::sync::{Arc, LazyLock, Mutex};
+use std::sync::{Arc, Once};
+use std::task::{Context, Poll, Wake, Waker};
 
-pub use arkit_core::theme;
-pub use arkit_core::{window, Theme};
-pub use arkit_futures::{Subscription, SubscriptionHandle};
+use arkit_arkui::{ArkUIRenderer, EventSink};
+use dioxus_core::{DynamicNode, ElementId, Runtime as DioxusRuntime, VNode};
+use napi_ohos::{Error, Result};
+use ohos_arkui_binding::common::handle::ArkUIHandle;
+use openharmony_ability::{Event as AbilityEvent, OpenHarmonyApp, OpenHarmonyWaker};
 
-pub type Element<Message, AppTheme = Theme, AppRenderer = ()> =
-    arkit_core::Element<'static, Message, AppTheme, AppRenderer>;
+mod webview;
+
+pub use webview::{EmbeddedWebViewController, EmbeddedWebViewInit, WebViewFrame, WebViewStyle};
+
+pub use dioxus_core::VirtualDom;
+
+// ---------------------------------------------------------------------------
+// UI loop machinery
+// ---------------------------------------------------------------------------
 
 thread_local! {
-    static DISPATCHER: RefCell<Option<RuntimeDispatcher>> = RefCell::new(None);
-    static CURRENT_RUNTIME: RefCell<Option<RuntimeHandle>> = RefCell::new(None);
     static UI_LOOP_EFFECTS: RefCell<Vec<Box<dyn FnOnce()>>> = RefCell::new(Vec::new());
     static UI_WAKER: RefCell<Option<Rc<dyn Fn()>>> = RefCell::new(None);
 }
 
-pub type RuntimeDispatcher = Rc<dyn Fn(Box<dyn Any + Send>)>;
-pub type GlobalRuntimeDispatcher = Arc<dyn Fn(Box<dyn Any + Send>) + Send + Sync>;
+/// A lazily-initialized, process-wide multi-threaded tokio runtime backing
+/// dioxus async hooks (`use_resource`/`use_future`/`use_coroutine`).
+///
+/// dioxus drives task futures on its own scheduler, but a future that awaits
+/// tokio I/O / timers (e.g. `tokio::time::sleep`) needs a tokio runtime
+/// context. [`tokio_handle`] returns the handle of the runtime started here;
+/// spawn blocking/timer work onto it from inside `use_resource` closures.
+static TOKIO_RUNTIME: std::sync::OnceLock<tokio::runtime::Runtime> = std::sync::OnceLock::new();
 
-static GLOBAL_DISPATCHER: LazyLock<Mutex<Option<GlobalRuntimeDispatcher>>> =
-    LazyLock::new(|| Mutex::new(None));
-
-#[derive(Clone)]
-pub struct RuntimeHandle {
-    request_rerender: Rc<dyn Fn()>,
+fn tokio_runtime() -> &'static tokio::runtime::Runtime {
+    TOKIO_RUNTIME.get_or_init(|| {
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("arkit_runtime: failed to build tokio runtime")
+    })
 }
 
-impl RuntimeHandle {
-    pub fn new(request_rerender: impl Fn() + 'static) -> Self {
-        Self {
-            request_rerender: Rc::new(request_rerender),
-        }
-    }
-
-    pub fn request_rerender(&self) {
-        (self.request_rerender)();
-    }
+/// The handle of the framework's tokio runtime. Use it to await timers / I/O
+/// inside dioxus async hooks, e.g.:
+///
+/// ```ignore
+/// let handle = arkit_runtime::tokio_handle();
+/// let _ = use_resource(move || async move {
+///     handle.spawn(async move { tokio::time::sleep(Duration::from_millis(800)).await }).await.unwrap();
+///     "done".to_string()
+/// });
+/// ```
+pub fn tokio_handle() -> tokio::runtime::Handle {
+    tokio_runtime().handle().clone()
 }
 
-pub fn dispatch<Message>(message: Message)
-where
-    Message: Send + 'static,
-{
-    if let Some(dispatcher) = DISPATCHER.with(|state| state.borrow().as_ref().cloned()) {
-        dispatcher(Box::new(message));
-        return;
-    }
-
-    if let Some(dispatcher) = GLOBAL_DISPATCHER
-        .lock()
-        .expect("global dispatcher lock")
-        .clone()
-    {
-        dispatcher(Box::new(message));
-        return;
-    }
-
-    panic!("arkit runtime dispatch called without an active dispatcher");
+thread_local! {
+    /// Global back-press handler registered by `arkit_router::use_back_handler`
+    /// (or any component). Consumed by the OHOS back-button interceptor wired
+    /// in `ArkRuntime::new`. Returns `true` to consume the back press.
+    static BACK_PRESS_HANDLER: RefCell<Option<Rc<dyn Fn() -> bool>>> = RefCell::new(None);
 }
 
-pub fn set_dispatcher(dispatcher: Option<RuntimeDispatcher>) {
-    DISPATCHER.with(|state| {
-        state.replace(dispatcher);
+/// Register (or clear) the global OHOS back-press handler. Called by
+/// `arkit_router::use_back_handler` on mount. The handler returns `true` to
+/// consume the back press (e.g. navigate back in the router history).
+pub fn set_back_press_handler(handler: Option<Rc<dyn Fn() -> bool>>) {
+    BACK_PRESS_HANDLER.with(|state| {
+        state.replace(handler);
     });
 }
 
-pub fn set_global_dispatcher(dispatcher: Option<GlobalRuntimeDispatcher>) {
-    *GLOBAL_DISPATCHER.lock().expect("global dispatcher lock") = dispatcher;
-}
-
-pub fn global_dispatcher() -> Option<GlobalRuntimeDispatcher> {
-    GLOBAL_DISPATCHER
-        .lock()
-        .unwrap_or_else(|error| error.into_inner())
-        .clone()
-}
-
-pub fn with_global_dispatcher<R>(
-    dispatcher: Option<GlobalRuntimeDispatcher>,
-    f: impl FnOnce() -> R,
-) -> R {
-    let Some(dispatcher) = dispatcher else {
-        return f();
-    };
-
-    let local_dispatcher: RuntimeDispatcher = Rc::new(move |message| dispatcher(message));
-    with_dispatcher(local_dispatcher, f)
-}
-
-pub fn with_dispatcher<R>(dispatcher: RuntimeDispatcher, f: impl FnOnce() -> R) -> R {
-    let previous = DISPATCHER.with(|state| state.replace(Some(dispatcher)));
-    let result = f();
-    DISPATCHER.with(|state| {
-        state.replace(previous);
-    });
-    result
-}
-
-pub fn set_current_runtime(runtime: Option<RuntimeHandle>) {
-    CURRENT_RUNTIME.with(|state| {
-        state.replace(runtime);
-    });
-}
-
-pub fn current_runtime() -> Option<RuntimeHandle> {
-    CURRENT_RUNTIME.with(|state| state.borrow().clone())
-}
-
-pub fn set_ui_waker(waker: Option<Rc<dyn Fn()>>) {
+fn set_ui_waker(waker: Option<Rc<dyn Fn()>>) {
     UI_WAKER.with(|state| {
         state.replace(waker);
-    });
+    })
 }
 
+/// Queue a closure to run on the next UI loop tick, and wake the UI waker.
 pub fn queue_ui_loop(effect: impl FnOnce() + 'static) {
     UI_LOOP_EFFECTS.with(|state| {
         state.borrow_mut().push(Box::new(effect));
     });
+    wake_ui_loop();
+}
 
+fn wake_ui_loop() {
     UI_WAKER.with(|state| {
         if let Some(waker) = state.borrow().as_ref() {
             waker();
@@ -129,449 +113,355 @@ pub fn queue_ui_loop(effect: impl FnOnce() + 'static) {
     });
 }
 
-pub fn run_ui_loop_effects() {
+fn run_ui_loop_effects() {
     let effects = UI_LOOP_EFFECTS.with(|state| state.replace(Vec::new()));
     for effect in effects {
-        effect();
+        if let Err(payload) = panic::catch_unwind(AssertUnwindSafe(effect)) {
+            log_panic_payload("ui_loop_effect", payload.as_ref());
+            std::process::abort();
+        }
     }
 }
 
-pub fn clear_ui_loop_effects() {
+fn clear_ui_loop_effects() {
     UI_LOOP_EFFECTS.with(|state| {
         state.borrow_mut().clear();
     });
 }
 
-#[doc(hidden)]
-pub type BoxedTaskFuture<Message> = Pin<Box<dyn Future<Output = Message> + Send + 'static>>;
+// ---------------------------------------------------------------------------
+// Runtime
+// ---------------------------------------------------------------------------
 
-#[doc(hidden)]
-pub enum TaskAction<Message> {
-    Ready(Box<dyn FnOnce(&mut Vec<Message>)>),
-    Future(BoxedTaskFuture<Message>),
-}
-
-pub struct Task<Message> {
-    actions: Vec<TaskAction<Message>>,
-}
-
-impl<Message: Send + 'static> Task<Message> {
-    pub fn none() -> Self {
-        Self {
-            actions: Vec::new(),
-        }
-    }
-
-    pub fn done(value: Message) -> Self {
-        Self {
-            actions: vec![TaskAction::Ready(Box::new(move |messages| {
-                messages.push(value)
-            }))],
-        }
-    }
-
-    pub fn batch(tasks: impl IntoIterator<Item = Self>) -> Self {
-        let mut actions = Vec::new();
-        for task in tasks {
-            actions.extend(task.actions);
-        }
-        Self { actions }
-    }
-
-    pub fn run(action: impl FnOnce() -> Message + 'static) -> Self {
-        Self {
-            actions: vec![TaskAction::Ready(Box::new(move |messages| {
-                messages.push(action())
-            }))],
-        }
-    }
-
-    pub fn perform<T: Send + 'static>(
-        operation: impl Future<Output = T> + Send + 'static,
-        map: impl FnOnce(T) -> Message + Send + 'static,
-    ) -> Self {
-        Self {
-            actions: vec![TaskAction::Future(Box::pin(
-                async move { map(operation.await) },
-            ))],
-        }
-    }
-
-    pub fn map<B: Send + 'static>(
-        self,
-        map: impl Fn(Message) -> B + Send + Sync + 'static,
-    ) -> Task<B> {
-        let map = Arc::new(map);
-        let mut actions = Vec::with_capacity(self.actions.len());
-
-        for action in self.actions {
-            let map = map.clone();
-            match action {
-                TaskAction::Ready(action) => {
-                    actions.push(TaskAction::Ready(Box::new(move |messages: &mut Vec<B>| {
-                        let mut source = Vec::new();
-                        action(&mut source);
-                        messages.extend(source.into_iter().map(|message| map(message)));
-                    })));
-                }
-                TaskAction::Future(future) => {
-                    actions.push(TaskAction::Future(Box::pin(
-                        async move { map(future.await) },
-                    )));
-                }
-            }
-        }
-
-        Task { actions }
-    }
-
-    pub fn units(&self) -> usize {
-        self.actions.len()
-    }
-
-    pub fn into_messages(self) -> Vec<Message> {
-        let mut messages = Vec::new();
-        for action in self.actions {
-            match action {
-                TaskAction::Ready(action) => action(&mut messages),
-                TaskAction::Future(_) => {
-                    panic!("Task::into_messages cannot consume async tasks");
-                }
-            }
-        }
-        messages
-    }
-
-    #[doc(hidden)]
-    pub fn into_actions(self) -> Vec<TaskAction<Message>> {
-        self.actions
-    }
-}
-
-impl<Message: Send + 'static> Default for Task<Message> {
-    fn default() -> Self {
-        Self::none()
-    }
-}
-
-pub enum BackPressDecision<Message> {
-    PassThrough,
-    Intercept(Task<Message>),
-}
-
-impl<Message: Send + 'static> BackPressDecision<Message> {
-    pub fn pass_through() -> Self {
-        Self::PassThrough
-    }
-
-    pub fn handled() -> Self {
-        Self::Intercept(Task::none())
-    }
-
-    pub fn task(task: Task<Message>) -> Self {
-        Self::Intercept(task)
-    }
-
-    pub fn message(message: Message) -> Self {
-        Self::Intercept(Task::done(message))
-    }
-
-    pub fn is_intercepted(&self) -> bool {
-        matches!(self, Self::Intercept(_))
-    }
-}
-
-pub trait Program: Sized {
-    type State: 'static;
-    type Message: Send + 'static;
-    type Theme: theme::Base + Default;
-    type Renderer: Default + 'static;
-
-    fn boot(&self) -> (Self::State, Task<Self::Message>);
-    fn update(&self, state: &mut Self::State, message: Self::Message) -> Task<Self::Message>;
-    fn view(
+/// Bridge resolving `use_ark_node` / overlay portal requests after each render.
+///
+/// dioxus 0.7 does not expose a `ScopeId → ElementId` mapping to component
+/// bodies, so `arkit_hooks::use_ark_node` registers pending scope lookups on an
+/// [`ArkHost`](arkit_hooks) context. The runtime owns the `VirtualDom` (which
+/// *can* map `ScopeId → root ElementId` via `mounted_root`), so after each
+/// render it asks the resolver for pending scopes, resolves each to its
+/// mounted node, and writes it back.
+///
+/// Implemented by `arkit_hooks::ArkHost` (which lives in a crate that depends
+/// on `arkit_runtime`, so the runtime holds it behind this trait to avoid a
+/// circular dependency).
+pub trait ScopeNodeResolver {
+    /// Snapshot of scopes awaiting node resolution.
+    fn pending_scopes(&self) -> Vec<dioxus_core::ScopeId>;
+    /// Deliver the mounted native node (shared `Rc` handle — the same one
+    /// mounted in the ArkUI tree and used as the event-dispatch user-data
+    /// target) for a scope, writing it into the hook's signal slot.
+    fn resolve_scope(
         &self,
-        state: &Self::State,
-        window: window::Id,
-    ) -> Element<Self::Message, Self::Theme, Self::Renderer>;
-
-    fn subscription(&self, _state: &Self::State) -> Subscription<Self::Message> {
-        Subscription::none()
-    }
-
-    fn back_press(&self, _state: &Self::State) -> BackPressDecision<Self::Message> {
-        BackPressDecision::PassThrough
-    }
+        scope: dioxus_core::ScopeId,
+        node: std::rc::Rc<std::cell::RefCell<ohos_arkui_binding::common::node::ArkUINode>>,
+    );
 }
 
-pub struct Application<State, Message, AppTheme = Theme, AppRenderer = ()>
-where
-    State: 'static,
-    Message: Send + 'static,
-    AppTheme: theme::Base + Default,
-    AppRenderer: Default + 'static,
-{
-    boot: Rc<dyn Fn() -> (State, Task<Message>)>,
-    update: Rc<dyn Fn(&mut State, Message) -> Task<Message>>,
-    view: Rc<dyn Fn(&State) -> Element<Message, AppTheme, AppRenderer>>,
-    subscription: Rc<dyn Fn(&State) -> Subscription<Message>>,
-    back_press: Rc<dyn Fn(&State) -> BackPressDecision<Message>>,
+thread_local! {
+    static SCOPE_RESOLVER: RefCell<Option<Rc<dyn ScopeNodeResolver>>> = RefCell::new(None);
 }
 
-pub fn application<State, Message, Boot, Update, View, AppTheme, AppRenderer>(
-    boot: Boot,
-    update: Update,
-    view: View,
-) -> Application<State, Message, AppTheme, AppRenderer>
-where
-    State: 'static,
-    Message: Send + 'static,
-    Boot: Fn() -> State + 'static,
-    Update: Fn(&mut State, Message) -> Task<Message> + 'static,
-    View: Fn(&State) -> Element<Message, AppTheme, AppRenderer> + 'static,
-    AppTheme: theme::Base + Default,
-    AppRenderer: Default + 'static,
-{
-    Application {
-        boot: Rc::new(move || (boot(), Task::none())),
-        update: Rc::new(update),
-        view: Rc::new(view),
-        subscription: Rc::new(|_| Subscription::none()),
-        back_press: Rc::new(|_| BackPressDecision::PassThrough),
-    }
+/// Install (or clear) the scope-node resolver. Called by
+/// `arkit_hooks::use_ark_host_provider` once the `ArkHost` context exists.
+pub fn set_scope_resolver(resolver: Option<Rc<dyn ScopeNodeResolver>>) {
+    SCOPE_RESOLVER.with(|state| {
+        state.replace(resolver);
+    });
 }
 
-impl<State, Message, AppTheme, AppRenderer> Application<State, Message, AppTheme, AppRenderer>
-where
-    State: 'static,
-    Message: Send + 'static,
-    AppTheme: theme::Base + Default,
-    AppRenderer: Default + 'static,
-{
-    pub fn boot(mut self, boot: impl Fn() -> (State, Task<Message>) + 'static) -> Self {
-        self.boot = Rc::new(boot);
-        self
-    }
-
-    pub fn subscription(mut self, f: impl Fn(&State) -> Subscription<Message> + 'static) -> Self {
-        self.subscription = Rc::new(f);
-        self
-    }
-
-    pub fn on_back_press(
-        mut self,
-        f: impl Fn(&State) -> BackPressDecision<Message> + 'static,
-    ) -> Self {
-        self.back_press = Rc::new(f);
-        self
-    }
-}
-
-impl<State, Message, AppTheme, AppRenderer> Program
-    for Application<State, Message, AppTheme, AppRenderer>
-where
-    State: 'static,
-    Message: Send + 'static,
-    AppTheme: theme::Base + Default,
-    AppRenderer: Default + 'static,
-{
-    type State = State;
-    type Message = Message;
-    type Theme = AppTheme;
-    type Renderer = AppRenderer;
-
-    fn boot(&self) -> (Self::State, Task<Self::Message>) {
-        (self.boot)()
-    }
-
-    fn update(&self, state: &mut Self::State, message: Self::Message) -> Task<Self::Message> {
-        (self.update)(state, message)
-    }
-
-    fn view(
-        &self,
-        state: &Self::State,
-        _window: window::Id,
-    ) -> Element<Self::Message, Self::Theme, Self::Renderer> {
-        (self.view)(state)
-    }
-
-    fn subscription(&self, state: &Self::State) -> Subscription<Self::Message> {
-        (self.subscription)(state)
-    }
-
-    fn back_press(&self, state: &Self::State) -> BackPressDecision<Self::Message> {
-        (self.back_press)(state)
-    }
-}
-
-#[doc(hidden)]
-pub mod internal {
-    pub use crate::{
-        clear_ui_loop_effects, current_runtime, dispatch, global_dispatcher, queue_ui_loop,
-        run_ui_loop_effects, set_current_runtime, set_dispatcher, set_global_dispatcher,
-        set_ui_waker, with_dispatcher, with_global_dispatcher, GlobalRuntimeDispatcher,
-        RuntimeDispatcher, RuntimeHandle,
+/// Resolve all pending `use_ark_node` lookups against the freshly-rendered
+/// VirtualDom. Called after each `render_immediate` / `rebuild`.
+fn resolve_pending(dom: &VirtualDom, renderer: &ArkUIRenderer) {
+    let Some(resolver) = SCOPE_RESOLVER.with(|state| state.borrow().clone()) else {
+        return;
     };
+
+    for scope in resolver.pending_scopes() {
+        let node_id_opt = dom
+            .get_scope(scope)
+            .and_then(|s| first_mounted_element(s.root_node(), dom));
+        if let Some(node) = node_id_opt.and_then(|id| renderer.node_for_element(id)) {
+            resolver.resolve_scope(scope, node);
+        }
+    }
 }
 
-#[cfg(test)]
-mod tests {
-    use std::cell::RefCell;
-    use std::rc::Rc;
+fn first_mounted_element(vnode: &VNode, dom: &VirtualDom) -> Option<ElementId> {
+    (0..vnode.template.roots.len()).find_map(|root_idx| vnode_root_element(vnode, root_idx, dom))
+}
 
-    use super::{application, BackPressDecision, Program, Subscription, Task, TaskAction, Theme};
+fn vnode_root_element(vnode: &VNode, root_idx: usize, dom: &VirtualDom) -> Option<ElementId> {
+    let dynamic_idx = vnode.template.roots.get(root_idx)?.dynamic_id();
+    match dynamic_idx {
+        Some(dynamic_idx) => dynamic_node_element(vnode, dynamic_idx, dom),
+        None => vnode.mounted_root(root_idx, dom),
+    }
+}
 
-    fn test_runtime() -> tokio::runtime::Runtime {
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("test tokio runtime")
+fn dynamic_node_element(vnode: &VNode, dynamic_idx: usize, dom: &VirtualDom) -> Option<ElementId> {
+    match vnode.dynamic_nodes.get(dynamic_idx)? {
+        DynamicNode::Text(_) | DynamicNode::Placeholder(_) => {
+            vnode.mounted_dynamic_node(dynamic_idx, dom)
+        }
+        DynamicNode::Fragment(children) => children
+            .iter()
+            .find_map(|child| first_mounted_element(child, dom)),
+        DynamicNode::Component(component) => component
+            .mounted_scope(dynamic_idx, vnode, dom)
+            .and_then(|scope| first_mounted_element(scope.root_node(), dom)),
+    }
+}
+
+static PANIC_HOOK: Once = Once::new();
+
+fn install_panic_hook() {
+    PANIC_HOOK.call_once(|| {
+        panic::set_hook(Box::new(|info| {
+            ohos_hilog_binding::error(format!("arkit_runtime: panic: {info}"));
+        }));
+    });
+}
+
+fn log_panic_payload(context: &str, payload: &(dyn Any + Send)) {
+    let message = payload
+        .downcast_ref::<&str>()
+        .map(|message| (*message).to_string())
+        .or_else(|| payload.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "non-string panic payload".to_string());
+    ohos_hilog_binding::error(format!("arkit_runtime: panic in {context}: {message}"));
+}
+
+struct RuntimeInner {
+    dom: VirtualDom,
+    renderer: ArkUIRenderer,
+}
+
+/// Wakes the OpenHarmony event loop when dioxus' scheduler receives work.
+///
+/// `VirtualDom::wait_for_work` registers this waker with its scheduler queue.
+/// The future itself can then be dropped: the queue retains the waker and calls
+/// it when signals, effects, events, or async tasks enqueue work.
+struct DioxusUiWaker(OpenHarmonyWaker);
+
+impl Wake for DioxusUiWaker {
+    fn wake(self: Arc<Self>) {
+        self.0.wake();
     }
 
-    #[test]
-    fn ready_tasks_produce_messages_in_batch_order() {
-        let task = Task::batch([Task::done(1), Task::run(|| 2), Task::done(3)]);
-
-        assert_eq!(task.into_messages(), vec![1, 2, 3]);
+    fn wake_by_ref(self: &Arc<Self>) {
+        self.0.wake();
     }
+}
 
-    #[test]
-    fn perform_maps_async_result_to_message() {
-        let mut actions = Task::perform(async { 41 }, |value| value + 1).into_actions();
-        assert_eq!(actions.len(), 1);
+fn render_dom(inner: &Rc<RefCell<RuntimeInner>>) {
+    let mut borrowed = inner.borrow_mut();
+    let RuntimeInner { dom, renderer } = &mut *borrowed;
+    dom.render_immediate(renderer);
+    resolve_pending(dom, renderer);
+}
 
-        let TaskAction::Future(future) = actions.remove(0) else {
-            panic!("Task::perform should create a future action");
+/// Poll dioxus' scheduler once, rendering only when work is ready.
+///
+/// A pending poll is intentional: it leaves `task_waker` registered with the
+/// scheduler so work completed on another thread wakes the OpenHarmony loop.
+fn render_ready_work(inner: &Rc<RefCell<RuntimeInner>>, task_waker: &Waker) {
+    loop {
+        let is_ready = {
+            let mut borrowed = inner.borrow_mut();
+            let mut wait_for_work = std::pin::pin!(borrowed.dom.wait_for_work());
+            let mut context = Context::from_waker(task_waker);
+            matches!(wait_for_work.as_mut().poll(&mut context), Poll::Ready(()))
         };
 
-        assert_eq!(test_runtime().block_on(future), 42);
+        if !is_ready {
+            return;
+        }
+        render_dom(inner);
     }
+}
 
-    #[test]
-    fn map_applies_to_ready_and_async_actions() {
-        let task = Task::batch([Task::done(1), Task::perform(async { 2 }, |value| value)])
-            .map(|value| format!("message:{value}"));
+/// Owns the dioxus VirtualDom and ArkUI renderer for one entry point.
+pub struct ArkRuntime {
+    inner: Rc<RefCell<RuntimeInner>>,
+}
 
-        let mut ready = Vec::new();
-        let mut futures = Vec::new();
+struct PendingNativeEvent {
+    name: &'static str,
+    element: ElementId,
+    payload: arkit_arkui::ArkEventPayload,
+}
 
-        for action in task.into_actions() {
-            match action {
-                TaskAction::Ready(action) => action(&mut ready),
-                TaskAction::Future(future) => futures.push(future),
+/// Native event boundary for one runtime.
+///
+/// ArkUI may invoke callbacks synchronously while the renderer is attaching or
+/// patching native nodes. The callback therefore owns only this queue: touching
+/// the `VirtualDom` here would re-enter it while `render_immediate` still has
+/// exclusive access to [`RuntimeInner`]. The OpenHarmony UI loop drains the
+/// queue at a phase boundary before starting the next render.
+#[derive(Default)]
+struct RuntimeEventSink {
+    pending: RefCell<VecDeque<PendingNativeEvent>>,
+}
+
+impl RuntimeEventSink {
+    fn dispatch_pending(&self, runtime: &Rc<DioxusRuntime>) {
+        let pending = self.pending.replace(VecDeque::new());
+        for PendingNativeEvent {
+            name,
+            element,
+            payload,
+        } in pending
+        {
+            let data: Rc<dyn Any> =
+                Rc::new(dioxus_elements::event::ArkEventData::with_payload(payload));
+            let event = dioxus_core::Event::new(data, event_bubbles(name));
+            runtime.handle_event(name, event, element);
+        }
+    }
+}
+
+impl EventSink for RuntimeEventSink {
+    fn dispatch(
+        &self,
+        name: &'static str,
+        element: ElementId,
+        payload: arkit_arkui::ArkEventPayload,
+    ) {
+        if let Err(payload) = panic::catch_unwind(AssertUnwindSafe(|| {
+            self.pending.borrow_mut().push_back(PendingNativeEvent {
+                name,
+                element,
+                payload,
+            });
+            wake_ui_loop();
+        })) {
+            log_panic_payload("event_dispatch", payload.as_ref());
+            std::process::abort();
+        }
+    }
+}
+
+fn event_bubbles(name: &str) -> bool {
+    matches!(
+        name,
+        "click" | "press" | "longpress" | "long_press" | "_long_press" | "touch"
+    )
+}
+
+impl ArkRuntime {
+    /// Create and mount a runtime from an already-configured dioxus
+    /// [`VirtualDom`].
+    ///
+    /// This is the native-renderer boundary used by higher-level launchers that
+    /// need root props or context wrappers. The runtime owns the VirtualDom
+    /// directly; it does not reconstruct or reinterpret the component tree.
+    pub fn from_virtual_dom(
+        slot: ArkUIHandle,
+        app: OpenHarmonyApp,
+        mut dom: VirtualDom,
+    ) -> Result<Self> {
+        install_panic_hook();
+
+        let mut renderer = ArkUIRenderer::new(slot).map_err(map_arkui_error)?;
+
+        // Install the queueing event sink before rebuild so every listener
+        // captures the same phase-isolated native event boundary.
+        let sink = Rc::new(RuntimeEventSink::default());
+        renderer.set_sink(sink.clone());
+
+        // Initial mount: build the real DOM tree onto the slot.
+        dom.rebuild(&mut renderer);
+        resolve_pending(&dom, &renderer);
+
+        let weak_runtime = Rc::downgrade(&dom.runtime());
+        let inner = Rc::new(RefCell::new(RuntimeInner { dom, renderer }));
+
+        // Bridge dioxus' scheduler to OpenHarmony. A pending
+        // `VirtualDom::wait_for_work` poll retains this waker, including when a
+        // task is later completed by the background tokio runtime.
+        let waker = app.create_waker();
+        let task_waker = Waker::from(Arc::new(DioxusUiWaker(waker.clone())));
+        set_ui_waker(Some(Rc::new({
+            let waker = waker.clone();
+            move || waker.wake()
+        })));
+
+        // Run imperative UI closures and queued native events first, then let
+        // dioxus render every piece of scheduler work they made ready.
+        let weak_inner = Rc::downgrade(&inner);
+        let loop_task_waker = task_waker.clone();
+        let loop_sink = sink.clone();
+        app.run_loop(move |event| {
+            if matches!(event, AbilityEvent::UserEvent) {
+                if let Err(payload) = panic::catch_unwind(AssertUnwindSafe(|| {
+                    run_ui_loop_effects();
+                    if let Some(inner) = weak_inner.upgrade() {
+                        if let Some(runtime) = weak_runtime.upgrade() {
+                            loop_sink.dispatch_pending(&runtime);
+                        }
+                        render_ready_work(&inner, &loop_task_waker);
+                    }
+                })) {
+                    log_panic_payload("ui_loop", payload.as_ref());
+                    std::process::abort();
+                }
             }
-        }
+        });
 
-        assert_eq!(ready, vec![String::from("message:1")]);
-        assert_eq!(futures.len(), 1);
-        assert_eq!(
-            test_runtime().block_on(futures.remove(0)),
-            String::from("message:2")
-        );
+        // Wire the OHOS back button: forward to the global back-press handler
+        // (registered by `arkit_router::use_back_handler` or any component).
+        // Consumes the press when the handler returns `true`.
+        app.on_back_press_intercept(move || {
+            BACK_PRESS_HANDLER.with(|state| state.borrow().as_ref().map(|h| h()).unwrap_or(false))
+        });
+
+        // `rebuild` does not finish a render cycle, so run one immediate pass
+        // to publish mount-time effects. Then drain exactly the scheduler work
+        // that is ready and leave a pending wait armed for future async work.
+        render_dom(&inner);
+        render_ready_work(&inner, &task_waker);
+
+        // ArkUI may apply control skins after initial insertion into the native
+        // tree. Replaying declarative attrs on the next UI tick keeps first
+        // paint consistent with later Dioxus patches without duplicating style
+        // logic in components.
+        let inner_for_initial_replay = inner.clone();
+        queue_ui_loop(move || {
+            inner_for_initial_replay
+                .borrow_mut()
+                .renderer
+                .replay_declarative_attrs();
+        });
+
+        Ok(Self { inner })
     }
 
-    #[test]
-    #[should_panic(expected = "Task::into_messages cannot consume async tasks")]
-    fn into_messages_rejects_async_tasks() {
-        let _ = Task::perform(async { 1 }, |value| value).into_messages();
+    /// Unmount the renderer root from the NodeContent slot.
+    pub fn unmount(&self) -> Result<()> {
+        let mut borrowed = self.inner.borrow_mut();
+        borrowed.renderer.unmount().map_err(map_arkui_error)
     }
+}
 
-    #[test]
-    fn back_press_decision_constructors_match_expected_behavior() {
-        assert!(!BackPressDecision::<i32>::pass_through().is_intercepted());
-        assert!(BackPressDecision::<i32>::handled().is_intercepted());
-
-        let BackPressDecision::Intercept(task) = BackPressDecision::message(7) else {
-            panic!("message decision should intercept");
-        };
-        assert_eq!(task.into_messages(), vec![7]);
-
-        let task = Task::done(9);
-        let BackPressDecision::Intercept(task) = BackPressDecision::task(task) else {
-            panic!("task decision should intercept");
-        };
-        assert_eq!(task.into_messages(), vec![9]);
+impl Drop for ArkRuntime {
+    fn drop(&mut self) {
+        set_ui_waker(None);
+        set_scope_resolver(None);
+        set_back_press_handler(None);
+        clear_ui_loop_effects();
     }
+}
 
-    #[test]
-    fn program_default_back_press_passes_through() {
-        struct TestProgram;
+/// Mount an already-configured dioxus [`VirtualDom`] into a NodeContent slot.
+pub fn mount_virtual_dom(
+    slot: ArkUIHandle,
+    app: OpenHarmonyApp,
+    dom: VirtualDom,
+) -> Result<ArkRuntime> {
+    ArkRuntime::from_virtual_dom(slot, app, dom)
+}
 
-        impl Program for TestProgram {
-            type State = ();
-            type Message = ();
-            type Theme = Theme;
-            type Renderer = ();
-
-            fn boot(&self) -> (Self::State, Task<Self::Message>) {
-                ((), Task::none())
-            }
-
-            fn update(
-                &self,
-                _state: &mut Self::State,
-                _message: Self::Message,
-            ) -> Task<Self::Message> {
-                Task::none()
-            }
-
-            fn view(
-                &self,
-                _state: &Self::State,
-                _window: super::window::Id,
-            ) -> super::Element<Self::Message, Self::Theme, Self::Renderer> {
-                unreachable!("view is not used by this test")
-            }
-        }
-
-        assert!(!TestProgram.back_press(&()).is_intercepted());
-    }
-
-    #[test]
-    fn application_back_press_handler_overrides_default() {
-        let app = application::<_, _, _, _, _, Theme, ()>(
-            || 3,
-            |_state, _message: i32| Task::none(),
-            |_state| unreachable!("view is not used by this test"),
-        )
-        .on_back_press(|state| BackPressDecision::message(*state + 4));
-
-        let BackPressDecision::Intercept(task) = Program::back_press(&app, &3) else {
-            panic!("custom back press handler should intercept");
-        };
-        assert_eq!(task.into_messages(), vec![7]);
-    }
-
-    #[test]
-    fn subscriptions_emit_synchronously_in_batch_order() {
-        fn first() -> [i32; 2] {
-            [1, 2]
-        }
-
-        fn second(seed: &i32) -> [i32; 1] {
-            [*seed]
-        }
-
-        let subscription =
-            Subscription::batch([Subscription::run(first), Subscription::run_with(3, second)])
-                .map(|value| format!("message:{value}"));
-
-        assert_eq!(subscription.units(), 2);
-
-        let emitted = Rc::new(RefCell::new(Vec::new()));
-        let mut handles = Vec::new();
-        for recipe in subscription.into_recipes() {
-            let emitted = emitted.clone();
-            handles.push((recipe.start)(Rc::new(move |message| {
-                emitted.borrow_mut().push(message);
-            })));
-        }
-
-        assert_eq!(
-            emitted.borrow().as_slice(),
-            ["message:1", "message:2", "message:3"]
-        );
-        drop(handles);
-    }
+fn map_arkui_error<E: ToString>(error: E) -> Error {
+    Error::from_reason(error.to_string())
 }

@@ -1,3 +1,5 @@
+//! rust-embed backed asset embedding for the lucide icon set.
+
 use std::sync::OnceLock;
 
 use rust_embed::{EmbeddedFile, RustEmbed};

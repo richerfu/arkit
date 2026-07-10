@@ -1,178 +1,179 @@
-use super::*;
-use std::rc::Rc;
+//! Tabs — shadcn-style tabbed navigation.
+//!
+//! Migrated from the original Elm builder API to dioxus 0.7 `#[component]` +
+//! `rsx!`. Preserves the original tabs-list surface (`muted` background, `lg`
+//! radius, `36.0` height, `3.0` padding), the trigger styling (`30.0` height,
+//! `md` radius, transparent border, active = `background`), and the
+//! visibility-toggled panel stack.
+
+use crate::theme::*;
+use arkit_prelude::*;
 
 const TRANSPARENT: u32 = 0x00000000;
+const TABS_LIST_HEIGHT: f32 = 36.0;
+const TABS_LIST_PADDING: f32 = 3.0;
+const TABS_TRIGGER_HEIGHT: f32 = TABS_LIST_HEIGHT - (TABS_LIST_PADDING * 2.0);
 
-fn tabs<Message: 'static>(
-    tab_labels: Vec<String>,
-    active: usize,
-    on_change: impl Fn(usize) + 'static,
-    panels: Vec<Element<Message>>,
-) -> Element<Message> {
-    arkit::column_component::<Message, arkit::Theme>()
-        .width(arkit::Length::Fill)
-        .children(vec![
-            tabs_list(tab_labels, active, Rc::new(on_change)),
-            arkit::row_component::<Message, arkit::Theme>()
-                .margin([spacing::SM, 0.0, 0.0, 0.0])
-                .children(vec![tabs_content(panels, active)])
-                .into(),
-        ])
-        .into()
+/// Props for [`TabsList`].
+#[derive(Props, Clone, PartialEq)]
+pub struct TabsListProps {
+    pub children: Element,
 }
 
-fn tabs_message<Message>(
-    tab_labels: Vec<String>,
-    active: usize,
-    on_change: impl Fn(usize) -> Message + 'static,
-    panels: Vec<Element<Message>>,
-) -> Element<Message>
-where
-    Message: Send + 'static,
-{
-    tabs(
-        tab_labels,
-        active,
-        move |value| dispatch_message(on_change(value)),
-        panels,
-    )
+/// The rounded container holding tab triggers.
+#[component]
+pub fn TabsList(props: TabsListProps) -> Element {
+    let theme = use_theme();
+    rsx! {
+        row {
+            align_items: "center",
+            justify_content: "center",
+            padding: TABS_LIST_PADDING,
+            height: TABS_LIST_HEIGHT,
+            border_radius: theme.radii.lg,
+            background_color: theme.colors.muted,
+            {props.children}
+        }
+    }
 }
 
-fn tabs_list<Message: 'static>(
-    tab_labels: Vec<String>,
-    active: usize,
-    on_change: Rc<dyn Fn(usize)>,
-) -> Element<Message> {
-    let children = tab_labels
-        .into_iter()
+/// Props for [`TabsTrigger`].
+#[derive(Props, Clone, PartialEq)]
+pub struct TabsTriggerProps {
+    pub label: String,
+    pub active: bool,
+    #[props(default)]
+    pub on_press: EventHandler<()>,
+}
+
+/// A single tab trigger. Highlights with the `background` color when active.
+#[component]
+pub fn TabsTrigger(props: TabsTriggerProps) -> Element {
+    let theme = use_theme();
+    let background = if props.active {
+        theme.colors.background
+    } else {
+        TRANSPARENT
+    };
+    let on_press = props.on_press;
+    rsx! {
+        row {
+            height: TABS_TRIGGER_HEIGHT,
+            align_items: "center",
+            justify_content: "center",
+            padding_top: spacing::XXS,
+            padding_right: spacing::SM,
+            padding_bottom: spacing::XXS,
+            padding_left: spacing::SM,
+            border_radius: theme.radii.md,
+            border_width: 1.0,
+            border_color: TRANSPARENT,
+            background_color: background,
+            onclick: move |_| on_press.call(()),
+            text {
+                content: props.label.clone(),
+                font_size: typography::SM,
+                font_weight: 500,
+                font_color: theme.colors.foreground,
+                line_height: 20.0,
+            }
+        }
+    }
+}
+
+/// Props for [`TabsContent`].
+#[derive(Props, Clone, PartialEq)]
+pub struct TabsContentProps {
+    /// Whether this panel is the active one (others are hidden via `None`).
+    pub active: bool,
+    pub children: Element,
+}
+
+/// A tab panel. Kept mounted; visibility is toggled so layout stays stable.
+#[component]
+pub fn TabsContent(props: TabsContentProps) -> Element {
+    rsx! {
+        column {
+            percent_width: 1.0,
+            visibility: if props.active { 0 } else { 2 },
+            {props.children}
+        }
+    }
+}
+
+/// Props for [`Tabs`].
+#[derive(Props, Clone, PartialEq)]
+pub struct TabsProps {
+    pub labels: Vec<String>,
+    pub panels: Vec<Element>,
+    /// Controlled active index. When `Some`, the tabs are controlled.
+    #[props(default)]
+    pub active: Option<usize>,
+    #[props(default)]
+    pub default_active: usize,
+    #[props(default)]
+    pub on_change: EventHandler<usize>,
+}
+
+/// A complete tabbed container — renders a [`TabsList`] of [`TabsTrigger`]s
+/// and a stack of [`TabsContent`] panels, toggling visibility by active index.
+#[component]
+pub fn Tabs(props: TabsProps) -> Element {
+    let controlled = props.active.is_some();
+    let local = use_signal(|| props.default_active);
+    let active = props.active.unwrap_or_else(|| *local.read());
+    let on_change = props.on_change;
+
+    let triggers: Vec<Element> = props
+        .labels
+        .iter()
         .enumerate()
         .map(|(index, label)| {
-            let is_active = active == index;
-            let on_change = on_change.clone();
-            arkit::row_component::<Message, arkit::Theme>()
-                .height(TABS_TRIGGER_HEIGHT)
-                .align_items_center()
-                .justify_content_center()
-                .padding([spacing::XXS, spacing::SM, spacing::XXS, spacing::SM])
-                .border_radius([radii().md, radii().md, radii().md, radii().md])
-                .border_width([1.0, 1.0, 1.0, 1.0])
-                .border_color(TRANSPARENT)
-                .clear_shadow()
-                .background_color(if is_active {
-                    colors().background
-                } else {
-                    TRANSPARENT
-                })
-                .on_click(move || on_change(index))
-                .children(vec![body_text::<Message>(label)
-                    .font_color(colors().foreground)
-                    .into()])
-                .into()
-        })
-        .collect::<Vec<_>>();
-
-    rounded_tabs_list_surface::<Message>(
-        arkit::row_component::<Message, arkit::Theme>()
-            .align_items_center()
-            .children(children),
-    )
-    .into()
-}
-
-fn tabs_content<Message: 'static>(
-    panels: Vec<Element<Message>>,
-    active: usize,
-) -> Element<Message> {
-    let panel_containers: Vec<Element<Message>> = panels
-        .into_iter()
-        .enumerate()
-        .map(|(index, panel)| {
-            let is_active = active == index;
-            arkit::column_component::<Message, arkit::Theme>()
-                .width(arkit::Length::Fill)
-                .visibility(if is_active {
-                    Visibility::Visible
-                } else {
-                    Visibility::None
-                })
-                .children(vec![panel])
-                .into()
+            let mut local = local;
+            rsx! {
+                TabsTrigger {
+                    key: "{index}",
+                    label: label.clone(),
+                    active: active == index,
+                    on_press: move |_| {
+                        if !controlled {
+                            local.set(index);
+                        }
+                        on_change.call(index);
+                    },
+                }
+            }
         })
         .collect();
 
-    arkit::stack_component::<Message, arkit::Theme>()
-        .width(arkit::Length::Fill)
-        .children(panel_containers)
-        .into()
-}
+    let panels: Vec<Element> = props
+        .panels
+        .iter()
+        .enumerate()
+        .map(|(index, panel)| {
+            rsx! {
+                TabsContent {
+                    key: "{index}",
+                    active: active == index,
+                    {panel.clone()}
+                }
+            }
+        })
+        .collect();
 
-// Struct component API
-pub struct Tabs<Message = ()> {
-    labels: Vec<String>,
-    panels: std::cell::RefCell<Option<Vec<Element<Message>>>>,
-    active: Option<usize>,
-    default_active: usize,
-    on_change: Option<std::rc::Rc<dyn Fn(usize) -> Message>>,
-}
-
-impl<Message> Tabs<Message> {
-    pub fn new(labels: Vec<String>, panels: Vec<Element<Message>>) -> Self {
-        Self {
-            labels,
-            panels: std::cell::RefCell::new(Some(panels)),
-            active: None,
-            default_active: 0,
-            on_change: None,
+    rsx! {
+        column {
+            percent_width: 1.0,
+            TabsList {
+                {triggers.into_iter()}
+            }
+            row {
+                margin_top: spacing::SM,
+                stack {
+                    percent_width: 1.0,
+                    {panels.into_iter()}
+                }
+            }
         }
-    }
-
-    pub fn active(mut self, active: usize) -> Self {
-        self.active = Some(active);
-        self
-    }
-
-    pub fn default_active(mut self, active: usize) -> Self {
-        self.default_active = active;
-        self
-    }
-
-    pub fn on_change(mut self, handler: impl Fn(usize) -> Message + 'static) -> Self {
-        self.on_change = Some(std::rc::Rc::new(handler));
-        self
-    }
-}
-
-impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer>
-    for Tabs<Message>
-{
-    fn body(
-        &self,
-        tree: &mut arkit::advanced::widget::Tree,
-        _renderer: &arkit::Renderer,
-    ) -> Element<Message> {
-        let state = super::widget_state(tree, || self.default_active);
-        let is_controlled = self.active.is_some();
-        let active = self.active.unwrap_or_else(|| *state.borrow());
-        let on_change = self.on_change.clone();
-        tabs(
-            self.labels.clone(),
-            active,
-            move |value| {
-                if !is_controlled {
-                    *state.borrow_mut() = value;
-                    super::request_widget_rerender();
-                }
-                if let Some(on_change) = on_change.as_ref() {
-                    dispatch_message(on_change(value));
-                }
-            },
-            super::take_component_slot(&self.panels, "tabs panels"),
-        )
-    }
-}
-
-impl<Message: Send + 'static> From<Tabs<Message>> for Element<Message> {
-    fn from(value: Tabs<Message>) -> Self {
-        Element::new(value)
     }
 }

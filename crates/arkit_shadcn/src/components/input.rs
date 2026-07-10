@@ -1,99 +1,57 @@
-use super::*;
+//! Input — shadcn-style single-line text input.
+//!
+//! Migrated from the original Elm builder API to dioxus 0.7 `#[component]` +
+//! `rsx!`. Mirrors React Native Reusables native styling: 48px-tall
+//! `TextInput` with an
+//! input-surface shell (1px `input` border, `md` radius, `background` fill),
+//! `lg` font size, and a translucent `muted_foreground` placeholder.
 
-pub(super) fn input<Message: Send + 'static>(
-    placeholder: impl Into<String>,
-) -> TextInputElement<Message> {
-    input_surface(
-        arkit::text_input::<Message, arkit::Theme>(placeholder, "")
-            .placeholder_color(with_alpha(colors().muted_foreground, 0x80))
-            .font_size(typography::MD)
-            .line_height(20.0)
-            .height(40.0),
-    )
+use crate::theme::*;
+use arkit_prelude::*;
+
+use super::ARKUI_BORDER_STYLE_SOLID;
+
+/// Props for [`Input`].
+#[derive(Props, Clone, PartialEq)]
+pub struct InputProps {
+    pub placeholder: Option<String>,
+    pub value: Option<String>,
+    #[props(default)]
+    pub height: Option<f32>,
+    pub percent_width: Option<f32>,
+    pub on_change: Option<EventHandler<String>>,
 }
 
-// Struct component API
-pub struct Input<Message = ()> {
-    placeholder: String,
-    value: Option<String>,
-    width: Option<arkit::Length>,
-    height: Option<arkit::Length>,
-    percent_width: Option<f32>,
-    on_input: Option<std::rc::Rc<dyn Fn(String) -> Message>>,
-}
+/// A single-line text input.
+#[component]
+pub fn Input(props: InputProps) -> Element {
+    let theme = use_theme();
+    let on_change = props.on_change;
 
-impl<Message> Input<Message> {
-    pub fn new(placeholder: impl Into<String>) -> Self {
-        Self {
-            placeholder: placeholder.into(),
-            value: None,
-            width: None,
-            height: None,
-            percent_width: None,
-            on_input: None,
+    rsx! {
+        textinput {
+            value: if let Some(v) = props.value { v },
+            placeholder: if let Some(p) = props.placeholder { p },
+            placeholder_color: with_alpha(theme.colors.muted_foreground, 0x80),
+            caret_color: theme.colors.primary,
+            font_size: typography::LG,
+            line_height: 22.5,
+            height: props.height.unwrap_or(48.0),
+            border_style: ARKUI_BORDER_STYLE_SOLID,
+            border_width: 1.0,
+            border_color: theme.colors.input,
+            border_radius: theme.radii.md,
+            background_color: theme.colors.background,
+            padding_top: spacing::XXS,
+            padding_right: spacing::MD,
+            padding_bottom: spacing::XXS,
+            padding_left: spacing::MD,
+            percent_width: if let Some(w) = props.percent_width { w },
+            on_change: move |evt| {
+                if let Some(handler) = on_change {
+                    handler.call(evt.data().string_value.clone());
+                }
+            },
         }
-    }
-
-    pub fn value(mut self, value: impl Into<String>) -> Self {
-        self.value = Some(value.into());
-        self
-    }
-
-    pub fn width(mut self, width: impl Into<arkit::Length>) -> Self {
-        self.width = Some(width.into());
-        self
-    }
-
-    pub fn height(mut self, height: impl Into<arkit::Length>) -> Self {
-        self.height = Some(height.into());
-        self
-    }
-
-    pub fn percent_width(mut self, value: f32) -> Self {
-        self.percent_width = Some(value);
-        self
-    }
-
-    pub fn on_input(mut self, handler: impl Fn(String) -> Message + 'static) -> Self {
-        self.on_input = Some(std::rc::Rc::new(handler));
-        self
-    }
-
-    pub fn on_change(self, handler: impl Fn(String) -> Message + 'static) -> Self {
-        self.on_input(handler)
-    }
-}
-
-impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer>
-    for Input<Message>
-{
-    fn body(
-        &self,
-        _tree: &mut arkit::advanced::widget::Tree,
-        _renderer: &arkit::Renderer,
-    ) -> Element<Message> {
-        let mut input = input::<Message>(self.placeholder.clone());
-        if let Some(value) = self.value.clone() {
-            input = input.value(value);
-        }
-        if let Some(width) = self.width {
-            input = input.width(width);
-        }
-        if let Some(height) = self.height {
-            input = input.height(height);
-        }
-        if let Some(width) = self.percent_width {
-            input = input.percent_width(width);
-        }
-        if let Some(handler) = self.on_input.clone() {
-            input = input.on_input(move |value| handler(value));
-        }
-        input.into()
-    }
-}
-
-impl<Message: Send + 'static> From<Input<Message>> for Element<Message> {
-    fn from(value: Input<Message>) -> Self {
-        Element::new(value)
     }
 }

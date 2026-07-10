@@ -1,195 +1,287 @@
-use super::*;
-use std::rc::Rc;
+//! Floating overlay primitive — the dioxus counterpart of the legacy
+//! `floating_panel` helper.
+//!
+//! The legacy implementation drove ArkUI's native floating-overlay system
+//! (`floating_overlay_with_surfaces`). In the dioxus migration we render
+//! inline: the trigger is mounted normally, and when `open` a near-transparent
+//! full-size capture layer is stacked over the trigger area; clicking that
+//! layer dismisses the panel (`on_close`), while the panel itself stops
+//! propagation so its own interactions don't dismiss.
+//!
+//! Shared constants/enums here are consumed by the overlay components
+//! (`popover`, `tooltip`, `hover_card`, `dialog`, `drawer`, `sheet`,
+//! `alert_dialog`).
 
-pub type FloatingSide = arkit::FloatingSide;
-pub type FloatingAlign = arkit::FloatingAlign;
-pub(crate) type FloatingSurfaceRegistry = arkit_widget::FloatingSurfaceRegistry;
+use arkit_prelude::*;
+use dioxus_core_macro::component;
 
-const FLOATING_SIDE_OFFSET_VP: f32 = spacing::XXS;
+use crate::theme::spacing;
 
-fn floating_spec(
-    open: bool,
-    side: FloatingSide,
-    align: FloatingAlign,
-    offset_vp: f32,
-    on_dismiss: bool,
-    pass_through_dismiss: bool,
-    match_trigger_width: bool,
-    native: bool,
-) -> arkit::FloatingOverlaySpec {
-    arkit::FloatingOverlaySpec {
-        open,
-        side,
-        align,
-        offset_vp,
-        estimated_panel_size_vp: None,
-        match_trigger_width,
-        backdrop_color: 0x01000000,
-        dismiss_mode: if on_dismiss {
-            if pass_through_dismiss {
-                arkit::OverlayDismissMode::PassThrough
-            } else {
-                arkit::OverlayDismissMode::Backdrop
-            }
-        } else {
-            arkit::OverlayDismissMode::None
-        },
-        strategy: if native {
-            arkit::OverlayStrategy::Native
-        } else {
-            arkit::OverlayStrategy::Portal
-        },
+/// Backdrop color for modal overlays (50% black).
+pub(crate) const OVERLAY_BACKDROP: u32 = 0x80000000u32;
+/// Near-transparent capture layer for floating overlays (legacy used
+/// `0x01000000` so the trigger remains visible underneath).
+pub(crate) const FLOATING_BACKDROP: u32 = 0x01000000u32;
+/// ArkUI `ShadowType::OuterDefaultSm` (small outer shadow).
+pub(crate) const SHADOW_SM: i32 = 1;
+
+// ArkUI `Alignment` enum values (used as the `alignment` int attribute on
+// `stack`).
+pub(crate) const ALIGN_TOP: i32 = 1;
+pub(crate) const ALIGN_START: i32 = 3;
+pub(crate) const ALIGN_END: i32 = 5;
+pub(crate) const ALIGN_BOTTOM: i32 = 7;
+
+/// Side of the trigger the floating panel anchors to.
+///
+/// Maps to an ArkUI `Alignment` int used on the capture-layer `stack`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FloatingSide {
+    Top,
+    #[default]
+    Bottom,
+    Left,
+    Right,
+}
+
+/// Cross-axis alignment of the floating panel relative to the trigger.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FloatingAlign {
+    Start,
+    #[default]
+    Center,
+    End,
+}
+
+/// Resolve a [`FloatingSide`] to its ArkUI `Alignment` int.
+pub(crate) fn side_alignment(side: FloatingSide) -> i32 {
+    match side {
+        FloatingSide::Top => ALIGN_TOP,
+        FloatingSide::Bottom => ALIGN_BOTTOM,
+        FloatingSide::Left => ALIGN_START,
+        FloatingSide::Right => ALIGN_END,
     }
 }
 
-pub(crate) fn floating_panel_aligned<Message: 'static>(
-    trigger: Element<Message>,
-    panel: Element<Message>,
-    open: bool,
-    side: FloatingSide,
-    align: FloatingAlign,
-    on_dismiss: Option<Rc<dyn Fn()>>,
-    pass_through_dismiss: bool,
-    register_surfaces: Vec<FloatingSurfaceRegistry>,
-    dismiss_registry: Option<FloatingSurfaceRegistry>,
-) -> Element<Message> {
-    arkit_widget::floating_overlay_with_surfaces(
-        trigger,
-        if open { Some(panel) } else { None },
-        floating_spec(
-            open,
+/// Resolve a side name (`"top"` / `"bottom"` / `"left"` / `"right"`) to a
+/// [`FloatingSide`]. Falls back to [`FloatingSide::Bottom`].
+pub(crate) fn side_from_name(name: &str) -> FloatingSide {
+    match name.to_ascii_lowercase().as_str() {
+        "top" => FloatingSide::Top,
+        "left" => FloatingSide::Left,
+        "right" => FloatingSide::Right,
+        _ => FloatingSide::Bottom,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct FloatingPanelPlacement {
+    pub x: f32,
+    pub y: f32,
+}
+
+impl FloatingPanelPlacement {
+    pub(crate) fn from_trigger(
+        trigger: arkit_hooks::LayoutFrame,
+        overlay: arkit_hooks::LayoutFrame,
+        panel_width: f32,
+        panel_height: f32,
+        side: FloatingSide,
+        align: FloatingAlign,
+        side_offset: f32,
+    ) -> Self {
+        let ratio = display_vp_ratio();
+        let viewport_width = if overlay.is_measured() {
+            overlay.width / ratio
+        } else {
+            ohos_display_binding::default_display_width() as f32 / ratio
+        }
+        .max(panel_width + (spacing::LG * 2.0));
+
+        let overlay_x = if overlay.is_measured() {
+            overlay.x
+        } else {
+            0.0
+        };
+        let overlay_y = if overlay.is_measured() {
+            overlay.y
+        } else {
+            0.0
+        };
+        let trigger_x = (trigger.x - overlay_x).max(0.0) / ratio;
+        let trigger_y = (trigger.y - overlay_y).max(0.0) / ratio;
+        let trigger_width = trigger.width / ratio;
+        let trigger_height = trigger.height / ratio;
+        let max_x = (viewport_width - panel_width - spacing::LG).max(spacing::LG);
+
+        let raw_x = match align {
+            FloatingAlign::Start => trigger_x,
+            FloatingAlign::Center => trigger_x + ((trigger_width - panel_width) / 2.0),
+            FloatingAlign::End => trigger_x + trigger_width - panel_width,
+        };
+        let raw_y = match side {
+            FloatingSide::Top => trigger_y - panel_height - side_offset,
+            FloatingSide::Bottom => trigger_y + trigger_height + side_offset,
+            FloatingSide::Left | FloatingSide::Right => trigger_y,
+        };
+
+        Self {
+            x: raw_x.clamp(spacing::LG, max_x),
+            y: raw_y.max(spacing::LG),
+        }
+    }
+
+    pub(crate) fn from_pointer(
+        pointer: dioxus_elements::event::PointerPayload,
+        overlay: arkit_hooks::LayoutFrame,
+        panel_width: f32,
+        panel_height: f32,
+        side: FloatingSide,
+        align: FloatingAlign,
+        side_offset: f32,
+    ) -> Option<Self> {
+        let trigger = if pointer.has_target_bounds() {
+            arkit_hooks::LayoutFrame {
+                x: pointer.target_x,
+                y: pointer.target_y,
+                width: pointer.target_width,
+                height: pointer.target_height,
+            }
+        } else if pointer.has_window_position() {
+            arkit_hooks::LayoutFrame {
+                x: pointer.window_x,
+                y: pointer.window_y,
+                width: 1.0,
+                height: 1.0,
+            }
+        } else {
+            return None;
+        };
+        Some(Self::from_trigger(
+            trigger,
+            overlay,
+            panel_width,
+            panel_height,
             side,
             align,
-            FLOATING_SIDE_OFFSET_VP,
-            on_dismiss.is_some(),
-            pass_through_dismiss,
-            false,
-            false,
-        ),
-        on_dismiss,
-        register_surfaces,
-        dismiss_registry,
-    )
+            side_offset,
+        ))
+    }
+
+    pub(crate) fn fallback() -> Self {
+        Self {
+            x: spacing::LG,
+            y: 96.0,
+        }
+    }
 }
 
-pub(crate) fn floating_panel_aligned_with_builder<Message: 'static>(
-    trigger: Element<Message>,
-    open: bool,
-    side: FloatingSide,
-    align: FloatingAlign,
-    offset_vp: f32,
-    panel_builder: Rc<dyn Fn(Option<f32>) -> Element<Message>>,
-    on_dismiss: Option<Rc<dyn Fn()>>,
-    pass_through_dismiss: bool,
-    register_surfaces: Vec<FloatingSurfaceRegistry>,
-    dismiss_registry: Option<FloatingSurfaceRegistry>,
-) -> Element<Message> {
-    arkit_widget::floating_overlay_with_builder_and_surfaces(
-        trigger,
-        floating_spec(
-            open,
-            side,
-            align,
-            offset_vp,
-            on_dismiss.is_some(),
-            pass_through_dismiss,
-            false,
-            false,
-        ),
-        panel_builder,
-        on_dismiss,
-        register_surfaces,
-        dismiss_registry,
-    )
+fn display_vp_ratio() -> f32 {
+    let ratio = ohos_display_binding::default_display_virtual_pixel_ratio();
+    if ratio.is_finite() && ratio > 0.0 {
+        ratio
+    } else {
+        1.0
+    }
 }
 
-pub(crate) fn floating_panel<Message>(
-    trigger: Element<Message>,
-    panel: Element<Message>,
-    open: bool,
-    side: FloatingSide,
-    on_dismiss: Option<Rc<dyn Fn()>>,
-) -> Element<Message>
-where
-    Message: 'static,
-{
-    floating_panel_aligned(
-        trigger,
-        panel,
-        open,
-        side,
-        FloatingAlign::Center,
-        on_dismiss,
-        false,
-        Vec::new(),
-        None,
-    )
+/// Generic floating layer: renders `trigger` and, when open, a capture layer
+/// holding `children` (the panel) aligned to `side`.
+///
+/// `hover` selects the trigger activation mode: when `true`, hovering the
+/// trigger opens the panel (tooltip/hover-card behaviour); otherwise the
+/// trigger toggles on click (popover behaviour). In both cases the capture
+/// layer dismisses on click via `on_close`.
+#[component]
+pub fn FloatingLayer(
+    trigger: Element,
+    open: Option<bool>,
+    default_open: Option<bool>,
+    on_close: Option<EventHandler<()>>,
+    side: Option<FloatingSide>,
+    hover: Option<bool>,
+    children: Element,
+) -> Element {
+    let mut internal = use_signal(|| default_open.unwrap_or(false));
+    let current = match open {
+        Some(v) => v,
+        None => *internal.read(),
+    };
+    let controlled = open.is_some();
+    let hover = hover.unwrap_or(false);
+    let alignment = side_alignment(side.unwrap_or_default());
+
+    let open_up = EventHandler::new(move |_: ()| {
+        if !controlled {
+            internal.set(true);
+        }
+    });
+    let toggle = EventHandler::new(move |_: ()| {
+        let next = !current;
+        if !controlled {
+            internal.set(next);
+        }
+        if !next {
+            if let Some(handler) = on_close {
+                handler.call(());
+            }
+        }
+    });
+    let close = EventHandler::new(move |_: ()| {
+        if !controlled {
+            internal.set(false);
+        }
+        if let Some(handler) = on_close {
+            handler.call(());
+        }
+    });
+
+    rsx! {
+        stack {
+            percent_width: 1.0,
+            percent_height: 1.0,
+            alignment: ALIGN_TOP,
+            if hover {
+                row {
+                    onclick: move |_| toggle.call(()),
+                    on_hover: move |_| open_up.call(()),
+                    {trigger}
+                }
+            } else {
+                row {
+                    onclick: move |_| toggle.call(()),
+                    {trigger}
+                }
+            }
+            if current {
+                stack {
+                    percent_width: 1.0,
+                    percent_height: 1.0,
+                    background_color: FLOATING_BACKDROP,
+                    alignment: alignment,
+                    onclick: move |_| close.call(()),
+                    {children}
+                }
+            }
+        }
+    }
 }
 
-#[allow(dead_code)]
-pub(crate) fn native_floating_panel<Message>(
-    trigger: Element<Message>,
-    panel: Element<Message>,
-    open: bool,
-    side: FloatingSide,
-) -> Element<Message>
-where
-    Message: 'static,
-{
-    native_floating_panel_aligned(trigger, panel, open, side, FloatingAlign::Center)
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[allow(dead_code)]
-pub(crate) fn native_floating_panel_aligned<Message>(
-    trigger: Element<Message>,
-    panel: Element<Message>,
-    open: bool,
-    side: FloatingSide,
-    align: FloatingAlign,
-) -> Element<Message>
-where
-    Message: 'static,
-{
-    arkit::floating_overlay(
-        trigger,
-        if open { Some(panel) } else { None },
-        floating_spec(
-            open,
-            side,
-            align,
-            FLOATING_SIDE_OFFSET_VP,
-            false,
-            false,
-            false,
-            true,
-        ),
-        None,
-    )
-}
+    #[test]
+    fn side_alignment_maps_to_arkui_alignment_ints() {
+        assert_eq!(side_alignment(FloatingSide::Top), ALIGN_TOP);
+        assert_eq!(side_alignment(FloatingSide::Bottom), ALIGN_BOTTOM);
+        assert_eq!(side_alignment(FloatingSide::Left), ALIGN_START);
+        assert_eq!(side_alignment(FloatingSide::Right), ALIGN_END);
+    }
 
-pub(crate) fn floating_panel_with_builder<Message: 'static>(
-    trigger: Element<Message>,
-    open: bool,
-    side: FloatingSide,
-    align: FloatingAlign,
-    panel_builder: Rc<dyn Fn(Option<f32>) -> Element<Message>>,
-    on_dismiss: Option<Rc<dyn Fn()>>,
-) -> Element<Message> {
-    arkit_widget::floating_overlay_with_builder_and_surfaces(
-        trigger,
-        floating_spec(
-            open,
-            side,
-            align,
-            FLOATING_SIDE_OFFSET_VP,
-            on_dismiss.is_some(),
-            false,
-            true,
-            false,
-        ),
-        panel_builder,
-        on_dismiss,
-        Vec::new(),
-        None,
-    )
+    #[test]
+    fn side_from_name_defaults_to_bottom() {
+        assert_eq!(side_from_name("right"), FloatingSide::Right);
+        assert_eq!(side_from_name("nonsense"), FloatingSide::Bottom);
+    }
 }

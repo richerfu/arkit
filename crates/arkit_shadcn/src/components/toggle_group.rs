@@ -1,350 +1,126 @@
+//! ToggleGroup — shadcn-style segmented toggle group.
+//!
+//! Migrated from the original Elm builder API to dioxus 0.7 `#[component]` +
+//! `rsx!`. Preserves the original outline-variant shell (rounded, clipped,
+//! small shadow) and items, single/multiple selection, and the text/icon item
+//! variants. Reuses the shared toggle helpers from [`super::toggle`].
+
+use crate::theme::*;
+use arkit_prelude::*;
+
 use super::toggle::{
     toggle_content_row, toggle_default_size, toggle_icon_size, toggle_surface, toggle_visual_style,
-    ToggleSizeStyle, ToggleVariant,
+    ToggleSurfaceStyle, ToggleVariant,
 };
-use super::*;
 
 const TOGGLE_GROUP_VARIANT: ToggleVariant = ToggleVariant::Outline;
 
-fn toggle_group_border(index: usize) -> [f32; 4] {
-    [1.0, 1.0, 1.0, if index == 0 { 1.0 } else { 0.0 }]
+/// Props for [`ToggleGroup`].
+#[derive(Props, Clone, PartialEq)]
+pub struct ToggleGroupProps {
+    pub options: Vec<String>,
+    /// Controlled selection. When `Some`, the group is controlled.
+    #[props(default)]
+    pub selected: Option<Vec<String>>,
+    #[props(default)]
+    pub default_selected: Vec<String>,
+    /// Render icon-only items (each option is a lucide icon name).
+    #[props(default)]
+    pub icons: bool,
+    /// Allow multiple selections.
+    #[props(default)]
+    pub multi: bool,
+    #[props(default)]
+    pub on_change: EventHandler<Vec<String>>,
 }
 
-fn toggle_group_radius(index: usize, total: usize) -> [f32; 4] {
-    let left_radius = if index == 0 { radii().md } else { 0.0 };
-    let right_radius = if index + 1 == total { radii().md } else { 0.0 };
-    [left_radius, right_radius, left_radius, right_radius]
-}
+/// A segmented group of outline toggles. Supports single/multiple selection
+/// and text/icon item variants.
+#[component]
+pub fn ToggleGroup(props: ToggleGroupProps) -> Element {
+    let theme = use_theme();
+    let controlled = props.selected.is_some();
+    let local = use_signal(|| props.default_selected.clone());
+    let selected: Vec<String> = props
+        .selected
+        .clone()
+        .unwrap_or_else(|| local.read().clone());
 
-fn toggle_group_shell<Message: 'static>(children: Vec<Element<Message>>) -> Element<Message> {
-    shadow_sm(
-        arkit::row_component::<Message, arkit::Theme>()
-            .align_items_center()
-            .border_radius([radii().md, radii().md, radii().md, radii().md])
-            .clip(true)
-            .children(children),
-    )
-    .into()
-}
+    let total = props.options.len();
+    let multi = props.multi;
+    let icons = props.icons;
+    let on_change = props.on_change;
+    let size_style = if icons {
+        toggle_icon_size()
+    } else {
+        toggle_default_size()
+    };
 
-fn toggle_group_item<Message: 'static>(
-    content: Element<Message>,
-    active: bool,
-    index: usize,
-    total: usize,
-    size_style: ToggleSizeStyle,
-) -> ButtonElement<Message> {
-    let border_width = toggle_group_border(index);
-    let border_radius = toggle_group_radius(index, total);
-
-    toggle_surface(
-        content,
-        active,
-        TOGGLE_GROUP_VARIANT,
-        size_style,
-        border_width,
-        border_radius,
-        Some(false),
-    )
-}
-
-fn toggle_group(
-    options: Vec<String>,
-    selected: impl Into<String>,
-    on_select: impl Fn(String) + 'static,
-) -> Element {
-    let selected = selected.into();
-    let on_select = std::rc::Rc::new(on_select);
-    let total = options.len();
-    let children = options
-        .into_iter()
+    let items: Vec<Element> = props
+        .options
+        .iter()
         .enumerate()
-        .map(|(index, item)| {
-            let text = item.clone();
-            let active = selected == text;
-            let on_select = on_select.clone();
-            let size_style = toggle_default_size();
-            let visual = toggle_visual_style(TOGGLE_GROUP_VARIANT, active);
+        .map(|(index, option)| {
+            let active = selected.contains(option);
+            let foreground = toggle_visual_style(TOGGLE_GROUP_VARIANT, active, &theme).foreground;
+            let label_opt = if icons { None } else { Some(option.clone()) };
+            let icon_opt = if icons { Some(option.clone()) } else { None };
+            let content = toggle_content_row(label_opt, icon_opt, foreground, size_style.icon_size);
 
-            toggle_group_item(
-                toggle_content_row(
-                    Some(text.clone()),
-                    None,
-                    visual.foreground,
-                    size_style.icon_size,
-                ),
-                active,
-                index,
-                total,
-                size_style,
-            )
-            .on_click(move || on_select(text.clone()))
-            .into()
-        })
-        .collect::<Vec<_>>();
-
-    toggle_group_shell(children)
-}
-
-fn toggle_group_message<Message>(
-    options: Vec<String>,
-    selected: impl Into<String>,
-    on_select: impl Fn(String) -> Message + 'static,
-) -> Element
-where
-    Message: Send + 'static,
-{
-    toggle_group(options, selected, move |value| {
-        dispatch_message(on_select(value))
-    })
-}
-
-fn toggle_group_icons(
-    options: Vec<String>,
-    selected: impl Into<String>,
-    on_select: impl Fn(String) + 'static,
-) -> Element {
-    let selected = selected.into();
-    let on_select = std::rc::Rc::new(on_select);
-    let total = options.len();
-    let children = options
-        .into_iter()
-        .enumerate()
-        .map(|(index, item)| {
-            let icon_name = item.clone();
-            let active = selected == icon_name;
-            let on_select = on_select.clone();
-            let size_style = toggle_icon_size();
-            let visual = toggle_visual_style(TOGGLE_GROUP_VARIANT, active);
-
-            toggle_group_item(
-                toggle_content_row(
-                    None,
-                    Some(icon_name.clone()),
-                    visual.foreground,
-                    size_style.icon_size,
-                ),
-                active,
-                index,
-                total,
-                size_style,
-            )
-            .on_click(move || on_select(icon_name.clone()))
-            .into()
-        })
-        .collect::<Vec<_>>();
-
-    toggle_group_shell(children)
-}
-
-fn toggle_group_icons_message<Message>(
-    options: Vec<String>,
-    selected: impl Into<String>,
-    on_select: impl Fn(String) -> Message + 'static,
-) -> Element
-where
-    Message: Send + 'static,
-{
-    toggle_group_icons(options, selected, move |value| {
-        dispatch_message(on_select(value))
-    })
-}
-
-fn toggle_group_multi(
-    options: Vec<String>,
-    selected: Vec<String>,
-    on_change: impl Fn(Vec<String>) + 'static,
-) -> Element {
-    let on_change = std::rc::Rc::new(on_change);
-    let total = options.len();
-    let children = options
-        .into_iter()
-        .enumerate()
-        .map(|(index, item)| {
-            let text = item.clone();
-            let active = selected.contains(&text);
-            let on_change = on_change.clone();
-            let selected_values = selected.clone();
-            let size_style = toggle_default_size();
-            let visual = toggle_visual_style(TOGGLE_GROUP_VARIANT, active);
-
-            toggle_group_item(
-                toggle_content_row(
-                    Some(text.clone()),
-                    None,
-                    visual.foreground,
-                    size_style.icon_size,
-                ),
-                active,
-                index,
-                total,
-                size_style,
-            )
-            .on_click(move || {
-                let mut next = selected_values.clone();
-                if let Some(pos) = next.iter().position(|value| value == &text) {
-                    next.remove(pos);
+            let item_radius = {
+                // [top, right, bottom, left] = [left_radius, right_radius, left_radius, right_radius]
+                let left_radius = if index == 0 { theme.radii.md } else { 0.0 };
+                let right_radius = if index + 1 == total {
+                    theme.radii.md
                 } else {
-                    next.push(text.clone());
-                }
-                on_change(next);
-            })
-            .into()
-        })
-        .collect::<Vec<_>>();
+                    0.0
+                };
+                format!("{left_radius},{right_radius},{left_radius},{right_radius}")
+            };
 
-    toggle_group_shell(children)
-}
-
-fn toggle_group_multi_message<Message>(
-    options: Vec<String>,
-    selected: Vec<String>,
-    on_change: impl Fn(Vec<String>) -> Message + 'static,
-) -> Element
-where
-    Message: Send + 'static,
-{
-    toggle_group_multi(options, selected, move |value| {
-        dispatch_message(on_change(value))
-    })
-}
-
-fn toggle_group_icons_multi<Message: Send + 'static>(
-    options: Vec<String>,
-    selected: Vec<String>,
-    on_change: impl Fn(Vec<String>) + 'static,
-) -> Element<Message> {
-    let on_change = std::rc::Rc::new(on_change);
-    let total = options.len();
-    let children = options
-        .into_iter()
-        .enumerate()
-        .map(|(index, item)| {
-            let icon_name = item.clone();
-            let active = selected.contains(&icon_name);
-            let on_change = on_change.clone();
-            let selected_values = selected.clone();
-            let size_style = toggle_icon_size();
-            let visual = toggle_visual_style(TOGGLE_GROUP_VARIANT, active);
-
-            toggle_group_item(
-                toggle_content_row(
-                    None,
-                    Some(icon_name.clone()),
-                    visual.foreground,
-                    size_style.icon_size,
-                ),
-                active,
-                index,
-                total,
-                size_style,
+            let click_value = option.clone();
+            let current_selected = selected.clone();
+            let mut local = local;
+            toggle_surface(
+                content,
+                ToggleSurfaceStyle {
+                    active,
+                    variant: TOGGLE_GROUP_VARIANT,
+                    size: size_style,
+                    border_width: 1.0,
+                    border_radius: item_radius,
+                    shadow: Some(false),
+                },
+                move || {
+                    let next = if multi {
+                        let mut v = current_selected.clone();
+                        if let Some(pos) = v.iter().position(|value| value == &click_value) {
+                            v.remove(pos);
+                        } else {
+                            v.push(click_value.clone());
+                        }
+                        v
+                    } else {
+                        vec![click_value.clone()]
+                    };
+                    if !controlled {
+                        local.set(next.clone());
+                    }
+                    on_change.call(next);
+                },
+                &theme,
             )
-            .on_click(move || {
-                let mut next = selected_values.clone();
-                if let Some(pos) = next.iter().position(|value| value == &icon_name) {
-                    next.remove(pos);
-                } else {
-                    next.push(icon_name.clone());
-                }
-                on_change(next);
-            })
-            .into()
         })
-        .collect::<Vec<_>>();
+        .collect();
 
-    toggle_group_shell::<Message>(children)
-}
-
-fn toggle_group_icons_multi_message<Message>(
-    options: Vec<String>,
-    selected: Vec<String>,
-    on_change: impl Fn(Vec<String>) -> Message + 'static,
-) -> Element<Message>
-where
-    Message: Send + 'static,
-{
-    toggle_group_icons_multi(options, selected, move |value| {
-        dispatch_message(on_change(value))
-    })
-}
-
-// Struct component API
-pub struct ToggleGroup<Message = ()> {
-    options: Vec<String>,
-    selected: Option<Vec<String>>,
-    default_selected: Vec<String>,
-    icons: bool,
-    multi: bool,
-    on_change: Option<std::rc::Rc<dyn Fn(Vec<String>) -> Message>>,
-}
-
-impl<Message> ToggleGroup<Message> {
-    pub fn new(options: Vec<String>) -> Self {
-        Self {
-            options,
-            selected: None,
-            default_selected: Vec::new(),
-            icons: false,
-            multi: false,
-            on_change: None,
+    rsx! {
+        row {
+            align_items: "center",
+            justify_content: "start",
+            border_radius: theme.radii.md,
+            clip: true,
+            shadow: 1,
+            {items.into_iter()}
         }
-    }
-
-    pub fn icons(mut self, icons: bool) -> Self {
-        self.icons = icons;
-        self
-    }
-
-    pub fn multi(mut self, multi: bool) -> Self {
-        self.multi = multi;
-        self
-    }
-
-    pub fn selected(mut self, selected: Vec<String>) -> Self {
-        self.selected = Some(selected);
-        self
-    }
-
-    pub fn default_selected(mut self, selected: Vec<String>) -> Self {
-        self.default_selected = selected;
-        self
-    }
-
-    pub fn on_change(mut self, handler: impl Fn(Vec<String>) -> Message + 'static) -> Self {
-        self.on_change = Some(std::rc::Rc::new(handler));
-        self
-    }
-}
-
-impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer>
-    for ToggleGroup<Message>
-{
-    fn body(
-        &self,
-        tree: &mut arkit::advanced::widget::Tree,
-        _renderer: &arkit::Renderer,
-    ) -> Element<Message> {
-        let state = super::widget_state(tree, || self.default_selected.clone());
-        let is_controlled = self.selected.is_some();
-        let selected = self
-            .selected
-            .clone()
-            .unwrap_or_else(|| state.borrow().clone());
-        let on_change = self.on_change.clone();
-        toggle_group_icons_multi(self.options.clone(), selected, move |value| {
-            if !is_controlled {
-                *state.borrow_mut() = value.clone();
-                super::request_widget_rerender();
-            }
-            if let Some(on_change) = on_change.as_ref() {
-                dispatch_message(on_change(value));
-            }
-        })
-    }
-}
-
-impl<Message: Send + 'static> From<ToggleGroup<Message>> for Element<Message> {
-    fn from(value: ToggleGroup<Message>) -> Self {
-        Element::new(value)
     }
 }

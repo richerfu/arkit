@@ -1,146 +1,56 @@
-# UI 组件
+# 业务 UI 与组件库
 
-## 基础组件
-
-常用 API：
+基础 UI 直接使用 ArkUI element registry：
 
 ```rust
-text("标题")
-button("提交")
-image("...")
-text_input("")
-checkbox(false)
-list_component()
-grid_component()
-```
-
-布局：
-
-```rust
-column_component()
-row_component()
-stack_component()
-scroll_component()
-```
-
-示例：
-
-```rust
-column_component()
-    .percent_width(1.0)
-    .padding(16.0)
-    .children(vec![
-        text("登录").font_size(24.0).into(),
-        text_input("")
-            .margin_top(16.0)
-            .into(),
-        button("提交")
-            .margin_top(16.0)
-            .on_press(Message::Submit)
-            .into(),
-    ])
-    .into()
-```
-
-## 样式
-
-```rust
-text("商品")
-    .font_size(20.0)
-    .font_color(0xFF111827)
-    .line_height(28.0)
-```
-
-```rust
-button("刷新")
-    .padding([8.0, 12.0, 8.0, 12.0])
-    .margin_top(12.0)
-    .border_radius(8.0)
-```
-
-## 抽组件
-
-重复 UI 可抽成普通函数：
-
-```rust
-fn section_title<Message: 'static>(title: impl Into<String>) -> Element<Message> {
-    text(title.into())
-        .font_size(20.0)
-        .line_height(28.0)
-        .into()
+rsx! {
+    column {
+        padding: 16.0,
+        text { font_size: 24.0, "Profile" }
+        button { onclick: move |_| save(), "Save" }
+    }
 }
 ```
 
-带事件：
+属性和事件由 `arkit_elements` 定义，renderer 将它们编码为 declarative desired state。组件应使用标准 `#[component]` props 和 Dioxus composition。
+
+## 事件
+
+事件 handler 修改 signal，renderer 负责把 ArkUI node event 或 gesture 转成 Dioxus event：
 
 ```rust
-fn primary_button<Message>(label: impl Into<String>, message: Message) -> Element<Message>
-where
-    Message: Clone + 'static,
-{
-    button(label.into())
-        .padding([8.0, 12.0, 8.0, 12.0])
-        .on_press(message)
-        .into()
+rsx! {
+    row {
+        onclick: move |_| select_item(),
+        onlongpress: move |_| open_context_menu(),
+        "Long press"
+    }
 }
 ```
 
-## arkit_shadcn
+`onlongpress` 和 `on_long_press` 都表示真实的 ArkUI LongPress Gesture：单指保持约 500ms 后触发一次。普通点击不会触发 long-press handler。组件禁止用 `onclick` 模拟长按；缺少的交互必须在 `arkit_elements` 和 `arkit_arkui` 的事件桥中实现。
 
-引入：
+原生 callback 不同步执行组件 handler。payload 会先进入 runtime event queue，再由 OpenHarmony UI loop 调用 Dioxus handler 并渲染更新，因此 handler 可以安全地修改 signal 或切换大块 subtree。
 
-```rust
-use arkit_shadcn::prelude::*;
-```
-
-按钮：
+`arkit_shadcn` 提供 theme context 与业务组件：
 
 ```rust
-Button::new("提交")
-    .variant(ButtonVariant::Default)
-    .size(ButtonSize::Default)
-    .on_press(Message::Submit)
+rsx! {
+    ThemeProvider {
+        theme: Theme::default(),
+        Button { "Submit" }
+    }
+}
 ```
 
-带图标：
+需要组件内部可变主题时使用 `use_theme_provider`；普通子组件通过 `use_theme` 读取。实际设备覆盖见 `examples/shadcn_showcase`。
 
-```rust
-Button::with_icon("保存", "save")
-    .on_press(Message::Save)
-```
+## Overlay 与受控状态
 
-卡片：
+浮层统一通过应用级 `OverlayRoot` 渲染，内容仍处于当前 Dioxus tree。菜单、Popover、HoverCard 等组件不得创建第二个 VirtualDom，也不得把首次打开时生成的 `Element` 当作永久内容快照。
 
-```rust
-Card::new(vec![
-    CardHeader::new("标题", "描述").into(),
-    CardContent::new(vec![
-        Text::new("内容").into(),
-    ]).into(),
-])
-```
+受控 menu entry 在浮层保持打开时必须立即反映最新 props，例如 checkbox/radio 点击后马上更新选中标记。共享菜单实现使用 overlay session 重新发布同一个 subtree，同时保留 submenu 的本地 hook 状态。
 
-主题：
+## Row/Column 对齐
 
-```rust
-arkit_shadcn::theme::with_theme(
-    arkit_shadcn::theme::Theme::default(),
-    || {
-        Card::new(vec![
-            Text::new("商品").into(),
-            Button::new("刷新")
-                .on_press(Message::Refresh)
-                .into(),
-        ])
-        .into()
-    },
-)
-```
-
-## 选择
-
-| 需求 | 使用 |
-| --- | --- |
-| 快速写页面 | 基础组件 |
-| 复用 UI | 函数组件 |
-| 统一视觉风格 | `arkit_shadcn` |
+ArkUI `Row` / `Column` 的 native 默认值不等于所有 shadcn 布局的设计默认值。组件内容需要左对齐时应显式写出 `align_items: "start"`；有固定宽度或会换行的 Text 还应显式使用 `text_align: 0`。不要依赖外层浮层的 start 对齐跨越多层容器自动生效。

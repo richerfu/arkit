@@ -1,238 +1,91 @@
-use super::label::label;
-use super::*;
-use arkit_icon as lucide;
-use std::rc::Rc;
+//! Checkbox — shadcn-style checkbox.
+//!
+//! Migrated from the original Elm builder API to dioxus 0.7 `#[component]` +
+//! `rsx!`. Matches the React Native Reusables primitive: a 16x16 indicator
+//! with `sm` radius, 1px primary border, primary fill only when checked, and a
+//! 16px `check` lucide icon in `primary_foreground`. Supports
+//! controlled/uncontrolled state, a custom selected color, `disabled`, an
+//! optional label, and `on_change`.
+
+use super::ARKUI_BORDER_STYLE_SOLID;
+use crate::theme::*;
+use arkit_prelude::*;
 
 const CHECKBOX_SIZE: f32 = 16.0;
 const CHECKBOX_BORDER_WIDTH: f32 = 1.0;
-const CHECKBOX_ICON_SIZE: f32 = 12.0;
-const CHECKBOX_ICON_STROKE_WIDTH: f32 = 3.5;
+const CHECKBOX_ICON_SIZE: f32 = 16.0;
+const ALIGN_CENTER: i32 = 4;
 
-#[derive(Debug, Clone, Copy)]
-struct CheckboxStyle {
-    checked_color: u32,
-    disabled: bool,
+/// Props for [`Checkbox`].
+#[derive(Props, Clone, PartialEq)]
+pub struct CheckboxProps {
+    pub label: Option<String>,
+    pub checked: Option<bool>,
+    pub default_checked: Option<bool>,
+    pub checked_color: Option<u32>,
+    pub disabled: Option<bool>,
+    pub on_change: Option<EventHandler<bool>>,
 }
 
-fn checkbox_indicator<Message: 'static>(checked: bool, style: CheckboxStyle) -> Element<Message> {
-    let mut indicator = shadow_sm(
-        arkit::row_component::<Message, arkit::Theme>()
-            .width(CHECKBOX_SIZE)
-            .height(CHECKBOX_SIZE)
-            .align_items_center()
-            .justify_content_center()
-            .border_radius([radii().sm, radii().sm, radii().sm, radii().sm])
-            .border_width([
-                CHECKBOX_BORDER_WIDTH,
-                CHECKBOX_BORDER_WIDTH,
-                CHECKBOX_BORDER_WIDTH,
-                CHECKBOX_BORDER_WIDTH,
-            ])
-            .border_color(if checked {
-                style.checked_color
-            } else {
-                colors().input
-            })
-            .clip(true)
-            .background_color(if checked {
-                style.checked_color
-            } else {
-                colors().background
-            }),
-    );
+/// A checkbox with an optional label.
+#[component]
+pub fn Checkbox(props: CheckboxProps) -> Element {
+    let theme = use_theme();
+    let mut internal = use_signal(|| props.default_checked.unwrap_or(false));
+    let controlled = props.checked.is_some();
+    let current = props.checked.unwrap_or_else(|| *internal.read());
+    let checked_color = props.checked_color.unwrap_or(theme.colors.primary);
+    let disabled = props.disabled.unwrap_or(false);
+    let on_change = props.on_change;
+    let label = props.label.clone();
 
-    if checked {
-        indicator = indicator.children(vec![lucide::icon("check")
-            .size(CHECKBOX_ICON_SIZE)
-            .stroke_width(CHECKBOX_ICON_STROKE_WIDTH)
-            .color(colors().primary_foreground)
-            .render::<Message, arkit::Theme>()]);
-    }
-
-    indicator.into()
-}
-
-fn checkbox_impl<Message: 'static>(
-    label_text: String,
-    checked: bool,
-    on_toggle: Option<Rc<dyn Fn(bool)>>,
-    style: CheckboxStyle,
-) -> Element<Message> {
-    let mut children = vec![checkbox_indicator::<Message>(checked, style)];
-
-    if !label_text.is_empty() {
-        children.push(
-            arkit::row_component::<Message, arkit::Theme>()
-                .align_items_center()
-                .margin([0.0, 0.0, 0.0, spacing::SM])
-                .children(vec![label(label_text).into()])
-                .into(),
-        );
-    }
-
-    let mut root = arkit::row_component::<Message, arkit::Theme>()
-        .align_items_center()
-        .children(children);
-
-    if let Some(on_toggle) = on_toggle {
-        if !style.disabled {
-            root = root.on_click(move || on_toggle(!checked));
-        }
-    }
-
-    if style.disabled {
-        root = root.opacity(0.5_f32);
-    }
-
-    root.into()
-}
-
-fn checkbox_message<Message>(
-    label: impl Into<String>,
-    checked: bool,
-    on_toggle: impl Fn(bool) -> Message + 'static,
-) -> Element<Message>
-where
-    Message: Send + 'static,
-{
-    checkbox_impl(
-        label.into(),
-        checked,
-        Some(Rc::new(move |value| dispatch_message(on_toggle(value)))),
-        CheckboxStyle {
-            checked_color: colors().primary,
-            disabled: false,
-        },
-    )
-}
-
-fn checkbox_with_checked_color_message<Message>(
-    label: impl Into<String>,
-    checked: bool,
-    on_toggle: impl Fn(bool) -> Message + 'static,
-    checked_color: u32,
-) -> Element<Message>
-where
-    Message: Send + 'static,
-{
-    checkbox_impl(
-        label.into(),
-        checked,
-        Some(Rc::new(move |value| dispatch_message(on_toggle(value)))),
-        CheckboxStyle {
-            checked_color,
-            disabled: false,
-        },
-    )
-}
-
-fn disabled_checkbox<Message: 'static>(
-    label: impl Into<String>,
-    checked: bool,
-) -> Element<Message> {
-    checkbox_impl(
-        label.into(),
-        checked,
-        None,
-        CheckboxStyle {
-            checked_color: colors().primary,
-            disabled: true,
-        },
-    )
-}
-
-// Struct component API
-pub struct Checkbox<Message = ()> {
-    label: String,
-    checked: Option<bool>,
-    default_checked: bool,
-    checked_color: Option<u32>,
-    disabled: bool,
-    on_change: Option<std::rc::Rc<dyn Fn(bool) -> Message>>,
-}
-
-impl<Message> Checkbox<Message> {
-    pub fn new(label: impl Into<String>) -> Self {
-        Self {
-            label: label.into(),
-            checked: None,
-            default_checked: false,
-            checked_color: None,
-            disabled: false,
-            on_change: None,
-        }
-    }
-
-    pub fn checked(mut self, checked: bool) -> Self {
-        self.checked = Some(checked);
-        self
-    }
-
-    pub fn default_checked(mut self, checked: bool) -> Self {
-        self.default_checked = checked;
-        self
-    }
-
-    pub fn checked_color(mut self, color: u32) -> Self {
-        self.checked_color = Some(color);
-        self
-    }
-
-    pub fn disabled(mut self, disabled: bool) -> Self {
-        self.disabled = disabled;
-        self
-    }
-
-    pub fn on_change(mut self, handler: impl Fn(bool) -> Message + 'static) -> Self {
-        self.on_change = Some(std::rc::Rc::new(handler));
-        self
-    }
-
-    pub fn on_toggle(self, handler: impl Fn(bool) -> Message + 'static) -> Self {
-        self.on_change(handler)
-    }
-}
-
-impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer>
-    for Checkbox<Message>
-{
-    fn body(
-        &self,
-        tree: &mut arkit::advanced::widget::Tree,
-        _renderer: &arkit::Renderer,
-    ) -> Element<Message> {
-        let state = super::widget_state(tree, || self.default_checked);
-        let is_controlled = self.checked.is_some();
-        let checked = self.checked.unwrap_or_else(|| *state.borrow());
-        let style = CheckboxStyle {
-            checked_color: self.checked_color.unwrap_or_else(|| colors().primary),
-            disabled: self.disabled,
-        };
-
-        if self.disabled {
-            return checkbox_impl(self.label.clone(), checked, None, style);
-        }
-
-        let handler = self.on_change.clone();
-        checkbox_impl(
-            self.label.clone(),
-            checked,
-            Some(std::rc::Rc::new(move |value| {
-                if !is_controlled {
-                    *state.borrow_mut() = value;
-                    super::request_widget_rerender();
+    rsx! {
+        row {
+            align_items: "center",
+            justify_content: "start",
+            opacity: if disabled { 0.5 } else { 1.0 },
+            onclick: move |_| {
+                if disabled {
+                    return;
                 }
-                if let Some(handler) = handler.as_ref() {
-                    dispatch_message(handler(value));
+                let next = !current;
+                if !controlled {
+                    internal.set(next);
                 }
-            })),
-            style,
-        )
-    }
-}
-
-impl<Message: Send + 'static> From<Checkbox<Message>> for Element<Message> {
-    fn from(value: Checkbox<Message>) -> Self {
-        Element::new(value)
+                if let Some(handler) = on_change {
+                    handler.call(next);
+                }
+            },
+            stack {
+                width: CHECKBOX_SIZE,
+                height: CHECKBOX_SIZE,
+                alignment: ALIGN_CENTER,
+                border_radius: theme.radii.sm,
+                border_width: CHECKBOX_BORDER_WIDTH,
+                border_style: ARKUI_BORDER_STYLE_SOLID,
+                border_color: checked_color,
+                background_color: if current { checked_color } else { theme.colors.background },
+                clip: true,
+                if current {
+                    {arkit_icon::icon(
+                        "check",
+                        CHECKBOX_ICON_SIZE,
+                        theme.colors.primary_foreground,
+                    )}
+                }
+            }
+            if let Some(text) = label.as_ref() {
+                row {
+                    margin_left: spacing::SM,
+                    text {
+                        content: text.clone(),
+                        font_size: typography::SM,
+                        font_weight: 500,
+                        font_color: theme.colors.foreground,
+                        text_align: 0,
+                    }
+                }
+            }
+        }
     }
 }

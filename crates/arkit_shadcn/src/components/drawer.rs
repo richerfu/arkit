@@ -1,80 +1,105 @@
-use super::*;
-use std::rc::Rc;
+//! Drawer — a panel that slides in from a screen side (default: bottom).
+//!
+//! Migrated from the legacy Elm builder API. The `side` prop (`"top"` /
+//! `"bottom"` / `"left"` / `"right"`) selects the capture-layer alignment
+//! (left=3, right=5, top=1, bottom=7). The panel preserves the original
+//! styling: `DRAWER_MAX_WIDTH` 640 cap, `spacing` padding
+//! (`[LG, XXL, XXL, XXL]`), `lg` radius, 1px top border, `background`/`border`
+//! tokens, small outer shadow, and a 40×4 drag handle (full radius,
+//! `muted_foreground` at 0.4 opacity) that dismisses on tap.
+
+use super::dialog::DialogHeader;
+use super::floating_layer::{side_alignment, side_from_name, OVERLAY_BACKDROP, SHADOW_SM};
+use crate::theme::*;
+use arkit_prelude::*;
+use dioxus_core_macro::component;
 
 const DRAWER_MAX_WIDTH: f32 = 640.0;
 
-fn drawer<Message>(
-    title: impl Into<String>,
-    open: bool,
-    on_open_change: impl Fn(bool) -> Message + 'static,
-    content: Vec<Element<Message>>,
-) -> Element<Message>
-where
-    Message: Send + 'static,
-{
-    let title = title.into();
-    let dismiss = Rc::new(move || dispatch_message(on_open_change(false)));
+/// Drawer panel anchored to a screen side.
+#[component]
+pub fn Drawer(
+    title: String,
+    side: Option<String>,
+    open: Option<bool>,
+    default_open: Option<bool>,
+    on_close: Option<EventHandler<()>>,
+    children: Element,
+) -> Element {
+    let theme = use_theme();
+    let mut internal = use_signal(|| default_open.unwrap_or(false));
+    let current = match open {
+        Some(v) => v,
+        None => *internal.read(),
+    };
+    let controlled = open.is_some();
+    let side = side_from_name(side.as_deref().unwrap_or("bottom"));
+    let alignment = side_alignment(side);
 
-    arkit::modal_overlay(
-        if open {
-            Some(
-                shadow_sm(
-                    arkit::stack_component::<Message, arkit::Theme>()
-                        .percent_width(1.0)
-                        .max_width_constraint(DRAWER_MAX_WIDTH)
-                        .padding([spacing::LG, spacing::XXL, spacing::XXL, spacing::XXL])
-                        .border_radius([radii().lg, radii().lg, 0.0, 0.0])
-                        .border_width([1.0, 0.0, 0.0, 0.0])
-                        .border_color(colors().border)
-                        .background_color(colors().background)
-                        .children(vec![arkit::column_component::<Message, arkit::Theme>()
-                            .percent_width(1.0)
-                            .children(vec![
-                                arkit::row_component::<Message, arkit::Theme>()
-                                    .percent_width(1.0)
-                                    .height(24.0)
-                                    .justify_content(JustifyContent::Center)
-                                    .align_items_center()
-                                    .on_click({
-                                        let dismiss = dismiss.clone();
-                                        move || dismiss()
-                                    })
-                                    .children(vec![arkit::row_component::<Message, arkit::Theme>()
-                                        .width(40.0)
-                                        .height(4.0)
-                                        .border_radius([
-                                            radii().full,
-                                            radii().full,
-                                            radii().full,
-                                            radii().full,
-                                        ])
-                                        .background_color(colors().muted_foreground)
-                                        .opacity(0.4_f32)
-                                        .into()])
-                                    .into(),
-                                arkit::column_component::<Message, arkit::Theme>()
-                                    .margin([spacing::LG, 0.0, 0.0, 0.0])
-                                    .children(vec![super::dialog::dialog_header(title, "")])
-                                    .into(),
-                                arkit::column_component::<Message, arkit::Theme>()
-                                    .margin([spacing::LG, 0.0, 0.0, 0.0])
-                                    .children(vec![stack(content, spacing::LG)])
-                                    .into(),
-                            ])
-                            .into()]),
-                )
-                .into(),
-            )
-        } else {
-            None
-        },
-        arkit::ModalOverlaySpec {
-            open,
-            presentation: arkit::ModalPresentation::BottomDrawer,
-            dismiss_on_backdrop: true,
-            backdrop_color: 0x80000000,
-            viewport_inset: 0.0,
-        },
-        Some(dismiss),
-    )
+    let close = EventHandler::new(move |_: ()| {
+        if !controlled {
+            internal.set(false);
+        }
+        if let Some(handler) = on_close {
+            handler.call(());
+        }
+    });
+
+    if !current {
+        return rsx! {};
+    }
+
+    rsx! {
+        stack {
+            percent_width: 1.0,
+            percent_height: 1.0,
+            background_color: OVERLAY_BACKDROP,
+            alignment: alignment,
+            onclick: move |_| close.call(()),
+            stack {
+                onclick: move |evt| { evt.stop_propagation(); },
+                percent_width: 1.0,
+                width: DRAWER_MAX_WIDTH,
+                padding_top: spacing::LG,
+                padding_right: spacing::XXL,
+                padding_bottom: spacing::XXL,
+                padding_left: spacing::XXL,
+                border_radius: theme.radii.lg,
+                border_width: 1.0,
+                border_color: theme.colors.border,
+                background_color: theme.colors.background,
+                shadow: SHADOW_SM,
+                column {
+                    percent_width: 1.0,
+                    row {
+                        percent_width: 1.0,
+                        height: 24.0,
+                        justify_content: "center",
+                        align_items: "center",
+                        onclick: move |_| close.call(()),
+                        row {
+                            width: 40.0,
+                            height: 4.0,
+                            border_radius: theme.radii.full,
+                            background_color: theme.colors.muted_foreground,
+                            opacity: 0.4_f32,
+                        }
+                    }
+                    column {
+                        percent_width: 1.0,
+                        margin_top: spacing::LG,
+                        DialogHeader {
+                            title: title,
+                            description: String::new(),
+                        }
+                    }
+                    column {
+                        percent_width: 1.0,
+                        margin_top: spacing::LG,
+                        {children}
+                    }
+                }
+            }
+        }
+    }
 }

@@ -4,13 +4,12 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
-[features]
-default = ["api-22"]
-api-22 = []
-
 [dependencies]
-arkit_core.workspace = true
-arkit_futures.workspace = true
-
-[dev-dependencies]
+arkit_arkui.workspace = true
+arkit_elements.workspace = true
+dioxus-core.workspace = true
+ohos-arkui-binding.workspace = true
+ohos-hilog-binding.workspace = true
+openharmony-ability = { workspace = true, features = ["webview"] }
+napi-ohos.workspace = true
 tokio.workspace = true

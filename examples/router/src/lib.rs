@@ -1,88 +1,86 @@
+//! Router example — dioxus-router with enum-based routes and full-screen page
+//! switching. Navigation via arkit's ArkUI-native `<Link>` (renders as styled
+//! clickable text, not a button or HTML anchor).
+
 use arkit::entry;
-use arkit::router::{
-    NavigationEvent, RouteGuardContext, RouteGuardDecision, Router, RouterMessage,
-    RouterNavigationExt, RouterOutlet, Routes,
-};
-use arkit::{application, Element, Task};
-use std::time::Duration;
+use arkit::prelude::*;
+use arkit::router::{Link, Routable, RouteTransition, Router};
+use dioxus_core::VNode;
 
-mod components;
-mod pages;
-mod routes;
-
-use pages::{HomePage, NotFoundPage, SettingsPage, UserLayout, UserPage, UserSettingsPage};
-
-#[derive(Debug, Clone)]
-enum Message {
-    Router(RouterMessage),
-}
-
-#[derive(Clone)]
-struct AppState {
-    router: Router,
-    last_navigation: Option<NavigationEvent>,
-}
-
-impl Default for AppState {
-    fn default() -> Self {
-        Self {
-            router: Router::new("/users/7?tab=profile"),
-            last_navigation: None,
-        }
-    }
-}
-
-fn update(state: &mut AppState, message: Message) -> Task<Message> {
-    match message {
-        Message::Router(RouterMessage::Event(event)) => {
-            state.last_navigation = Some(event);
-            Task::none()
-        }
-        Message::Router(message) => state.router.handle(message, Message::Router),
-    }
-}
-
-fn user_settings_guard(
-    context: RouteGuardContext,
-) -> impl std::future::Future<Output = RouteGuardDecision> + Send {
-    async move {
-        tokio::time::sleep(Duration::from_millis(250)).await;
-        if context.to.param("id") == Some("0") {
-            RouteGuardDecision::Redirect("/users/7".to_string())
-        } else {
-            RouteGuardDecision::Allow
-        }
-    }
-}
-
-fn view(state: &AppState) -> Element<Message> {
-    RouterOutlet::new(
-        state.router.clone(),
-        Routes::new()
-            .route("/", |context| Element::new(HomePage::new(context)))
-            .nest(
-                "/users/:id",
-                |context, outlet| Element::new(UserLayout::new(context, outlet)),
-                |users| {
-                    users
-                        .index(|context| Element::new(UserPage::new(context)))
-                        .guard_async(user_settings_guard, |guarded| {
-                            guarded.route("settings", |context| {
-                                Element::new(UserSettingsPage::new(context))
-                            })
-                        })
-                },
-            )
-            .route("/settings", |context| {
-                Element::new(SettingsPage::new(context))
-            })
-            .fallback("*rest", |context| Element::new(NotFoundPage::new(context))),
-    )
-    .into()
+#[derive(Routable, Clone, PartialEq, Debug)]
+enum Route {
+    #[route("/")]
+    Home {},
+    #[route("/settings")]
+    Settings {},
+    #[route("/users/:id")]
+    Users { id: u32 },
 }
 
 #[entry]
-fn app() -> impl arkit::EntryPoint {
-    application(AppState::default, update, view)
-        .on_back_press(|state| state.router.handle_system_back(Message::Router))
+fn app() -> Element {
+    rsx! {
+        Router::<Route> {}
+    }
+}
+
+#[component]
+fn Home() -> Element {
+    rsx! {
+        RouteTransition::<Route> {
+            column {
+                percent_width: 1.0,
+                percent_height: 1.0,
+                align_items: "center",
+                justify_content: "center",
+                background_color: "#fffef3c7",
+
+                text { font_size: 32.0, "Home" }
+                text { margin_top: 12.0, font_size: 16.0, "Full-screen home page" }
+
+                Link { to: Route::Settings {}, "Go to Settings →" }
+                Link { to: Route::Users { id: 42 }, "Go to User 42 →" }
+            }
+        }
+    }
+}
+
+#[component]
+fn Settings() -> Element {
+    rsx! {
+        RouteTransition::<Route> {
+            column {
+                percent_width: 1.0,
+                percent_height: 1.0,
+                align_items: "center",
+                justify_content: "center",
+                background_color: "#ffe0f2fe",
+
+                text { font_size: 32.0, "Settings" }
+                text { margin_top: 12.0, font_size: 16.0, "Full-screen settings page" }
+
+                Link { to: Route::Home {}, "← Back to Home" }
+            }
+        }
+    }
+}
+
+#[component]
+fn Users(id: u32) -> Element {
+    rsx! {
+        RouteTransition::<Route> {
+            column {
+                percent_width: 1.0,
+                percent_height: 1.0,
+                align_items: "center",
+                justify_content: "center",
+                background_color: "#fffdf2f8",
+
+                text { font_size: 32.0, "User {id}" }
+                text { margin_top: 12.0, font_size: 16.0, "Full-screen user detail page" }
+
+                Link { to: Route::Home {}, "← Back to Home" }
+            }
+        }
+    }
 }

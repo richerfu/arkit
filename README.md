@@ -1,112 +1,75 @@
 # arkit
 
-`arkit` is an ArkUI framework for OpenHarmony.
-
-It is built on top of local `ohos-native-bindings`, integrates with
-`openharmony-ability`, and uses an `iced`-style programming model:
-
-- application state lives in `State`
-- rendering is `view(&State) -> Element`
-- side effects flow through `Task<Message>` and `Subscription<Message>`
-
-## Taste
+`arkit` is a Dioxus 0.7 native renderer for OpenHarmony ArkUI. Applications use normal Dioxus components, `rsx!`, signals, hooks, async resources, and `dioxus-router`; the framework translates Dioxus mutations into ArkUI native nodes.
 
 ```rust
 use arkit::prelude::*;
-use arkit::{application, Element, Task};
-
-#[derive(Debug, Clone)]
-enum Message {
-    Increment,
-}
-
-#[derive(Default)]
-struct State {
-    count: i32,
-}
-
-fn update(state: &mut State, message: Message) -> Task<Message> {
-    match message {
-        Message::Increment => state.count += 1,
-    }
-
-    Task::none()
-}
-
-fn view(state: &State) -> Element<Message> {
-    column_component()
-        .percent_width(1.0)
-        .percent_height(1.0)
-        .align_items_center()
-        .justify_content_center()
-        .children(vec![
-            text(format!("count = {}", state.count))
-                .font_size(28.0)
-                .line_height(32.0)
-                .into(),
-            button("increment")
-                .margin_top(12.0)
-                .padding([8.0, 12.0, 8.0, 12.0])
-                .on_press(Message::Increment)
-                .into(),
-        ])
-        .into()
-}
 
 #[entry]
-fn app() -> impl arkit::EntryPoint {
-    application(State::default, update, view)
+fn app() -> Element {
+    let mut count = use_signal(|| 0);
+
+    rsx! {
+        column {
+            percent_width: 1.0,
+            percent_height: 1.0,
+            align_items: "center",
+            justify_content: "center",
+
+            text { font_size: 28.0, "count = {count}" }
+            button {
+                margin_top: 12.0,
+                onclick: move |_| count += 1,
+                "increment"
+            }
+        }
+    }
 }
 ```
 
 The complete runnable version is in [examples/counter](examples/counter/src/lib.rs).
 
-## Feature Flags
+## Architecture
 
-- `api-22`: baseline OHOS API level, enabled by default
-- `webview`: enables embedded webview support through `openharmony-ability`
+- `arkit`: public facade, prelude, and `#[entry]` launch wrapper.
+- `arkit_runtime`: owns the Dioxus `VirtualDom`, connects the scheduler to the OpenHarmony event loop, queues native events before Dioxus dispatch, and hosts embedded WebView state.
+- `arkit_arkui`: owns the HostTree projection, declarative attribute encoding, native node-event/gesture bridge, ArkUI node creation, image resources, and virtual adapters.
+- `arkit_elements`: the ArkUI `dioxus_elements` registry used by `rsx!`.
+- `arkit_hooks`: Dioxus hooks for native-node access, layout, overlays, and virtual lists.
+- `arkit_router`, `arkit_i18n`, `arkit_animation`, `arkit_icon`, `arkit_shadcn`: Dioxus-native framework capabilities.
+
+There is no parallel Element tree or message/update runtime. Dioxus owns component identity, hooks, diffing, task scheduling, and routing.
 
 ## Examples
 
-- `examples/counter`: minimal state + button update example
-- `examples/async_task`: `Task::perform` example
-- `examples/webview`: embedded webview example behind the `webview` feature
-- `examples/shadcn_showcase`: UI showcase built with `arkit_shadcn`
-
-## Workspace
-
-- `crates/arkit`: facade crate and public re-exports
-- `crates/arkit_widget`: widget tree, renderer, overlays, and ArkUI bindings glue
-- `crates/arkit_runtime`: application runtime, task execution, and subscriptions
-- `crates/arkit_derive`: `#[entry]` and `#[component]`
-- `crates/arkit_shadcn`: shadcn-style components on top of `arkit`
+- `examples/counter`: signals and native events.
+- `examples/async_task`: `use_resource` with a Tokio-backed future.
+- `examples/router`: typed `dioxus-router` routes and ArkUI links.
+- `examples/i18n`: reactive locale context.
+- `examples/complex_cases`: ArkUI NodeAdapter virtualization.
+- `examples/shadcn_showcase`: component and theme showcase.
+- `examples/webview`: embedded WebView controlled from Dioxus.
 
 ## Building
 
-Build an example from its crate directory with `ohrs`:
+Format the Rust workspace:
+
+```sh
+cargo fmt --all -- --check
+```
+
+OpenHarmony validation must use the project toolchain from the example directory:
 
 ```sh
 cd examples/counter
 ohrs build --arch aarch
 ```
 
-For webview examples, enable the `webview` feature in the crate dependency:
+`cargo check` is useful as a host-side diagnostic, but it does not replace an `ohrs` build. Package and deploy one example at a time through `app/run.sh` after its `ohrs` build succeeds.
 
-```toml
-arkit = { workspace = true, features = ["webview"] }
-```
-
-## Documentation
-
-The framework documentation is built with VitePress:
+Documentation uses VitePress:
 
 ```sh
 pnpm install
 pnpm run docs:dev
-```
-
-Static output:
-
-```sh
-pnpm run docs:build
 ```

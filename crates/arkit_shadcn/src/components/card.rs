@@ -1,183 +1,182 @@
-use super::*;
+//! Card — shadcn-style surface container.
+//!
+//! Migrated from the original Elm builder API to dioxus 0.7 `#[component]` +
+//! `rsx!`. Mirrors React Native Reusables: the card shell owns only surface
+//! styling, while Header/Content/Footer own their own `p-6` padding.
 
-pub(super) fn card<Message: 'static>(children: Vec<Element<Message>>) -> Element<Message> {
-    card_surface(
-        arkit::column_component::<Message, arkit::Theme>()
-            .width(arkit::Length::Fill)
-            .children(vec![stack(children, spacing::XXL)]),
-    )
-    .into()
+use crate::theme::*;
+use arkit_prelude::*;
+
+/// A card surface container. Wraps its children in a bordered, rounded,
+/// shadowed column with the theme's `card` background.
+#[derive(Props, Clone, PartialEq)]
+pub struct CardProps {
+    pub children: Element,
 }
 
-fn card_header<Message: 'static>(
-    title: impl Into<String>,
-    description: impl Into<String>,
-) -> Element<Message> {
-    arkit::row_component::<Message, arkit::Theme>()
-        .width(arkit::Length::Fill)
-        .children(vec![arkit::column_component::<Message, arkit::Theme>()
-            .width(arkit::Length::Fill)
-            .padding([0.0, spacing::XXL, 0.0, spacing::XXL])
-            .children(vec![
-                card_title(title),
-                arkit::row_component::<Message, arkit::Theme>()
-                    .margin_top(spacing::XS)
-                    .children(vec![card_description(description)])
-                    .into(),
-            ])
-            .into()])
-        .into()
-}
-
-fn card_title<Message: 'static>(content: impl Into<String>) -> Element<Message> {
-    arkit::text::<Message, arkit::Theme>(content)
-        .font_size(typography::MD)
-        .font_weight(FontWeight::W600)
-        .font_color(colors().foreground)
-        .line_height(16.0)
-        .text_letter_spacing(-0.2_f32)
-        .into()
-}
-
-fn card_description<Message: 'static>(content: impl Into<String>) -> Element<Message> {
-    muted_text(content).into()
-}
-
-fn card_content<Message: 'static>(children: Vec<Element<Message>>) -> Element<Message> {
-    arkit::column_component::<Message, arkit::Theme>()
-        .width(arkit::Length::Fill)
-        .padding([0.0, spacing::XXL, 0.0, spacing::XXL])
-        .children(children)
-        .into()
-}
-
-fn card_footer<Message: 'static>(children: Vec<Element<Message>>) -> Element<Message> {
-    arkit::row_component::<Message, arkit::Theme>()
-        .width(arkit::Length::Fill)
-        .padding([0.0, spacing::XXL, 0.0, spacing::XXL])
-        .align_items_center()
-        .children(children)
-        .into()
-}
-
-// Struct component API
-pub struct Card<Message = ()> {
-    children: std::cell::RefCell<Option<Vec<Element<Message>>>>,
-}
-
-impl<Message> Card<Message> {
-    pub fn new(children: Vec<Element<Message>>) -> Self {
-        Self {
-            children: std::cell::RefCell::new(Some(children)),
+#[component]
+pub fn Card(props: CardProps) -> Element {
+    let theme = use_theme();
+    rsx! {
+        column {
+            percent_width: 1.0,
+            align_items: "start",
+            background_color: theme.colors.card,
+            foreground_color: theme.colors.card_foreground,
+            padding_top: 0.0,
+            padding_right: 0.0,
+            padding_bottom: 0.0,
+            padding_left: 0.0,
+            border_width: 1.0,
+            border_color: theme.colors.border,
+            border_radius: theme.radii.lg,
+            shadow: 1,
+            {props.children}
         }
     }
 }
 
-impl_component_widget!(Card<Message>, Message, |value: &Card<Message>| {
-    card(super::take_component_slot(&value.children, "card children"))
-});
-
-pub struct CardHeader<Message = ()> {
-    title: String,
-    description: Option<String>,
-    _marker: std::marker::PhantomData<Message>,
+/// Props for [`CardHeader`].
+#[derive(Props, Clone, PartialEq)]
+pub struct CardHeaderProps {
+    pub title: String,
+    pub description: String,
 }
 
-impl<Message> CardHeader<Message> {
-    pub fn new(title: impl Into<String>, description: impl Into<String>) -> Self {
-        Self {
-            title: title.into(),
-            description: Some(description.into()),
-            _marker: std::marker::PhantomData,
+/// Card header — `p-6` with title and muted description stacked at `space-y-1.5`.
+#[component]
+pub fn CardHeader(props: CardHeaderProps) -> Element {
+    let theme = use_theme();
+    rsx! {
+        row {
+            percent_width: 1.0,
+            justify_content: "start",
+            column {
+                percent_width: 1.0,
+                align_items: "start",
+                padding_top: spacing::XXL,
+                padding_right: spacing::XXL,
+                padding_bottom: spacing::XXL,
+                padding_left: spacing::XXL,
+                row {
+                    percent_width: 1.0,
+                    justify_content: "start",
+                    text {
+                        content: props.title.clone(),
+                        font_size: typography::XXL,
+                        font_weight: 600,
+                        font_color: theme.colors.card_foreground,
+                        line_height: 24.0,
+                        text_letter_spacing: -0.35,
+                        text_align: 0,
+                    }
+                }
+                row {
+                    percent_width: 1.0,
+                    margin_top: spacing::XS,
+                    justify_content: "start",
+                    text {
+                        content: props.description.clone(),
+                        font_size: typography::SM,
+                        font_color: theme.colors.muted_foreground,
+                        line_height: 20.0,
+                        text_align: 0,
+                    }
+                }
+            }
         }
     }
 }
 
-impl_component_widget!(CardHeader<Message>, Message, |value: &CardHeader<
-    Message,
->| {
-    card_header(
-        value.title.clone(),
-        value.description.clone().unwrap_or_default(),
-    )
-});
-
-pub struct CardTitle<Message = ()> {
-    content: String,
-    _marker: std::marker::PhantomData<Message>,
+/// Props for [`CardTitle`].
+#[derive(Props, Clone, PartialEq)]
+pub struct CardTitleProps {
+    pub content: String,
 }
 
-impl<Message> CardTitle<Message> {
-    pub fn new(content: impl Into<String>) -> Self {
-        Self {
-            content: content.into(),
-            _marker: std::marker::PhantomData,
+/// Standalone card title — `text-2xl font-semibold leading-none tracking-tight`.
+#[component]
+pub fn CardTitle(props: CardTitleProps) -> Element {
+    let theme = use_theme();
+    rsx! {
+        text {
+            content: props.content.clone(),
+            font_size: typography::XXL,
+            font_weight: 600,
+            font_color: theme.colors.card_foreground,
+            line_height: 24.0,
+            text_letter_spacing: -0.35,
+            text_align: 0,
         }
     }
 }
 
-impl_component_widget!(CardTitle<Message>, Message, |value: &CardTitle<Message>| {
-    card_title(value.content.clone())
-});
-
-pub struct CardDescription<Message = ()> {
-    content: String,
-    _marker: std::marker::PhantomData<Message>,
+/// Props for [`CardDescription`].
+#[derive(Props, Clone, PartialEq)]
+pub struct CardDescriptionProps {
+    pub content: String,
 }
 
-impl<Message> CardDescription<Message> {
-    pub fn new(content: impl Into<String>) -> Self {
-        Self {
-            content: content.into(),
-            _marker: std::marker::PhantomData,
+/// Standalone card description — muted, small supporting text.
+#[component]
+pub fn CardDescription(props: CardDescriptionProps) -> Element {
+    let theme = use_theme();
+    rsx! {
+        text {
+            content: props.content.clone(),
+            font_size: typography::SM,
+            font_color: theme.colors.muted_foreground,
+            line_height: 20.0,
+            text_align: 0,
         }
     }
 }
 
-impl_component_widget!(
-    CardDescription<Message>,
-    Message,
-    |value: &CardDescription<Message>| { card_description(value.content.clone()) }
-);
-
-pub struct CardContent<Message = ()> {
-    children: std::cell::RefCell<Option<Vec<Element<Message>>>>,
+/// Props for [`CardContent`].
+#[derive(Props, Clone, PartialEq)]
+pub struct CardContentProps {
+    pub children: Element,
 }
 
-impl<Message> CardContent<Message> {
-    pub fn new(children: Vec<Element<Message>>) -> Self {
-        Self {
-            children: std::cell::RefCell::new(Some(children)),
+/// Card content region — `p-6 pt-0`.
+#[component]
+pub fn CardContent(props: CardContentProps) -> Element {
+    rsx! {
+        column {
+            percent_width: 1.0,
+            align_items: "start",
+            padding_top: 0.0,
+            padding_right: spacing::XXL,
+            padding_bottom: spacing::XXL,
+            padding_left: spacing::XXL,
+            row {
+                percent_width: 1.0,
+                justify_content: "start",
+                {props.children}
+            }
         }
     }
 }
 
-impl_component_widget!(CardContent<Message>, Message, |value: &CardContent<
-    Message,
->| {
-    card_content(super::take_component_slot(
-        &value.children,
-        "card content children",
-    ))
-});
-
-pub struct CardFooter<Message = ()> {
-    children: std::cell::RefCell<Option<Vec<Element<Message>>>>,
+/// Props for [`CardFooter`].
+#[derive(Props, Clone, PartialEq)]
+pub struct CardFooterProps {
+    pub children: Element,
 }
 
-impl<Message> CardFooter<Message> {
-    pub fn new(children: Vec<Element<Message>>) -> Self {
-        Self {
-            children: std::cell::RefCell::new(Some(children)),
+/// Card footer — `flex-row items-center p-6 pt-0`.
+#[component]
+pub fn CardFooter(props: CardFooterProps) -> Element {
+    rsx! {
+        row {
+            percent_width: 1.0,
+            align_items: "center",
+            justify_content: "start",
+            padding_top: 0.0,
+            padding_right: spacing::XXL,
+            padding_bottom: spacing::XXL,
+            padding_left: spacing::XXL,
+            {props.children}
         }
     }
 }
-
-impl_component_widget!(CardFooter<Message>, Message, |value: &CardFooter<
-    Message,
->| {
-    card_footer(super::take_component_slot(
-        &value.children,
-        "card footer children",
-    ))
-});
