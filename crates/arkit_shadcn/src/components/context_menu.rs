@@ -1,242 +1,114 @@
-use super::menu_common::{
-    menu_action_entry, menu_checkbox_entry, menu_label_entry, menu_popup, menu_radio_entry,
-    menu_separator_entry, menu_submenu_entry, MenuEntry, MenuStyle,
-};
-use super::*;
-use std::rc::Rc;
+//! ContextMenu — right-click/long-press trigger + portal dropdown of entries.
+//!
+//! Ported from the legacy Elm builder `context_menu.rs`. The trigger owns a
+//! native ArkUI long-press recognizer; ordinary taps remain available to its
+//! child content. The menu panel renders through the shared overlay root.
 
-const MENU_PANEL_WIDTH: f32 = 208.0;
-const SUBMENU_PANEL_WIDTH: f32 = MENU_PANEL_WIDTH - (spacing::XXS * 2.0);
+use crate::components::menu_common::{
+    menu_closed_panel_height, use_menu_overlay_refresh, MenuEntry, MenuOverlayPlacement,
+    MenuOverlaySession, MenuStyle,
+};
+use crate::theme::*;
+use arkit_prelude::*;
+
+const MENU_PANEL_WIDTH: f32 = 224.0;
 
 pub type ContextMenuEntry = MenuEntry;
 
-fn context_menu_message<Message>(
-    trigger: Element<Message>,
+#[component]
+pub fn ContextMenu(
     items: Vec<ContextMenuEntry>,
-    open: bool,
-    on_open_change: impl Fn(bool) -> Message + 'static,
-) -> Element<Message>
-where
-    Message: Send + 'static,
-{
-    menu_popup(
-        trigger,
-        items,
-        open,
-        move |value| dispatch_message(on_open_change(value)),
-        super::floating_layer::FloatingAlign::Start,
-        MenuStyle {
-            width: MENU_PANEL_WIDTH,
-            submenu_width: SUBMENU_PANEL_WIDTH,
-            side_offset_vp: spacing::XXS,
-        },
-    )
-}
-
-fn context_menu_item(title: impl Into<String>) -> ContextMenuEntry {
-    menu_action_entry(title, None, false, false, false, None)
-}
-
-fn context_menu_item_destructive(title: impl Into<String>) -> ContextMenuEntry {
-    menu_action_entry(title, None, true, false, false, None)
-}
-
-fn context_menu_item_inset(title: impl Into<String>) -> ContextMenuEntry {
-    menu_action_entry(title, None, false, false, true, None)
-}
-
-fn context_menu_item_inset_destructive(title: impl Into<String>) -> ContextMenuEntry {
-    menu_action_entry(title, None, true, false, true, None)
-}
-
-fn context_menu_item_with_shortcut(
-    title: impl Into<String>,
-    shortcut: impl Into<String>,
-) -> ContextMenuEntry {
-    menu_action_entry(title, Some(shortcut.into()), false, false, false, None)
-}
-
-fn context_menu_item_inset_with_shortcut(
-    title: impl Into<String>,
-    shortcut: impl Into<String>,
-) -> ContextMenuEntry {
-    menu_action_entry(title, Some(shortcut.into()), false, false, true, None)
-}
-
-fn context_menu_item_inset_with_shortcut_action_message<Message>(
-    title: impl Into<String>,
-    shortcut: impl Into<String>,
-    on_select: Message,
-) -> ContextMenuEntry
-where
-    Message: Clone + Send + 'static,
-{
-    menu_action_entry(
-        title,
-        Some(shortcut.into()),
-        false,
-        false,
-        true,
-        Some(Rc::new(move || dispatch_message(on_select.clone()))),
-    )
-}
-
-fn disabled_context_menu_item_inset_with_shortcut(
-    title: impl Into<String>,
-    shortcut: impl Into<String>,
-) -> ContextMenuEntry {
-    menu_action_entry(title, Some(shortcut.into()), false, true, true, None)
-}
-
-fn context_menu_sub_trigger_inset(title: impl Into<String>) -> ContextMenuEntry {
-    menu_submenu_entry(title, true, Vec::new())
-}
-
-fn context_menu_subcontent(items: Vec<ContextMenuEntry>) -> Vec<ContextMenuEntry> {
-    items
-}
-
-fn context_menu_submenu_inset_message(
-    title: impl Into<String>,
-    items: Vec<ContextMenuEntry>,
-) -> ContextMenuEntry {
-    menu_submenu_entry(title, true, items)
-}
-
-fn context_menu_checkbox_item_message<Message>(
-    title: impl Into<String>,
-    checked: bool,
-    on_toggle: impl Fn(bool) -> Message + 'static,
-) -> ContextMenuEntry
-where
-    Message: Send + 'static,
-{
-    menu_checkbox_entry(
-        title,
-        checked,
-        Rc::new(move |value| dispatch_message(on_toggle(value))),
-    )
-}
-
-fn context_menu_label(title: impl Into<String>) -> ContextMenuEntry {
-    menu_label_entry(title, false)
-}
-
-fn context_menu_label_inset(title: impl Into<String>) -> ContextMenuEntry {
-    menu_label_entry(title, true)
-}
-
-fn context_menu_separator() -> ContextMenuEntry {
-    menu_separator_entry()
-}
-
-fn context_menu_radio_item_message<Message>(
-    title: impl Into<String>,
-    value: impl Into<String>,
-    selected: impl Into<String>,
-    on_select: impl Fn(String) -> Message + 'static,
-) -> ContextMenuEntry
-where
-    Message: Send + 'static,
-{
-    menu_radio_entry(
-        title,
-        value,
-        selected,
-        Rc::new(move |value| dispatch_message(on_select(value))),
-    )
-}
-
-// Struct component API
-pub struct ContextMenu<Message = ()> {
-    trigger: std::cell::RefCell<Option<Element<Message>>>,
-    items: Vec<super::menu_common::MenuEntry>,
+    children: Element,
     open: Option<bool>,
     default_open: bool,
-    on_open_change: Option<std::rc::Rc<dyn Fn(bool) -> Message>>,
-}
+    on_open_change: Option<EventHandler<bool>>,
+    #[props(default)] width: Option<f32>,
+) -> Element {
+    let theme = use_theme();
+    let overlay = arkit_hooks::use_overlay();
+    let trigger_frame = use_signal(arkit_hooks::LayoutFrame::default);
+    let mut overlay_session = use_signal(|| None::<MenuOverlaySession>);
+    arkit_hooks::use_layout_frame(move |frame| {
+        let mut trigger_frame = trigger_frame;
+        trigger_frame.set(frame);
+    });
+    let mut internal_open = use_signal(|| default_open);
+    let is_controlled = open.is_some();
+    let current_open = open.unwrap_or_else(|| *internal_open.read());
 
-impl<Message> ContextMenu<Message> {
-    pub fn new(trigger: Element<Message>, items: Vec<super::menu_common::MenuEntry>) -> Self {
-        Self {
-            trigger: std::cell::RefCell::new(Some(trigger)),
-            items,
-            open: None,
-            default_open: false,
-            on_open_change: None,
-        }
-    }
-
-    pub fn open(mut self, open: bool) -> Self {
-        self.open = Some(open);
-        self
-    }
-
-    pub fn default_open(mut self, open: bool) -> Self {
-        self.default_open = open;
-        self
-    }
-
-    pub fn on_open_change(mut self, handler: impl Fn(bool) -> Message + 'static) -> Self {
-        self.on_open_change = Some(std::rc::Rc::new(handler));
-        self
-    }
-}
-
-impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer>
-    for ContextMenu<Message>
-{
-    fn body(
-        &self,
-        tree: &mut arkit::advanced::widget::Tree,
-        _renderer: &arkit::Renderer,
-    ) -> Element<Message> {
-        let state = super::widget_state(tree, || self.default_open);
-        let is_controlled = self.open.is_some();
-        let open = self.open.unwrap_or_else(|| *state.borrow());
-        let handler = self.on_open_change.clone();
-        let mut trigger = super::take_component_slot(&self.trigger, "context menu trigger");
+    let set_open = EventHandler::new(move |value: bool| {
         if !is_controlled {
-            let trigger_state = state.clone();
-            let trigger_handler = handler.clone();
-            trigger = arkit::row_component::<Message, arkit::Theme>()
-                .on_click(move || {
-                    let next = !open;
-                    *trigger_state.borrow_mut() = next;
-                    super::request_widget_rerender();
-                    if let Some(handler) = trigger_handler.as_ref() {
-                        dispatch_message(handler(next));
-                    }
-                })
-                .children(vec![trigger])
-                .into();
+            internal_open.set(value);
         }
+        if let Some(handler) = on_open_change {
+            handler.call(value);
+        }
+    });
 
-        menu_popup(
-            trigger,
-            self.items.clone(),
-            open,
-            move |value| {
-                if !is_controlled {
-                    *state.borrow_mut() = value;
-                    super::request_widget_rerender();
-                }
-                if let Some(handler) = handler.as_ref() {
-                    dispatch_message(handler(value));
+    let panel_width = width.unwrap_or(MENU_PANEL_WIDTH);
+    let style = MenuStyle {
+        width: panel_width,
+        submenu_width: panel_width - (spacing::XXS * 2.0),
+        side_offset_vp: spacing::XXS,
+    };
+
+    let dismiss_overlay = overlay.clone();
+    let mut dismiss_session = overlay_session;
+    let dismiss = EventHandler::new(move |_: ()| {
+        set_open.call(false);
+        dismiss_session.set(None);
+        dismiss_overlay.dismiss();
+    });
+
+    use_menu_overlay_refresh(
+        overlay.clone(),
+        current_open,
+        *overlay_session.read(),
+        style,
+        theme,
+        dismiss,
+        items.clone(),
+    );
+
+    rsx! {
+        row {
+            onlongpress: move |evt: dioxus_core::Event<dioxus_elements::event::ClickData>| {
+                if current_open {
+                    dismiss.call(());
+                } else {
+                    set_open.call(true);
+                    let entries = items.clone();
+                    let frame = *trigger_frame.read();
+                    let overlay_frame = overlay.overlay_frame();
+                    let panel_height = menu_closed_panel_height(&entries);
+                    let pointer = evt.data().pointer;
+                    let placement = if let Some(placement) = pointer.and_then(|pointer| {
+                        MenuOverlayPlacement::from_pointer(
+                            pointer,
+                            overlay_frame,
+                            style.width,
+                            panel_height,
+                            style.side_offset_vp,
+                        )
+                    }) {
+                        placement
+                    } else if frame.is_measured() {
+                        MenuOverlayPlacement::from_trigger(
+                            frame,
+                            overlay_frame,
+                            style.width,
+                            panel_height,
+                            style.side_offset_vp,
+                        )
+                    } else {
+                        MenuOverlayPlacement::fallback()
+                    };
+                    let session = MenuOverlaySession::new(placement, None);
+                    overlay_session.set(Some(session));
+                    session.show(&overlay, style, theme, dismiss, entries);
                 }
             },
-            super::floating_layer::FloatingAlign::Start,
-            MenuStyle {
-                width: MENU_PANEL_WIDTH,
-                submenu_width: SUBMENU_PANEL_WIDTH,
-                side_offset_vp: spacing::XXS,
-            },
-        )
-    }
-}
-
-impl<Message: Send + 'static> From<ContextMenu<Message>> for Element<Message> {
-    fn from(value: ContextMenu<Message>) -> Self {
-        Element::new(value)
+            {children}
+        }
     }
 }

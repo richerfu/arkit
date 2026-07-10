@@ -6,3 +6,6 @@ license.workspace = true
 
 [dependencies]
 arkit_i18n_macros.workspace = true
+dioxus-core.workspace = true
+dioxus-signals.workspace = true
+dioxus-hooks.workspace = true

@@ -1,42 +1,34 @@
-use super::*;
+//! Skeleton — shadcn-style loading placeholder.
+//!
+//! Migrated from the original Elm builder API to dioxus 0.7 `#[component]` +
+//! `rsx!`. Preserves the original logic: a `accent`-colored box whose radius
+//! becomes `full` for square shapes ≥ 40px, otherwise `md`.
 
-fn skeleton<Message: 'static>(width: f32, height: f32) -> Element<Message> {
-    let skeleton_radius = if (width - height).abs() < f32::EPSILON && width >= 40.0 {
-        radii().full
+use crate::theme::*;
+use arkit_prelude::*;
+
+/// Props for [`Skeleton`].
+#[derive(Props, Clone, PartialEq)]
+pub struct SkeletonProps {
+    pub width: f32,
+    pub height: f32,
+}
+
+/// A loading placeholder shaped like its eventual content.
+#[component]
+pub fn Skeleton(props: SkeletonProps) -> Element {
+    let theme = use_theme();
+    let radius = if (props.width - props.height).abs() < f32::EPSILON && props.width >= 40.0 {
+        theme.radii.full
     } else {
-        radii().md
+        theme.radii.md
     };
-
-    arkit::row_component::<Message, arkit::Theme>()
-        .width(width)
-        .height(height)
-        .background_color(colors().accent)
-        .border_radius([
-            skeleton_radius,
-            skeleton_radius,
-            skeleton_radius,
-            skeleton_radius,
-        ])
-        .into()
-}
-
-// Struct component API
-pub struct Skeleton<Message = ()> {
-    width: f32,
-    height: f32,
-    _marker: std::marker::PhantomData<Message>,
-}
-
-impl<Message> Skeleton<Message> {
-    pub fn new(width: f32, height: f32) -> Self {
-        Self {
-            width,
-            height,
-            _marker: std::marker::PhantomData,
+    rsx! {
+        row {
+            width: props.width,
+            height: props.height,
+            background_color: theme.colors.accent,
+            border_radius: radius,
         }
     }
 }
-
-impl_component_widget!(Skeleton<Message>, Message, |value: &Skeleton<Message>| {
-    skeleton(value.width, value.height)
-});

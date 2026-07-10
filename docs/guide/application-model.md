@@ -1,116 +1,33 @@
 # 应用模型
 
-Arkit 应用由 `State`、`Message`、`update`、`view` 组成。
-
-## State
-
-保存页面数据。
+Arkit 应用就是 Dioxus 应用：组件返回 `Element`，signal 保存响应式状态，event handler 修改状态，hooks 管理副作用。
 
 ```rust
-#[derive(Default)]
-struct State {
-    loading: bool,
-    items: Vec<Item>,
-    error: Option<String>,
-}
-```
+use arkit::prelude::*;
 
-## Message
+#[entry]
+fn app() -> Element {
+    let mut count = use_signal(|| 0);
 
-描述事件。
-
-```rust
-#[derive(Debug, Clone)]
-enum Message {
-    Load,
-    Loaded(Result<Vec<Item>, String>),
-    ItemPressed(String),
-}
-```
-
-## update
-
-处理事件，修改 State，返回 Task。
-
-```rust
-fn update(state: &mut State, message: Message) -> Task<Message> {
-    match message {
-        Message::Load => {
-            state.loading = true;
-            Task::perform(load_items(), Message::Loaded)
+    rsx! {
+        button {
+            onclick: move |_| count += 1,
+            "count = {count}"
         }
-        Message::Loaded(result) => {
-            state.loading = false;
-            match result {
-                Ok(items) => state.items = items,
-                Err(error) => state.error = Some(error),
-            }
-            Task::none()
-        }
-        Message::ItemPressed(_id) => Task::none(),
     }
 }
 ```
 
-## view
+## 组件
 
-根据 State 生成页面。
+使用 `#[component]` 建立组件边界。不要直接调用包含 hooks 的组件函数；在 `rsx!` 中挂载组件，让 Dioxus 管理 scope、props memoization 和生命周期。
 
-```rust
-fn view(state: &State) -> Element<Message> {
-    if state.loading {
-        return text("loading").into();
-    }
+## 状态
 
-    column_component()
-        .children(
-            state
-                .items
-                .iter()
-                .map(|item| {
-                    button(&item.title)
-                        .on_press(Message::ItemPressed(item.id.clone()))
-                        .into()
-                })
-                .collect(),
-        )
-        .into()
-}
-```
+- 局部可变状态：`use_signal`
+- 派生值：`use_memo`
+- 跨树共享：`use_context_provider` / `use_context`
+- 副作用与清理：`use_effect` / `use_drop`
+- 异步：`use_resource` / `use_future` / `use_coroutine`
 
-## 启动任务
-
-```rust
-#[entry]
-fn app() -> impl arkit::EntryPoint {
-    application(State::default, update, view)
-        .boot(|| (State::default(), Task::done(Message::Load)))
-}
-```
-
-## 返回键
-
-```rust
-#[entry]
-fn app() -> impl arkit::EntryPoint {
-    application(State::default, update, view)
-        .on_back_press(|state| {
-            if state.dialog_open {
-                BackPressDecision::message(Message::CloseDialog)
-            } else {
-                BackPressDecision::pass_through()
-            }
-        })
-}
-```
-
-## API
-
-| API | 说明 |
-| --- | --- |
-| `application(boot, update, view)` | 创建应用。 |
-| `Task::none()` | 无后续消息。 |
-| `Task::done(message)` | 立即发送一个消息。 |
-| `Task::perform(future, map)` | 执行异步任务。 |
-| `BackPressDecision::pass_through()` | 返回键交给系统。 |
-| `BackPressDecision::message(message)` | 拦截返回键并发送消息。 |
+Arkit 不再提供 `State + Message + update + Task` 的第二套 runtime。

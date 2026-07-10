@@ -1,155 +1,90 @@
-use super::button::icon_button;
-use super::*;
+//! Collapsible — shadcn-style expand/collapse container.
+//!
+//! Migrated from the original Elm builder API to dioxus 0.7 `#[component]` +
+//! `rsx!`. Preserves the original trigger row (title + `chevrons-up-down`
+//! ghost icon, space-between layout, `LG` horizontal padding), the `SM` top
+//! margin on the expanded body, and the open/close toggle.
 
-fn collapsible<Message: Send + 'static>(
-    title: impl Into<String>,
-    open: bool,
-    on_open_change: impl Fn(bool) + 'static,
-    content: Vec<Element<Message>>,
-) -> Element<Message> {
-    let mut items = content.into_iter();
-    let first = items.next();
-    let rest: Vec<Element<Message>> = items
-        .map(|child| {
-            arkit::row_component::<Message, arkit::Theme>()
-                .margin([spacing::SM, 0.0, 0.0, 0.0])
-                .children(vec![child])
-                .into()
-        })
-        .collect();
+use crate::theme::*;
+use arkit_prelude::*;
 
-    let mut children: Vec<Element<Message>> = vec![arkit::row_component::<Message, arkit::Theme>()
-        .percent_width(1.0)
-        .align_items_center()
-        .justify_content(JustifyContent::SpaceBetween)
-        .padding([0.0, spacing::LG, 0.0, spacing::LG])
-        .on_click(move || on_open_change(!open))
-        .children(vec![
-            body_text(title)
-                .font_weight(FontWeight::W600)
-                .font_color(colors().foreground)
-                .into(),
-            icon_button("chevrons-up-down")
-                .theme(ButtonVariant::Ghost)
-                .width(32.0)
-                .height(32.0)
-                .padding(arkit::Padding::ZERO)
-                .into(),
-        ])
-        .into()];
+use super::ARKUI_BORDER_STYLE_SOLID;
 
-    if let Some(first) = first {
-        children.push(
-            arkit::row_component::<Message, arkit::Theme>()
-                .margin([spacing::SM, 0.0, 0.0, 0.0])
-                .children(vec![first])
-                .into(),
-        );
-    }
-
-    // Keep the body mounted and let normal patching update visibility so layout
-    // and interaction remain stable across explicit runtime rerenders.
-    if !rest.is_empty() {
-        children.push(
-            visibility_gate(
-                arkit::column_component::<Message, arkit::Theme>().percent_width(1.0),
-                open,
-            )
-            .children(rest)
-            .into(),
-        );
-    }
-
-    arkit::column_component::<Message, arkit::Theme>()
-        .percent_width(1.0)
-        .children(children)
-        .into()
+/// Props for [`Collapsible`].
+#[derive(Props, Clone, PartialEq)]
+pub struct CollapsibleProps {
+    pub title: String,
+    pub children: Element,
+    /// Controlled open state. When `Some`, the collapsible is controlled.
+    #[props(default)]
+    pub open: Option<bool>,
+    #[props(default)]
+    pub default_open: bool,
+    #[props(default)]
+    pub on_open_change: EventHandler<bool>,
 }
 
-fn collapsible_message<Message>(
-    title: impl Into<String>,
-    open: bool,
-    on_open_change: impl Fn(bool) -> Message + 'static,
-    content: Vec<Element<Message>>,
-) -> Element<Message>
-where
-    Message: Send + 'static,
-{
-    collapsible(
-        title,
-        open,
-        move |value| dispatch_message(on_open_change(value)),
-        content,
-    )
-}
+/// A collapsible section. Clicking the header row toggles the body's
+/// visibility. Supports controlled and uncontrolled open state.
+#[component]
+pub fn Collapsible(props: CollapsibleProps) -> Element {
+    let theme = use_theme();
+    let controlled = props.open.is_some();
+    let mut local = use_signal(|| props.default_open);
+    let open = props.open.unwrap_or_else(|| *local.read());
+    let on_change = props.on_open_change;
 
-// Struct component API
-pub struct Collapsible<Message = ()> {
-    title: String,
-    content: std::cell::RefCell<Option<Vec<Element<Message>>>>,
-    open: Option<bool>,
-    default_open: bool,
-    on_open_change: Option<std::rc::Rc<dyn Fn(bool) -> Message>>,
-}
-
-impl<Message> Collapsible<Message> {
-    pub fn new(title: impl Into<String>, content: Vec<Element<Message>>) -> Self {
-        Self {
-            title: title.into(),
-            content: std::cell::RefCell::new(Some(content)),
-            open: None,
-            default_open: false,
-            on_open_change: None,
+    rsx! {
+        column {
+            percent_width: 1.0,
+            row {
+                percent_width: 1.0,
+                align_items: "center",
+                justify_content: "space_between",
+                padding_top: 0.0,
+                padding_right: spacing::LG,
+                padding_bottom: 0.0,
+                padding_left: spacing::LG,
+                onclick: move |_| {
+                    let next = !open;
+                    if !controlled {
+                        local.set(next);
+                    }
+                    on_change.call(next);
+                },
+                text {
+                    content: props.title.clone(),
+                    font_size: typography::SM,
+                    font_weight: 600,
+                    font_color: theme.colors.foreground,
+                    line_height: 20.0,
+                }
+                button {
+                    width: 32.0,
+                    height: 32.0,
+                    padding_top: 0.0,
+                    padding_right: 0.0,
+                    padding_bottom: 0.0,
+                    padding_left: 0.0,
+                    background_color: 0x00000000,
+                    border_width: 0.0,
+                    border_style: ARKUI_BORDER_STYLE_SOLID,
+                    focusable: false,
+                    focus_on_touch: false,
+                    alignment: 4,
+                    {arkit_icon::icon("chevrons-up-down".to_string(), 16.0, theme.colors.foreground)}
+                }
+            }
+            if open {
+                arkit_animation::MountTransition {
+                    preset: Some(arkit_animation::TransitionPreset::SlideUp),
+                    duration_ms: Some(140),
+                    row {
+                        margin_top: spacing::SM,
+                        {props.children}
+                    }
+                }
+            }
         }
-    }
-
-    pub fn open(mut self, open: bool) -> Self {
-        self.open = Some(open);
-        self
-    }
-
-    pub fn default_open(mut self, open: bool) -> Self {
-        self.default_open = open;
-        self
-    }
-
-    pub fn on_open_change(mut self, handler: impl Fn(bool) -> Message + 'static) -> Self {
-        self.on_open_change = Some(std::rc::Rc::new(handler));
-        self
-    }
-}
-
-impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer>
-    for Collapsible<Message>
-{
-    fn body(
-        &self,
-        tree: &mut arkit::advanced::widget::Tree,
-        _renderer: &arkit::Renderer,
-    ) -> Element<Message> {
-        let state = super::widget_state(tree, || self.default_open);
-        let is_controlled = self.open.is_some();
-        let open = self.open.unwrap_or_else(|| *state.borrow());
-        let handler = self.on_open_change.clone();
-        collapsible(
-            self.title.clone(),
-            open,
-            move |value| {
-                if !is_controlled {
-                    *state.borrow_mut() = value;
-                    super::request_widget_rerender();
-                }
-                if let Some(handler) = handler.as_ref() {
-                    dispatch_message(handler(value));
-                }
-            },
-            super::take_component_slot(&self.content, "collapsible content"),
-        )
-    }
-}
-
-impl<Message: Send + 'static> From<Collapsible<Message>> for Element<Message> {
-    fn from(value: Collapsible<Message>) -> Self {
-        Element::new(value)
     }
 }

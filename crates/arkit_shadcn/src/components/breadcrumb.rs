@@ -1,34 +1,83 @@
-use super::*;
+//! Breadcrumb — shadcn-style breadcrumb trail.
+//!
+//! Migrated from the original Elm builder API to dioxus 0.7 `#[component]` +
+//! `rsx!`. [`Breadcrumb`] renders a row of items separated by `/`; non-final
+//! items are muted, the final item is foreground-colored. [`BreadcrumbItem`]
+//! renders a standalone muted item.
 
-fn breadcrumb(items: Vec<String>) -> Element {
-    let mut children = Vec::new();
-    let total = items.len();
-    for (index, item) in items.into_iter().enumerate() {
-        if index > 0 {
-            children.push(
-                arkit::text("/")
-                    .font_size(typography::SM)
-                    .font_color(colors().muted_foreground)
-                    .into(),
-            );
-        }
-        if index + 1 == total {
-            children.push(
-                body_text_regular(item)
-                    .font_color(colors().foreground)
-                    .into(),
-            );
-        } else {
-            children.push(muted_text(item).into());
-        }
-    }
-    arkit::row_component()
-        .percent_width(1.0)
-        .align_items_center()
-        .children(children)
-        .into()
+use crate::theme::*;
+use arkit_prelude::*;
+
+/// Props for [`Breadcrumb`].
+#[derive(Props, Clone, PartialEq)]
+pub struct BreadcrumbProps {
+    pub items: Vec<String>,
 }
 
-fn breadcrumb_item(title: impl Into<String>) -> Element {
-    muted_text(title).into()
+/// A breadcrumb trail.
+#[component]
+pub fn Breadcrumb(props: BreadcrumbProps) -> Element {
+    let theme = use_theme();
+    let total = props.items.len();
+    let rows: Vec<Element> = props
+        .items
+        .iter()
+        .enumerate()
+        .map(|(index, item)| {
+            let is_last = index + 1 == total;
+            let content = item.clone();
+            if is_last {
+                rsx! {
+                    text {
+                        content: content,
+                        font_size: typography::MD,
+                        font_color: theme.colors.foreground,
+                        line_height: 20.0,
+                    }
+                }
+            } else {
+                rsx! {
+                    text {
+                        content: content,
+                        font_size: typography::SM,
+                        font_color: theme.colors.muted_foreground,
+                        line_height: 20.0,
+                    }
+                    text {
+                        content: "/".to_string(),
+                        font_size: typography::SM,
+                        font_color: theme.colors.muted_foreground,
+                    }
+                }
+            }
+        })
+        .collect();
+
+    rsx! {
+        row {
+            percent_width: 1.0,
+            align_items: "center",
+            {rows.into_iter()}
+        }
+    }
+}
+
+/// Props for [`BreadcrumbItem`].
+#[derive(Props, Clone, PartialEq)]
+pub struct BreadcrumbItemProps {
+    pub content: String,
+}
+
+/// A standalone muted breadcrumb item.
+#[component]
+pub fn BreadcrumbItem(props: BreadcrumbItemProps) -> Element {
+    let theme = use_theme();
+    rsx! {
+        text {
+            content: props.content.clone(),
+            font_size: typography::SM,
+            font_color: theme.colors.muted_foreground,
+            line_height: 20.0,
+        }
+    }
 }

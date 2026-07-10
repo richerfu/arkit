@@ -1,35 +1,278 @@
-use super::floating_layer::{
-    floating_panel_aligned_with_builder, FloatingAlign, FloatingSide, FloatingSurfaceRegistry,
-};
-use super::*;
-use arkit::advanced;
-use arkit::ohos_arkui_binding::arkui_input_binding::UIInputAction;
-use arkit::ohos_arkui_binding::common::node::ArkUINode;
-use arkit::ohos_arkui_binding::component::attribute::{ArkUIAttributeBasic, ArkUICommonAttribute};
-use arkit::TextAlignment;
-use arkit_icon as lucide;
-use std::cell::RefCell;
-use std::rc::Rc;
+//! Shared menu helpers/styles — entry types, menu style, and rendering helpers.
+//!
+//! Ported from the legacy Elm builder `menu_common.rs`. This is NOT a
+//! `#[component]`: it exposes entry enum types, a [`MenuStyle`] descriptor, and
+//! `rsx!`-based rendering helpers shared by `dropdown_menu`, `context_menu`,
+//! `menubar`, and `select`.
+//!
+//! The root popup is rendered through the Dioxus overlay tree. Nested submenus
+//! stay inside the same popup and are expanded by path state owned by the menu
+//! panel, matching the legacy interaction contract without making callers track
+//! submenu state.
+
+use crate::theme::*;
+use arkit_prelude::*;
 
 pub(crate) const TRANSPARENT: u32 = 0x00000000;
 const MENU_PANEL_HORIZONTAL_PADDING: f32 = spacing::XXS * 2.0;
-const MENU_PANEL_MAX_SIZE: f32 = 100_000.0;
-const FIX_AT_IDEAL_SIZE_POLICY: i32 = 2;
+const MENU_PANEL_VERTICAL_PADDING: f32 = spacing::XXS * 2.0;
+const MENU_ROW_HEIGHT: f32 = 38.0;
+const MENU_SEPARATOR_HEIGHT: f32 = 9.0;
 const MENU_TEXT_MAX_LINES: i32 = 1;
+const MENU_TEXT_OVERFLOW_ELLIPSIS: i32 = 2;
 const MENU_TRAILING_GAP: f32 = spacing::SM;
+const MENU_VIEWPORT_PADDING: f32 = spacing::LG;
+const MENU_ICON_SIZE: f32 = 14.0;
 
-type ActionCallback = Rc<dyn Fn()>;
-type ToggleCallback = Rc<dyn Fn(bool)>;
-type SelectCallback = Rc<dyn Fn(String)>;
-
-#[derive(Clone)]
-pub(crate) struct MenuStyle {
-    pub(crate) width: f32,
-    pub(crate) submenu_width: f32,
-    pub(crate) side_offset_vp: f32,
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct MenuOverlayPlacement {
+    pub x: f32,
+    pub y: f32,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct MenuOverlayPassThroughRegion {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
+/// Placement state retained for one open menu overlay.
+///
+/// OverlayRoot stores an `Element`, so the element published when a menu first
+/// opens is a snapshot of that render's entries. Retaining the placement
+/// separately lets the owning menu republish the same overlay subtree with
+/// fresh controlled props without closing or repositioning it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct MenuOverlaySession {
+    placement: MenuOverlayPlacement,
+    pass_through_region: Option<MenuOverlayPassThroughRegion>,
+}
+
+impl MenuOverlaySession {
+    pub(crate) fn new(
+        placement: MenuOverlayPlacement,
+        pass_through_region: Option<MenuOverlayPassThroughRegion>,
+    ) -> Self {
+        Self {
+            placement,
+            pass_through_region,
+        }
+    }
+
+    pub(crate) fn show(
+        self,
+        overlay: &arkit_hooks::OverlayApi,
+        style: MenuStyle,
+        theme: Theme,
+        on_dismiss: EventHandler<()>,
+        entries: Vec<MenuEntry>,
+    ) {
+        overlay.show_floating(move || {
+            menu_overlay_content(
+                style,
+                theme,
+                on_dismiss,
+                entries,
+                self.placement,
+                self.pass_through_region,
+            )
+        });
+    }
+}
+
+/// Keep an already-open menu overlay synchronized with its owner's current
+/// controlled entries.
+///
+/// `use_effect` normally tracks signal reads inside its callback. Menu entries
+/// arrive as component props instead, so the effect is explicitly marked dirty
+/// on every owner render. Publishing the same component subtree updates its
+/// props while preserving overlay-local hook state such as the open submenu
+/// path.
+#[track_caller]
+pub(crate) fn use_menu_overlay_refresh(
+    overlay: arkit_hooks::OverlayApi,
+    open: bool,
+    session: Option<MenuOverlaySession>,
+    style: MenuStyle,
+    theme: Theme,
+    on_dismiss: EventHandler<()>,
+    entries: Vec<MenuEntry>,
+) {
+    let mut refresh = use_effect(move || {
+        if open && overlay.is_open() {
+            if let Some(session) = session {
+                session.show(&overlay, style, theme, on_dismiss, entries.clone());
+            }
+        }
+    });
+    refresh.mark_dirty();
+}
+
+impl MenuOverlayPassThroughRegion {
+    pub(crate) fn from_frame(
+        frame: arkit_hooks::LayoutFrame,
+        overlay: arkit_hooks::LayoutFrame,
+    ) -> Option<Self> {
+        if !frame.is_measured() {
+            return None;
+        }
+
+        let ratio = display_vp_ratio();
+        let overlay_x = if overlay.is_measured() {
+            overlay.x
+        } else {
+            0.0
+        };
+        let overlay_y = if overlay.is_measured() {
+            overlay.y
+        } else {
+            0.0
+        };
+
+        Some(Self {
+            x: ((frame.x - overlay_x) / ratio).max(0.0),
+            y: ((frame.y - overlay_y) / ratio).max(0.0),
+            width: (frame.width / ratio).max(0.0),
+            height: (frame.height / ratio).max(0.0),
+        })
+    }
+
+    fn top(self) -> f32 {
+        self.y.max(0.0)
+    }
+
+    fn bottom(self) -> f32 {
+        (self.y + self.height).max(self.top())
+    }
+}
+
+impl MenuOverlayPlacement {
+    pub(crate) fn from_trigger(
+        trigger: arkit_hooks::LayoutFrame,
+        overlay: arkit_hooks::LayoutFrame,
+        panel_width: f32,
+        panel_height: f32,
+        side_offset: f32,
+    ) -> Self {
+        let ratio = display_vp_ratio();
+        let viewport_width = if overlay.is_measured() {
+            overlay.width / ratio
+        } else {
+            ohos_display_binding::default_display_width() as f32 / ratio
+        }
+        .max(panel_width + (MENU_VIEWPORT_PADDING * 2.0));
+        let viewport_height = if overlay.is_measured() {
+            overlay.height / ratio
+        } else {
+            ohos_display_binding::default_display_height() as f32 / ratio
+        }
+        .max(panel_height + (MENU_VIEWPORT_PADDING * 2.0));
+        let overlay_x = if overlay.is_measured() {
+            overlay.x
+        } else {
+            0.0
+        };
+        let overlay_y = if overlay.is_measured() {
+            overlay.y
+        } else {
+            0.0
+        };
+        let trigger_x = (trigger.x - overlay_x).max(0.0) / ratio;
+        let trigger_y = (trigger.y - overlay_y).max(0.0) / ratio;
+        let trigger_height = trigger.height / ratio;
+        let max_x =
+            (viewport_width - panel_width - MENU_VIEWPORT_PADDING).max(MENU_VIEWPORT_PADDING);
+        let trigger_bottom = trigger_y + trigger_height;
+        let below_y = trigger_bottom + side_offset;
+        let above_y = trigger_y - panel_height - side_offset;
+        let max_y =
+            (viewport_height - panel_height - MENU_VIEWPORT_PADDING).max(MENU_VIEWPORT_PADDING);
+        let below_fits = below_y + panel_height <= viewport_height - MENU_VIEWPORT_PADDING;
+        let above_fits = above_y >= MENU_VIEWPORT_PADDING;
+        let y = if below_fits || !above_fits {
+            below_y
+        } else {
+            above_y
+        };
+
+        Self {
+            x: trigger_x.clamp(MENU_VIEWPORT_PADDING, max_x),
+            y: y.clamp(MENU_VIEWPORT_PADDING, max_y),
+        }
+    }
+
+    pub(crate) fn from_pointer(
+        pointer: dioxus_elements::event::PointerPayload,
+        overlay: arkit_hooks::LayoutFrame,
+        panel_width: f32,
+        panel_height: f32,
+        side_offset: f32,
+    ) -> Option<Self> {
+        let trigger = if pointer.has_target_bounds() {
+            arkit_hooks::LayoutFrame {
+                x: pointer.target_x,
+                y: pointer.target_y,
+                width: pointer.target_width,
+                height: pointer.target_height,
+            }
+        } else if pointer.has_window_position() {
+            arkit_hooks::LayoutFrame {
+                x: pointer.window_x,
+                y: pointer.window_y,
+                width: 1.0,
+                height: 1.0,
+            }
+        } else {
+            return None;
+        };
+        Some(Self::from_trigger(
+            trigger,
+            overlay,
+            panel_width,
+            panel_height,
+            side_offset,
+        ))
+    }
+
+    pub(crate) fn fallback() -> Self {
+        Self {
+            x: MENU_VIEWPORT_PADDING,
+            y: 96.0,
+        }
+    }
+}
+
+fn display_vp_ratio() -> f32 {
+    let ratio = ohos_display_binding::default_display_virtual_pixel_ratio();
+    if ratio.is_finite() && ratio > 0.0 {
+        ratio
+    } else {
+        1.0
+    }
+}
+
+/// Layout/sizing descriptor for a menu popup.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MenuStyle {
+    pub width: f32,
+    pub submenu_width: f32,
+    pub side_offset_vp: f32,
+}
+
+impl Default for MenuStyle {
+    fn default() -> Self {
+        Self {
+            width: 224.0,
+            submenu_width: 224.0 - (spacing::XXS * 2.0),
+            side_offset_vp: spacing::XXS,
+        }
+    }
+}
+
+/// A single entry in a menu.
+#[derive(Debug, Clone, PartialEq)]
 pub enum MenuEntry {
     Action(MenuActionEntry),
     Submenu(MenuSubmenuEntry),
@@ -39,91 +282,111 @@ pub enum MenuEntry {
     Separator,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MenuActionEntry {
-    pub(crate) title: String,
-    pub(crate) shortcut: Option<String>,
-    pub(crate) destructive: bool,
-    pub(crate) disabled: bool,
-    pub(crate) inset: bool,
-    pub(crate) on_select: Option<ActionCallback>,
+    pub title: String,
+    pub shortcut: Option<String>,
+    pub icon: Option<String>,
+    pub destructive: bool,
+    pub disabled: bool,
+    pub inset: bool,
+    pub on_select: Option<EventHandler<()>>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MenuSubmenuEntry {
-    pub(crate) title: String,
-    pub(crate) inset: bool,
-    pub(crate) items: Vec<MenuEntry>,
+    pub title: String,
+    pub icon: Option<String>,
+    pub inset: bool,
+    pub items: Vec<MenuEntry>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MenuCheckboxEntry {
-    pub(crate) title: String,
-    pub(crate) checked: bool,
-    pub(crate) on_toggle: ToggleCallback,
+    pub title: String,
+    pub shortcut: Option<String>,
+    pub checked: bool,
+    pub close_on_select: bool,
+    pub on_toggle: EventHandler<bool>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MenuRadioEntry {
-    pub(crate) title: String,
-    pub(crate) value: String,
-    pub(crate) selected: String,
-    pub(crate) on_select: SelectCallback,
+    pub title: String,
+    pub value: String,
+    pub selected: String,
+    pub close_on_select: bool,
+    pub on_select: EventHandler<String>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MenuLabelEntry {
-    pub(crate) title: String,
-    pub(crate) inset: bool,
+    pub title: String,
+    pub inset: bool,
 }
+
+// --- Entry constructors ----------------------------------------------------
 
 impl MenuEntry {
     pub fn action(title: impl Into<String>) -> Self {
-        menu_action_entry(title, None, false, false, false, None)
+        Self::Action(MenuActionEntry {
+            title: title.into(),
+            shortcut: None,
+            icon: None,
+            destructive: false,
+            disabled: false,
+            inset: false,
+            on_select: None,
+        })
     }
 
     pub fn submenu(title: impl Into<String>, items: Vec<MenuEntry>) -> Self {
-        menu_submenu_entry(title, false, items)
+        Self::Submenu(MenuSubmenuEntry {
+            title: title.into(),
+            icon: None,
+            inset: false,
+            items,
+        })
     }
 
-    pub fn checkbox<Message>(
+    pub fn checkbox(
         title: impl Into<String>,
         checked: bool,
-        on_toggle: impl Fn(bool) -> Message + 'static,
-    ) -> Self
-    where
-        Message: Send + 'static,
-    {
-        menu_checkbox_entry(
-            title,
+        on_toggle: EventHandler<bool>,
+    ) -> Self {
+        Self::Checkbox(MenuCheckboxEntry {
+            title: title.into(),
+            shortcut: None,
             checked,
-            Rc::new(move |value| super::dispatch_message(on_toggle(value))),
-        )
+            close_on_select: false,
+            on_toggle,
+        })
     }
 
-    pub fn radio<Message>(
+    pub fn radio(
         title: impl Into<String>,
         value: impl Into<String>,
         selected: impl Into<String>,
-        on_select: impl Fn(String) -> Message + 'static,
-    ) -> Self
-    where
-        Message: Send + 'static,
-    {
-        menu_radio_entry(
-            title,
-            value,
-            selected,
-            Rc::new(move |value| super::dispatch_message(on_select(value))),
-        )
+        on_select: EventHandler<String>,
+    ) -> Self {
+        Self::Radio(MenuRadioEntry {
+            title: title.into(),
+            value: value.into(),
+            selected: selected.into(),
+            close_on_select: false,
+            on_select,
+        })
     }
 
     pub fn label(title: impl Into<String>) -> Self {
-        menu_label_entry(title, false)
+        Self::Label(MenuLabelEntry {
+            title: title.into(),
+            inset: false,
+        })
     }
 
     pub fn separator() -> Self {
-        menu_separator_entry()
+        Self::Separator
     }
 
     pub fn destructive(mut self) -> Self {
@@ -151,525 +414,45 @@ impl MenuEntry {
     }
 
     pub fn shortcut(mut self, shortcut: impl Into<String>) -> Self {
-        if let Self::Action(entry) = &mut self {
-            entry.shortcut = Some(shortcut.into());
+        let shortcut = shortcut.into();
+        match &mut self {
+            Self::Action(entry) => entry.shortcut = Some(shortcut.clone()),
+            Self::Checkbox(entry) => entry.shortcut = Some(shortcut),
+            _ => {}
         }
         self
     }
 
-    pub fn on_select(mut self, callback: impl Fn() + 'static) -> Self {
-        if let Self::Action(entry) = &mut self {
-            entry.on_select = Some(Rc::new(callback));
+    pub fn icon(mut self, icon: impl Into<String>) -> Self {
+        let icon = icon.into();
+        match &mut self {
+            Self::Action(entry) => entry.icon = Some(icon.clone()),
+            Self::Submenu(entry) => entry.icon = Some(icon),
+            _ => {}
         }
         self
     }
 
-    pub fn on_select_message<Message>(self, message: Message) -> Self
-    where
-        Message: Clone + Send + 'static,
-    {
-        self.on_select(move || super::dispatch_message(message.clone()))
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum MenuInteractionVariant {
-    Default,
-    Destructive,
-}
-
-#[derive(Clone)]
-struct MenuRenderContext {
-    dismiss: Rc<dyn Fn()>,
-    root_open: bool,
-    root_surfaces: FloatingSurfaceRegistry,
-    current_surfaces: FloatingSurfaceRegistry,
-    interaction: Rc<RefCell<MenuInteractionState>>,
-    path: Vec<usize>,
-    style: MenuStyle,
-}
-
-#[derive(Default)]
-struct MenuInteractionState {
-    open_path: Vec<usize>,
-}
-
-struct MenuPopupTreeState {
-    root_surfaces: FloatingSurfaceRegistry,
-    interaction: Rc<RefCell<MenuInteractionState>>,
-}
-
-struct MenuSubmenuTreeState {}
-
-struct MenuPopupWidget<Message> {
-    trigger: RefCell<Option<Element<Message>>>,
-    items: Vec<MenuEntry>,
-    open: bool,
-    align: FloatingAlign,
-    on_open_change: Rc<dyn Fn(bool)>,
-    style: MenuStyle,
-}
-
-struct MenuSubmenuWidget<Message> {
-    title: String,
-    inset: bool,
-    items: Vec<MenuEntry>,
-    path: Vec<usize>,
-    context: MenuRenderContext,
-    _marker: std::marker::PhantomData<Message>,
-}
-
-struct RuntimeMenuRowNode(ArkUINode);
-
-impl ArkUIAttributeBasic for RuntimeMenuRowNode {
-    fn raw(&self) -> &ArkUINode {
-        &self.0
-    }
-
-    fn borrow_mut(&mut self) -> &mut ArkUINode {
-        &mut self.0
-    }
-}
-
-impl ArkUICommonAttribute for RuntimeMenuRowNode {}
-
-fn request_widget_rerender() {
-    arkit_widget::queue_ui_loop(|| {
-        if let Some(runtime) = arkit_widget::current_runtime() {
-            let _ = runtime.request_rerender();
+    pub fn on_select(mut self, callback: EventHandler<()>) -> Self {
+        if let Self::Action(entry) = &mut self {
+            entry.on_select = Some(callback);
         }
-    });
-}
-
-fn ensure_tree_children(tree: &mut advanced::widget::Tree, len: usize) {
-    let mut children = std::mem::take(tree.children_mut());
-    children.truncate(len);
-    while children.len() < len {
-        children.push(advanced::widget::Tree::empty());
-    }
-    tree.replace_children(children);
-}
-
-fn menu_branch_path(parent_path: &[usize], index: usize) -> Vec<usize> {
-    let mut path = parent_path.to_vec();
-    path.push(index);
-    path
-}
-
-fn menu_branch_is_open(open_path: &[usize], branch_path: &[usize]) -> bool {
-    !branch_path.is_empty() && open_path.starts_with(branch_path)
-}
-
-fn toggle_menu_branch(state: &Rc<RefCell<MenuInteractionState>>, branch_path: &[usize]) {
-    let mut state = state.borrow_mut();
-    if menu_branch_is_open(&state.open_path, branch_path) {
-        state
-            .open_path
-            .truncate(branch_path.len().saturating_sub(1));
-    } else {
-        state.open_path.clear();
-        state.open_path.extend_from_slice(branch_path);
+        self
     }
 }
 
-fn reset_menu_branches(state: &Rc<RefCell<MenuInteractionState>>) {
-    state.borrow_mut().open_path.clear();
-}
-
-impl<Message: 'static> advanced::Widget<Message, arkit::Theme, arkit::Renderer>
-    for MenuPopupWidget<Message>
-{
-    fn state(&self) -> advanced::widget::State {
-        advanced::widget::State::new(Box::new(MenuPopupTreeState {
-            root_surfaces: FloatingSurfaceRegistry::new(),
-            interaction: Rc::new(RefCell::new(MenuInteractionState::default())),
-        }))
-    }
-
-    fn children(&self) -> Vec<advanced::widget::Tree> {
-        vec![advanced::widget::Tree::empty()]
-    }
-
-    fn diff(&self, tree: &mut advanced::widget::Tree)
-    where
-        Self: 'static,
-    {
-        tree.set_tag(self.tag());
-        ensure_tree_children(tree, 1);
-    }
-
-    fn body(
-        &self,
-        tree: &mut advanced::widget::Tree,
-        _renderer: &arkit::Renderer,
-    ) -> Element<Message> {
-        let state = tree
-            .state()
-            .downcast_mut::<MenuPopupTreeState>()
-            .expect("menu popup tree state type mismatch");
-        let root_surfaces = state.root_surfaces.clone();
-        let interaction = state.interaction.clone();
-        if !self.open {
-            reset_menu_branches(&interaction);
-        }
-        let trigger = self
-            .trigger
-            .borrow_mut()
-            .take()
-            .expect("menu popup trigger was already consumed");
-        let dismiss_interaction = interaction.clone();
-        let on_open_change = self.on_open_change.clone();
-        let dismiss = Rc::new(move || {
-            reset_menu_branches(&dismiss_interaction);
-            on_open_change(false);
-        });
-        let context = MenuRenderContext {
-            dismiss: dismiss.clone(),
-            root_open: self.open,
-            root_surfaces: root_surfaces.clone(),
-            current_surfaces: root_surfaces.clone(),
-            interaction: interaction.clone(),
-            path: Vec::new(),
-            style: self.style.clone(),
-        };
-        let panel_items = self.items.clone();
-        let panel_style = self.style.clone();
-        let panel_side_offset_vp = self.style.side_offset_vp;
-        let panel_builder = Rc::new(move |_trigger_width: Option<f32>| {
-            menu_content_with_width(
-                panel_style.width,
-                render_menu_entries::<Message>(panel_items.clone(), context.clone()),
-            )
-        });
-
-        floating_panel_aligned_with_builder(
-            trigger,
-            self.open,
-            FloatingSide::Bottom,
-            self.align,
-            panel_side_offset_vp,
-            panel_builder,
-            Some(dismiss),
-            false,
-            vec![root_surfaces.clone()],
-            Some(root_surfaces),
-        )
-    }
-}
-
-impl<Message: 'static> advanced::Widget<Message, arkit::Theme, arkit::Renderer>
-    for MenuSubmenuWidget<Message>
-{
-    fn state(&self) -> advanced::widget::State {
-        advanced::widget::State::new(Box::new(MenuSubmenuTreeState {}))
-    }
-
-    fn children(&self) -> Vec<advanced::widget::Tree> {
-        vec![advanced::widget::Tree::empty()]
-    }
-
-    fn diff(&self, tree: &mut advanced::widget::Tree)
-    where
-        Self: 'static,
-    {
-        tree.set_tag(self.tag());
-        ensure_tree_children(tree, 1);
-    }
-
-    fn body(
-        &self,
-        tree: &mut advanced::widget::Tree,
-        _renderer: &arkit::Renderer,
-    ) -> Element<Message> {
-        let _state = tree
-            .state()
-            .downcast_mut::<MenuSubmenuTreeState>()
-            .expect("menu submenu tree state type mismatch");
-        let title = self.title.clone();
-        let submenu_path = self.path.clone();
-        let submenu_open = self.context.root_open
-            && menu_branch_is_open(&self.context.interaction.borrow().open_path, &submenu_path);
-        let toggle_state = self.context.interaction.clone();
-        let toggle_path = submenu_path.clone();
-
-        let trigger = submenu_trigger_row(
-            title,
-            self.inset,
-            submenu_open,
-            menu_row_min_width(&self.context.style),
-            Rc::new(move || {
-                toggle_menu_branch(&toggle_state, &toggle_path);
-                request_widget_rerender();
-            }),
-        );
-
-        let mut column_children: Vec<Element<Message>> = vec![trigger];
-
-        if submenu_open {
-            let submenu_context = MenuRenderContext {
-                dismiss: self.context.dismiss.clone(),
-                root_open: self.context.root_open,
-                root_surfaces: self.context.root_surfaces.clone(),
-                current_surfaces: self.context.current_surfaces.clone(),
-                interaction: self.context.interaction.clone(),
-                path: submenu_path,
-                style: self.context.style.clone(),
-            };
-            let sub_items = render_menu_entries::<Message>(self.items.clone(), submenu_context);
-            let min_width = menu_submenu_min_width(&self.context.style);
-
-            let sub_content = arkit::column_component::<Message, arkit::Theme>()
-                .attr(
-                    ArkUINodeAttributeType::WidthLayoutpolicy,
-                    FIX_AT_IDEAL_SIZE_POLICY,
-                )
-                .constraint_size(min_width, MENU_PANEL_MAX_SIZE, 0.0, MENU_PANEL_MAX_SIZE)
-                .align_items_start()
-                .padding([spacing::XXS, spacing::XXS, spacing::XXS, spacing::XXS])
-                .border_radius([radii().sm, radii().sm, radii().sm, radii().sm])
-                .background_color(colors().accent)
-                .children(sub_items);
-
-            column_children.push(sub_content.into());
-        }
-
-        arkit::column_component::<Message, arkit::Theme>()
-            .attr(
-                ArkUINodeAttributeType::WidthLayoutpolicy,
-                FIX_AT_IDEAL_SIZE_POLICY,
-            )
-            .constraint_size(
-                menu_subtree_min_width(&self.context.style),
-                MENU_PANEL_MAX_SIZE,
-                0.0,
-                MENU_PANEL_MAX_SIZE,
-            )
-            .align_items_start()
-            .children(column_children)
-            .into()
-    }
-}
-
-pub(crate) fn menu_popup<Message: 'static>(
-    trigger: Element<Message>,
-    items: Vec<MenuEntry>,
-    open: bool,
-    on_open_change: impl Fn(bool) + 'static,
-    align: FloatingAlign,
-    style: MenuStyle,
-) -> Element<Message> {
-    Element::new(MenuPopupWidget {
-        trigger: RefCell::new(Some(trigger)),
-        items,
-        open,
-        align,
-        on_open_change: Rc::new(on_open_change),
-        style,
-    })
-}
-
-fn render_menu_entries<Message: 'static>(
-    entries: Vec<MenuEntry>,
-    context: MenuRenderContext,
-) -> Vec<Element<Message>> {
-    entries
-        .into_iter()
-        .enumerate()
-        .map(|(index, entry)| render_menu_entry(entry, index, context.clone()))
-        .collect()
-}
-
-fn render_menu_entry<Message: 'static>(
-    entry: MenuEntry,
-    index: usize,
-    context: MenuRenderContext,
-) -> Element<Message> {
-    match entry {
-        MenuEntry::Action(entry) => render_action_entry(entry, &context),
-        MenuEntry::Submenu(entry) => Element::new(MenuSubmenuWidget {
-            title: entry.title,
-            inset: entry.inset,
-            items: entry.items,
-            path: menu_branch_path(&context.path, index),
-            context,
-            _marker: std::marker::PhantomData,
-        }),
-        MenuEntry::Checkbox(entry) => render_checkbox_entry(entry, &context),
-        MenuEntry::Radio(entry) => render_radio_entry(entry, &context),
-        MenuEntry::Label(entry) => render_label_entry(entry, &context),
-        MenuEntry::Separator => menu_separator(menu_row_min_width(&context.style)),
-    }
-}
-
-fn render_action_entry<Message: 'static>(
-    entry: MenuActionEntry,
-    context: &MenuRenderContext,
-) -> Element<Message> {
-    let leading = entry.inset.then(|| leading_slot(None));
-    let children = menu_row_children(
-        leading,
-        item_text(
-            entry.title,
-            if entry.destructive {
-                colors().destructive
-            } else {
-                colors().popover_foreground
-            },
-            FontWeight::W400,
-        ),
-        entry.shortcut.map(shortcut_text),
-    );
-
-    let on_select = entry.on_select.clone();
-    let dismiss = context.dismiss.clone();
-    let row = interactive_menu_row(
-        children,
-        menu_row_min_width(&context.style),
-        entry.disabled,
-        if entry.destructive {
-            MenuInteractionVariant::Destructive
-        } else {
-            MenuInteractionVariant::Default
-        },
-        None,
-        Some(Rc::new(move || {
-            if let Some(on_select) = on_select.as_ref() {
-                on_select();
-            }
-            dismiss();
-        })),
-    );
-
-    if entry.disabled {
-        return row.into();
-    }
-    row.into()
-}
-
-fn render_checkbox_entry<Message: 'static>(
-    entry: MenuCheckboxEntry,
-    context: &MenuRenderContext,
-) -> Element<Message> {
-    let on_toggle = entry.on_toggle.clone();
-    let dismiss = context.dismiss.clone();
-    interactive_menu_row(
-        menu_row_children(
-            Some(leading_slot(if entry.checked {
-                Some(
-                    lucide::icon("check")
-                        .size(16.0)
-                        .stroke_width(3.0)
-                        .color(colors().foreground)
-                        .render::<Message, arkit::Theme>(),
-                )
-            } else {
-                None
-            })),
-            item_text(entry.title, colors().popover_foreground, FontWeight::W400),
-            None,
-        ),
-        menu_row_min_width(&context.style),
-        false,
-        MenuInteractionVariant::Default,
-        None,
-        Some(Rc::new(move || {
-            on_toggle(!entry.checked);
-            dismiss();
-        })),
-    )
-    .into()
-}
-
-fn render_radio_entry<Message: 'static>(
-    entry: MenuRadioEntry,
-    context: &MenuRenderContext,
-) -> Element<Message> {
-    let on_select = entry.on_select.clone();
-    let dismiss = context.dismiss.clone();
-    let selected = entry.selected == entry.value;
-    let value = entry.value.clone();
-    interactive_menu_row(
-        menu_row_children(
-            Some(leading_slot(if selected {
-                Some(
-                    arkit::row_component()
-                        .width(8.0)
-                        .height(8.0)
-                        .border_radius([radii().full, radii().full, radii().full, radii().full])
-                        .background_color(colors().foreground)
-                        .into(),
-                )
-            } else {
-                None
-            })),
-            item_text(entry.title, colors().popover_foreground, FontWeight::W400),
-            None,
-        ),
-        menu_row_min_width(&context.style),
-        false,
-        MenuInteractionVariant::Default,
-        None,
-        Some(Rc::new(move || {
-            on_select(value.clone());
-            dismiss();
-        })),
-    )
-    .into()
-}
-
-fn render_label_entry<Message: 'static>(
-    entry: MenuLabelEntry,
-    context: &MenuRenderContext,
-) -> Element<Message> {
-    let leading = entry.inset.then(|| leading_slot(None));
-    let children = menu_row_children(
-        leading,
-        item_text(entry.title, colors().foreground, FontWeight::W500),
-        None,
-    );
-    menu_row(children, menu_row_min_width(&context.style), false).into()
-}
-
-fn submenu_trigger_row<Message: 'static>(
-    title: String,
-    inset: bool,
-    active: bool,
-    min_width: f32,
-    on_click: Rc<dyn Fn()>,
-) -> Element<Message> {
-    let leading = inset.then(|| leading_slot(None));
-    let children = menu_row_children(
-        leading,
-        item_text(title, colors().popover_foreground, FontWeight::W400),
-        Some(
-            lucide::icon(if active { "chevron-up" } else { "chevron-down" })
-                .size(16.0)
-                .color(colors().foreground)
-                .render::<Message, arkit::Theme>(),
-        ),
-    );
-    interactive_menu_row(
-        children,
-        min_width,
-        false,
-        MenuInteractionVariant::Default,
-        Some(active),
-        Some(on_click),
-    )
-    .into()
-}
-
-pub(crate) fn menu_action_entry(
+pub fn menu_action_entry(
     title: impl Into<String>,
     shortcut: Option<String>,
     destructive: bool,
     disabled: bool,
     inset: bool,
-    on_select: Option<ActionCallback>,
+    on_select: Option<EventHandler<()>>,
 ) -> MenuEntry {
     MenuEntry::Action(MenuActionEntry {
         title: title.into(),
         shortcut,
+        icon: None,
         destructive,
         disabled,
         inset,
@@ -677,322 +460,748 @@ pub(crate) fn menu_action_entry(
     })
 }
 
-pub(crate) fn menu_submenu_entry(
+pub fn menu_submenu_entry(
     title: impl Into<String>,
     inset: bool,
     items: Vec<MenuEntry>,
 ) -> MenuEntry {
     MenuEntry::Submenu(MenuSubmenuEntry {
         title: title.into(),
+        icon: None,
         inset,
         items,
     })
 }
 
-pub(crate) fn menu_checkbox_entry(
+pub fn menu_checkbox_entry(
     title: impl Into<String>,
     checked: bool,
-    on_toggle: ToggleCallback,
+    on_toggle: EventHandler<bool>,
 ) -> MenuEntry {
     MenuEntry::Checkbox(MenuCheckboxEntry {
         title: title.into(),
+        shortcut: None,
         checked,
+        close_on_select: false,
         on_toggle,
     })
 }
 
-pub(crate) fn menu_radio_entry(
+pub fn menu_radio_entry(
     title: impl Into<String>,
     value: impl Into<String>,
     selected: impl Into<String>,
-    on_select: SelectCallback,
+    on_select: EventHandler<String>,
 ) -> MenuEntry {
     MenuEntry::Radio(MenuRadioEntry {
         title: title.into(),
         value: value.into(),
         selected: selected.into(),
+        close_on_select: false,
         on_select,
     })
 }
 
-pub(crate) fn menu_label_entry(title: impl Into<String>, inset: bool) -> MenuEntry {
+pub fn menu_label_entry(title: impl Into<String>, inset: bool) -> MenuEntry {
     MenuEntry::Label(MenuLabelEntry {
         title: title.into(),
         inset,
     })
 }
 
-pub(crate) fn menu_separator_entry() -> MenuEntry {
+pub fn menu_separator_entry() -> MenuEntry {
     MenuEntry::Separator
 }
 
-pub(crate) fn menu_content_with_width<Message: 'static>(
-    width: f32,
-    items: Vec<Element<Message>>,
-) -> Element<Message> {
-    shadow_sm(
-        arkit::column_component::<Message, arkit::Theme>()
-            .attr(
-                ArkUINodeAttributeType::WidthLayoutpolicy,
-                FIX_AT_IDEAL_SIZE_POLICY,
-            )
-            .constraint_size(width, MENU_PANEL_MAX_SIZE, 0.0, MENU_PANEL_MAX_SIZE)
-            .align_items_start()
-            .padding([spacing::XXS, spacing::XXS, spacing::XXS, spacing::XXS])
-            .border_radius([radii().lg, radii().lg, radii().lg, radii().lg])
-            .border_width([1.0, 1.0, 1.0, 1.0])
-            .border_color(colors().border)
-            .clip(true)
-            .background_color(colors().popover)
-            .children(items),
-    )
-    .into()
-}
+// --- Style helpers ---------------------------------------------------------
 
-pub(crate) fn item_text<Message: 'static>(
-    content: impl Into<String>,
-    color_value: u32,
-    weight: FontWeight,
-) -> Element<Message> {
-    arkit::text::<Message, arkit::Theme>(content)
-        .font_size(typography::SM)
-        .font_color(color_value)
-        .font_weight(weight)
-        .line_height(20.0)
-        .attr(ArkUINodeAttributeType::TextMaxLines, MENU_TEXT_MAX_LINES)
-        .text_align(TextAlignment::Start)
-        .into()
-}
-
-fn shortcut_text<Message: 'static>(content: impl Into<String>) -> Element<Message> {
-    arkit::text::<Message, arkit::Theme>(content)
-        .font_size(typography::XS)
-        .font_color(colors().muted_foreground)
-        .line_height(16.0)
-        .text_letter_spacing(1.2_f32)
-        .attr(ArkUINodeAttributeType::TextMaxLines, MENU_TEXT_MAX_LINES)
-        .text_align(TextAlignment::Start)
-        .into()
-}
-
-fn leading_slot<Message: 'static>(child: Option<Element<Message>>) -> Element<Message> {
-    let mut slot = arkit::row_component::<Message, arkit::Theme>()
-        .width(16.0)
-        .height(16.0)
-        .align_items_center()
-        .justify_content_center();
-
-    if let Some(child) = child {
-        slot = slot.children(vec![child]);
-    }
-
-    arkit::row_component::<Message, arkit::Theme>()
-        .attr(
-            ArkUINodeAttributeType::WidthLayoutpolicy,
-            FIX_AT_IDEAL_SIZE_POLICY,
-        )
-        .margin([0.0, 8.0, 0.0, 0.0])
-        .children(vec![slot.into()])
-        .into()
-}
-
-fn menu_row_children<Message: 'static>(
-    leading: Option<Element<Message>>,
-    label: Element<Message>,
-    trailing: Option<Element<Message>>,
-) -> Vec<Element<Message>> {
-    let mut leading_children = Vec::new();
-    if let Some(leading) = leading {
-        leading_children.push(leading);
-    }
-    leading_children.push(label);
-
-    let mut children = vec![menu_row_leading_group(leading_children)];
-    if let Some(trailing) = trailing {
-        children.push(menu_row_trailing_group(trailing));
-    }
-    children
-}
-
-fn menu_row_leading_group<Message: 'static>(children: Vec<Element<Message>>) -> Element<Message> {
-    arkit::row_component::<Message, arkit::Theme>()
-        .attr(
-            ArkUINodeAttributeType::WidthLayoutpolicy,
-            FIX_AT_IDEAL_SIZE_POLICY,
-        )
-        .align_items_center()
-        .children(children)
-        .into()
-}
-
-fn menu_row_trailing_group<Message: 'static>(child: Element<Message>) -> Element<Message> {
-    arkit::row_component::<Message, arkit::Theme>()
-        .attr(
-            ArkUINodeAttributeType::WidthLayoutpolicy,
-            FIX_AT_IDEAL_SIZE_POLICY,
-        )
-        .align_items_center()
-        .margin([0.0, 0.0, 0.0, MENU_TRAILING_GAP])
-        .children(vec![child])
-        .into()
-}
-
-pub(crate) fn menu_row<Message: 'static>(
-    children: Vec<Element<Message>>,
-    min_width: f32,
-    disabled: bool,
-) -> RowElement<Message> {
-    let mut row = arkit::row_component::<Message, arkit::Theme>()
-        .attr(
-            ArkUINodeAttributeType::WidthLayoutpolicy,
-            FIX_AT_IDEAL_SIZE_POLICY,
-        )
-        .constraint_size(min_width, MENU_PANEL_MAX_SIZE, 0.0, MENU_PANEL_MAX_SIZE)
-        .height(32.0)
-        .align_items_center()
-        .justify_content(arkit::JustifyContent::SpaceBetween)
-        .padding([6.0, 8.0, 6.0, 8.0])
-        .border_radius([radii().sm, radii().sm, radii().sm, radii().sm])
-        .clip(true)
-        .background_color(TRANSPARENT)
-        .children(children);
-
-    if disabled {
-        row = row.opacity(0.5_f32);
-    }
-
-    row
-}
-
-fn menu_separator<Message: 'static>(min_width: f32) -> Element<Message> {
-    arkit::row_component::<Message, arkit::Theme>()
-        .attr(
-            ArkUINodeAttributeType::WidthLayoutpolicy,
-            FIX_AT_IDEAL_SIZE_POLICY,
-        )
-        .constraint_size(min_width, MENU_PANEL_MAX_SIZE, 0.0, MENU_PANEL_MAX_SIZE)
-        .height(1.0)
-        .margin([4.0, 0.0, 4.0, 0.0])
-        .background_color(colors().border)
-        .into()
-}
-
-fn menu_row_min_width(style: &MenuStyle) -> f32 {
+pub(crate) fn menu_row_min_width(style: &MenuStyle) -> f32 {
     (style.width - MENU_PANEL_HORIZONTAL_PADDING).max(0.0)
 }
 
-fn menu_submenu_min_width(style: &MenuStyle) -> f32 {
+pub(crate) fn menu_submenu_min_width(style: &MenuStyle) -> f32 {
     style.submenu_width.max(0.0)
 }
 
-fn menu_subtree_min_width(style: &MenuStyle) -> f32 {
+pub(crate) fn menu_subtree_min_width(style: &MenuStyle) -> f32 {
     menu_row_min_width(style).max(menu_submenu_min_width(style))
 }
 
-fn menu_row_pressed_background(variant: MenuInteractionVariant) -> u32 {
-    match variant {
-        MenuInteractionVariant::Default => colors().accent,
-        MenuInteractionVariant::Destructive => with_alpha(colors().destructive, 0x1A),
+pub(crate) fn menu_closed_panel_height(entries: &[MenuEntry]) -> f32 {
+    menu_entries_closed_height(entries)
+}
+
+fn menu_entries_closed_height(entries: &[MenuEntry]) -> f32 {
+    MENU_PANEL_VERTICAL_PADDING
+        + entries
+            .iter()
+            .map(|entry| match entry {
+                MenuEntry::Separator => MENU_SEPARATOR_HEIGHT,
+                _ => MENU_ROW_HEIGHT,
+            })
+            .sum::<f32>()
+}
+
+// --- Rendering helpers -----------------------------------------------------
+
+/// Render the menu popup panel (column) with entries. Caller renders this
+/// inline when the menu is open.
+pub(crate) fn menu_content(
+    style: MenuStyle,
+    theme: &Theme,
+    on_dismiss: EventHandler<()>,
+    entries: &[MenuEntry],
+) -> Element {
+    rsx! {
+        arkit_animation::MountTransition {
+            preset: Some(arkit_animation::TransitionPreset::SlideUp),
+            duration_ms: Some(140),
+            MenuContentPanel {
+                style,
+                theme: *theme,
+                on_dismiss,
+                entries: entries.to_vec(),
+            }
+        }
     }
 }
 
-pub(crate) fn interactive_menu_row<Message: 'static>(
-    children: Vec<Element<Message>>,
-    min_width: f32,
-    disabled: bool,
-    variant: MenuInteractionVariant,
-    active: Option<bool>,
-    on_activate: Option<Rc<dyn Fn()>>,
-) -> RowElement<Message> {
-    let runtime_node = Rc::new(RefCell::new(None::<RuntimeMenuRowNode>));
-    let capture_node = runtime_node.clone();
-    let row = menu_row(children, min_width, disabled)
-        .background_color(if active.unwrap_or(false) {
-            menu_row_pressed_background(variant)
-        } else {
-            TRANSPARENT
-        })
-        .with_patch(move |node| {
-            capture_node.replace(Some(RuntimeMenuRowNode(node.clone())));
-            Ok(())
-        });
+#[component]
+fn MenuContentPanel(
+    style: MenuStyle,
+    theme: Theme,
+    on_dismiss: EventHandler<()>,
+    entries: Vec<MenuEntry>,
+) -> Element {
+    let mut open_path = use_signal(Vec::<usize>::new);
+    let current_open_path = open_path.read().clone();
+    let set_open_path = EventHandler::new(move |next: Vec<usize>| {
+        open_path.set(next);
+    });
+    let colors = &theme.colors;
+    let reserve_leading_slot = menu_entries_need_leading_slot(&entries);
+    let render_context = MenuRenderContext {
+        open_path: &current_open_path,
+        set_open_path,
+        style,
+        theme: &theme,
+        on_dismiss,
+        reserve_leading_slot,
+    };
 
-    if disabled {
-        return row;
-    }
-
-    row.on_event(arkit::prelude::NodeEventType::TouchEvent, move |event| {
-        let Some(input_event) = event.input_event() else {
-            return;
-        };
-        let _ = input_event.pointer_set_stop_propagation(true);
-        let row_binding = runtime_node.borrow();
-        let Some(node) = row_binding.as_ref() else {
-            return;
-        };
-
-        match input_event.action {
-            UIInputAction::Down => {
-                let _ = node.background_color(menu_row_pressed_background(variant));
-            }
-            UIInputAction::Up => {
-                if let Some(on_activate) = on_activate.as_ref() {
-                    on_activate();
+    rsx! {
+        column {
+            width: style.width,
+            align_self: "start",
+            align_items: "start",
+            padding_top: spacing::XXS,
+            padding_right: spacing::XXS,
+            padding_bottom: spacing::XXS,
+            padding_left: spacing::XXS,
+            border_radius: theme.radii.md,
+            border_width: 1.0,
+            border_color: colors.border,
+            clip: true,
+            background_color: colors.popover,
+            shadow: 1i32,
+            for (index, entry) in entries.iter().enumerate() {
+                {
+                    render_menu_entry(
+                        entry,
+                        index,
+                        &[],
+                        render_context,
+                    )
                 }
-                let keep_active = active.unwrap_or(false);
-                let _ = node.background_color(if keep_active {
-                    menu_row_pressed_background(variant)
-                } else {
-                    TRANSPARENT
-                });
             }
-            UIInputAction::Cancel => {
-                let keep_active = active.unwrap_or(false);
-                let _ = node.background_color(if keep_active {
-                    menu_row_pressed_background(variant)
-                } else {
-                    TRANSPARENT
-                });
-            }
-            UIInputAction::Move => {}
         }
+    }
+}
+
+/// Render menu content in the app-level overlay portal.
+///
+/// The root overlay is the one valid stack here: it layers a full-screen
+/// dismiss region behind an anchored panel. Menu item layout below this point
+/// uses row/column, matching the legacy builder implementation.
+pub(crate) fn menu_overlay_content(
+    style: MenuStyle,
+    theme: Theme,
+    on_dismiss: EventHandler<()>,
+    entries: Vec<MenuEntry>,
+    placement: MenuOverlayPlacement,
+    pass_through_region: Option<MenuOverlayPassThroughRegion>,
+) -> Element {
+    let top = placement.y.max(0.0);
+    let left = placement.x.max(0.0);
+    let pass_through_region = pass_through_region
+        .filter(|region| region.width > 0.0 && region.height > 0.0 && region.bottom() <= top);
+    let reserved_above_panel = pass_through_region
+        .map(|region| region.bottom())
+        .unwrap_or(0.0)
+        .clamp(0.0, top);
+    let backdrop_top_padding = (top - reserved_above_panel).max(0.0);
+    rsx! {
+        column {
+            percent_width: 1.0,
+            percent_height: 1.0,
+            align_items: "start",
+            hit_test_behavior: 2_i32,
+            if let Some(region) = pass_through_region {
+                if region.top() > 0.0 {
+                    row {
+                        percent_width: 1.0,
+                        height: region.top(),
+                        background_color: 0x01000000u32,
+                        hit_test_behavior: 0_i32,
+                        onclick: move |_| on_dismiss.call(()),
+                    }
+                }
+                row {
+                    percent_width: 1.0,
+                    height: region.height,
+                    hit_test_behavior: 2_i32,
+                    if region.x > 0.0 {
+                        row {
+                            width: region.x,
+                            percent_height: 1.0,
+                            background_color: 0x01000000u32,
+                            hit_test_behavior: 0_i32,
+                            onclick: move |_| on_dismiss.call(()),
+                        }
+                    }
+                    row {
+                        width: region.width,
+                        percent_height: 1.0,
+                        hit_test_behavior: 2_i32,
+                    }
+                    row {
+                        layout_weight: 1.0,
+                        percent_height: 1.0,
+                        background_color: 0x01000000u32,
+                        hit_test_behavior: 0_i32,
+                        onclick: move |_| on_dismiss.call(()),
+                    }
+                }
+            }
+            column {
+                percent_width: 1.0,
+                layout_weight: 1.0,
+                align_items: "start",
+                padding_top: backdrop_top_padding,
+                background_color: 0x01000000u32,
+                hit_test_behavior: 0_i32,
+                onclick: move |_| on_dismiss.call(()),
+                row {
+                    percent_width: 1.0,
+                    align_items: "start",
+                    column {
+                        onclick: move |evt| evt.stop_propagation(),
+                        margin_left: left,
+                        {menu_content(style, &theme, on_dismiss, &entries)}
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct MenuRenderContext<'a> {
+    open_path: &'a [usize],
+    set_open_path: EventHandler<Vec<usize>>,
+    style: MenuStyle,
+    theme: &'a Theme,
+    on_dismiss: EventHandler<()>,
+    reserve_leading_slot: bool,
+}
+
+fn render_menu_entry(
+    entry: &MenuEntry,
+    index: usize,
+    parent_path: &[usize],
+    context: MenuRenderContext<'_>,
+) -> Element {
+    match entry {
+        MenuEntry::Action(e) => render_action_entry(
+            e,
+            context.style,
+            context.theme,
+            context.on_dismiss,
+            context.reserve_leading_slot,
+        ),
+        MenuEntry::Submenu(e) => render_submenu_entry(e, index, parent_path, context),
+        MenuEntry::Checkbox(e) => {
+            render_checkbox_entry(e, context.style, context.theme, context.on_dismiss)
+        }
+        MenuEntry::Radio(e) => {
+            render_radio_entry(e, context.style, context.theme, context.on_dismiss)
+        }
+        MenuEntry::Label(e) => render_label_entry(
+            e,
+            context.style,
+            context.theme,
+            context.reserve_leading_slot,
+        ),
+        MenuEntry::Separator => render_separator_entry(context.style, context.theme),
+    }
+}
+
+fn render_action_entry(
+    entry: &MenuActionEntry,
+    style: MenuStyle,
+    theme: &Theme,
+    on_dismiss: EventHandler<()>,
+    reserve_leading_slot: bool,
+) -> Element {
+    let min_width = menu_row_min_width(&style);
+    let colors = &theme.colors;
+    let title_color = if entry.destructive {
+        colors.destructive
+    } else {
+        colors.popover_foreground
+    };
+    let title = entry.title.clone();
+    let shortcut = entry.shortcut.clone();
+    let icon = entry.icon.clone();
+    let on_select = entry.on_select;
+    let disabled = entry.disabled;
+    let inset = entry.inset;
+    let sm = theme.radii.sm;
+
+    rsx! {
+        row {
+            width: min_width,
+            height: MENU_ROW_HEIGHT,
+            align_self: "start",
+            align_items: "center",
+            justify_content: "start",
+            padding_top: 8.0,
+            padding_right: 8.0,
+            padding_bottom: 8.0,
+            padding_left: 8.0,
+            border_radius: sm,
+            clip: true,
+            background_color: TRANSPARENT,
+            opacity: if disabled { 0.5f32 } else { 1.0f32 },
+            onclick: move |_: dioxus_core::Event<_>| {
+                if disabled {
+                    return;
+                }
+                if let Some(on_select) = on_select {
+                    on_select.call(());
+                }
+                on_dismiss.call(());
+            },
+            row {
+                layout_weight: 1.0,
+                clip: true,
+                justify_content: "start",
+                align_items: "center",
+                if let Some(icon) = icon {
+                    {menu_icon_leading_slot(icon, colors.foreground)}
+                } else if inset || reserve_leading_slot {
+                    {menu_empty_leading_slot()}
+                }
+                {menu_item_text(title, title_color, 400)}
+            }
+            if let Some(shortcut) = shortcut {
+                {menu_trailing_text(shortcut, colors.muted_foreground)}
+            }
+        }
+    }
+}
+
+fn render_submenu_entry(
+    entry: &MenuSubmenuEntry,
+    index: usize,
+    parent_path: &[usize],
+    context: MenuRenderContext<'_>,
+) -> Element {
+    let MenuRenderContext {
+        open_path,
+        set_open_path,
+        style,
+        theme,
+        reserve_leading_slot,
+        ..
+    } = context;
+    let min_width = menu_row_min_width(&style);
+    let submenu_min_width = menu_submenu_min_width(&style);
+    let colors = &theme.colors;
+    let title = entry.title.clone();
+    let icon = entry.icon.clone();
+    let inset = entry.inset;
+    let sm = theme.radii.sm;
+    let branch_path = menu_branch_path(parent_path, index);
+    let submenu_open = menu_branch_is_open(open_path, &branch_path);
+    let next_open_path = if submenu_open {
+        parent_path.to_vec()
+    } else {
+        branch_path.clone()
+    };
+    let chevron = if submenu_open {
+        "chevron-up"
+    } else {
+        "chevron-down"
+    };
+    let child_reserve_leading_slot = menu_entries_need_leading_slot(&entry.items);
+
+    rsx! {
+        column {
+            width: menu_subtree_min_width(&style),
+            align_self: "start",
+            align_items: "start",
+            row {
+                width: min_width,
+                height: MENU_ROW_HEIGHT,
+                align_self: "start",
+                align_items: "center",
+                justify_content: "start",
+                padding_top: 8.0,
+                padding_right: 8.0,
+                padding_bottom: 8.0,
+                padding_left: 8.0,
+                border_radius: sm,
+                clip: true,
+                background_color: if submenu_open { colors.accent } else { TRANSPARENT },
+                onclick: move |evt: dioxus_core::Event<_>| {
+                    evt.stop_propagation();
+                    set_open_path.call(next_open_path.clone());
+                },
+                row {
+                    layout_weight: 1.0,
+                    clip: true,
+                    justify_content: "start",
+                    align_items: "center",
+                    if let Some(icon) = icon {
+                        {menu_icon_leading_slot(icon, colors.foreground)}
+                    } else if inset || reserve_leading_slot {
+                        {menu_empty_leading_slot()}
+                    }
+                    {menu_item_text(title, colors.popover_foreground, 400)}
+                }
+                row {
+                    align_items: "center",
+                    justify_content: "center",
+                    margin_left: MENU_TRAILING_GAP,
+                    width: 18.0,
+                    height: 18.0,
+                    {crate::icon::icon_placeholder(chevron, 18.0, colors.foreground)}
+                }
+            }
+            if submenu_open {
+                arkit_animation::MountTransition {
+                    preset: Some(arkit_animation::TransitionPreset::SlideUp),
+                    duration_ms: Some(120),
+                    column {
+                        width: submenu_min_width.max(min_width),
+                        align_self: "start",
+                        align_items: "start",
+                        margin_top: spacing::XXS,
+                        margin_bottom: 0.0,
+                        padding_top: spacing::XXS,
+                        padding_right: spacing::XXS,
+                        padding_bottom: spacing::XXS,
+                        padding_left: spacing::XXS,
+                        border_radius: theme.radii.md,
+                        border_width: 1.0,
+                        border_color: colors.border,
+                        clip: true,
+                        background_color: colors.popover,
+                        shadow: 1_i32,
+                        for (child_index, child) in entry.items.iter().enumerate() {
+                            {
+                                render_menu_entry(
+                                    child,
+                                    child_index,
+                                    &branch_path,
+                                    MenuRenderContext {
+                                        reserve_leading_slot: child_reserve_leading_slot,
+                                        ..context
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn render_checkbox_entry(
+    entry: &MenuCheckboxEntry,
+    style: MenuStyle,
+    theme: &Theme,
+    on_dismiss: EventHandler<()>,
+) -> Element {
+    let min_width = menu_row_min_width(&style);
+    let colors = &theme.colors;
+    let title = entry.title.clone();
+    let shortcut = entry.shortcut.clone();
+    let checked = entry.checked;
+    let close_on_select = entry.close_on_select;
+    let on_toggle = entry.on_toggle;
+    let sm = theme.radii.sm;
+
+    rsx! {
+        row {
+            width: min_width,
+            height: MENU_ROW_HEIGHT,
+            align_self: "start",
+            align_items: "center",
+            justify_content: "start",
+            padding_top: 8.0,
+            padding_right: 8.0,
+            padding_bottom: 8.0,
+            padding_left: 8.0,
+            border_radius: sm,
+            clip: true,
+            background_color: TRANSPARENT,
+            onclick: move |_: dioxus_core::Event<_>| {
+                on_toggle.call(!checked);
+                if close_on_select {
+                    on_dismiss.call(());
+                }
+            },
+            row {
+                layout_weight: 1.0,
+                clip: true,
+                justify_content: "start",
+                align_items: "center",
+                {menu_leading_slot(rsx! {
+                    if checked {
+                        {arkit_icon::icon_with_stroke("check", 16.0, colors.foreground, 3.0)}
+                    }
+                })}
+                {menu_item_text(title, colors.popover_foreground, 400)}
+            }
+            if let Some(shortcut) = shortcut {
+                {menu_trailing_text(shortcut, colors.muted_foreground)}
+            }
+        }
+    }
+}
+
+fn render_radio_entry(
+    entry: &MenuRadioEntry,
+    style: MenuStyle,
+    theme: &Theme,
+    on_dismiss: EventHandler<()>,
+) -> Element {
+    let min_width = menu_row_min_width(&style);
+    let colors = &theme.colors;
+    let title = entry.title.clone();
+    let selected = entry.selected == entry.value;
+    let value = entry.value.clone();
+    let close_on_select = entry.close_on_select;
+    let on_select = entry.on_select;
+    let sm = theme.radii.sm;
+    let full_radius = theme.radii.full;
+
+    rsx! {
+        row {
+            width: min_width,
+            height: MENU_ROW_HEIGHT,
+            align_self: "start",
+            align_items: "center",
+            justify_content: "start",
+            padding_top: 8.0,
+            padding_right: 8.0,
+            padding_bottom: 8.0,
+            padding_left: 8.0,
+            border_radius: sm,
+            clip: true,
+            background_color: TRANSPARENT,
+            onclick: move |_: dioxus_core::Event<_>| {
+                on_select.call(value.clone());
+                if close_on_select {
+                    on_dismiss.call(());
+                }
+            },
+            row {
+                layout_weight: 1.0,
+                clip: true,
+                justify_content: "start",
+                align_items: "center",
+                {menu_leading_slot(rsx! {
+                    if selected {
+                        row {
+                            width: 8.0,
+                            height: 8.0,
+                            border_radius: full_radius,
+                            background_color: colors.foreground,
+                        }
+                    }
+                })}
+                {menu_item_text(title, colors.popover_foreground, 400)}
+            }
+        }
+    }
+}
+
+fn render_label_entry(
+    entry: &MenuLabelEntry,
+    style: MenuStyle,
+    theme: &Theme,
+    reserve_leading_slot: bool,
+) -> Element {
+    let min_width = menu_row_min_width(&style);
+    let colors = &theme.colors;
+    let title = entry.title.clone();
+    let inset = entry.inset;
+    let sm = theme.radii.sm;
+
+    rsx! {
+        row {
+            width: min_width,
+            height: 32.0,
+            align_self: "start",
+            align_items: "center",
+            justify_content: "start",
+            padding_top: 6.0,
+            padding_right: 8.0,
+            padding_bottom: 6.0,
+            padding_left: 8.0,
+            border_radius: sm,
+            clip: true,
+            background_color: TRANSPARENT,
+            row {
+                layout_weight: 1.0,
+                clip: true,
+                justify_content: "start",
+                align_items: "center",
+                if inset || reserve_leading_slot {
+                    {menu_empty_leading_slot()}
+                }
+                {menu_label_text(title, colors.foreground)}
+            }
+        }
+    }
+}
+
+fn render_separator_entry(style: MenuStyle, theme: &Theme) -> Element {
+    let min_width = menu_row_min_width(&style);
+    let border = theme.colors.border;
+
+    rsx! {
+        row {
+            width: min_width,
+            height: 1.0,
+            align_self: "start",
+            margin_top: 4.0,
+            margin_bottom: 4.0,
+            background_color: border,
+        }
+    }
+}
+
+fn menu_item_text(content: String, color: u32, weight: i32) -> Element {
+    rsx! {
+        row {
+            layout_weight: 1.0,
+            clip: true,
+            text {
+                percent_width: 1.0,
+                font_size: typography::LG,
+                font_weight: weight,
+                font_color: color,
+                line_height: 22.0,
+                max_lines: MENU_TEXT_MAX_LINES,
+                text_overflow: MENU_TEXT_OVERFLOW_ELLIPSIS,
+                {content}
+            }
+        }
+    }
+}
+
+fn menu_label_text(content: String, color: u32) -> Element {
+    rsx! {
+        row {
+            layout_weight: 1.0,
+            clip: true,
+            text {
+                percent_width: 1.0,
+                font_size: typography::MD,
+                font_weight: 600_i32,
+                font_color: color,
+                line_height: 20.0,
+                max_lines: MENU_TEXT_MAX_LINES,
+                text_overflow: MENU_TEXT_OVERFLOW_ELLIPSIS,
+                {content}
+            }
+        }
+    }
+}
+
+fn menu_trailing_text(content: String, color: u32) -> Element {
+    rsx! {
+        row {
+            align_items: "center",
+            margin_left: MENU_TRAILING_GAP,
+            text {
+                font_size: typography::SM,
+                font_color: color,
+                line_height: 18.0,
+                text_letter_spacing: 1.2f32,
+                max_lines: MENU_TEXT_MAX_LINES,
+                text_overflow: MENU_TEXT_OVERFLOW_ELLIPSIS,
+                {content}
+            }
+        }
+    }
+}
+
+fn menu_empty_leading_slot() -> Element {
+    menu_leading_slot(rsx! {})
+}
+
+fn menu_icon_leading_slot(name: String, color: u32) -> Element {
+    menu_leading_slot(rsx! {
+        {crate::icon::icon_placeholder(name.as_str(), MENU_ICON_SIZE, color)}
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn toggling_closed_branch_opens_that_branch() {
-        let state = Rc::new(RefCell::new(MenuInteractionState::default()));
-        toggle_menu_branch(&state, &[3]);
-        assert_eq!(state.borrow().open_path, vec![3]);
+fn menu_leading_slot(child: Element) -> Element {
+    rsx! {
+        row {
+            margin_right: 8.0,
+            row {
+                width: 16.0,
+                height: 16.0,
+                align_items: "center",
+                justify_content: "center",
+                {child}
+            }
+        }
     }
+}
 
-    #[test]
-    fn toggling_open_branch_closes_only_that_branch() {
-        let state = Rc::new(RefCell::new(MenuInteractionState {
-            open_path: vec![2, 4],
-        }));
-        toggle_menu_branch(&state, &[2, 4]);
-        assert_eq!(state.borrow().open_path, vec![2]);
-    }
+fn menu_entries_need_leading_slot(entries: &[MenuEntry]) -> bool {
+    entries.iter().any(menu_entry_needs_leading_slot)
+}
 
-    #[test]
-    fn switching_branches_replaces_open_path() {
-        let state = Rc::new(RefCell::new(MenuInteractionState {
-            open_path: vec![1, 0],
-        }));
-        toggle_menu_branch(&state, &[3]);
-        assert_eq!(state.borrow().open_path, vec![3]);
+fn menu_entry_needs_leading_slot(entry: &MenuEntry) -> bool {
+    match entry {
+        MenuEntry::Action(entry) => entry.icon.is_some() || entry.inset,
+        MenuEntry::Submenu(entry) => entry.icon.is_some() || entry.inset,
+        MenuEntry::Checkbox(_) | MenuEntry::Radio(_) => true,
+        MenuEntry::Label(entry) => entry.inset,
+        MenuEntry::Separator => false,
     }
+}
 
-    #[test]
-    fn branch_open_check_uses_prefix_matching() {
-        assert!(menu_branch_is_open(&[1, 2], &[1]));
-        assert!(menu_branch_is_open(&[1, 2], &[1, 2]));
-        assert!(!menu_branch_is_open(&[1, 2], &[2]));
-        assert!(!menu_branch_is_open(&[], &[1]));
-    }
+fn menu_branch_path(parent_path: &[usize], index: usize) -> Vec<usize> {
+    let mut path = Vec::with_capacity(parent_path.len() + 1);
+    path.extend_from_slice(parent_path);
+    path.push(index);
+    path
+}
+
+fn menu_branch_is_open(open_path: &[usize], branch_path: &[usize]) -> bool {
+    open_path.len() >= branch_path.len()
+        && open_path
+            .iter()
+            .zip(branch_path.iter())
+            .all(|(open, branch)| open == branch)
 }

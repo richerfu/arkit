@@ -1,171 +1,183 @@
-use super::floating_layer::{floating_panel, FloatingSide};
-use super::*;
+//! Hover card — a floating card anchored beneath a trigger, shown on hover
+//! (and toggled on tap for touch).
+//!
+//! Migrated from the legacy Elm builder API. The trigger opens the card on
+//! hover (`on_hover`) and toggles it on click; the panel renders through the app
+//! overlay root so parent layout cannot clip it. Panel styling preserved
+//! (legacy `panel_surface`): default width `256` (Tailwind `w-64`),
+//! `spacing::LG` padding, `md` radius, 1px border, `popover`/`border` tokens,
+//! small outer shadow, start-aligned content. Anchored below the trigger.
 
-const HOVER_CARD_DEFAULT_WIDTH: f32 = 256.0; // Tailwind `w-64`
+use super::floating_layer::{
+    FloatingAlign, FloatingPanelPlacement, FloatingSide, FLOATING_BACKDROP, SHADOW_SM,
+};
+use crate::theme::*;
+use arkit_prelude::*;
+use dioxus_core_macro::component;
 
-fn hover_card<Message: 'static>(
-    trigger: Element<Message>,
-    content: Vec<Element<Message>>,
-    show: bool,
-    on_show_change: impl Fn(bool) + 'static,
-) -> Element<Message> {
-    hover_card_with_width(
-        trigger,
-        content,
-        show,
-        on_show_change,
-        HOVER_CARD_DEFAULT_WIDTH,
-    )
-}
+const HOVER_CARD_DEFAULT_WIDTH: f32 = 256.0;
+const HOVER_CARD_ESTIMATED_HEIGHT: f32 = 132.0;
 
-fn hover_card_message<Message>(
-    trigger: Element<Message>,
-    content: Vec<Element<Message>>,
-    show: bool,
-    on_show_change: impl Fn(bool) -> Message + 'static,
-) -> Element<Message>
-where
-    Message: Send + 'static,
-{
-    hover_card(trigger, content, show, move |value| {
-        dispatch_message(on_show_change(value))
-    })
-}
-
-fn hover_card_with_width<Message: 'static>(
-    trigger: Element<Message>,
-    content: Vec<Element<Message>>,
-    show: bool,
-    on_show_change: impl Fn(bool) + 'static,
-    width: f32,
-) -> Element<Message> {
-    floating_panel(
-        trigger,
-        panel_surface(
-            arkit::column_component::<Message, arkit::Theme>()
-                .width(width)
-                .align_items_start()
-                .padding([spacing::LG, spacing::LG, spacing::LG, spacing::LG])
-                .children(vec![stack(content, spacing::MD)]),
-        )
-        .into(),
-        show,
-        FloatingSide::Bottom,
-        Some(std::rc::Rc::new(move || on_show_change(false))),
-    )
-}
-
-fn hover_card_with_width_message<Message>(
-    trigger: Element<Message>,
-    content: Vec<Element<Message>>,
-    show: bool,
-    on_show_change: impl Fn(bool) -> Message + 'static,
-    width: f32,
-) -> Element<Message>
-where
-    Message: Send + 'static,
-{
-    hover_card_with_width(
-        trigger,
-        content,
-        show,
-        move |value| dispatch_message(on_show_change(value)),
-        width,
-    )
-}
-
-// Struct component API
-pub struct HoverCard<Message = ()> {
-    trigger: std::cell::RefCell<Option<Element<Message>>>,
-    content: std::cell::RefCell<Option<Vec<Element<Message>>>>,
+/// Hover/tap hover card.
+#[component]
+pub fn HoverCard(
+    trigger: Element,
     open: Option<bool>,
-    default_open: bool,
+    default_open: Option<bool>,
+    on_close: Option<EventHandler<()>>,
+    on_open_change: Option<EventHandler<bool>>,
     width: Option<f32>,
-    on_open_change: Option<std::rc::Rc<dyn Fn(bool) -> Message>>,
-}
+    children: Element,
+) -> Element {
+    let theme = use_theme();
+    let overlay = arkit_hooks::use_overlay();
+    let trigger_frame = use_signal(arkit_hooks::LayoutFrame::default);
+    arkit_hooks::use_layout_frame(move |frame| {
+        let mut trigger_frame = trigger_frame;
+        trigger_frame.set(frame);
+    });
+    let mut internal = use_signal(|| default_open.unwrap_or(false));
+    let current = match open {
+        Some(v) => v,
+        None => *internal.read(),
+    };
+    let controlled = open.is_some();
+    let panel_width = width.unwrap_or(HOVER_CARD_DEFAULT_WIDTH);
 
-impl<Message> HoverCard<Message> {
-    pub fn new(trigger: Element<Message>, content: Vec<Element<Message>>) -> Self {
-        Self {
-            trigger: std::cell::RefCell::new(Some(trigger)),
-            content: std::cell::RefCell::new(Some(content)),
-            open: None,
-            default_open: false,
-            width: None,
-            on_open_change: None,
+    let set_open = EventHandler::new(move |next: bool| {
+        if !controlled {
+            internal.set(next);
         }
-    }
-
-    pub fn open(mut self, open: bool) -> Self {
-        self.open = Some(open);
-        self
-    }
-
-    pub fn default_open(mut self, open: bool) -> Self {
-        self.default_open = open;
-        self
-    }
-
-    pub fn width(mut self, width: f32) -> Self {
-        self.width = Some(width);
-        self
-    }
-
-    pub fn on_open_change(mut self, handler: impl Fn(bool) -> Message + 'static) -> Self {
-        self.on_open_change = Some(std::rc::Rc::new(handler));
-        self
-    }
-}
-
-impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer>
-    for HoverCard<Message>
-{
-    fn body(
-        &self,
-        tree: &mut arkit::advanced::widget::Tree,
-        _renderer: &arkit::Renderer,
-    ) -> Element<Message> {
-        let state = super::widget_state(tree, || self.default_open);
-        let is_controlled = self.open.is_some();
-        let open = self.open.unwrap_or_else(|| *state.borrow());
-        let handler = self.on_open_change.clone();
-        let mut trigger = super::take_component_slot(&self.trigger, "hover card trigger");
-        if !is_controlled {
-            let trigger_state = state.clone();
-            let trigger_handler = handler.clone();
-            trigger = arkit::row_component::<Message, arkit::Theme>()
-                .on_click(move || {
-                    let next = !open;
-                    *trigger_state.borrow_mut() = next;
-                    super::request_widget_rerender();
-                    if let Some(handler) = trigger_handler.as_ref() {
-                        dispatch_message(handler(next));
-                    }
-                })
-                .children(vec![trigger])
-                .into();
+        if let Some(handler) = on_open_change {
+            handler.call(next);
         }
+        if !next {
+            if let Some(handler) = on_close {
+                handler.call(());
+            }
+        }
+    });
 
-        hover_card_with_width(
-            trigger,
-            super::take_component_slot(&self.content, "hover card content"),
-            open,
-            move |value| {
-                if !is_controlled {
-                    *state.borrow_mut() = value;
-                    super::request_widget_rerender();
-                }
-                if let Some(handler) = handler.as_ref() {
-                    dispatch_message(handler(value));
+    let show_overlay = overlay.clone();
+    let show_card = EventHandler::new(
+        move |pointer: Option<dioxus_elements::event::PointerPayload>| {
+            if current {
+                return;
+            }
+            set_open.call(true);
+            let panel = children.clone();
+            let frame = *trigger_frame.read();
+            let overlay_frame = show_overlay.overlay_frame();
+            let placement = if let Some(placement) = pointer.and_then(|pointer| {
+                FloatingPanelPlacement::from_pointer(
+                    pointer,
+                    overlay_frame,
+                    panel_width,
+                    HOVER_CARD_ESTIMATED_HEIGHT,
+                    FloatingSide::Bottom,
+                    FloatingAlign::Center,
+                    spacing::XXS,
+                )
+            }) {
+                placement
+            } else if frame.is_measured() {
+                FloatingPanelPlacement::from_trigger(
+                    frame,
+                    overlay_frame,
+                    panel_width,
+                    HOVER_CARD_ESTIMATED_HEIGHT,
+                    FloatingSide::Bottom,
+                    FloatingAlign::Center,
+                    spacing::XXS,
+                )
+            } else {
+                FloatingPanelPlacement::fallback()
+            };
+            let dismiss_overlay = show_overlay.clone();
+            let dismiss = EventHandler::new(move |_: ()| {
+                set_open.call(false);
+                dismiss_overlay.dismiss();
+            });
+            show_overlay.show_floating(move || {
+                hover_card_overlay_content(theme, panel_width, placement, dismiss, panel)
+            });
+        },
+    );
+
+    let leave_overlay = overlay.clone();
+    let close_card = EventHandler::new(move |_: ()| {
+        if !current {
+            return;
+        }
+        set_open.call(false);
+        leave_overlay.dismiss();
+    });
+
+    let toggle_overlay = overlay.clone();
+    let toggle = move |pointer: Option<dioxus_elements::event::PointerPayload>| {
+        if current {
+            set_open.call(false);
+            toggle_overlay.dismiss();
+        } else {
+            show_card.call(pointer);
+        }
+    };
+
+    rsx! {
+        row {
+            onclick: move |evt: dioxus_core::Event<dioxus_elements::event::ClickData>| {
+                toggle(evt.data().pointer);
+            },
+            on_hover: move |evt| {
+                if evt.data().is_hovering {
+                    show_card.call(None);
+                } else {
+                    close_card.call(());
                 }
             },
-            self.width.unwrap_or(HOVER_CARD_DEFAULT_WIDTH),
-        )
+            {trigger}
+        }
     }
 }
 
-impl<Message: Send + 'static> From<HoverCard<Message>> for Element<Message> {
-    fn from(value: HoverCard<Message>) -> Self {
-        Element::new(value)
+fn hover_card_overlay_content(
+    theme: Theme,
+    panel_width: f32,
+    placement: FloatingPanelPlacement,
+    on_dismiss: EventHandler<()>,
+    children: Element,
+) -> Element {
+    let top = placement.y.max(0.0);
+    let left = placement.x.max(0.0);
+    rsx! {
+        column {
+            percent_width: 1.0,
+            percent_height: 1.0,
+            align_items: "start",
+            padding_top: top,
+            background_color: FLOATING_BACKDROP,
+            onclick: move |_| on_dismiss.call(()),
+            row {
+                percent_width: 1.0,
+                align_items: "start",
+                arkit_animation::MountTransition {
+                    preset: Some(arkit_animation::TransitionPreset::SlideUp),
+                    duration_ms: Some(140),
+                    column {
+                        onclick: move |evt| evt.stop_propagation(),
+                        margin_left: left,
+                        width: panel_width,
+                        align_items: "start",
+                        padding: spacing::LG,
+                        border_radius: theme.radii.md,
+                        border_width: 1.0,
+                        border_color: theme.colors.border,
+                        background_color: theme.colors.popover,
+                        shadow: SHADOW_SM,
+                        {children}
+                    }
+                }
+            }
+        }
     }
 }

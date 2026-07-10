@@ -1,151 +1,160 @@
-mod ohos;
-pub mod i18n {
-    pub use arkit_i18n::*;
-}
-pub mod router;
+//! arkit — Dioxus 0.7 + ArkUI framework for OpenHarmony.
+//!
+//! This facade re-exports the full stack: dioxus core (`rsx!`, `use_signal`,
+//! `Element`), the `dioxus_elements` registry (ArkUI element/attribute/event
+//! descriptors), the ArkUI renderer + runtime host, and the component/hooks/
+//! i18n/router/animation/icon libraries. The `#[entry]` macro mounts a
+//! `fn() -> Element` root component into a NodeContent slot.
 
-pub use arkit_core::advanced;
-pub use arkit_core::theme;
-pub use arkit_core::{window, Horizontal, Length, Padding, Settings, Size, Theme, Vertical};
+// --- Entry macro ---
 pub use arkit_derive::entry;
+
+// --- Runtime: VirtualDom host ---
 pub use arkit_runtime::{
-    Application, BackPressDecision, Program, Subscription, SubscriptionHandle, Task,
-};
-pub use arkit_widget::ListVisibleContentChangeEvent;
-pub use arkit_widget::Renderer;
-pub use arkit_widget::{
-    button, button_component, calendar_picker, calendar_picker_component, checkbox,
-    checkbox_component, column, column_component, container, date_picker, date_picker_component,
-    flex, flex_component, floating_overlay, floating_overlay_with_builder, flow_item,
-    flow_item_component, grid, grid_component, grid_item, grid_item_component,
-    grouped_virtual_list, image, image_component, lazy, list, list_component, list_item,
-    list_item_component, list_item_group_component, modal_overlay, observe_text_layout, progress,
-    progress_component, radio, radio_component, refresh, refresh_component, row, row_component,
-    scroll, scroll_component, slider, slider_component, stack, stack_component, swiper,
-    swiper_component, text, text_area, text_area_component, text_component, text_input,
-    text_input_component, toggle, toggle_component, virtual_grid, virtual_grid_component,
-    virtual_list, virtual_list_component, virtual_water_flow, virtual_water_flow_component,
-    water_flow_component, ArkEvent, ArkUINodeAttributeItem, ArkUINodeAttributeType, BorderStyle,
-    ButtonElement, ButtonType, CalendarPickerElement, CheckboxElement, ColumnElement, Component,
-    ContainerElement, DatePickerElement, Element, FlexDirection, FlexElement, FlexOptions,
-    FlexWrap, FloatingAlign, FloatingOverlaySpec, FloatingSide, FlowItemElement, FontStyle,
-    FontWeight, GridElement, GridItemElement, GridScrollIndexEvent, HitTestBehavior, ImageElement,
-    ItemAlignment, JustifyContent, LayoutFrame, LayoutSize, Lazy, LifecycleEvent, ListElement,
-    ListItemElement, ListItemGroupElement, ListScrollIndexEvent, ListStickyStyle, ModalOverlaySpec,
-    ModalPresentation, NativeOverlayPlacement, Node, NodeCustomEvent, NodeCustomEventType,
-    NodeEventType, ObjectFit, OverlayDismissMode, OverlayStrategy, ProgressElement,
-    ProgressLinearStyle, ProgressType, RadioElement, RefreshElement, RowElement, ScrollElement,
-    ScrollOffset, ScrollViewport, ShadowStyle, SliderElement, StackElement, SwiperElement,
-    TextAlignment, TextAreaElement, TextElement, TextInputElement, TextLayoutLine,
-    TextLayoutSnapshot, ToggleElement, UiState, VirtualListGroup, VirtualVisibleRange, Visibility,
-    WaterFlowElement, WaterFlowScrollIndexEvent,
-};
-#[cfg(feature = "webview")]
-pub use arkit_widget::{
-    web_view, web_view_component, DownloadStartResult, WebViewController, WebViewElement,
-    WebViewStyle, Webview,
-};
-pub use ohos::{
-    mount_application, mount_entry, napi_derive_ohos, napi_ohos, ohos_arkui_binding,
-    openharmony_ability, ApplicationRuntime, EntryPoint, MountedEntryHandle,
+    set_back_press_handler, tokio_handle, ArkRuntime, EmbeddedWebViewController,
+    EmbeddedWebViewInit, ScopeNodeResolver, VirtualDom, WebViewFrame, WebViewStyle,
 };
 
-pub fn application<State, Message, Boot, Update, View>(
-    boot: Boot,
-    update: Update,
-    view: View,
-) -> Application<State, Message, Theme, Renderer>
-where
-    State: 'static,
-    Message: Send + 'static,
-    Boot: Fn() -> State + 'static,
-    Update: Fn(&mut State, Message) -> Task<Message> + 'static,
-    View: Fn(&State) -> Element<Message, Theme> + 'static,
-{
-    arkit_runtime::application::<State, Message, Boot, Update, View, Theme, Renderer>(
-        boot, update, view,
-    )
+// --- Renderer + native node primitives ---
+pub use arkit_arkui::{
+    canonical_tag, create_node, create_node_by_tag, kind_from_tag, ArkUIRenderer, EventSink,
+    NodeBuilder, NodeKind, VirtualKind, VirtualListAdapter,
+};
+
+// --- Hooks (escape hatches: overlay / layout / virtual range / ark node) ---
+pub use arkit_hooks as hooks;
+pub use arkit_hooks::{
+    use_ark_host_provider, use_ark_node, use_layout_frame, use_layout_frame_node, use_layout_size,
+    use_overlay, use_virtual_list, use_virtual_range, ArkHost, ArkNodeRef, LayoutFrame, LayoutSize,
+    OverlayRoot, VirtualListHandle, VirtualVisibleRange,
+};
+
+// --- i18n ---
+pub use arkit_i18n as i18n;
+/// Translate a message. Re-export of [`arkit_i18n::t!`].
+pub use arkit_i18n::t;
+pub use arkit_i18n::{use_i18n, use_i18n_provider, I18nContext};
+pub use arkit_i18n_macros::i18n;
+
+// --- Router ---
+pub use arkit_router as router;
+pub use arkit_router::{
+    use_back_handler, AnimatedOutlet, Link, LinkProps, Routable, RouteTransition, Router,
+};
+
+// --- Animation ---
+pub use arkit_animation as animation;
+pub use arkit_animation::{
+    use_animation, AnimationControls, Motion, MountTransition, TransitionPreset,
+};
+
+// --- Icon ---
+pub use arkit_icon::{has_icon, icon, icon_names};
+
+// --- shadcn component library ---
+pub use arkit_shadcn as shadcn;
+
+// --- Dioxus core pieces — re-exported so `rsx!`-emitted paths
+// (`dioxus_core::...`, `dioxus_elements::...`) resolve at the call site after
+// `use arkit::prelude::*`. ---
+pub use arkit_prelude::{
+    component, dioxus_core, dioxus_core_macro, dioxus_elements, dioxus_hooks, dioxus_signals, rsx,
+    use_coroutine, use_future, use_resource, use_signal, Element, Props,
+};
+
+// --- OpenHarmony / napi re-exports used by the `#[entry]` macro expansion. ---
+pub use napi_derive_ohos;
+pub use napi_ohos;
+pub use ohos_arkui_binding;
+pub use openharmony_ability;
+
+#[derive(Clone, Props)]
+struct EntryRootProps {
+    root: fn() -> Element,
 }
 
-pub fn run<State, Message, Update, View>(
-    update: Update,
-    view: View,
-) -> Application<State, Message, Theme, Renderer>
-where
-    State: Default + 'static,
-    Message: Send + 'static,
-    Update: Fn(&mut State, Message) -> Task<Message> + 'static,
-    View: Fn(&State) -> Element<Message, Theme> + 'static,
-{
-    application(State::default, update, view)
+impl PartialEq for EntryRootProps {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::fn_addr_eq(self.root, other.root)
+    }
 }
 
-pub mod widget {
-    pub use crate::{
-        button, button_component, calendar_picker, calendar_picker_component, checkbox,
-        checkbox_component, column, column_component, container, date_picker,
-        date_picker_component, flex, flex_component, flow_item, flow_item_component, grid,
-        grid_component, grid_item, grid_item_component, grouped_virtual_list, image,
-        image_component, lazy, list, list_component, list_item, list_item_component,
-        list_item_group_component, progress, progress_component, radio, radio_component, refresh,
-        refresh_component, row, row_component, scroll, scroll_component, slider, slider_component,
-        stack, stack_component, swiper, swiper_component, text, text_area, text_area_component,
-        text_component, text_input, text_input_component, toggle, toggle_component, virtual_grid,
-        virtual_grid_component, virtual_list, virtual_list_component, virtual_water_flow,
-        virtual_water_flow_component, water_flow_component, Lazy,
-    };
-    #[cfg(feature = "webview")]
-    pub use crate::{web_view, web_view_component};
+/// Mount an arkit entry component into an ArkUI [`NodeContent`] slot.
+///
+/// The public facade wraps every app root with the framework host context used
+/// by `use_ark_node`, layout observers, virtual adapters, WebView embedding,
+/// and overlay rendering. Business entry components should not call
+/// [`use_ark_host_provider`] themselves.
+pub fn mount_entry(
+    slot: ohos_arkui_binding::common::handle::ArkUIHandle,
+    app: openharmony_ability::OpenHarmonyApp,
+    root: fn() -> Element,
+) -> napi_ohos::Result<ArkRuntime> {
+    let dom = VirtualDom::new_with_props(arkit_entry_root, EntryRootProps { root });
+    arkit_runtime::mount_virtual_dom(slot, app, dom)
+}
+
+fn arkit_entry_root(props: EntryRootProps) -> Element {
+    let _host = use_ark_host_provider();
+    // Keep the business root as a real Dioxus component boundary. Calling the
+    // function directly would merge its hooks into this framework wrapper's
+    // scope and break normal component identity/memoization semantics.
+    let content = dioxus_core::DynamicNode::Component(dioxus_core::VComponent::new(
+        props.root,
+        (),
+        "ArkitApp",
+    ));
+
+    rsx! {
+        stack {
+            percent_width: 1.0,
+            percent_height: 1.0,
+            alignment: 0,
+            clip: false,
+            {content}
+            OverlayRoot {}
+        }
+    }
 }
 
 pub mod prelude {
-    pub use crate::i18n;
-    pub use crate::router::RouterNavigationExt;
-    pub use crate::widget::*;
-    pub use crate::ListVisibleContentChangeEvent;
+    //! Everything an app needs in one glob.
+    //!
+    //! `use arkit::prelude::*` brings in `rsx!`, signals/hooks, all ArkUI
+    //! element/event descriptors, the entry macro, escape-hatch hooks, and the
+    //! shadcn component + theme prelude.
+
+    // Dioxus primitives, hooks, signals, and ArkUI element descriptors.
+    pub use arkit_prelude::*;
+
+    // Entry + runtime + renderer.
     pub use crate::{
-        application, entry, observe_text_layout, run, window, ArkEvent, ArkUINodeAttributeItem,
-        ArkUINodeAttributeType, BackPressDecision, BorderStyle, ButtonType, Element, FlexDirection,
-        FlexOptions, FlexWrap, FloatingAlign, FloatingOverlaySpec, FloatingSide, FontStyle,
-        FontWeight, GridScrollIndexEvent, HitTestBehavior, Horizontal, ItemAlignment,
-        JustifyContent, LayoutFrame, LayoutSize, Lazy, Length, LifecycleEvent,
-        ListScrollIndexEvent, ListStickyStyle, ModalOverlaySpec, ModalPresentation,
-        NativeOverlayPlacement, NodeCustomEvent, NodeCustomEventType, NodeEventType, ObjectFit,
-        OverlayDismissMode, OverlayStrategy, Padding, Program, ProgressLinearStyle, ProgressType,
-        Renderer, ScrollOffset, ScrollViewport, Settings, ShadowStyle, Size, Subscription,
-        SubscriptionHandle, Task, TextAlignment, TextLayoutLine, TextLayoutSnapshot, Theme,
-        UiState, Vertical, VirtualListGroup, VirtualVisibleRange, Visibility,
-        WaterFlowScrollIndexEvent,
+        entry, mount_entry, ArkRuntime, ArkUIRenderer, EmbeddedWebViewController,
+        EmbeddedWebViewInit, EventSink, ScopeNodeResolver, VirtualDom, WebViewFrame, WebViewStyle,
     };
-    #[cfg(feature = "webview")]
+
+    // Native node primitives + virtual-list builder.
     pub use crate::{
-        web_view, web_view_component, DownloadStartResult, WebViewController, WebViewElement,
-        WebViewStyle, Webview,
+        canonical_tag, create_node, create_node_by_tag, kind_from_tag, NodeBuilder, NodeKind,
+        VirtualKind, VirtualListAdapter,
     };
-}
 
-#[doc(hidden)]
-pub mod internal {
-    pub use arkit_runtime::internal::*;
-}
-
-#[macro_export]
-macro_rules! row {
-    ($($child:expr),* $(,)?) => {
-        $crate::row(vec![$(($child).into()),*])
+    // Escape-hatch hooks.
+    pub use crate::{
+        use_ark_host_provider, use_ark_node, use_layout_frame, use_layout_frame_node,
+        use_layout_size, use_overlay, use_virtual_list, use_virtual_range, ArkHost, ArkNodeRef,
+        LayoutFrame, LayoutSize, OverlayRoot, VirtualListHandle, VirtualVisibleRange,
     };
-}
 
-#[macro_export]
-macro_rules! column {
-    ($($child:expr),* $(,)?) => {
-        $crate::column(vec![$(($child).into()),*])
+    // i18n + router + animation + icon.
+    pub use crate::t;
+    pub use crate::{has_icon, icon, icon_names};
+    pub use crate::{
+        use_animation, use_back_handler, use_i18n, use_i18n_provider, AnimatedOutlet,
+        AnimationControls, I18nContext, Motion, MountTransition, Routable, RouteTransition, Router,
+        TransitionPreset,
     };
-}
 
-#[macro_export]
-macro_rules! flex {
-    ($($child:expr),* $(,)?) => {
-        $crate::flex(vec![$(($child).into()),*])
-    };
+    // shadcn components + theme.
+    pub use arkit_shadcn::prelude::*;
 }

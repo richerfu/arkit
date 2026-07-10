@@ -1,0 +1,7 @@
+{
+  "string": [
+    { "name": "module_desc", "value": "arkit example module" },
+    { "name": "EntryAbility_desc", "value": "arkit example" },
+    { "name": "EntryAbility_label", "value": "arkit example" }
+  ]
+}

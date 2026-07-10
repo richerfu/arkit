@@ -1,81 +1,51 @@
-# 快速开始
+# 安装与第一个页面
 
-## 安装
-
-在业务 crate 中添加依赖：
+业务 crate 依赖 workspace facade：
 
 ```toml
 [dependencies]
-arkit = { workspace = true }
+arkit.workspace = true
+napi-ohos.workspace = true
+napi-derive-ohos.workspace = true
+
+[build-dependencies]
+napi-build-ohos.workspace = true
 ```
 
-WebView 需要额外启用 feature：
-
-```toml
-arkit = { workspace = true, features = ["webview"] }
-```
-
-## 最小应用
+入口函数返回 Dioxus `Element`：
 
 ```rust
 use arkit::prelude::*;
-use arkit::{application, Element, Task};
-
-#[derive(Default)]
-struct State {
-    count: i32,
-}
-
-#[derive(Debug, Clone)]
-enum Message {
-    Increment,
-}
-
-fn update(state: &mut State, message: Message) -> Task<Message> {
-    match message {
-        Message::Increment => {
-            state.count += 1;
-        }
-    }
-
-    Task::none()
-}
-
-fn view(state: &State) -> Element<Message> {
-    column_component()
-        .percent_width(1.0)
-        .percent_height(1.0)
-        .align_items_center()
-        .justify_content_center()
-        .children(vec![
-            text(format!("count = {}", state.count))
-                .font_size(28.0)
-                .into(),
-            button("increment")
-                .margin_top(12.0)
-                .padding([8.0, 12.0, 8.0, 12.0])
-                .on_press(Message::Increment)
-                .into(),
-        ])
-        .into()
-}
 
 #[entry]
-fn app() -> impl arkit::EntryPoint {
-    application(State::default, update, view)
+fn app() -> Element {
+    let mut count = use_signal(|| 0);
+
+    rsx! {
+        column {
+            percent_width: 1.0,
+            percent_height: 1.0,
+            align_items: "center",
+            justify_content: "center",
+
+            text { font_size: 28.0, "count = {count}" }
+            button {
+                margin_top: 12.0,
+                onclick: move |_| count += 1,
+                "increment"
+            }
+        }
+    }
 }
 ```
 
-## 构建示例
+`#[entry]` 生成 OpenHarmony 的 `init/render/destroy` NAPI 入口。框架 root 自动安装 native-node/overlay context，业务 root 保持独立 Dioxus component scope。
+
+先运行：
 
 ```sh
 cd examples/counter
 ohrs build --arch aarch
 ```
 
-## 文档预览
-
-```sh
-pnpm install
-pnpm run docs:dev
-```
+`cargo check` 可以辅助发现 host 类型错误，但不能替代 OpenHarmony 目标构建。`ohrs` 成功后，设备打包与部署参考 `app/run.sh`；一次只安装一个 example 并完成交互验收。

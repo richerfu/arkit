@@ -1,183 +1,156 @@
-use super::card::card;
-use super::floating_layer::{floating_panel, FloatingSide};
-use super::*;
-use std::rc::Rc;
+//! Popover — a floating panel anchored to a trigger, toggled by tapping the
+//! trigger and dismissed by tapping outside.
+//!
+//! Migrated from the legacy Elm builder API. The trigger toggles the open
+//! state (click mode). The panel renders through the app overlay root so it is
+//! not clipped by the trigger's parent layout. Panel styling preserved: default
+//! width `288` (Tailwind `w-72`), `spacing::LG` padding, `md` radius, 1px
+//! border, `popover`/`border` tokens, small outer shadow, start-aligned
+//! content.
 
-const POPOVER_DEFAULT_WIDTH: f32 = 288.0; // Tailwind `w-72`
+use super::floating_layer::{
+    FloatingAlign, FloatingPanelPlacement, FloatingSide, FLOATING_BACKDROP, SHADOW_SM,
+};
+use crate::theme::*;
+use arkit_prelude::*;
+use dioxus_core_macro::component;
 
-fn popover<Message: 'static>(
-    trigger: Element<Message>,
-    content: Vec<Element<Message>>,
-    open: bool,
-    on_open_change: impl Fn(bool) + 'static,
-) -> Element<Message> {
-    popover_with_width(
-        trigger,
-        content,
-        open,
-        on_open_change,
-        POPOVER_DEFAULT_WIDTH,
-    )
-}
+const POPOVER_DEFAULT_WIDTH: f32 = 288.0;
+const POPOVER_ESTIMATED_HEIGHT: f32 = 132.0;
 
-fn popover_message<Message>(
-    trigger: Element<Message>,
-    content: Vec<Element<Message>>,
-    open: bool,
-    on_open_change: impl Fn(bool) -> Message + 'static,
-) -> Element<Message>
-where
-    Message: Send + 'static,
-{
-    popover(trigger, content, open, move |value| {
-        dispatch_message(on_open_change(value))
-    })
-}
-
-fn popover_with_width<Message: 'static>(
-    trigger: Element<Message>,
-    content: Vec<Element<Message>>,
-    open: bool,
-    on_open_change: impl Fn(bool) + 'static,
-    width: f32,
-) -> Element<Message> {
-    let dismiss = Rc::new(move || {
-        on_open_change(false);
-    });
-    floating_panel(
-        trigger,
-        panel_surface(
-            arkit::column_component::<Message, arkit::Theme>()
-                .width(width)
-                .align_items_start()
-                .padding([spacing::LG, spacing::LG, spacing::LG, spacing::LG])
-                .children(vec![stack(content, spacing::LG)]),
-        )
-        .into(),
-        open,
-        FloatingSide::Bottom,
-        Some(dismiss),
-    )
-}
-
-fn popover_with_width_message<Message>(
-    trigger: Element<Message>,
-    content: Vec<Element<Message>>,
-    open: bool,
-    on_open_change: impl Fn(bool) -> Message + 'static,
-    width: f32,
-) -> Element<Message>
-where
-    Message: Send + 'static,
-{
-    popover_with_width(
-        trigger,
-        content,
-        open,
-        move |value| dispatch_message(on_open_change(value)),
-        width,
-    )
-}
-
-fn popover_card<Message: 'static>(
-    title: impl Into<String>,
-    body: impl Into<String>,
-) -> Element<Message> {
-    card(vec![title_text(title).into(), muted_text(body).into()])
-}
-
-// Struct component API
-pub struct Popover<Message = ()> {
-    trigger: std::cell::RefCell<Option<Element<Message>>>,
-    content: std::cell::RefCell<Option<Vec<Element<Message>>>>,
+/// Popover floating panel.
+#[component]
+pub fn Popover(
+    trigger: Element,
     open: Option<bool>,
-    default_open: bool,
+    default_open: Option<bool>,
+    on_close: Option<EventHandler<()>>,
+    on_open_change: Option<EventHandler<bool>>,
     width: Option<f32>,
-    on_open_change: Option<std::rc::Rc<dyn Fn(bool) -> Message>>,
-}
+    children: Element,
+) -> Element {
+    let theme = use_theme();
+    let overlay = arkit_hooks::use_overlay();
+    let trigger_frame = use_signal(arkit_hooks::LayoutFrame::default);
+    arkit_hooks::use_layout_frame(move |frame| {
+        let mut trigger_frame = trigger_frame;
+        trigger_frame.set(frame);
+    });
+    let mut internal = use_signal(|| default_open.unwrap_or(false));
+    let current = match open {
+        Some(v) => v,
+        None => *internal.read(),
+    };
+    let controlled = open.is_some();
+    let panel_width = width.unwrap_or(POPOVER_DEFAULT_WIDTH);
 
-impl<Message> Popover<Message> {
-    pub fn new(trigger: Element<Message>, content: Vec<Element<Message>>) -> Self {
-        Self {
-            trigger: std::cell::RefCell::new(Some(trigger)),
-            content: std::cell::RefCell::new(Some(content)),
-            open: None,
-            default_open: false,
-            width: None,
-            on_open_change: None,
+    let set_open = EventHandler::new(move |next: bool| {
+        if !controlled {
+            internal.set(next);
         }
-    }
-
-    pub fn open(mut self, open: bool) -> Self {
-        self.open = Some(open);
-        self
-    }
-
-    pub fn default_open(mut self, open: bool) -> Self {
-        self.default_open = open;
-        self
-    }
-
-    pub fn width(mut self, width: f32) -> Self {
-        self.width = Some(width);
-        self
-    }
-
-    pub fn on_open_change(mut self, handler: impl Fn(bool) -> Message + 'static) -> Self {
-        self.on_open_change = Some(std::rc::Rc::new(handler));
-        self
-    }
-}
-
-impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer>
-    for Popover<Message>
-{
-    fn body(
-        &self,
-        tree: &mut arkit::advanced::widget::Tree,
-        _renderer: &arkit::Renderer,
-    ) -> Element<Message> {
-        let state = super::widget_state(tree, || self.default_open);
-        let is_controlled = self.open.is_some();
-        let open = self.open.unwrap_or_else(|| *state.borrow());
-        let handler = self.on_open_change.clone();
-        let mut trigger = super::take_component_slot(&self.trigger, "popover trigger");
-        if !is_controlled {
-            let trigger_state = state.clone();
-            let trigger_handler = handler.clone();
-            trigger = arkit::row_component::<Message, arkit::Theme>()
-                .on_click(move || {
-                    let next = !open;
-                    *trigger_state.borrow_mut() = next;
-                    super::request_widget_rerender();
-                    if let Some(handler) = trigger_handler.as_ref() {
-                        dispatch_message(handler(next));
-                    }
-                })
-                .children(vec![trigger])
-                .into();
+        if let Some(handler) = on_open_change {
+            handler.call(next);
         }
+        if !next {
+            if let Some(handler) = on_close {
+                handler.call(());
+            }
+        }
+    });
 
-        popover_with_width(
-            trigger,
-            super::take_component_slot(&self.content, "popover content"),
-            open,
-            move |value| {
-                if !is_controlled {
-                    *state.borrow_mut() = value;
-                    super::request_widget_rerender();
-                }
-                if let Some(handler) = handler.as_ref() {
-                    dispatch_message(handler(value));
-                }
+    let toggle = move |pointer: Option<dioxus_elements::event::PointerPayload>| {
+        if current {
+            set_open.call(false);
+            overlay.dismiss();
+        } else {
+            set_open.call(true);
+            let panel = children.clone();
+            let frame = *trigger_frame.read();
+            let overlay_frame = overlay.overlay_frame();
+            let placement = if let Some(placement) = pointer.and_then(|pointer| {
+                FloatingPanelPlacement::from_pointer(
+                    pointer,
+                    overlay_frame,
+                    panel_width,
+                    POPOVER_ESTIMATED_HEIGHT,
+                    FloatingSide::Bottom,
+                    FloatingAlign::Center,
+                    spacing::XXS,
+                )
+            }) {
+                placement
+            } else if frame.is_measured() {
+                FloatingPanelPlacement::from_trigger(
+                    frame,
+                    overlay_frame,
+                    panel_width,
+                    POPOVER_ESTIMATED_HEIGHT,
+                    FloatingSide::Bottom,
+                    FloatingAlign::Center,
+                    spacing::XXS,
+                )
+            } else {
+                FloatingPanelPlacement::fallback()
+            };
+            let dismiss_overlay = overlay.clone();
+            let dismiss = EventHandler::new(move |_: ()| {
+                set_open.call(false);
+                dismiss_overlay.dismiss();
+            });
+            overlay.show_floating(move || {
+                popover_overlay_content(theme, panel_width, placement, dismiss, panel)
+            });
+        }
+    };
+
+    rsx! {
+        row {
+            onclick: move |evt: dioxus_core::Event<dioxus_elements::event::ClickData>| {
+                toggle(evt.data().pointer);
             },
-            self.width.unwrap_or(POPOVER_DEFAULT_WIDTH),
-        )
+            {trigger}
+        }
     }
 }
 
-impl<Message: Send + 'static> From<Popover<Message>> for Element<Message> {
-    fn from(value: Popover<Message>) -> Self {
-        Element::new(value)
+fn popover_overlay_content(
+    theme: Theme,
+    panel_width: f32,
+    placement: FloatingPanelPlacement,
+    on_dismiss: EventHandler<()>,
+    children: Element,
+) -> Element {
+    let top = placement.y.max(0.0);
+    let left = placement.x.max(0.0);
+    rsx! {
+        column {
+            percent_width: 1.0,
+            percent_height: 1.0,
+            align_items: "start",
+            padding_top: top,
+            background_color: FLOATING_BACKDROP,
+            onclick: move |_| on_dismiss.call(()),
+            row {
+                percent_width: 1.0,
+                align_items: "start",
+                arkit_animation::MountTransition {
+                    preset: Some(arkit_animation::TransitionPreset::SlideUp),
+                    duration_ms: Some(140),
+                    column {
+                        onclick: move |evt| evt.stop_propagation(),
+                        margin_left: left,
+                        width: panel_width,
+                        align_items: "start",
+                        padding: spacing::LG,
+                        border_radius: theme.radii.md,
+                        border_width: 1.0,
+                        border_color: theme.colors.border,
+                        background_color: theme.colors.popover,
+                        shadow: SHADOW_SM,
+                        {children}
+                    }
+                }
+            }
+        }
     }
 }

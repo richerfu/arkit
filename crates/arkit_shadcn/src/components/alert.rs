@@ -1,6 +1,12 @@
-use super::*;
-use arkit::TextAlignment;
-use arkit_icon as lucide;
+//! Alert — shadcn-style contextual feedback container.
+//!
+//! Migrated from the original Elm builder API to dioxus 0.7 `#[component]` +
+//! `rsx!`. Preserves the original variants (`Default`, `Destructive`), the
+//! per-variant tone mapping, icon positioning, and the title/description/list
+//! spacing constants.
+
+use crate::theme::*;
+use arkit_prelude::*;
 
 const ALERT_BORDER_WIDTH: f32 = 1.0;
 const ALERT_ICON_SIZE: f32 = 16.0;
@@ -21,8 +27,12 @@ const ALERT_TITLE_LINE_HEIGHT: f32 = 14.0;
 const ALERT_DESCRIPTION_LINE_HEIGHT: f32 = 22.75;
 const ALERT_LIST_LINE_HEIGHT: f32 = 20.0;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Alert visual variant. `Default` uses foreground tones; `Destructive` uses
+/// the destructive color for title/icon and a translucent destructive tone for
+/// the description.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AlertVariant {
+    #[default]
     Default,
     Destructive,
 }
@@ -34,231 +44,200 @@ struct AlertTone {
     icon_color: u32,
 }
 
-fn alert_root<Message: 'static>(
-    icon_name: impl Into<String>,
-    variant: AlertVariant,
-    children: Vec<Element<Message>>,
-) -> Element<Message> {
-    let tone = alert_tone(variant);
-
-    arkit::stack_component::<Message, arkit::Theme>()
-        .percent_width(1.0)
-        .border_radius([radii().lg, radii().lg, radii().lg, radii().lg])
-        .border_width([
-            ALERT_BORDER_WIDTH,
-            ALERT_BORDER_WIDTH,
-            ALERT_BORDER_WIDTH,
-            ALERT_BORDER_WIDTH,
-        ])
-        .border_color(colors().border)
-        .background_color(colors().card)
-        .children(vec![
-            arkit::row_component::<Message, arkit::Theme>()
-                .width(ALERT_ICON_SIZE)
-                .height(ALERT_ICON_SIZE)
-                .position(ALERT_ICON_LEFT, ALERT_ICON_TOP)
-                .children(vec![lucide::icon(icon_name)
-                    .size(ALERT_ICON_SIZE)
-                    .color(tone.icon_color)
-                    .render::<Message, arkit::Theme>()])
-                .into(),
-            arkit::column_component::<Message, arkit::Theme>()
-                .percent_width(1.0)
-                .align_items_start()
-                .padding([
-                    ALERT_PADDING_TOP,
-                    ALERT_PADDING_RIGHT,
-                    ALERT_PADDING_BOTTOM,
-                    ALERT_PADDING_LEFT,
-                ])
-                .children(children)
-                .into(),
-        ])
-        .into()
-}
-
-fn alert_title<Message: 'static>(
-    content: impl Into<String>,
-    variant: AlertVariant,
-) -> TextElement<Message> {
-    let tone = alert_tone(variant);
-
-    arkit::text::<Message, arkit::Theme>(content)
-        .font_size(typography::SM)
-        .font_weight(FontWeight::W500)
-        .font_color(tone.title_color)
-        .line_height(ALERT_TITLE_LINE_HEIGHT)
-        .text_letter_spacing(ALERT_TRACKING_TIGHT)
-        .text_align(TextAlignment::Start)
-        .margin([0.0, 0.0, ALERT_TITLE_BOTTOM, ALERT_CONTENT_OFFSET])
-        .padding([0.0, 0.0, 0.0, ALERT_CONTENT_LEFT])
-}
-
-fn alert_description<Message: 'static>(
-    content: impl Into<String>,
-    variant: AlertVariant,
-) -> TextElement<Message> {
-    let tone = alert_tone(variant);
-
-    arkit::text::<Message, arkit::Theme>(content)
-        .font_size(typography::SM)
-        .font_color(tone.description_color)
-        .line_height(ALERT_DESCRIPTION_LINE_HEIGHT)
-        .text_align(TextAlignment::Start)
-        .margin([0.0, 0.0, 0.0, ALERT_CONTENT_OFFSET])
-        .padding([0.0, 0.0, ALERT_DESCRIPTION_BOTTOM, ALERT_CONTENT_LEFT])
-}
-
-fn alert_list<Message: 'static>(
-    items: Vec<impl Into<String>>,
-    variant: AlertVariant,
-) -> Element<Message> {
-    let tone = alert_tone(variant);
-    let rows = items
-        .into_iter()
-        .enumerate()
-        .map(|(index, item)| {
-            let text = format!("\u{2022} {}", item.into());
-            let row = arkit::text(text)
-                .font_size(typography::SM)
-                .font_color(tone.title_color)
-                .line_height(ALERT_LIST_LINE_HEIGHT);
-
-            if index == 0 {
-                row.into()
-            } else {
-                margin_top(row, 2.0).into()
-            }
-        })
-        .collect::<Vec<Element<Message>>>();
-
-    arkit::column_component::<Message, arkit::Theme>()
-        .percent_width(1.0)
-        .align_items_start()
-        .margin([0.0, 0.0, 0.0, ALERT_CONTENT_OFFSET])
-        .padding([0.0, 0.0, ALERT_LIST_BOTTOM, ALERT_CONTENT_LEFT])
-        .children(rows)
-        .into()
-}
-
-fn alert_tone(variant: AlertVariant) -> AlertTone {
+fn alert_tone(variant: AlertVariant, theme: &Theme) -> AlertTone {
     match variant {
         AlertVariant::Default => AlertTone {
-            title_color: colors().foreground,
-            description_color: colors().muted_foreground,
-            icon_color: colors().foreground,
+            title_color: theme.colors.foreground,
+            description_color: theme.colors.muted_foreground,
+            icon_color: theme.colors.foreground,
         },
         AlertVariant::Destructive => AlertTone {
-            title_color: colors().destructive,
-            description_color: with_alpha(colors().destructive, 0xE6),
-            icon_color: colors().destructive,
+            title_color: theme.colors.destructive,
+            description_color: with_alpha(theme.colors.destructive, 0xE6),
+            icon_color: theme.colors.destructive,
         },
     }
 }
 
-// Struct component API
-pub struct Alert<Message = ()> {
-    icon_name: String,
-    variant: AlertVariant,
-    children: std::cell::RefCell<Option<Vec<Element<Message>>>>,
+/// Props for [`Alert`].
+#[derive(Props, Clone, PartialEq)]
+pub struct AlertProps {
+    /// Lucide icon name rendered at the top-left of the alert.
+    pub icon: String,
+    #[props(default)]
+    pub variant: AlertVariant,
+    pub children: Element,
 }
 
-impl<Message> Alert<Message> {
-    pub fn new(
-        icon_name: impl Into<String>,
-        variant: AlertVariant,
-        children: Vec<Element<Message>>,
-    ) -> Self {
-        Self {
-            icon_name: icon_name.into(),
-            variant,
-            children: std::cell::RefCell::new(Some(children)),
+/// Alert root — a bordered, rounded card with an icon pinned top-left and a
+/// padded content column.
+#[component]
+pub fn Alert(props: AlertProps) -> Element {
+    let theme = use_theme();
+    let tone = alert_tone(props.variant, &theme);
+    let icon = props.icon.clone();
+    let icon_position = format!("{ALERT_ICON_LEFT},{ALERT_ICON_TOP}");
+    let border_color = match props.variant {
+        AlertVariant::Default => theme.colors.border,
+        AlertVariant::Destructive => with_alpha(theme.colors.destructive, 0x80),
+    };
+    rsx! {
+        stack {
+            percent_width: 1.0,
+            border_radius: theme.radii.lg,
+            border_width: ALERT_BORDER_WIDTH,
+            border_color,
+            background_color: theme.colors.card,
+            row {
+                width: ALERT_ICON_SIZE,
+                height: ALERT_ICON_SIZE,
+                position: icon_position,
+                align_items: "center",
+                justify_content: "center",
+                {arkit_icon::icon(icon, ALERT_ICON_SIZE, tone.icon_color)}
+            }
+            column {
+                percent_width: 1.0,
+                align_items: "start",
+                padding_top: ALERT_PADDING_TOP,
+                padding_right: ALERT_PADDING_RIGHT,
+                padding_bottom: ALERT_PADDING_BOTTOM,
+                padding_left: ALERT_PADDING_LEFT,
+                {props.children}
+            }
         }
     }
 }
 
-impl_component_widget!(Alert<Message>, Message, |value: &Alert<Message>| {
-    alert_root(
-        value.icon_name.clone(),
-        value.variant,
-        super::take_component_slot(&value.children, "alert children"),
-    )
-});
-
-pub struct AlertTitle<Message = ()> {
-    content: String,
-    variant: AlertVariant,
-    _marker: std::marker::PhantomData<Message>,
+/// Props for [`AlertTitle`].
+#[derive(Props, Clone, PartialEq)]
+pub struct AlertTitleProps {
+    pub content: String,
+    #[props(default)]
+    pub variant: AlertVariant,
 }
 
-impl<Message> AlertTitle<Message> {
-    pub fn new(content: impl Into<String>, variant: AlertVariant) -> Self {
-        Self {
-            content: content.into(),
-            variant,
-            _marker: std::marker::PhantomData,
+/// Alert title — small, medium-weight text colored by the variant tone.
+#[component]
+pub fn AlertTitle(props: AlertTitleProps) -> Element {
+    let theme = use_theme();
+    let tone = alert_tone(props.variant, &theme);
+    rsx! {
+        text {
+            content: props.content.clone(),
+            percent_width: 1.0,
+            font_size: typography::SM,
+            font_weight: 500,
+            font_color: tone.title_color,
+            line_height: ALERT_TITLE_LINE_HEIGHT,
+            text_letter_spacing: ALERT_TRACKING_TIGHT,
+            text_align: 0,
+            margin_top: 0.0,
+            margin_right: 0.0,
+            margin_bottom: ALERT_TITLE_BOTTOM,
+            margin_left: ALERT_CONTENT_OFFSET,
+            padding_left: ALERT_CONTENT_LEFT,
         }
     }
 }
 
-impl<Message: 'static> From<AlertTitle<Message>> for arkit::TextElement<Message> {
-    fn from(value: AlertTitle<Message>) -> Self {
-        alert_title(value.content, value.variant)
-    }
+/// Props for [`AlertDescription`].
+#[derive(Props, Clone, PartialEq)]
+pub struct AlertDescriptionProps {
+    pub content: String,
+    #[props(default)]
+    pub variant: AlertVariant,
 }
 
-impl_component_widget!(AlertTitle<Message>, Message, |value: &AlertTitle<
-    Message,
->| {
-    alert_title(value.content.clone(), value.variant).into()
-});
-
-pub struct AlertDescription<Message = ()> {
-    content: String,
-    variant: AlertVariant,
-    _marker: std::marker::PhantomData<Message>,
-}
-
-impl<Message> AlertDescription<Message> {
-    pub fn new(content: impl Into<String>, variant: AlertVariant) -> Self {
-        Self {
-            content: content.into(),
-            variant,
-            _marker: std::marker::PhantomData,
+/// Alert description — small, relaxed-line-height supporting text.
+#[component]
+pub fn AlertDescription(props: AlertDescriptionProps) -> Element {
+    let theme = use_theme();
+    let tone = alert_tone(props.variant, &theme);
+    rsx! {
+        text {
+            content: props.content.clone(),
+            percent_width: 1.0,
+            font_size: typography::SM,
+            font_color: tone.description_color,
+            line_height: ALERT_DESCRIPTION_LINE_HEIGHT,
+            text_align: 0,
+            margin_top: 0.0,
+            margin_right: 0.0,
+            margin_bottom: 0.0,
+            margin_left: ALERT_CONTENT_OFFSET,
+            padding_top: 0.0,
+            padding_right: 0.0,
+            padding_bottom: ALERT_DESCRIPTION_BOTTOM,
+            padding_left: ALERT_CONTENT_LEFT,
         }
     }
 }
 
-impl<Message: 'static> From<AlertDescription<Message>> for arkit::TextElement<Message> {
-    fn from(value: AlertDescription<Message>) -> Self {
-        alert_description(value.content, value.variant)
-    }
+/// Props for [`AlertList`].
+#[derive(Props, Clone, PartialEq)]
+pub struct AlertListProps {
+    pub items: Vec<String>,
+    #[props(default)]
+    pub variant: AlertVariant,
 }
 
-impl_component_widget!(
-    AlertDescription<Message>,
-    Message,
-    |value: &AlertDescription<Message>| {
-        alert_description(value.content.clone(), value.variant).into()
-    }
-);
-
-pub struct AlertList<Message = ()> {
-    items: Vec<String>,
-    variant: AlertVariant,
-    _marker: std::marker::PhantomData<Message>,
-}
-
-impl<Message> AlertList<Message> {
-    pub fn new<T: Into<String>>(items: Vec<T>, variant: AlertVariant) -> Self {
-        Self {
-            items: items.into_iter().map(Into::into).collect(),
-            variant,
-            _marker: std::marker::PhantomData,
+/// Alert list — a bulleted (`•`) column of small text lines, with a small gap
+/// between non-first rows.
+#[component]
+pub fn AlertList(props: AlertListProps) -> Element {
+    let theme = use_theme();
+    let tone = alert_tone(props.variant, &theme);
+    let title_color = tone.title_color;
+    let rows: Vec<Element> = props
+        .items
+        .iter()
+        .enumerate()
+        .map(|(index, item)| {
+            let text = format!("\u{2022} {item}");
+            if index == 0 {
+                rsx! {
+                    text {
+                        content: text,
+                        percent_width: 1.0,
+                        font_size: typography::SM,
+                        font_color: title_color,
+                        line_height: ALERT_LIST_LINE_HEIGHT,
+                        text_align: 0,
+                    }
+                }
+            } else {
+                rsx! {
+                    row {
+                        percent_width: 1.0,
+                        align_items: "start",
+                        margin_top: 2.0,
+                        text {
+                            content: text,
+                            percent_width: 1.0,
+                            font_size: typography::SM,
+                            font_color: title_color,
+                            line_height: ALERT_LIST_LINE_HEIGHT,
+                            text_align: 0,
+                        }
+                    }
+                }
+            }
+        })
+        .collect();
+    rsx! {
+        column {
+            percent_width: 1.0,
+            align_items: "start",
+            margin_top: 0.0,
+            margin_right: 0.0,
+            margin_bottom: 0.0,
+            margin_left: ALERT_CONTENT_OFFSET,
+            padding_top: 0.0,
+            padding_right: 0.0,
+            padding_bottom: ALERT_LIST_BOTTOM,
+            padding_left: ALERT_CONTENT_LEFT,
+            {rows.iter().cloned()}
         }
     }
 }
-
-impl_component_widget!(AlertList<Message>, Message, |value: &AlertList<Message>| {
-    alert_list(value.items.clone(), value.variant)
-});

@@ -1,20 +1,13 @@
-# 示例索引
+# 示例
 
-`examples/*` 是当前框架能力的活文档。新增功能时优先补一个最小示例，再补复杂组合示例。
-
-| 示例 | 说明 |
+| 示例 | 重点 |
 | --- | --- |
-| `counter` | 最小 State / Message / update / view。 |
-| `async_task` | `Task::perform` 异步任务。 |
-| `router` | 路由注册、页面切换、404 和导航消息。 |
-| `i18n` | typed `.ftl` 国际化。 |
-| `shadcn_showcase` | shadcn 组件库展示。 |
-| `webview` | feature gated WebView。 |
-| `complex_cases` | 复杂组合场景。 |
+| `counter` | `use_signal`、`rsx!`、native click event |
+| `async_task` | `use_resource`、Tokio、scheduler wake |
+| `complex_cases` | ArkUI NodeAdapter 虚拟列表/网格 |
+| `router` | Routable enum、Router、ArkUI Link、route transition |
+| `i18n` | locale context、类型安全翻译 |
+| `shadcn_showcase` | Dioxus 组件、theme signal、overlay、native gesture |
+| `webview` | layout/native-node hook 与嵌入 WebView |
 
-## 示例开发原则
-
-- 示例要能独立构建。
-- 示例代码应展示推荐 API。
-- 与设备原生行为相关的能力必须有示例。
-- 文档中的代码片段应与示例保持一致。
+所有示例都是 workspace member。OpenHarmony 验证必须进入对应示例目录执行 `ohrs build --arch aarch`；host `cargo check` 只能作为辅助诊断，不能替代目标平台构建。

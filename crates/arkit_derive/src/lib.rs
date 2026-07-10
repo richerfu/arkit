@@ -28,12 +28,9 @@ pub fn entry(_attr: TokenStream, item: TokenStream) -> TokenStream {
     }
 
     if input.sig.asyncness.is_some() {
-        return syn::Error::new_spanned(
-            &input.sig.asyncness,
-            "#[entry] function must not be async",
-        )
-        .to_compile_error()
-        .into();
+        return syn::Error::new_spanned(input.sig.asyncness, "#[entry] function must not be async")
+            .to_compile_error()
+            .into();
     }
 
     let fn_name = input.sig.ident.clone();
@@ -51,7 +48,7 @@ pub fn entry(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 LazyLock::new(::arkit::openharmony_ability::OpenHarmonyApp::new);
 
             thread_local! {
-                static RUNTIME: RefCell<Option<Box<dyn ::arkit::MountedEntryHandle>>> = RefCell::new(None);
+                static RUNTIME: RefCell<Option<::arkit::ArkRuntime>> = RefCell::new(None);
             }
 
             #[::arkit::napi_derive_ohos::napi]
@@ -92,7 +89,10 @@ pub fn entry(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         // Already mounted — the OHOS entrypoint only mounts once.
                         Ok(())
                     } else {
-                        let runtime = ::arkit::mount_entry(slot, (*APP).clone(), #fn_name())?;
+                        // `#fn_name` is the user's root component `fn() -> Element`.
+                        // The runtime creates a VirtualDom from it and rebuilds
+                        // into an ArkUIRenderer mounted on `slot`.
+                        let runtime = ::arkit::mount_entry(slot, (*APP).clone(), #fn_name)?;
                         runtime_state.replace(runtime);
                         Ok(())
                     }

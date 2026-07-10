@@ -1,40 +1,47 @@
-use super::*;
-use arkit::ohos_arkui_binding::common::attribute::{
-    ArkUINodeAttributeItem, ArkUINodeAttributeNumber,
-};
-use arkit::ohos_arkui_binding::types::alignment::Alignment;
-use arkit::prelude::Padding;
-use arkit::{ShadowStyle, TextAlignment};
-use arkit_icon as lucide;
+//! Button — shadcn-style button.
+//!
+//! Migrated from the original Elm builder API to dioxus 0.7 `#[component]` +
+//! `rsx!`. Preserves the original variants (`Default`, `Secondary`, `Outline`,
+//! `Ghost`, `Destructive`, `Link`), sizes (`Default`, `Sm`, `Lg`, `Icon`), and
+//! per-variant/size style computations (height, padding, text size, background,
+//! foreground, border, shadow).
+
+use crate::theme::*;
+use arkit_prelude::*;
+
+use super::{ARKUI_BORDER_STYLE_SOLID, ARKUI_BUTTON_TYPE_NORMAL};
 
 const TRANSPARENT: u32 = 0x00000000;
-const TEXT_DECORATION_NONE: i32 = 0;
-const TEXT_DECORATION_STYLE_SOLID: i32 = 0;
 
-fn disabled_opacity(disabled: bool) -> f32 {
-    if disabled {
-        0.5
-    } else {
-        1.0
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Button visual variant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ButtonVariant {
+    /// `bg-primary text-primary_foreground shadow-sm`.
+    #[default]
     Default,
+    /// `bg-secondary text-secondary_foreground shadow-sm`.
     Secondary,
+    /// `border border-border bg-background shadow-sm`.
     Outline,
+    /// No background, no shadow.
     Ghost,
+    /// `bg-destructive text-destructive_foreground shadow-sm`.
     Destructive,
+    /// No background, no shadow, primary-colored text.
     Link,
 }
 
+/// Button size.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ButtonSize {
+    /// Native `h-12 px-5 py-3`, 48px tall, `text-base`.
     #[default]
     Default,
+    /// `h-9 px-3`, 36px tall, `text-base` on native text.
     Sm,
+    /// Native `h-14 px-8`, 56px tall, `text-lg`.
     Lg,
+    /// 40x40 square, no padding.
     Icon,
 }
 
@@ -55,220 +62,25 @@ struct ButtonVariantStyle {
     shadow: bool,
 }
 
-fn retheme_button_content<Message: Send + 'static, AppTheme: 'static>(
-    element: ButtonElement<Message, AppTheme>,
-    foreground: u32,
-) -> ButtonElement<Message, AppTheme> {
-    element.map_descendants(move |node| {
-        if let Some(name) = node
-            .attr_string(ArkUINodeAttributeType::ImageAlt)
-            .map(str::to_owned)
-        {
-            let size = node.attr_f32(ArkUINodeAttributeType::Width).unwrap_or(16.0);
-            return lucide::icon_node::<Message, AppTheme>(name, size, foreground).unwrap_or(node);
-        }
-
-        if node
-            .attr_string(ArkUINodeAttributeType::TextContent)
-            .is_some()
-        {
-            node.font_color(foreground)
-        } else {
-            node
-        }
-    })
-}
-
-pub(super) fn button<Message: Send + 'static>(label: impl Into<String>) -> ButtonElement<Message> {
-    apply_button_size(
-        apply_button_theme(button_host(normal_button(label)), ButtonVariant::Default),
-        size_style(ButtonSize::Default),
-    )
-}
-
-fn button_with_icon<Message: Send + 'static>(
-    label: impl Into<String>,
-    icon_name: impl Into<String>,
-) -> ButtonElement<Message> {
-    icon_label_button(label, icon_name, ButtonSize::Default)
-}
-
-fn icon_label_button<Message: Send + 'static>(
-    label: impl Into<String>,
-    icon_name: impl Into<String>,
-    size: ButtonSize,
-) -> ButtonElement<Message> {
-    let label = label.into();
-    let icon_name = icon_name.into();
-    let button = button_host(normal_button_component())
-        .children(vec![button_content_row(
-            Some(label),
-            Some(icon_name),
-            colors().foreground,
-            icon_size(size),
-        )])
-        .size(size);
-
-    apply_button_theme(button, ButtonVariant::Default)
-}
-
-pub(super) fn icon_button<Message: Send + 'static>(
-    icon: impl Into<String>,
-) -> ButtonElement<Message> {
-    let button = button_host(normal_button_component())
-        .children(vec![button_content_row(
-            None,
-            Some(icon.into()),
-            colors().foreground,
-            icon_size(ButtonSize::Icon),
-        )])
-        .size(ButtonSize::Icon);
-
-    apply_button_theme(button, ButtonVariant::Default)
-}
-
-fn normal_button_component<Message, AppTheme>() -> ButtonElement<Message, AppTheme> {
-    arkit::button_component::<Message, AppTheme>()
-}
-
-fn normal_button<Message: 'static, AppTheme: 'static>(
-    label: impl Into<String>,
-) -> ButtonElement<Message, AppTheme> {
-    normal_button_component().children(vec![arkit::text(label).into()])
-}
-
-fn button_host<Message, AppTheme>(
-    element: ButtonElement<Message, AppTheme>,
-) -> ButtonElement<Message, AppTheme> {
-    element
-        .focusable(false)
-        .focus_on_touch(false)
-        .background_color(TRANSPARENT)
-        .border_style(BorderStyle::Solid)
-        .border_radius(radii().md)
-        .clip(true)
-        .alignment(Alignment::Center)
-        .padding(Padding::ZERO)
-        .border_width(0.0)
-        .border_color(TRANSPARENT)
-}
-
-fn apply_button_size<Message, AppTheme>(
-    element: ButtonElement<Message, AppTheme>,
-    size_style: ButtonSizeStyle,
-) -> ButtonElement<Message, AppTheme> {
-    let mut button = element
-        .height(size_style.height)
-        .padding(size_style.padding)
-        .font_size(size_style.text_size);
-
-    if let Some(width) = size_style.width {
-        button = button.width(width);
-    }
-
-    button
-}
-
-fn resize_button_content<Message: Send + 'static, AppTheme: 'static>(
-    element: ButtonElement<Message, AppTheme>,
-    size: ButtonSize,
-) -> ButtonElement<Message, AppTheme> {
-    let size_style = size_style(size);
-    let icon_size = icon_size(size);
-
-    element.map_descendants(move |node| {
-        if node.attr_string(ArkUINodeAttributeType::ImageAlt).is_some() {
-            return node.width(icon_size).height(icon_size);
-        }
-
-        if node
-            .attr_string(ArkUINodeAttributeType::TextContent)
-            .is_some()
-        {
-            node.font_size(size_style.text_size)
-        } else {
-            node
-        }
-    })
-}
-
-fn apply_button_theme<Message: Send + 'static, AppTheme: 'static>(
-    element: ButtonElement<Message, AppTheme>,
-    variant: ButtonVariant,
-) -> ButtonElement<Message, AppTheme> {
-    let variant_style = variant_style(variant);
-    let element = retheme_button_content(element, variant_style.foreground);
-
-    apply_button_theme_with_content(element, variant)
-}
-
-fn apply_button_theme_with_content<Message: Send + 'static, AppTheme>(
-    element: ButtonElement<Message, AppTheme>,
-    variant: ButtonVariant,
-) -> ButtonElement<Message, AppTheme> {
-    let variant_style = variant_style(variant);
-    let initial_text_decoration = TEXT_DECORATION_NONE;
-
-    let button = element
-        .border_radius(radii().md)
-        .clip(true)
-        .border_width(variant_style.border_width)
-        .border_color(variant_style.border_color)
-        .background_color(variant_style.background)
-        .font_weight(FontWeight::W500)
-        .font_color(variant_style.foreground)
-        .text_align(TextAlignment::Center)
-        .text_decoration(text_decoration(
-            initial_text_decoration,
-            variant_style.foreground,
-        ));
-
-    finalize_button(button, variant_style)
-}
-
-pub trait ButtonStyleExt: Sized {
-    fn theme(self, variant: ButtonVariant) -> Self;
-    fn size(self, size: ButtonSize) -> Self;
-    fn disabled(self, disabled: bool) -> Self;
-}
-
-impl<Message: Send + 'static, AppTheme: 'static> ButtonStyleExt
-    for ButtonElement<Message, AppTheme>
-{
-    fn theme(self, variant: ButtonVariant) -> Self {
-        apply_button_theme(self, variant)
-    }
-
-    fn size(self, size: ButtonSize) -> Self {
-        resize_button_content(apply_button_size(self, size_style(size)), size)
-    }
-
-    fn disabled(self, disabled: bool) -> Self {
-        let opacity = disabled_opacity(disabled);
-
-        self.enabled(!disabled).opacity(opacity)
-    }
-}
-
 fn size_style(size: ButtonSize) -> ButtonSizeStyle {
     match size {
         ButtonSize::Default => ButtonSizeStyle {
-            height: 40.0,
+            height: 48.0,
             width: None,
-            padding: [8.0, 16.0, 8.0, 16.0],
-            text_size: typography::SM,
+            padding: [12.0, 20.0, 12.0, 20.0],
+            text_size: typography::MD,
         },
         ButtonSize::Sm => ButtonSizeStyle {
             height: 36.0,
             width: None,
             padding: [0.0, 12.0, 0.0, 12.0],
-            text_size: typography::SM,
+            text_size: typography::MD,
         },
         ButtonSize::Lg => ButtonSizeStyle {
-            height: 44.0,
+            height: 56.0,
             width: None,
-            padding: [0.0, 24.0, 0.0, 24.0],
-            text_size: typography::SM,
+            padding: [0.0, 32.0, 0.0, 32.0],
+            text_size: typography::LG,
         },
         ButtonSize::Icon => ButtonSizeStyle {
             height: 40.0,
@@ -279,52 +91,46 @@ fn size_style(size: ButtonSize) -> ButtonSizeStyle {
     }
 }
 
-fn variant_style(variant: ButtonVariant) -> ButtonVariantStyle {
+fn variant_style(variant: ButtonVariant, theme: &Theme) -> ButtonVariantStyle {
     match variant {
-        // bg-primary, shadow-sm
         ButtonVariant::Default => ButtonVariantStyle {
-            background: colors().primary,
-            foreground: colors().primary_foreground,
+            background: theme.colors.primary,
+            foreground: theme.colors.primary_foreground,
             border_width: 0.0,
             border_color: TRANSPARENT,
             shadow: true,
         },
-        // bg-secondary, shadow-sm
         ButtonVariant::Secondary => ButtonVariantStyle {
-            background: colors().secondary,
-            foreground: colors().secondary_foreground,
+            background: theme.colors.secondary,
+            foreground: theme.colors.secondary_foreground,
             border_width: 0.0,
             border_color: TRANSPARENT,
             shadow: true,
         },
-        // border-border bg-background, shadow-sm
         ButtonVariant::Outline => ButtonVariantStyle {
-            background: colors().background,
-            foreground: colors().foreground,
+            background: theme.colors.background,
+            foreground: theme.colors.foreground,
             border_width: 1.0,
-            border_color: colors().border,
+            border_color: theme.colors.border,
             shadow: true,
         },
-        // no bg, no shadow
         ButtonVariant::Ghost => ButtonVariantStyle {
             background: TRANSPARENT,
-            foreground: colors().foreground,
+            foreground: theme.colors.foreground,
             border_width: 0.0,
             border_color: TRANSPARENT,
             shadow: false,
         },
-        // bg-destructive, shadow-sm
         ButtonVariant::Destructive => ButtonVariantStyle {
-            background: colors().destructive,
-            foreground: colors().destructive_foreground,
+            background: theme.colors.destructive,
+            foreground: theme.colors.destructive_foreground,
             border_width: 0.0,
             border_color: TRANSPARENT,
             shadow: true,
         },
-        // no bg, no shadow
         ButtonVariant::Link => ButtonVariantStyle {
             background: TRANSPARENT,
-            foreground: colors().primary,
+            foreground: theme.colors.primary,
             border_width: 0.0,
             border_color: TRANSPARENT,
             shadow: false,
@@ -332,266 +138,66 @@ fn variant_style(variant: ButtonVariant) -> ButtonVariantStyle {
     }
 }
 
-fn finalize_button<Message: Send + 'static, AppTheme>(
-    mut button: ButtonElement<Message, AppTheme>,
-    variant_style: ButtonVariantStyle,
-) -> ButtonElement<Message, AppTheme> {
-    button = if variant_style.shadow {
-        subtle_button_shadow(button)
-    } else {
-        clear_button_shadow(button)
-    };
-
-    button
+/// Props for [`Button`].
+#[derive(Props, Clone, PartialEq)]
+pub struct ButtonProps {
+    #[props(default)]
+    pub variant: ButtonVariant,
+    #[props(default)]
+    pub size: ButtonSize,
+    pub disabled: Option<bool>,
+    pub percent_width: Option<f32>,
+    pub onclick: Option<EventHandler<()>>,
+    pub children: Element,
 }
 
-fn button_content_row<Message: 'static>(
-    label: Option<String>,
-    icon_name: Option<String>,
-    foreground: u32,
-    icon_size: f32,
-) -> Element<Message> {
-    let mut children = Vec::new();
+/// A button with shadcn variants and sizes.
+#[component]
+pub fn Button(props: ButtonProps) -> Element {
+    let theme = use_theme();
+    let vs = variant_style(props.variant, &theme);
+    let ss = size_style(props.size);
+    let disabled = props.disabled.unwrap_or(false);
+    let onclick = props.onclick;
 
-    if let Some(icon_name) = icon_name {
-        children.push(
-            lucide::icon(icon_name)
-                .size(icon_size)
-                .color(foreground)
-                .render::<Message, arkit::Theme>(),
-        );
-    }
-
-    if let Some(label) = label {
-        let text = arkit::text::<Message, arkit::Theme>(label)
-            .font_size(typography::SM)
-            .font_color(foreground)
-            .font_weight(FontWeight::W500)
-            .line_height(20.0)
-            .into();
-
-        if children.is_empty() {
-            children.push(text);
-        } else {
-            children.push(
-                arkit::row_component::<Message, arkit::Theme>()
-                    .margin([0.0, 0.0, 0.0, 8.0])
-                    .children(vec![text])
-                    .into(),
-            );
+    rsx! {
+        button {
+            button_type: ARKUI_BUTTON_TYPE_NORMAL,
+            focusable: false,
+            focus_on_touch: false,
+            height: ss.height,
+            width: if let Some(w) = ss.width { w },
+            percent_width: if let Some(w) = props.percent_width { w },
+            padding_top: ss.padding[0],
+            padding_right: ss.padding[1],
+            padding_bottom: ss.padding[2],
+            padding_left: ss.padding[3],
+            font_size: ss.text_size,
+            font_weight: 500,
+            font_color: vs.foreground,
+            foreground_color: vs.foreground,
+            background_color: vs.background,
+            border_style: ARKUI_BORDER_STYLE_SOLID,
+            border_width: vs.border_width,
+            border_color: vs.border_color,
+            border_radius: theme.radii.md,
+            clip: true,
+            alignment: 4,
+            shadow: if vs.shadow { 1 } else { 0 },
+            opacity: if disabled { 0.5 } else { 1.0 },
+            enabled: !disabled,
+            onclick: move |_| {
+                if !disabled {
+                    if let Some(handler) = onclick {
+                        handler.call(());
+                    }
+                }
+            },
+            row {
+                align_items: "center",
+                justify_content: "center",
+                {props.children}
+            }
         }
-    }
-
-    arkit::row_component::<Message, arkit::Theme>()
-        .align_items_center()
-        .justify_content_center()
-        .children(children)
-        .into()
-}
-
-fn icon_size(size: ButtonSize) -> f32 {
-    match size {
-        ButtonSize::Icon => 16.0,
-        ButtonSize::Sm => 15.0,
-        ButtonSize::Lg => 18.0,
-        ButtonSize::Default => 16.0,
-    }
-}
-
-fn subtle_button_shadow<Message, AppTheme>(
-    element: ButtonElement<Message, AppTheme>,
-) -> ButtonElement<Message, AppTheme> {
-    element.shadow(ShadowStyle::OuterDefaultSm)
-}
-
-fn clear_button_shadow<Message, AppTheme>(
-    element: ButtonElement<Message, AppTheme>,
-) -> ButtonElement<Message, AppTheme> {
-    element.clear_shadow()
-}
-
-fn text_decoration(decoration_type: i32, color_value: u32) -> ArkUINodeAttributeItem {
-    ArkUINodeAttributeItem::NumberValue(vec![
-        ArkUINodeAttributeNumber::Int(decoration_type),
-        ArkUINodeAttributeNumber::Uint(color_value),
-        ArkUINodeAttributeNumber::Int(TEXT_DECORATION_STYLE_SOLID),
-    ])
-}
-
-// Struct component API
-enum ButtonContent {
-    Label,
-    IconLabel,
-    Icon,
-}
-
-#[derive(Debug, Clone, Copy)]
-enum ButtonWidth {
-    Length(arkit::Length),
-    Percent(f32),
-}
-
-pub struct Button<Message = ()> {
-    content: ButtonContent,
-    label: Option<String>,
-    icon_name: Option<String>,
-    variant: ButtonVariant,
-    size: ButtonSize,
-    disabled: bool,
-    key: Option<String>,
-    width: Option<ButtonWidth>,
-    height: Option<arkit::Length>,
-    padding: Option<arkit::Padding>,
-    on_press: std::cell::RefCell<Option<Message>>,
-    on_click: Option<std::rc::Rc<dyn Fn()>>,
-}
-
-impl<Message> Button<Message> {
-    pub fn new(label: impl Into<String>) -> Self {
-        Self {
-            content: ButtonContent::Label,
-            label: Some(label.into()),
-            icon_name: None,
-            variant: ButtonVariant::Default,
-            size: ButtonSize::Default,
-            disabled: false,
-            key: None,
-            width: None,
-            height: None,
-            padding: None,
-            on_press: std::cell::RefCell::new(None),
-            on_click: None,
-        }
-    }
-
-    pub fn with_icon(label: impl Into<String>, icon_name: impl Into<String>) -> Self {
-        Self {
-            content: ButtonContent::IconLabel,
-            label: Some(label.into()),
-            icon_name: Some(icon_name.into()),
-            ..Self::new("")
-        }
-    }
-
-    pub fn icon(icon_name: impl Into<String>) -> Self {
-        Self {
-            content: ButtonContent::Icon,
-            label: None,
-            icon_name: Some(icon_name.into()),
-            size: ButtonSize::Icon,
-            ..Self::new("")
-        }
-    }
-
-    pub fn variant(mut self, variant: ButtonVariant) -> Self {
-        self.variant = variant;
-        self
-    }
-
-    pub fn theme(self, variant: ButtonVariant) -> Self {
-        self.variant(variant)
-    }
-
-    pub fn size(mut self, size: ButtonSize) -> Self {
-        self.size = size;
-        self
-    }
-
-    pub fn disabled(mut self, disabled: bool) -> Self {
-        self.disabled = disabled;
-        self
-    }
-
-    pub fn key(mut self, key: impl Into<String>) -> Self {
-        self.key = Some(key.into());
-        self
-    }
-
-    pub fn width(mut self, width: impl Into<arkit::Length>) -> Self {
-        self.width = Some(ButtonWidth::Length(width.into()));
-        self
-    }
-
-    pub fn percent_width(mut self, value: f32) -> Self {
-        self.width = Some(ButtonWidth::Percent(value));
-        self
-    }
-
-    pub fn height(mut self, height: impl Into<arkit::Length>) -> Self {
-        self.height = Some(height.into());
-        self
-    }
-
-    pub fn padding(mut self, padding: impl Into<arkit::Padding>) -> Self {
-        self.padding = Some(padding.into());
-        self
-    }
-
-    pub fn on_press(self, message: Message) -> Self {
-        *self.on_press.borrow_mut() = Some(message);
-        self
-    }
-
-    pub fn on_click(mut self, callback: impl Fn() + 'static) -> Self {
-        self.on_click = Some(std::rc::Rc::new(callback));
-        self
-    }
-}
-
-impl<Message: Clone + Send + 'static> Button<Message> {
-    fn render(&self) -> Element<Message> {
-        let mut button = match self.content {
-            ButtonContent::Label => button(self.label.clone().unwrap_or_default()),
-            ButtonContent::IconLabel => button_with_icon(
-                self.label.clone().unwrap_or_default(),
-                self.icon_name.clone().unwrap_or_default(),
-            ),
-            ButtonContent::Icon => icon_button(self.icon_name.clone().unwrap_or_default()),
-        }
-        .theme(self.variant)
-        .size(self.size)
-        .disabled(self.disabled);
-
-        if let Some(key) = self.key.clone() {
-            button = button.key(key);
-        }
-        if let Some(width) = self.width {
-            button = match width {
-                ButtonWidth::Length(width) => button.width(width),
-                ButtonWidth::Percent(width) => button.percent_width(width),
-            };
-        }
-        if let Some(height) = self.height {
-            button = button.height(height);
-        }
-        if let Some(padding) = self.padding {
-            button = button.padding(padding);
-        }
-        if let Some(message) = self.on_press.borrow_mut().take() {
-            button = button.on_press(message);
-        }
-        if let Some(callback) = self.on_click.clone() {
-            button = button.on_click(move || callback());
-        }
-
-        button.into()
-    }
-}
-
-impl<Message: Clone + Send + 'static>
-    arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for Button<Message>
-{
-    fn body(
-        &self,
-        _tree: &mut arkit::advanced::widget::Tree,
-        _renderer: &arkit::Renderer,
-    ) -> Element<Message> {
-        self.render()
-    }
-}
-
-impl<Message: Clone + Send + 'static> From<Button<Message>> for Element<Message> {
-    fn from(value: Button<Message>) -> Self {
-        Element::new(value)
     }
 }

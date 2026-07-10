@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+# 把指定 arkit example 打包成 hap 安装到 OpenHarmony 模拟器并启动。
+#
+# 用法: ./run.sh <example-dir> [install|build|start|log]
+#   example-dir: counter | async_task | complex_cases | i18n | router | shadcn_showcase | webview
+#
+# 每个 example 的 .so 名 = lib<crate-name>.so（crate-name 取自 examples/<dir>/Cargo.toml）。
+# 切换 example 时同步更新 app 壳的 moduleName / lib 依赖 / cpp/types，保持名字一致。
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+APP="$ROOT/app"
+HVIGWORW="/Users/ranger/Downloads/command-line-tools/bin/hvigorw"
+OHPM="/Users/ranger/Downloads/command-line-tools/bin/ohpm"
+BUNDLE="com.arkit.example"
+ABILITY="EntryAbility"
+
+EX="${1:?usage: $0 <example-dir> [build|install|start|log]}"
+ACTION="${2:-all}"
+
+# 解析 example 的 crate 名（= .so 名）
+CARGO_TOML="$ROOT/examples/$EX/Cargo.toml"
+[ -f "$CARGO_TOML" ] || { echo "example not found: $EX"; exit 1; }
+CRATE=$(grep '^name' "$CARGO_TOML" | head -1 | sed 's/.*= *"\(.*\)"/\1/')
+SO_SRC="$ROOT/examples/$EX/dist/arm64-v8a/lib${CRATE}.so"
+DTS_SRC="$ROOT/examples/$EX/dist/index.d.ts"
+[ -f "$SO_SRC" ] || { echo ".so not found, build first: ohrs build --arch aarch in examples/$EX ($SO_SRC)"; exit 1; }
+
+echo ">> example=$EX crate=$CRATE"
+
+# 1) 同步 .so + d.ts + moduleName + oh-package 依赖到 app 壳
+sync_shell() {
+  echo ">> syncing lib${CRATE}.so + types into app shell"
+  # 清旧 types，建新
+  rm -rf "$APP/entry/src/main/cpp/types"/lib*
+  mkdir -p "$APP/entry/src/main/cpp/types/lib${CRATE}"
+  cp "$DTS_SRC" "$APP/entry/src/main/cpp/types/lib${CRATE}/Index.d.ts"
+  cat > "$APP/entry/src/main/cpp/types/lib${CRATE}/oh-package.json5" <<EOF
+{
+  "name": "lib${CRATE}.so",
+  "types": "./Index.d.ts",
+  "version": "1.0.0",
+  "description": "arkit ${EX} example napi bindings"
+}
+EOF
+  # .so — 放 entry/libs/arm64-v8a/（hvigor 默认打包此目录的预编译 native 库）
+  rm -f "$APP/entry/libs/arm64-v8a"/lib*.so
+  mkdir -p "$APP/entry/libs/arm64-v8a"
+  cp "$SO_SRC" "$APP/entry/libs/arm64-v8a/lib${CRATE}.so"
+  # entry oh-package.json5 的 lib 依赖
+  cat > "$APP/entry/oh-package.json5" <<EOF
+{
+  "name": "entry",
+  "version": "1.0.0",
+  "description": "arkit example entry",
+  "main": "",
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "lib${CRATE}.so": "file:./src/main/cpp/types/lib${CRATE}",
+    "@ohos-rs/ability": "0.4.0-beta.7"
+  }
+}
+EOF
+  # EntryAbility moduleName + Index 默认值
+  perl -0pi -e 's/(public moduleName: string = ")[^"]*(")/${1}'"$CRATE"'${2}/' \
+    "$APP/entry/src/main/ets/entryability/EntryAbility.ets"
+  perl -0pi -e 's/(@State moduleName: string = ")[^"]*(")/${1}'"$CRATE"'${2}/' \
+    "$APP/entry/src/main/ets/pages/Index.ets"
+}
+
+do_build() {
+  echo ">> ohpm install"
+  (cd "$APP" && "$OHPM" install)
+  echo ">> hvigorw assembleHap"
+  (cd "$APP" && "$HVIGWORW" assembleHap --no-daemon --mode module -p product=default -p buildMode=debug --no-hvigorw-daemon)
+}
+
+HAP=$(find "$APP/entry/build" -name "*.hap" -path "*outputs*" 2>/dev/null | head -1)
+
+do_install() {
+  HAP=$(find "$APP/entry/build" -name "*.hap" -path "*outputs*" 2>/dev/null | head -1)
+  [ -n "$HAP" ] || { echo "no hap found, build first"; exit 1; }
+  echo ">> hdc install $HAP"
+  hdc install -r "$HAP" 2>&1 | tail -3
+}
+
+do_start() {
+  echo ">> aa start $ABILITY / $BUNDLE"
+  hdc shell aa start -a "$ABILITY" -b "$BUNDLE" 2>&1 | tail -3
+}
+
+case "$ACTION" in
+  sync) sync_shell ;;
+  build) do_build ;;
+  install) do_install ;;
+  start) do_start ;;
+  log) hdc hilog | grep -iE "arkit|ArkUI|dioxus|error|fatal" ;;
+  all)
+    sync_shell
+    do_build
+    do_install
+    do_start
+    echo ">> deployed $EX ($CRATE). tail logs: $0 $EX log"
+    ;;
+  *) echo "unknown action: $ACTION"; exit 1 ;;
+esac

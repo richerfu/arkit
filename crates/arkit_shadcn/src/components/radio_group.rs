@@ -1,161 +1,114 @@
-use super::label::label;
-use super::*;
-use std::rc::Rc;
+//! RadioGroup — shadcn-style single-choice radio group.
+//!
+//! Migrated from the original Elm builder API to dioxus 0.7 `#[component]` +
+//! `rsx!`. Matches the React Native Reusables primitive: a 16x16 primary
+//! border ring with an 8x8 primary dot when checked, full radius, 8px row gap,
+//! and medium-weight `SM` labels.
+
+use super::ARKUI_BORDER_STYLE_SOLID;
+use crate::theme::*;
+use arkit_prelude::*;
 
 const RADIO_SIZE: f32 = 16.0;
 const RADIO_DOT_SIZE: f32 = 8.0;
 const RADIO_BORDER_WIDTH: f32 = 1.0;
+const ALIGN_CENTER: i32 = 4;
 
-fn radio_indicator<Message: 'static>(checked: bool) -> Element<Message> {
-    let mut indicator = shadow_sm(
-        arkit::row_component::<Message, arkit::Theme>()
-            .width(RADIO_SIZE)
-            .height(RADIO_SIZE)
-            .align_items_center()
-            .justify_content_center()
-            .border_radius([radii().full, radii().full, radii().full, radii().full])
-            .border_width([
-                RADIO_BORDER_WIDTH,
-                RADIO_BORDER_WIDTH,
-                RADIO_BORDER_WIDTH,
-                RADIO_BORDER_WIDTH,
-            ])
-            .border_color(if checked {
-                colors().primary
-            } else {
-                colors().input
-            })
-            .background_color(colors().background),
-    );
-
-    if checked {
-        indicator = indicator.children(vec![arkit::row_component::<Message, arkit::Theme>()
-            .width(RADIO_DOT_SIZE)
-            .height(RADIO_DOT_SIZE)
-            .border_radius([radii().full, radii().full, radii().full, radii().full])
-            .background_color(colors().primary)
-            .into()]);
-    }
-
-    indicator.into()
-}
-
-fn radio_group_impl<Message: 'static>(
-    options: Vec<String>,
-    selected: impl Into<String>,
-    on_select: impl Fn(String) + 'static,
-) -> Element<Message> {
-    let selected = selected.into();
-    let on_select = Rc::new(on_select);
-    let children = options
-        .into_iter()
-        .enumerate()
-        .map(|(index, option)| {
-            let selected_value = selected.clone();
-            let click_value = option.clone();
-            let on_select = on_select.clone();
-            let row = arkit::row_component::<Message, arkit::Theme>()
-                .percent_width(1.0)
-                .align_items_center()
-                .on_click(move || on_select(click_value.clone()))
-                .children(vec![
-                    radio_indicator::<Message>(selected_value == option),
-                    arkit::row_component::<Message, arkit::Theme>()
-                        .margin([0.0, 0.0, 0.0, spacing::MD])
-                        .children(vec![label::<Message>(option).into()])
-                        .into(),
-                ]);
-
-            if index == 0 {
-                row.into()
-            } else {
-                margin_top(row, spacing::MD).into()
+/// Render the radio indicator ring (with a primary dot when `checked`).
+fn radio_indicator(checked: bool, theme: &Theme) -> Element {
+    rsx! {
+        stack {
+            width: RADIO_SIZE,
+            height: RADIO_SIZE,
+            alignment: ALIGN_CENTER,
+            border_radius: theme.radii.full,
+            border_width: RADIO_BORDER_WIDTH,
+            border_style: ARKUI_BORDER_STYLE_SOLID,
+            border_color: theme.colors.primary,
+            background_color: theme.colors.background,
+            clip: true,
+            if checked {
+                row {
+                    width: RADIO_DOT_SIZE,
+                    height: RADIO_DOT_SIZE,
+                    border_radius: theme.radii.full,
+                    background_color: theme.colors.primary,
+                }
             }
-        })
-        .collect::<Vec<Element<Message>>>();
-
-    arkit::column_component::<Message, arkit::Theme>()
-        .percent_width(1.0)
-        .children(children)
-        .into()
-}
-
-fn radio_group_message<Message>(
-    options: Vec<String>,
-    selected: impl Into<String>,
-    on_select: impl Fn(String) -> Message + 'static,
-) -> Element<Message>
-where
-    Message: Send + 'static,
-{
-    radio_group_impl(options, selected, move |value| {
-        dispatch_message(on_select(value))
-    })
-}
-
-// Struct component API
-pub struct RadioGroup<Message = ()> {
-    options: Vec<String>,
-    selected: Option<String>,
-    default_selected: String,
-    on_select: Option<std::rc::Rc<dyn Fn(String) -> Message>>,
-}
-
-impl<Message> RadioGroup<Message> {
-    pub fn new(options: Vec<String>) -> Self {
-        Self {
-            options,
-            selected: None,
-            default_selected: String::new(),
-            on_select: None,
         }
     }
-
-    pub fn selected(mut self, selected: impl Into<String>) -> Self {
-        self.selected = Some(selected.into());
-        self
-    }
-
-    pub fn default_selected(mut self, selected: impl Into<String>) -> Self {
-        self.default_selected = selected.into();
-        self
-    }
-
-    pub fn on_select(mut self, handler: impl Fn(String) -> Message + 'static) -> Self {
-        self.on_select = Some(std::rc::Rc::new(handler));
-        self
-    }
 }
 
-impl<Message: Send + 'static> arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer>
-    for RadioGroup<Message>
-{
-    fn body(
-        &self,
-        tree: &mut arkit::advanced::widget::Tree,
-        _renderer: &arkit::Renderer,
-    ) -> Element<Message> {
-        let state = super::widget_state(tree, || self.default_selected.clone());
-        let is_controlled = self.selected.is_some();
-        let selected = self
-            .selected
-            .clone()
-            .unwrap_or_else(|| state.borrow().clone());
-        let on_select = self.on_select.clone();
-        radio_group_impl(self.options.clone(), selected, move |value| {
-            if !is_controlled {
-                *state.borrow_mut() = value.clone();
-                super::request_widget_rerender();
-            }
-            if let Some(on_select) = on_select.as_ref() {
-                dispatch_message(on_select(value));
-            }
+/// Props for [`RadioGroup`].
+#[derive(Props, Clone, PartialEq)]
+pub struct RadioGroupProps {
+    pub options: Vec<String>,
+    /// Controlled selection. When `Some`, the group is controlled.
+    #[props(default)]
+    pub selected: Option<String>,
+    #[props(default)]
+    pub default_selected: String,
+    #[props(default)]
+    pub on_select: EventHandler<String>,
+}
+
+/// A vertical group of radio options. Selecting an option fires
+/// [`RadioGroupProps::on_select`] with its value.
+#[component]
+pub fn RadioGroup(props: RadioGroupProps) -> Element {
+    let theme = use_theme();
+    let controlled = props.selected.is_some();
+    let local = use_signal(|| props.default_selected.clone());
+    let selected: String = props
+        .selected
+        .clone()
+        .unwrap_or_else(|| local.read().clone());
+
+    let rows: Vec<Element> = props
+        .options
+        .iter()
+        .enumerate()
+        .map(|(index, option)| {
+            let checked = selected == *option;
+            let indicator = radio_indicator(checked, &theme);
+            let on_select = props.on_select;
+            let mut local = local;
+            let click_value = option.clone();
+            let label_color = theme.colors.foreground;
+            let top_margin = if index == 0 { 0.0 } else { spacing::MD };
+            let row = rsx! {
+                row {
+                    percent_width: 1.0,
+                    align_items: "center",
+                    justify_content: "start",
+                    margin_top: top_margin,
+                    onclick: move |_| {
+                        if !controlled {
+                            local.set(click_value.clone());
+                        }
+                        on_select.call(click_value.clone());
+                    },
+                    {indicator}
+                    row {
+                        margin_left: spacing::MD,
+                        text {
+                            content: option.clone(),
+                            font_size: typography::SM,
+                            font_weight: 500,
+                            font_color: label_color,
+                            text_align: 0,
+                        }
+                    }
+                }
+            };
+            row
         })
-    }
-}
+        .collect();
 
-impl<Message: Send + 'static> From<RadioGroup<Message>> for Element<Message> {
-    fn from(value: RadioGroup<Message>) -> Self {
-        Element::new(value)
+    rsx! {
+        column {
+            percent_width: 1.0,
+            {rows.into_iter()}
+        }
     }
 }

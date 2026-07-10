@@ -1,282 +1,266 @@
+//! WebView example — a real embedded webview driven by dioxus signals.
+//!
+//! The webview is created through the local renderer/runtime embedded path,
+//! not through `openharmony_ability::WebViewBuilder`. That keeps callback
+//! argument handling under this crate's control and mounts the WebView as an
+//! ArkUI native child of the dioxus host node.
+
+use std::rc::Rc;
+
 use arkit::entry;
-use arkit::internal::dispatch;
 use arkit::prelude::*;
-use arkit::{application, Element, Task, WebViewController};
+use arkit_runtime as runtime;
+use dioxus_core::use_drop;
+use dioxus_core_macro::{component, Props};
+use dioxus_hooks::{use_context, use_context_provider};
+use dioxus_signals::{ReadableExt, WritableExt};
 
 const RUST_URL: &str = "https://www.rust-lang.org";
 const DOCS_URL: &str = "https://docs.rs";
-
-#[derive(Debug, Clone)]
-enum Message {
-    ProbeTap,
-    Reload,
-    Focus,
-    LoadRust,
-    LoadDocs,
-    EvalScript,
-    ToggleVisible,
-    TitleChanged(String),
-    StatusChanged(String),
-}
-
-#[derive(Clone)]
-struct AppState {
-    controller: WebViewController,
-    current_url: String,
-    title: String,
-    status: String,
-    visible: bool,
-    probe_taps: u32,
-}
-
-impl Default for AppState {
-    fn default() -> Self {
-        Self {
-            controller: WebViewController::with_id("arkit-example-webview"),
-            current_url: RUST_URL.to_string(),
-            title: String::from("loading..."),
-            status: String::from("ready"),
-            visible: true,
-            probe_taps: 0,
-        }
-    }
-}
-
-fn update(state: &mut AppState, message: Message) -> Task<Message> {
-    match message {
-        Message::ProbeTap => {
-            state.probe_taps += 1;
-            state.status = format!("probe tapped {} time(s)", state.probe_taps);
-        }
-        Message::Reload => {
-            state.status = match state.controller.reload() {
-                Ok(()) => String::from("reloaded page"),
-                Err(error) => format!("reload failed: {error}"),
-            };
-        }
-        Message::Focus => {
-            state.status = match state.controller.focus() {
-                Ok(()) => String::from("webview focused"),
-                Err(error) => format!("focus failed: {error}"),
-            };
-        }
-        Message::LoadRust => {
-            state.current_url = RUST_URL.to_string();
-            state.status = match state.controller.load_url(RUST_URL) {
-                Ok(()) => String::from("loaded rust-lang.org"),
-                Err(error) => format!("load failed: {error}"),
-            };
-        }
-        Message::LoadDocs => {
-            state.current_url = DOCS_URL.to_string();
-            state.status = match state.controller.load_url(DOCS_URL) {
-                Ok(()) => String::from("loaded docs.rs"),
-                Err(error) => format!("load failed: {error}"),
-            };
-        }
-        Message::EvalScript => {
-            state.status = match state.controller.evaluate_script_with_callback(
-                "document.title",
-                Some(Box::new(|title| {
-                    dispatch(Message::StatusChanged(format!("document.title = {title}")));
-                })),
-            ) {
-                Ok(()) => String::from("requested document.title"),
-                Err(error) => format!("script failed: {error}"),
-            };
-        }
-        Message::ToggleVisible => {
-            state.visible = !state.visible;
-            state.status = match state.controller.set_visible(state.visible) {
-                Ok(()) => {
-                    if state.visible {
-                        String::from("webview visible")
-                    } else {
-                        String::from("webview hidden")
-                    }
-                }
-                Err(error) => format!("toggle failed: {error}"),
-            };
-        }
-        Message::TitleChanged(title) => {
-            state.title = title;
-            state.status = String::from("title updated from webview");
-        }
-        Message::StatusChanged(status) => {
-            state.status = status;
-        }
-    }
-
-    Task::none()
-}
-
-fn view(state: &AppState) -> Element<Message> {
-    Element::new(WebviewExampleView {
-        state: state.clone(),
-    })
-}
-
-struct WebviewExampleView {
-    state: AppState,
-}
-
-impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for WebviewExampleView {
-    fn body(
-        &self,
-        _tree: &mut arkit::advanced::widget::Tree,
-        _renderer: &arkit::Renderer,
-    ) -> Element<Message> {
-        let state = &self.state;
-
-        column_component()
-            .percent_width(1.0)
-            .percent_height(1.0)
-            .background_color(0xFFF6F7FB)
-            .children(vec![
-                column_component()
-                    .padding(16.0)
-                    .background_color(0xFFFFFFFF)
-                    .children(vec![
-                        text("arkit webview example")
-                            .font_size(24.0)
-                            .font_weight(FontWeight::W700)
-                            .line_height(28.0)
-                            .into(),
-                        text(format!("title: {}", state.title))
-                            .margin_top(8.0)
-                            .font_size(14.0)
-                            .line_height(18.0)
-                            .font_color(0xFF334155)
-                            .into(),
-                        text(format!("url: {}", state.current_url))
-                            .margin_top(4.0)
-                            .font_size(13.0)
-                            .line_height(18.0)
-                            .font_color(0xFF64748B)
-                            .into(),
-                        text(format!("status: {}", state.status))
-                            .margin_top(4.0)
-                            .font_size(13.0)
-                            .line_height(18.0)
-                            .font_color(0xFF0F766E)
-                            .into(),
-                        Element::new(
-                            ToolbarButton::new(
-                                format!("Tap Probe {}", state.probe_taps),
-                                Message::ProbeTap,
-                            )
-                            .background_color(0xFF0F766E)
-                            .margin_top(12.0),
-                        ),
-                        row_component()
-                            .margin_top(12.0)
-                            .children(vec![
-                                Element::new(ToolbarButton::new("Reload", Message::Reload)),
-                                Element::new(
-                                    ToolbarButton::new("Focus", Message::Focus).margin_left(8.0),
-                                ),
-                                Element::new(
-                                    ToolbarButton::new("Eval JS", Message::EvalScript)
-                                        .margin_left(8.0),
-                                ),
-                                Element::new(
-                                    ToolbarButton::new(
-                                        if state.visible { "Hide" } else { "Show" },
-                                        Message::ToggleVisible,
-                                    )
-                                    .margin_left(8.0),
-                                ),
-                            ])
-                            .into(),
-                        row_component()
-                            .margin_top(8.0)
-                            .children(vec![
-                                Element::new(ToolbarButton::new(
-                                    "rust-lang.org",
-                                    Message::LoadRust,
-                                )),
-                                Element::new(
-                                    ToolbarButton::new("docs.rs", Message::LoadDocs)
-                                        .margin_left(8.0),
-                                ),
-                            ])
-                            .into(),
-                    ])
-                    .into(),
-                container(
-                    web_view(state.controller.clone(), state.current_url.clone())
-                        .background_color(0xFFFFFFFF)
-                        .on_title_change(|title| dispatch(Message::TitleChanged(title))),
-                )
-                .padding(16.0)
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .into(),
-            ])
-            .into()
-    }
-}
-
-struct ToolbarButton {
-    label: String,
-    message: Message,
-    background_color: u32,
-    margin_top: f32,
-    margin_left: f32,
-}
-
-impl ToolbarButton {
-    fn new(label: impl Into<String>, message: Message) -> Self {
-        Self {
-            label: label.into(),
-            message,
-            background_color: 0xFF111827,
-            margin_top: 0.0,
-            margin_left: 0.0,
-        }
-    }
-
-    fn background_color(mut self, color: u32) -> Self {
-        self.background_color = color;
-        self
-    }
-
-    fn margin_top(mut self, value: f32) -> Self {
-        self.margin_top = value;
-        self
-    }
-
-    fn margin_left(mut self, value: f32) -> Self {
-        self.margin_left = value;
-        self
-    }
-}
-
-impl arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer> for ToolbarButton {
-    fn body(
-        &self,
-        _tree: &mut arkit::advanced::widget::Tree,
-        _renderer: &arkit::Renderer,
-    ) -> Element<Message> {
-        container(
-            text(self.label.clone())
-                .font_color(0xFFFFFFFF)
-                .font_size(13.0)
-                .line_height(16.0),
-        )
-        .align_items_center()
-        .justify_content_center()
-        .padding([10.0, 14.0, 10.0, 14.0])
-        .border_radius(10.0)
-        .background_color(self.background_color)
-        .margin_top(self.margin_top)
-        .margin_left(self.margin_left)
-        .on_press(self.message.clone())
-        .into()
-    }
-}
+const WEBVIEW_ID: &str = "arkit-example-webview";
 
 #[entry]
-fn app() -> impl arkit::EntryPoint {
-    application(AppState::default, update, view)
+fn app() -> Element {
+    let webview = use_context_provider(|| EmbeddedWebViewController::new(WEBVIEW_ID));
+
+    let url = use_signal(|| RUST_URL.to_string());
+    let title = use_signal(|| String::from("loading..."));
+    let status = use_signal(|| String::from("ready"));
+    let zoom = use_signal(|| 1.0_f64);
+
+    let title_display = (title.read()).clone();
+    let status_display = (status.read()).clone();
+    let url_display = (url.read()).clone();
+    let zoom_display = *zoom.read();
+
+    let wv_reload = webview.clone();
+    let mut status_reload = status;
+    let wv_focus = webview.clone();
+    let mut status_focus = status;
+    let wv_zoom_in = webview.clone();
+    let mut zoom_in = zoom;
+    let mut status_zoom_in = status;
+    let wv_zoom_out = webview.clone();
+    let mut zoom_out = zoom;
+    let mut status_zoom_out = status;
+    let mut url_rust = url;
+    let mut status_rust = status;
+    let wv_rust = webview.clone();
+    let mut url_docs = url;
+    let mut status_docs = status;
+    let wv_docs = webview.clone();
+    let mut url_input = url;
+
+    rsx! {
+        column {
+            percent_width: 1.0,
+            percent_height: 1.0,
+            background_color: 0xFFF6F7FBu32,
+
+            column {
+                padding: 16.0,
+                background_color: 0xFFFFFFFFu32,
+
+                text {
+                    font_size: 24.0,
+                    line_height: 28.0,
+                    font_weight: "700",
+                    "arkit webview example"
+                }
+                text {
+                    margin_top: 8.0,
+                    font_size: 14.0,
+                    line_height: 18.0,
+                    font_color: 0xFF334155u32,
+                    "title: {title_display}"
+                }
+                text {
+                    margin_top: 4.0,
+                    font_size: 13.0,
+                    line_height: 18.0,
+                    font_color: 0xFF64748Bu32,
+                    "url: {url_display}"
+                }
+                text {
+                    margin_top: 4.0,
+                    font_size: 13.0,
+                    line_height: 18.0,
+                    font_color: 0xFF0F766Eu32,
+                    "status: {status_display}  (zoom {zoom_display:.2})"
+                }
+
+                textinput {
+                    margin_top: 12.0,
+                    padding: 10.0,
+                    font_size: 14.0,
+                    background_color: 0xFFF1F5F9u32,
+                    border_radius: 8.0,
+                    value: url_display.clone(),
+                    placeholder: "enter url",
+                    onchange: move |evt| {
+                        url_input.set(evt.string_value.clone());
+                    }
+                }
+
+                row {
+                    margin_top: 12.0,
+                    button {
+                        onclick: move |_| {
+                            let result = wv_reload.reload();
+                            status_reload.set(match result {
+                                Ok(()) => String::from("reloaded page"),
+                                Err(e) => format!("reload failed: {e}"),
+                            });
+                        },
+                        "Reload"
+                    }
+                    button {
+                        margin_left: 8.0,
+                        onclick: move |_| {
+                            let result = wv_focus.focus();
+                            status_focus.set(match result {
+                                Ok(()) => String::from("webview focused"),
+                                Err(e) => format!("focus failed: {e}"),
+                            });
+                        },
+                        "Focus"
+                    }
+                    button {
+                        margin_left: 8.0,
+                        onclick: move |_| {
+                            let next = *zoom_in.read() + 0.1;
+                            zoom_in.set(next);
+                            let result = wv_zoom_in.set_zoom(next);
+                            status_zoom_in.set(match result {
+                                Ok(()) => format!("zoom set to {next:.2}"),
+                                Err(e) => format!("zoom failed: {e}"),
+                            });
+                        },
+                        "Zoom +"
+                    }
+                    button {
+                        margin_left: 8.0,
+                        onclick: move |_| {
+                            let next = (*zoom_out.read() - 0.1).max(0.1);
+                            zoom_out.set(next);
+                            let result = wv_zoom_out.set_zoom(next);
+                            status_zoom_out.set(match result {
+                                Ok(()) => format!("zoom set to {next:.2}"),
+                                Err(e) => format!("zoom failed: {e}"),
+                            });
+                        },
+                        "Zoom -"
+                    }
+                }
+
+                row {
+                    margin_top: 8.0,
+                    button {
+                        onclick: move |_| {
+                            url_rust.set(RUST_URL.to_string());
+                            let result = wv_rust.load_url(RUST_URL);
+                            status_rust.set(match result {
+                                Ok(()) => String::from("loaded rust-lang.org"),
+                                Err(e) => format!("load failed: {e}"),
+                            });
+                        },
+                        "rust-lang.org"
+                    }
+                    button {
+                        margin_left: 8.0,
+                        onclick: move |_| {
+                            url_docs.set(DOCS_URL.to_string());
+                            let result = wv_docs.load_url(DOCS_URL);
+                            status_docs.set(match result {
+                                Ok(()) => String::from("loaded docs.rs"),
+                                Err(e) => format!("load failed: {e}"),
+                            });
+                        },
+                        "docs.rs"
+                    }
+                }
+            }
+
+            WebviewArea {
+                url,
+                title,
+                status,
+            }
+        }
+    }
+}
+
+#[component]
+fn WebviewArea(
+    url: dioxus_signals::Signal<String>,
+    title: dioxus_signals::Signal<String>,
+    status: dioxus_signals::Signal<String>,
+) -> Element {
+    let webview: EmbeddedWebViewController = use_context();
+
+    let url_for_frame = url;
+    let title_sig = title;
+    let status_sig = status;
+    let webview_for_frame = webview.clone();
+
+    use_layout_frame_node(move |mut host_node, frame| {
+        if !frame.is_measured() {
+            return;
+        }
+
+        let mut init = EmbeddedWebViewInit::url(WEBVIEW_ID, (url_for_frame)());
+        init.style = Some(WebViewStyle {
+            x: None,
+            y: None,
+            visible: Some(true),
+            background_color: Some("#FFFFFFFF".to_string()),
+        });
+
+        let title_cb_sig = title_sig;
+        init.on_title_change = Some(Rc::new(move |new_title| {
+            let mut sig = title_cb_sig;
+            runtime::queue_ui_loop(move || {
+                sig.set(new_title);
+            });
+        }));
+
+        let result = webview_for_frame.mount_or_sync(
+            &mut host_node,
+            init,
+            Some(WebViewFrame {
+                width: frame.width,
+                height: frame.height,
+            }),
+        );
+
+        match result {
+            Ok(()) if webview_for_frame.is_mounted() => {
+                let mut sig = status_sig;
+                runtime::queue_ui_loop(move || {
+                    sig.set(String::from("webview mounted"));
+                });
+            }
+            Ok(()) => {}
+            Err(err) => {
+                let mut sig = status_sig;
+                let msg = err.to_string();
+                runtime::queue_ui_loop(move || {
+                    sig.set(format!("webview mount failed: {msg}"));
+                });
+            }
+        }
+    });
+
+    let webview_for_drop = webview.clone();
+    use_drop(move || {
+        webview_for_drop.dispose();
+    });
+
+    rsx! {
+        stack {
+            percent_width: 1.0,
+            height: 400.0,
+            background_color: 0xFFFFFFFFu32,
+        }
+    }
 }

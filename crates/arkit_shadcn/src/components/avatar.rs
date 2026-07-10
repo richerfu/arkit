@@ -1,116 +1,86 @@
-use super::*;
+//! Avatar — shadcn-style user avatar.
+//!
+//! Migrated from the original Elm builder API to dioxus 0.7 `#[component]` +
+//! `rsx!`. The root owns size, clipping, radius, ring and optional image
+//! overlay. Fallback content is an explicit slot; Avatar does not synthesize a
+//! default fallback when business code omits one.
 
-fn avatar<Message: 'static>(
-    src: Option<String>,
-    fallback_text: impl Into<String>,
-) -> Element<Message> {
-    avatar_with_radius(src, fallback_text, radii().full)
+use crate::theme::*;
+use arkit_prelude::*;
+
+const AVATAR_SIZE: f32 = 32.0;
+const AVATAR_RING_WIDTH: f32 = 2.0;
+
+/// Props for [`Avatar`].
+#[derive(Props, Clone, PartialEq)]
+pub struct AvatarProps {
+    #[props(default)]
+    pub src: Option<String>,
+    #[props(default)]
+    pub fallback: Option<Element>,
+    #[props(default)]
+    pub ring: Option<bool>,
+    #[props(default)]
+    pub radius: Option<f32>,
 }
 
-fn avatar_with_radius<Message: 'static>(
-    src: Option<String>,
-    fallback_text: impl Into<String>,
-    radius_value: f32,
-) -> Element<Message> {
-    let fallback = fallback_text.into();
-    if let Some(src) = src {
-        arkit::image::<Message, arkit::Theme>(src)
-            .width(32.0)
-            .height(32.0)
-            .border_radius([radius_value, radius_value, radius_value, radius_value])
-            .clip(true)
-            .into()
+/// A user avatar with image, fallback initials, optional ring and radius.
+#[component]
+pub fn Avatar(props: AvatarProps) -> Element {
+    let theme = use_theme();
+    let radius = props.radius.unwrap_or(theme.radii.full);
+    let ring = props.ring.unwrap_or(false);
+    let border_width = if ring { AVATAR_RING_WIDTH } else { 0.0 };
+    let border_color = if ring {
+        theme.colors.background
     } else {
-        arkit::row_component::<Message, arkit::Theme>()
-            .width(32.0)
-            .height(32.0)
-            .background_color(colors().muted)
-            .border_radius([radius_value, radius_value, radius_value, radius_value])
-            .align_items_center()
-            .justify_content_center()
-            .children(vec![muted_text(fallback).into()])
-            .into()
-    }
-}
+        0x00000000
+    };
 
-fn avatar_ring<Message: 'static>(
-    src: Option<String>,
-    fallback_text: impl Into<String>,
-) -> Element<Message> {
-    avatar_ring_with_radius(src, fallback_text, radii().full)
-}
-
-fn avatar_ring_with_radius<Message: 'static>(
-    src: Option<String>,
-    fallback_text: impl Into<String>,
-    radius_value: f32,
-) -> Element<Message> {
-    let fallback = fallback_text.into();
-    if let Some(src) = src {
-        arkit::image::<Message, arkit::Theme>(src)
-            .width(32.0)
-            .height(32.0)
-            .border_radius([radius_value, radius_value, radius_value, radius_value])
-            .clip(true)
-            .border_width([2.0, 2.0, 2.0, 2.0])
-            .border_color(colors().background)
-            .into()
-    } else {
-        arkit::row_component::<Message, arkit::Theme>()
-            .width(32.0)
-            .height(32.0)
-            .background_color(colors().muted)
-            .border_radius([radius_value, radius_value, radius_value, radius_value])
-            .clip(true)
-            .border_width([2.0, 2.0, 2.0, 2.0])
-            .border_color(colors().background)
-            .align_items_center()
-            .justify_content_center()
-            .children(vec![muted_text(fallback).into()])
-            .into()
-    }
-}
-
-// Struct component API
-pub struct Avatar<Message = ()> {
-    src: Option<String>,
-    fallback: String,
-    ring: bool,
-    radius: Option<f32>,
-    _marker: std::marker::PhantomData<Message>,
-}
-
-impl<Message> Avatar<Message> {
-    pub fn new(src: Option<String>, fallback: impl Into<String>) -> Self {
-        Self {
-            src,
-            fallback: fallback.into(),
-            ring: false,
-            radius: None,
-            _marker: std::marker::PhantomData,
+    rsx! {
+        stack {
+            width: AVATAR_SIZE,
+            height: AVATAR_SIZE,
+            border_radius: radius,
+            border_width,
+            border_color,
+            alignment: 4_i32,
+            clip: true,
+            if let Some(fallback) = props.fallback {
+                {fallback}
+            }
+            if let Some(src) = props.src.as_ref() {
+                image {
+                    src: src.clone(),
+                    width: AVATAR_SIZE,
+                    height: AVATAR_SIZE,
+                    border_radius: radius,
+                    object_fit: 1_i32,
+                    clip: true,
+                }
+            }
         }
     }
-
-    pub fn ring(mut self, ring: bool) -> Self {
-        self.ring = ring;
-        self
-    }
-
-    pub fn radius(mut self, radius: f32) -> Self {
-        self.radius = Some(radius);
-        self
-    }
 }
 
-impl_component_widget!(Avatar<Message>, Message, |value: &Avatar<Message>| {
-    match (value.ring, value.radius) {
-        (true, Some(radius)) => {
-            avatar_ring_with_radius(value.src.clone(), value.fallback.clone(), radius)
+/// Default initials fallback surface for [`Avatar`].
+#[component]
+pub fn AvatarFallback(content: String) -> Element {
+    let theme = use_theme();
+
+    rsx! {
+        stack {
+            width: AVATAR_SIZE,
+            height: AVATAR_SIZE,
+            background_color: theme.colors.muted,
+            alignment: 4_i32,
+            text {
+                content,
+                font_size: typography::SM,
+                font_color: theme.colors.muted_foreground,
+                line_height: 20.0,
+                text_align: 0,
+            }
         }
-        (true, None) => avatar_ring(value.src.clone(), value.fallback.clone()),
-        (false, Some(radius)) => {
-            avatar_with_radius(value.src.clone(), value.fallback.clone(), radius)
-        }
-        (false, None) => avatar(value.src.clone(), value.fallback.clone()),
     }
-});
+}

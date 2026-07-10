@@ -1,0 +1,12 @@
+[package]
+name = "arkit_prelude"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+arkit_elements.workspace = true
+dioxus-core.workspace = true
+dioxus-core-macro.workspace = true
+dioxus-hooks.workspace = true
+dioxus-signals.workspace = true

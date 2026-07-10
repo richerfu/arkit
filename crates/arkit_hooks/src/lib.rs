@@ -1,0 +1,33 @@
+//! Hook-based escape-hatch APIs for the dioxus 0.7 ArkUI framework.
+//!
+//! This crate replaces the old command-oriented overlay/observer/virtual-list
+//! machinery with dioxus hooks. The hooks here are the bridge between dioxus
+//! components and the raw ArkUI native nodes owned by [`arkit_arkui`]'s
+//! renderer.
+//!
+//! ## Modules
+//! - [`node`]: `use_ark_node` — get the native ArkUI node backing the current
+//!   dioxus element, plus the `ArkHost` context that wires the renderer to
+//!   hooks. Also `OverlayRoot` — render once at the app root to mount overlay
+//!   content driven by `use_overlay`.
+//! - [`layout`]: `use_layout_frame` / `use_layout_size` — observe the ArkUI
+//!   layout of the current element via `onSizeChange`/`onAreaChange`.
+//! - [`overlay`]: `use_overlay` — floating and modal overlays. Content
+//!   is rendered declaratively as a full-screen stack subtree at the app root
+//!   via the host's overlay-content signal + `OverlayRoot`.
+//! - [`virtual_range`]: `use_virtual_range` — the visible-item-range signal
+//!   consumed by `VirtualList`/`VirtualGrid`/`VirtualWaterFlow`.
+
+mod layout;
+mod node;
+mod overlay;
+mod virtual_list;
+mod virtual_range;
+
+pub use layout::{
+    use_layout_frame, use_layout_frame_node, use_layout_size, LayoutFrame, LayoutSize,
+};
+pub use node::{use_ark_host_provider, use_ark_node, ArkHost, ArkNodeRef, HostNode, OverlayRoot};
+pub use overlay::{use_overlay, ModalOverlaySpec, ModalPresentation, OverlayApi};
+pub use virtual_list::{use_virtual_list, VirtualListHandle};
+pub use virtual_range::{use_virtual_range, VirtualVisibleRange};

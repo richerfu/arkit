@@ -1,0 +1,1 @@
+# ArkTS obfuscation rules (disabled in build-profile; placeholder).

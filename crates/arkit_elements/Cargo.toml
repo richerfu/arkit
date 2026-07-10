@@ -1,0 +1,11 @@
+[package]
+name = "arkit_elements"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "dioxus_elements"
+
+[dependencies]
+dioxus-core.workspace = true

@@ -1,44 +1,35 @@
-use super::*;
+//! Progress — shadcn-style progress bar.
+//!
+//! Migrated from the original Elm builder API to dioxus 0.7 `#[component]` +
+//! `rsx!`. Preserves the original styling: `primary` progress color, 8px
+//! height, `full` corner radius, clipped, `secondary` track background,
+//! linear type.
 
-fn progress<Message>(value: f32, total: f32) -> ProgressElement<Message> {
-    rounded_progress(
-        arkit::progress::<Message, arkit::Theme>(value, total)
-            .progress_color(colors().primary)
-            .height(8.0),
-    )
+use crate::theme::*;
+use arkit_prelude::*;
+
+/// Props for [`Progress`].
+#[derive(Props, Clone, PartialEq)]
+pub struct ProgressProps {
+    pub value: f32,
+    pub total: Option<f32>,
 }
 
-// Struct component API
-pub struct Progress<Message = ()> {
-    value: f32,
-    total: f32,
-    _marker: std::marker::PhantomData<Message>,
-}
-
-impl<Message> Progress<Message> {
-    pub fn new(value: f32, total: f32) -> Self {
-        Self {
-            value,
-            total,
-            _marker: std::marker::PhantomData,
+/// A horizontal progress bar.
+#[component]
+pub fn Progress(props: ProgressProps) -> Element {
+    let theme = use_theme();
+    let total = props.total.unwrap_or(100.0);
+    rsx! {
+        progress {
+            progress_value: props.value,
+            progress_total: total,
+            progress_color: theme.colors.primary,
+            progress_type: 0,
+            height: 8.0,
+            border_radius: theme.radii.full,
+            clip: true,
+            background_color: theme.colors.secondary,
         }
-    }
-}
-
-impl<Message: 'static> arkit::advanced::Widget<Message, arkit::Theme, arkit::Renderer>
-    for Progress<Message>
-{
-    fn body(
-        &self,
-        _tree: &mut arkit::advanced::widget::Tree,
-        _renderer: &arkit::Renderer,
-    ) -> Element<Message> {
-        progress::<Message>(self.value, self.total).into()
-    }
-}
-
-impl<Message: 'static> From<Progress<Message>> for Element<Message> {
-    fn from(value: Progress<Message>) -> Self {
-        Element::new(value)
     }
 }

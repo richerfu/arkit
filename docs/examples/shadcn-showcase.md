@@ -2,25 +2,24 @@
 
 路径：`examples/shadcn_showcase`
 
-该示例是 `arkit_shadcn` 的组件展示应用。
+展示 `arkit_shadcn` 的 Dioxus 组件、主题预设、controlled/uncontrolled state、overlay 与交互事件。showcase 当前集中在 `src/lib.rs`，便于作为单一设备验收入口。
 
-## 结构
+## 当前交互契约
 
-```text
-src/showcase/constants.rs
-src/showcase/layout.rs
-src/showcase/home.rs
-src/showcase/component.rs
-src/showcase/examples/*.rs
+- Tabs、页面切换和其他 subtree replacement 通过 runtime event queue 进入 Dioxus，原生 callback 不允许重入正在执行的 render。
+- Menubar、DropdownMenu、ContextMenu 的 checkbox/radio 是受控 entry；菜单保持打开时必须立即刷新选择标记，submenu 展开状态不得被重置。
+- ContextMenu 只由真实 `onlongpress` 触发。短按无响应，单指长按约 500ms 后打开一次。
+- HoverCard 相对 trigger 使用 center anchor；卡片内容使用 start alignment。不要把“锚点居中”和“内容居中”混为同一布局属性。
+- Grid/List 切换必须改变 native projection；`grid_column_template` 等 collection 属性必须由 renderer 编码，不能静默忽略。
+
+## 构建与设备验收
+
+```bash
+cd examples/shadcn_showcase
+ohrs build --arch aarch
+
+cd ../..
+app/run.sh shadcn_showcase all
 ```
 
-## 使用方式
-
-- `layout.rs` 负责展示页布局。
-- `constants.rs` 维护组件分组和导航。
-- `examples/*.rs` 每个文件展示一个组件的状态和交互。
-- 组件示例应尽量覆盖默认、禁用、变体、交互回调等状态。
-
-## 新组件要求
-
-新增 shadcn 组件时必须同步补 showcase 页面，否则很难在设备上验证 ArkUI 真实表现。
+`ohrs build` 成功后才能打 HAP。一次只安装这一个 example，等待设备交互验收完成后再切换下一个。host `cargo check` 不是 OpenHarmony 构建验证。

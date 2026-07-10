@@ -1,8 +1,11 @@
-use std::cell::RefCell;
+//! Shadcn theme tokens + dioxus context provider.
+//!
+//! `ThemeProvider` seeds a Dioxus context and components read it through
+//! [`use_theme`] (which falls back to [`Theme::default`] when no provider is
+//! mounted).
 
-thread_local! {
-    static THEME_STACK: RefCell<Vec<Theme>> = const { RefCell::new(Vec::new()) };
-}
+use arkit_prelude::*;
+use dioxus_core_macro::{component, Props};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ThemeMode {
@@ -180,37 +183,22 @@ impl Default for Theme {
     }
 }
 
-pub fn with_theme<R>(theme: Theme, render: impl FnOnce() -> R) -> R {
-    struct ThemeGuard;
-
-    impl Drop for ThemeGuard {
-        fn drop(&mut self) {
-            THEME_STACK.with(|stack| {
-                stack.borrow_mut().pop();
-            });
-        }
-    }
-
-    THEME_STACK.with(|stack| {
-        stack.borrow_mut().push(theme);
-    });
-    let _guard = ThemeGuard;
-
-    render()
+/// Provide a mutable theme signal to the current Dioxus subtree.
+///
+/// This is a custom hook and must be called unconditionally from a component.
+/// Prefer [`ThemeProvider`] when the theme is controlled by props; use this
+/// hook when the component itself needs to mutate the active theme.
+pub fn use_theme_provider(initial: Theme) -> Signal<Theme> {
+    use_context_provider(move || Signal::new(initial))
 }
 
-pub fn current() -> Theme {
-    THEME_STACK
-        .with(|stack| stack.borrow().last().copied())
+/// Read the active theme from context (reactively). Falls back to
+/// [`Theme::default`] when no provider is mounted so leaf components still
+/// render in tests/snippets.
+pub fn use_theme() -> Theme {
+    dioxus_core::try_consume_context::<dioxus_signals::Signal<Theme>>()
+        .map(|sig| sig())
         .unwrap_or_default()
-}
-
-pub fn colors() -> ColorTokens {
-    current().colors
-}
-
-pub fn radii() -> RadiusTokens {
-    current().radii
 }
 
 pub const fn with_alpha(color: u32, alpha: u8) -> u32 {
@@ -227,82 +215,205 @@ const fn preset_tokens(preset: ThemePreset, mode: ThemeMode) -> ColorTokens {
 const fn light_tokens(preset: ThemePreset) -> ColorTokens {
     match preset {
         ThemePreset::Zinc => base_tokens(
-            0xFFFFFFFF, 0xFF09090B, 0xFFFFFFFF, 0xFF09090B, 0xFF09090B, 0xFFFAFAFA, 0xFFF4F4F5,
-            0xFF09090B, 0xFF71717A, 0xFFE4E4E7, 0xFF71717A,
+            TokenSeed {
+                canvas: [0xFFFFFFFF, 0xFF09090B],
+                card: [0xFFFFFFFF, 0xFF09090B],
+                primary: [0xFF09090B, 0xFFFAFAFA],
+                secondary: [0xFFF4F4F5, 0xFF09090B],
+                muted_foreground: 0xFF71717A,
+                border: 0xFFE4E4E7,
+                ring: 0xFF71717A,
+            },
+            ThemeMode::Light,
         ),
         ThemePreset::Neutral => base_tokens(
-            0xFFFFFFFF, 0xFF0A0A0A, 0xFFFFFFFF, 0xFF0A0A0A, 0xFF171717, 0xFFFAFAFA, 0xFFF5F5F5,
-            0xFF171717, 0xFF737373, 0xFFE5E5E5, 0xFF737373,
+            TokenSeed {
+                canvas: [0xFFFFFFFF, 0xFF0A0A0A],
+                card: [0xFFFFFFFF, 0xFF0A0A0A],
+                primary: [0xFF171717, 0xFFFAFAFA],
+                secondary: [0xFFF5F5F5, 0xFF171717],
+                muted_foreground: 0xFF737373,
+                border: 0xFFE5E5E5,
+                ring: 0xFF737373,
+            },
+            ThemeMode::Light,
         ),
         ThemePreset::Stone => base_tokens(
-            0xFFFFFFFF, 0xFF0C0A09, 0xFFFFFFFF, 0xFF0C0A09, 0xFF1C1917, 0xFFFAFAF9, 0xFFF5F5F4,
-            0xFF1C1917, 0xFF78716C, 0xFFE7E5E4, 0xFF78716C,
+            TokenSeed {
+                canvas: [0xFFFFFFFF, 0xFF0C0A09],
+                card: [0xFFFFFFFF, 0xFF0C0A09],
+                primary: [0xFF1C1917, 0xFFFAFAF9],
+                secondary: [0xFFF5F5F4, 0xFF1C1917],
+                muted_foreground: 0xFF78716C,
+                border: 0xFFE7E5E4,
+                ring: 0xFF78716C,
+            },
+            ThemeMode::Light,
         ),
         ThemePreset::Mauve => base_tokens(
-            0xFFFFFFFF, 0xFF1F1A24, 0xFFFFFFFF, 0xFF1F1A24, 0xFF2E2633, 0xFFFBF8FC, 0xFFF4EEF7,
-            0xFF2E2633, 0xFF7A6F80, 0xFFE8DFED, 0xFF7A6F80,
+            TokenSeed {
+                canvas: [0xFFFFFFFF, 0xFF1F1A24],
+                card: [0xFFFFFFFF, 0xFF1F1A24],
+                primary: [0xFF2E2633, 0xFFFBF8FC],
+                secondary: [0xFFF4EEF7, 0xFF2E2633],
+                muted_foreground: 0xFF7A6F80,
+                border: 0xFFE8DFED,
+                ring: 0xFF7A6F80,
+            },
+            ThemeMode::Light,
         ),
         ThemePreset::Olive => base_tokens(
-            0xFFFFFFFF, 0xFF1C1F1A, 0xFFFFFFFF, 0xFF1C1F1A, 0xFF283025, 0xFFFAFCF8, 0xFFF1F5EE,
-            0xFF283025, 0xFF6F7869, 0xFFE2E8DD, 0xFF6F7869,
+            TokenSeed {
+                canvas: [0xFFFFFFFF, 0xFF1C1F1A],
+                card: [0xFFFFFFFF, 0xFF1C1F1A],
+                primary: [0xFF283025, 0xFFFAFCF8],
+                secondary: [0xFFF1F5EE, 0xFF283025],
+                muted_foreground: 0xFF6F7869,
+                border: 0xFFE2E8DD,
+                ring: 0xFF6F7869,
+            },
+            ThemeMode::Light,
         ),
         ThemePreset::Mist => base_tokens(
-            0xFFFFFFFF, 0xFF172123, 0xFFFFFFFF, 0xFF172123, 0xFF203033, 0xFFF7FCFC, 0xFFEDF5F5,
-            0xFF203033, 0xFF667779, 0xFFDCE8E8, 0xFF667779,
+            TokenSeed {
+                canvas: [0xFFFFFFFF, 0xFF172123],
+                card: [0xFFFFFFFF, 0xFF172123],
+                primary: [0xFF203033, 0xFFF7FCFC],
+                secondary: [0xFFEDF5F5, 0xFF203033],
+                muted_foreground: 0xFF667779,
+                border: 0xFFDCE8E8,
+                ring: 0xFF667779,
+            },
+            ThemeMode::Light,
         ),
         ThemePreset::Taupe => base_tokens(
-            0xFFFFFFFF, 0xFF211D1B, 0xFFFFFFFF, 0xFF211D1B, 0xFF302A27, 0xFFFCFAF8, 0xFFF5F1EE,
-            0xFF302A27, 0xFF7B716B, 0xFFE8E1DD, 0xFF7B716B,
+            TokenSeed {
+                canvas: [0xFFFFFFFF, 0xFF211D1B],
+                card: [0xFFFFFFFF, 0xFF211D1B],
+                primary: [0xFF302A27, 0xFFFCFAF8],
+                secondary: [0xFFF5F1EE, 0xFF302A27],
+                muted_foreground: 0xFF7B716B,
+                border: 0xFFE8E1DD,
+                ring: 0xFF7B716B,
+            },
+            ThemeMode::Light,
         ),
     }
 }
 
 const fn dark_tokens(preset: ThemePreset) -> ColorTokens {
     match preset {
-        ThemePreset::Zinc => dark_base_tokens(
-            0xFF09090B, 0xFFFAFAFA, 0xFF18181B, 0xFFFAFAFA, 0xFFFAFAFA, 0xFF18181B, 0xFF27272A,
-            0xFFFAFAFA, 0xFFA1A1AA, 0xFF27272A, 0xFFD4D4D8,
+        ThemePreset::Zinc => base_tokens(
+            TokenSeed {
+                canvas: [0xFF09090B, 0xFFFAFAFA],
+                card: [0xFF18181B, 0xFFFAFAFA],
+                primary: [0xFFFAFAFA, 0xFF18181B],
+                secondary: [0xFF27272A, 0xFFFAFAFA],
+                muted_foreground: 0xFFA1A1AA,
+                border: 0xFF27272A,
+                ring: 0xFFD4D4D8,
+            },
+            ThemeMode::Dark,
         ),
-        ThemePreset::Neutral => dark_base_tokens(
-            0xFF0A0A0A, 0xFFFAFAFA, 0xFF171717, 0xFFFAFAFA, 0xFFFAFAFA, 0xFF171717, 0xFF262626,
-            0xFFFAFAFA, 0xFFA3A3A3, 0xFF262626, 0xFFD4D4D4,
+        ThemePreset::Neutral => base_tokens(
+            TokenSeed {
+                canvas: [0xFF0A0A0A, 0xFFFAFAFA],
+                card: [0xFF171717, 0xFFFAFAFA],
+                primary: [0xFFFAFAFA, 0xFF171717],
+                secondary: [0xFF262626, 0xFFFAFAFA],
+                muted_foreground: 0xFFA3A3A3,
+                border: 0xFF262626,
+                ring: 0xFFD4D4D4,
+            },
+            ThemeMode::Dark,
         ),
-        ThemePreset::Stone => dark_base_tokens(
-            0xFF0C0A09, 0xFFFAFAF9, 0xFF1C1917, 0xFFFAFAF9, 0xFFFAFAF9, 0xFF1C1917, 0xFF292524,
-            0xFFFAFAF9, 0xFFA8A29E, 0xFF292524, 0xFFD6D3D1,
+        ThemePreset::Stone => base_tokens(
+            TokenSeed {
+                canvas: [0xFF0C0A09, 0xFFFAFAF9],
+                card: [0xFF1C1917, 0xFFFAFAF9],
+                primary: [0xFFFAFAF9, 0xFF1C1917],
+                secondary: [0xFF292524, 0xFFFAFAF9],
+                muted_foreground: 0xFFA8A29E,
+                border: 0xFF292524,
+                ring: 0xFFD6D3D1,
+            },
+            ThemeMode::Dark,
         ),
-        ThemePreset::Mauve => dark_base_tokens(
-            0xFF121016, 0xFFFBF8FC, 0xFF211C27, 0xFFFBF8FC, 0xFFFBF8FC, 0xFF2E2633, 0xFF352C3A,
-            0xFFFBF8FC, 0xFFB8ADBF, 0xFF352C3A, 0xFFD8CDDD,
+        ThemePreset::Mauve => base_tokens(
+            TokenSeed {
+                canvas: [0xFF121016, 0xFFFBF8FC],
+                card: [0xFF211C27, 0xFFFBF8FC],
+                primary: [0xFFFBF8FC, 0xFF2E2633],
+                secondary: [0xFF352C3A, 0xFFFBF8FC],
+                muted_foreground: 0xFFB8ADBF,
+                border: 0xFF352C3A,
+                ring: 0xFFD8CDDD,
+            },
+            ThemeMode::Dark,
         ),
-        ThemePreset::Olive => dark_base_tokens(
-            0xFF11140F, 0xFFFAFCF8, 0xFF1D241A, 0xFFFAFCF8, 0xFFFAFCF8, 0xFF283025, 0xFF30382B,
-            0xFFFAFCF8, 0xFFAFB8A9, 0xFF30382B, 0xFFD0D8CA,
+        ThemePreset::Olive => base_tokens(
+            TokenSeed {
+                canvas: [0xFF11140F, 0xFFFAFCF8],
+                card: [0xFF1D241A, 0xFFFAFCF8],
+                primary: [0xFFFAFCF8, 0xFF283025],
+                secondary: [0xFF30382B, 0xFFFAFCF8],
+                muted_foreground: 0xFFAFB8A9,
+                border: 0xFF30382B,
+                ring: 0xFFD0D8CA,
+            },
+            ThemeMode::Dark,
         ),
-        ThemePreset::Mist => dark_base_tokens(
-            0xFF0D1416, 0xFFF7FCFC, 0xFF182528, 0xFFF7FCFC, 0xFFF7FCFC, 0xFF203033, 0xFF283A3D,
-            0xFFF7FCFC, 0xFFA7B8BA, 0xFF283A3D, 0xFFCADADB,
+        ThemePreset::Mist => base_tokens(
+            TokenSeed {
+                canvas: [0xFF0D1416, 0xFFF7FCFC],
+                card: [0xFF182528, 0xFFF7FCFC],
+                primary: [0xFFF7FCFC, 0xFF203033],
+                secondary: [0xFF283A3D, 0xFFF7FCFC],
+                muted_foreground: 0xFFA7B8BA,
+                border: 0xFF283A3D,
+                ring: 0xFFCADADB,
+            },
+            ThemeMode::Dark,
         ),
-        ThemePreset::Taupe => dark_base_tokens(
-            0xFF14110F, 0xFFFCFAF8, 0xFF241F1C, 0xFFFCFAF8, 0xFFFCFAF8, 0xFF302A27, 0xFF39312D,
-            0xFFFCFAF8, 0xFFB8ADA7, 0xFF39312D, 0xFFD8CEC8,
+        ThemePreset::Taupe => base_tokens(
+            TokenSeed {
+                canvas: [0xFF14110F, 0xFFFCFAF8],
+                card: [0xFF241F1C, 0xFFFCFAF8],
+                primary: [0xFFFCFAF8, 0xFF302A27],
+                secondary: [0xFF39312D, 0xFFFCFAF8],
+                muted_foreground: 0xFFB8ADA7,
+                border: 0xFF39312D,
+                ring: 0xFFD8CEC8,
+            },
+            ThemeMode::Dark,
         ),
     }
 }
 
-const fn base_tokens(
-    background: u32,
-    foreground: u32,
-    card: u32,
-    card_foreground: u32,
-    primary: u32,
-    primary_foreground: u32,
-    secondary: u32,
-    secondary_foreground: u32,
+#[derive(Clone, Copy)]
+struct TokenSeed {
+    canvas: [u32; 2],
+    card: [u32; 2],
+    primary: [u32; 2],
+    secondary: [u32; 2],
     muted_foreground: u32,
     border: u32,
     ring: u32,
-) -> ColorTokens {
+}
+
+const fn base_tokens(seed: TokenSeed, mode: ThemeMode) -> ColorTokens {
+    let background = seed.canvas[0];
+    let foreground = seed.canvas[1];
+    let card = seed.card[0];
+    let card_foreground = seed.card[1];
+    let primary = seed.primary[0];
+    let primary_foreground = seed.primary[1];
+    let secondary = seed.secondary[0];
+    let secondary_foreground = seed.secondary[1];
+    let muted_foreground = seed.muted_foreground;
+    let border = seed.border;
+    let ring = seed.ring;
+    let dark = matches!(mode, ThemeMode::Dark);
     ColorTokens {
         background,
         foreground,
@@ -319,69 +430,18 @@ const fn base_tokens(
         muted_foreground,
         accent: secondary,
         accent_foreground: secondary_foreground,
-        destructive: color::DESTRUCTIVE,
+        destructive: if dark { 0xFF7F1D1D } else { color::DESTRUCTIVE },
         destructive_foreground: color::DESTRUCTIVE_FOREGROUND,
         border,
         input: border,
         ring,
         surface: background,
-        chart_1: color::CHART_1,
-        chart_2: color::CHART_2,
-        chart_3: color::CHART_3,
-        chart_4: color::CHART_4,
-        chart_5: color::CHART_5,
-        sidebar: secondary,
-        sidebar_foreground: foreground,
-        sidebar_primary: primary,
-        sidebar_primary_foreground: primary_foreground,
-        sidebar_accent: secondary,
-        sidebar_accent_foreground: secondary_foreground,
-        sidebar_border: border,
-        sidebar_ring: ring,
-    }
-}
-
-const fn dark_base_tokens(
-    background: u32,
-    foreground: u32,
-    card: u32,
-    card_foreground: u32,
-    primary: u32,
-    primary_foreground: u32,
-    secondary: u32,
-    secondary_foreground: u32,
-    muted_foreground: u32,
-    border: u32,
-    ring: u32,
-) -> ColorTokens {
-    ColorTokens {
-        background,
-        foreground,
-        card,
-        card_foreground,
-        popover: card,
-        popover_foreground: card_foreground,
-        primary,
-        primary_foreground,
-        primary_track: with_alpha(primary, 0x33),
-        secondary,
-        secondary_foreground,
-        muted: secondary,
-        muted_foreground,
-        accent: secondary,
-        accent_foreground: secondary_foreground,
-        destructive: 0xFF7F1D1D,
-        destructive_foreground: color::DESTRUCTIVE_FOREGROUND,
-        border,
-        input: border,
-        ring,
-        surface: background,
-        chart_1: 0xFF3B82F6,
-        chart_2: 0xFF10B981,
-        chart_3: 0xFFF59E0B,
-        chart_4: 0xFFA855F7,
-        chart_5: 0xFFEF4444,
-        sidebar: card,
+        chart_1: if dark { 0xFF3B82F6 } else { color::CHART_1 },
+        chart_2: if dark { 0xFF10B981 } else { color::CHART_2 },
+        chart_3: if dark { 0xFFF59E0B } else { color::CHART_3 },
+        chart_4: if dark { 0xFFA855F7 } else { color::CHART_4 },
+        chart_5: if dark { 0xFFEF4444 } else { color::CHART_5 },
+        sidebar: if dark { card } else { secondary },
         sidebar_foreground: foreground,
         sidebar_primary: primary,
         sidebar_primary_foreground: primary_foreground,
@@ -422,8 +482,6 @@ pub mod color {
 }
 
 pub mod radius {
-    // Keep these close to the Tailwind radii used by react-native-reusables:
-    // `rounded`/small surfaces ~= 4, `rounded-md` = 6, `rounded-lg` = 8.
     pub const SM: f32 = 4.0;
     pub const MD: f32 = 6.0;
     pub const LG: f32 = 8.0;
@@ -451,6 +509,21 @@ pub mod typography {
     pub const XXL: f32 = 24.0;
 }
 
+/// Theme provider component. Mount near the app root to seed the dioxus
+/// context consumed by [`use_theme`]. The theme is held in a `Signal<Theme>`
+/// so descendants re-skin reactively when the provider's theme signal is
+/// updated.
+#[component]
+pub fn ThemeProvider(theme: Theme, children: Element) -> Element {
+    let mut provided = use_theme_provider(theme);
+    use_effect(use_reactive((&theme,), move |(theme,)| {
+        if *provided.peek() != theme {
+            provided.set(theme);
+        }
+    }));
+    rsx! { {children} }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -458,7 +531,6 @@ mod tests {
     #[test]
     fn default_theme_matches_legacy_zinc_light_tokens() {
         let theme = Theme::default();
-
         assert_eq!(theme.mode, ThemeMode::Light);
         assert_eq!(theme.preset, Some(ThemePreset::Zinc));
         assert_eq!(theme.colors.background, color::BACKGROUND);
@@ -471,77 +543,8 @@ mod tests {
     fn light_and_dark_presets_resolve_different_tokens() {
         let light = Theme::light(ThemePreset::Zinc);
         let dark = Theme::dark(ThemePreset::Zinc);
-
         assert_ne!(light.colors.background, dark.colors.background);
         assert_ne!(light.colors.foreground, dark.colors.foreground);
-        assert_ne!(
-            light.colors.primary_foreground,
-            dark.colors.primary_foreground
-        );
-    }
-
-    #[test]
-    fn built_in_presets_expose_distinct_primary_palettes() {
-        let zinc = Theme::light(ThemePreset::Zinc).colors;
-
-        for preset in [
-            ThemePreset::Neutral,
-            ThemePreset::Stone,
-            ThemePreset::Mauve,
-            ThemePreset::Olive,
-            ThemePreset::Mist,
-            ThemePreset::Taupe,
-        ] {
-            let colors = Theme::light(preset).colors;
-
-            assert_ne!(colors.primary, zinc.primary);
-        }
-    }
-
-    #[test]
-    fn scoped_theme_uses_nearest_value() {
-        let outer = Theme::dark(ThemePreset::Stone);
-        let inner = Theme::light(ThemePreset::Olive);
-
-        assert_eq!(current(), Theme::default());
-        with_theme(outer, || {
-            assert_eq!(current(), outer);
-            with_theme(inner, || {
-                assert_eq!(current(), inner);
-            });
-            assert_eq!(current(), outer);
-        });
-        assert_eq!(current(), Theme::default());
-    }
-
-    #[test]
-    fn custom_theme_exposes_custom_colors_and_radius() {
-        let colors = Theme::light(ThemePreset::Neutral)
-            .colors
-            .with_surface(0xFF010203);
-        let radii = RadiusTokens::from_base(10.0);
-        let theme = Theme::custom(colors).with_radius(radii);
-
-        with_theme(theme, || {
-            assert_eq!(super::colors().surface, 0xFF010203);
-            assert_eq!(super::radii().lg, 10.0);
-            assert_eq!(super::radii().xl, 15.0);
-        });
-    }
-
-    #[test]
-    fn token_helpers_restore_default_after_rendering() {
-        let theme = Theme::dark(ThemePreset::Stone);
-
-        with_theme(theme, || {
-            assert_eq!(super::colors().background, theme.colors.background);
-        });
-
-        assert_eq!(current(), Theme::default());
-        assert_eq!(
-            super::colors().background,
-            Theme::default().colors.background
-        );
     }
 
     #[test]

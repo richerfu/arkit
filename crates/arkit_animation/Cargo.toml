@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-arkit.workspace = true
-arkit_widget.workspace = true
+arkit_prelude.workspace = true
+arkit_hooks.workspace = true
+ohos-arkui-binding.workspace = true
 ohos-hilog-binding.workspace = true

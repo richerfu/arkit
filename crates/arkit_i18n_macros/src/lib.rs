@@ -1,3 +1,11 @@
+//! Proc-macro crate for `arkit_i18n`.
+//!
+//! Provides the `i18n!` macro: a compile-time `.ftl` resolver that generates a
+//! typed `Locale` enum, an `I18n` helper, message-constructor functions, and a
+//! `pub static CATALOG` for runtime translation. Behavior is preserved from the
+//! legacy implementation; only `CATALOG` is now `pub` so dioxus context layers
+//! can reference it.
+
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
 use quote::{format_ident, quote};
@@ -282,7 +290,9 @@ fn expand_i18n(input: I18nInput) -> syn::Result<TokenStream2> {
 
             pub const FALLBACK_LOCALE: Locale = Locale::#fallback_variant;
 
-            static CATALOG: ::arkit_i18n::Catalog = ::arkit_i18n::Catalog {
+            /// The static catalog for this i18n module. Public so dioxus context
+            /// providers (e.g. `arkit_i18n::use_i18n_provider`) can reference it.
+            pub static CATALOG: ::arkit_i18n::Catalog = ::arkit_i18n::Catalog {
                 fallback: #fallback_id,
                 locales: &[#(#locale_catalogs),*],
             };
@@ -400,7 +410,6 @@ fn parse_ftl(source: &str) -> Result<BTreeMap<String, Template>, String> {
 fn extract_vars(pattern: &str) -> Result<BTreeSet<String>, String> {
     let mut vars = BTreeSet::new();
     let mut rest = pattern;
-
     while let Some(start) = rest.find("{$") {
         let name_start = start + 2;
         let Some(relative_end) = rest[name_start..].find('}') else {
