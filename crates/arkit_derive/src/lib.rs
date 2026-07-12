@@ -1,12 +1,16 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, ItemFn};
+use syn::{parse_macro_input, punctuated::Punctuated, Ident, ItemFn, Token};
 
 /// Mark a function as the application entry point.
 ///
 /// Generates OpenHarmony NAPI bindings (init / render / destroy lifecycle)
 /// that call the entry function. The entry function must take no arguments
 /// and return `Element`.
+///
+/// `#[entry]` keeps business content in the framework safe viewport.
+/// `#[entry(edge_to_edge)]` lets it fill the mounted XComponent surface while
+/// retaining window metrics and framework-owned overlay avoidance.
 ///
 /// ## How it works (for IDE / rust-analyzer)
 ///
@@ -15,7 +19,18 @@ use syn::{parse_macro_input, ItemFn};
 /// calls the user's entry function, rust-analyzer can trace the entire
 /// call chain — no `#[allow(dead_code)]` needed.
 #[proc_macro_attribute]
-pub fn entry(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn entry(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(attr with Punctuated::<Ident, Token![,]>::parse_terminated);
+    let mut edge_to_edge = false;
+    for arg in args {
+        if arg == "edge_to_edge" {
+            edge_to_edge = true;
+        } else {
+            return syn::Error::new_spanned(arg, "unsupported #[entry] option")
+                .to_compile_error()
+                .into();
+        }
+    }
     let input = parse_macro_input!(item as ItemFn);
 
     if !input.sig.inputs.is_empty() {
@@ -34,6 +49,11 @@ pub fn entry(_attr: TokenStream, item: TokenStream) -> TokenStream {
     }
 
     let fn_name = input.sig.ident.clone();
+    let safe_area_policy = if edge_to_edge {
+        quote!(::arkit::SafeAreaPolicy::EdgeToEdge)
+    } else {
+        quote!(::arkit::SafeAreaPolicy::Safe)
+    };
 
     let expanded = quote! {
         #input
@@ -92,7 +112,12 @@ pub fn entry(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         // `#fn_name` is the user's root component `fn() -> Element`.
                         // The runtime creates a VirtualDom from it and rebuilds
                         // into an ArkUIRenderer mounted on `slot`.
-                        let runtime = ::arkit::mount_entry(slot, (*APP).clone(), #fn_name)?;
+                        let runtime = ::arkit::mount_entry_with_policy(
+                            slot,
+                            (*APP).clone(),
+                            #fn_name,
+                            #safe_area_policy,
+                        )?;
                         runtime_state.replace(runtime);
                         Ok(())
                     }

@@ -63,9 +63,9 @@ EOF
 }
 EOF
   # EntryAbility moduleName + Index 默认值
-  perl -0pi -e 's/(public moduleName: string = ")[^"]*(")/${1}'"$CRATE"'${2}/' \
+  LC_ALL=C LANG=C perl -0pi -e 's/(public moduleName: string = ")[^"]*(")/${1}'"$CRATE"'${2}/' \
     "$APP/entry/src/main/ets/entryability/EntryAbility.ets"
-  perl -0pi -e 's/(@State moduleName: string = ")[^"]*(")/${1}'"$CRATE"'${2}/' \
+  LC_ALL=C LANG=C perl -0pi -e 's/(@State moduleName: string = ")[^"]*(")/${1}'"$CRATE"'${2}/' \
     "$APP/entry/src/main/ets/pages/Index.ets"
 }
 
@@ -76,10 +76,8 @@ do_build() {
   (cd "$APP" && "$HVIGWORW" assembleHap --no-daemon --mode module -p product=default -p buildMode=debug --no-hvigorw-daemon)
 }
 
-HAP=$(find "$APP/entry/build" -name "*.hap" -path "*outputs*" 2>/dev/null | head -1)
-
 do_install() {
-  HAP=$(find "$APP/entry/build" -name "*.hap" -path "*outputs*" 2>/dev/null | head -1)
+  HAP=$(find "$APP/entry/build" -name "*.hap" -path "*outputs*" 2>/dev/null | head -1 || true)
   [ -n "$HAP" ] || { echo "no hap found, build first"; exit 1; }
   echo ">> hdc install $HAP"
   hdc install -r "$HAP" 2>&1 | tail -3

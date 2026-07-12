@@ -14,11 +14,15 @@ pub(super) fn render(series: &BasicSeries, context: &mut FreeRenderContext<'_>) 
         if point.values.len() < 3 {
             continue;
         }
-        let time = point.number(0) as i64;
-        let value = point.number(1).max(0.0);
+        let (Some(time), Some(value)) = (point.number_opt(0), point.number_opt(1)) else {
+            continue;
+        };
+        let time = time as i64;
+        let value = value.max(0.0);
         let name = match &point.values[2] {
             DataValue::String(value) => value.clone(),
             DataValue::Number(value) => value.to_string(),
+            DataValue::Null => continue,
         };
         times.push(time);
         groups.entry(name).or_default().insert(time, value);
@@ -86,6 +90,7 @@ pub(super) fn render(series: &BasicSeries, context: &mut FreeRenderContext<'_>) 
                 with_opacity(color(palette, group_index), 0.72),
             );
             if let Some((x, y)) = top_points.first() {
+                set_next_data_index(group_index);
                 draw_text(canvas, name, *x + 4.0, *y, 10.0, 0xFF333333, 400);
             }
         }

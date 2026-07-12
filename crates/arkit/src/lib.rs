@@ -11,8 +11,9 @@ pub use arkit_derive::entry;
 
 // --- Runtime: VirtualDom host ---
 pub use arkit_runtime::{
-    set_back_press_handler, tokio_handle, ArkRuntime, EmbeddedWebViewController,
-    EmbeddedWebViewInit, ScopeNodeResolver, VirtualDom, WebViewFrame, WebViewStyle,
+    set_back_press_handler, tokio_handle, ArkRuntime, EdgeInsets, EmbeddedWebViewController,
+    EmbeddedWebViewInit, PhysicalRect, SafeAreaPolicy, ScopeNodeResolver, VirtualDom, WebViewFrame,
+    WebViewStyle, WindowMetrics, WindowMetricsHandle, WindowMetricsSubscription,
 };
 
 // --- Renderer + native node primitives ---
@@ -25,8 +26,9 @@ pub use arkit_arkui::{
 pub use arkit_hooks as hooks;
 pub use arkit_hooks::{
     use_ark_host_provider, use_ark_node, use_layout_frame, use_layout_frame_node, use_layout_size,
-    use_overlay, use_virtual_list, use_virtual_range, ArkHost, ArkNodeRef, LayoutFrame, LayoutSize,
-    OverlayRoot, VirtualListHandle, VirtualVisibleRange,
+    use_overlay, use_safe_area, use_safe_area_policy, use_virtual_list, use_virtual_range,
+    use_window_metrics, ArkHost, ArkNodeRef, LayoutFrame, LayoutSize, OverlayRoot, OverlayViewport,
+    SafeArea, SafeAreaEdges, SafeAreaProps, VirtualListHandle, VirtualVisibleRange,
 };
 
 // --- i18n ---
@@ -54,9 +56,14 @@ pub use arkit_icon::{has_icon, icon, icon_names};
 // --- Native ECharts-compatible charts ---
 pub use arkit_chart as echarts;
 pub use arkit_chart::{
-    Axis, AxisOrientation, AxisType, BasicSeries, ChartEvent, ChartOption, ChartParseError,
-    DataPoint, DataValue, Dataset, Diagnostic, ECharts, EChartsProps, GraphSeries, Grid, Legend,
-    LinkData, MapFeature, MapSeries, NodeData, SankeySeries, Series, Title, Tooltip, VisualStyle,
+    Axis, AxisLabelStyle, AxisLine, AxisOrientation, AxisTick, AxisType, BasicSeries, ChartAction,
+    ChartActionKind, ChartActionTarget, ChartAppendData, ChartController, ChartCoordinateFinder,
+    ChartCoordinatePoint, ChartEvent, ChartOption, ChartParseError, ChartRuntimeEvent,
+    ChartRuntimeEventBatchItem, ChartSelectedItems, DataPoint, DataValue, Dataset, Diagnostic,
+    ECharts, EChartsProps, GraphSeries, Grid, ItemStyle, LabelLayoutCallback,
+    LabelLayoutCallbackParams, LabelLayoutCallbackResult, LabelLayoutOptions, LabelStyle, Legend,
+    LineStyle, LinkData, MapFeature, MapOptions, MapPolygon, MapSeries, NodeData, SankeySeries,
+    Series, SeriesOptions, Title, Tooltip, VisualStyle,
 };
 
 // --- shadcn component library ---
@@ -98,12 +105,29 @@ pub fn mount_entry(
     app: openharmony_ability::OpenHarmonyApp,
     root: fn() -> Element,
 ) -> napi_ohos::Result<ArkRuntime> {
+    mount_entry_with_policy(slot, app, root, SafeAreaPolicy::Safe)
+}
+
+/// Mount an Arkit entry component with an explicit root safe-area policy.
+pub fn mount_entry_with_policy(
+    slot: ohos_arkui_binding::common::handle::ArkUIHandle,
+    app: openharmony_ability::OpenHarmonyApp,
+    root: fn() -> Element,
+    safe_area_policy: SafeAreaPolicy,
+) -> napi_ohos::Result<ArkRuntime> {
     let dom = VirtualDom::new_with_props(arkit_entry_root, EntryRootProps { root });
-    arkit_runtime::mount_virtual_dom(slot, app, dom)
+    arkit_runtime::mount_virtual_dom_with_policy(slot, app, dom, safe_area_policy)
 }
 
 fn arkit_entry_root(props: EntryRootProps) -> Element {
     let _host = use_ark_host_provider();
+    let policy = use_safe_area_policy();
+    let measured_safe_area = use_safe_area();
+    let safe_area = if policy == SafeAreaPolicy::Safe {
+        measured_safe_area
+    } else {
+        EdgeInsets::ZERO
+    };
     // Keep the business root as a real Dioxus component boundary. Calling the
     // function directly would merge its hooks into this framework wrapper's
     // scope and break normal component identity/memoization semantics.
@@ -119,7 +143,16 @@ fn arkit_entry_root(props: EntryRootProps) -> Element {
             percent_height: 1.0,
             alignment: 0,
             clip: false,
-            {content}
+            stack {
+                percent_width: 1.0,
+                percent_height: 1.0,
+                alignment: 0,
+                padding_top: safe_area.top,
+                padding_right: safe_area.right,
+                padding_bottom: safe_area.bottom,
+                padding_left: safe_area.left,
+                {content}
+            }
             OverlayRoot {}
         }
     }
@@ -137,8 +170,10 @@ pub mod prelude {
 
     // Entry + runtime + renderer.
     pub use crate::{
-        entry, mount_entry, ArkRuntime, ArkUIRenderer, EmbeddedWebViewController,
-        EmbeddedWebViewInit, EventSink, ScopeNodeResolver, VirtualDom, WebViewFrame, WebViewStyle,
+        entry, mount_entry, mount_entry_with_policy, ArkRuntime, ArkUIRenderer, EdgeInsets,
+        EmbeddedWebViewController, EmbeddedWebViewInit, EventSink, PhysicalRect, SafeAreaPolicy,
+        ScopeNodeResolver, VirtualDom, WebViewFrame, WebViewStyle, WindowMetrics,
+        WindowMetricsHandle, WindowMetricsSubscription,
     };
 
     // Native node primitives + virtual-list builder.
@@ -150,8 +185,10 @@ pub mod prelude {
     // Escape-hatch hooks.
     pub use crate::{
         use_ark_host_provider, use_ark_node, use_layout_frame, use_layout_frame_node,
-        use_layout_size, use_overlay, use_virtual_list, use_virtual_range, ArkHost, ArkNodeRef,
-        LayoutFrame, LayoutSize, OverlayRoot, VirtualListHandle, VirtualVisibleRange,
+        use_layout_size, use_overlay, use_safe_area, use_safe_area_policy, use_virtual_list,
+        use_virtual_range, use_window_metrics, ArkHost, ArkNodeRef, LayoutFrame, LayoutSize,
+        OverlayRoot, OverlayViewport, SafeArea, SafeAreaEdges, SafeAreaProps, VirtualListHandle,
+        VirtualVisibleRange,
     };
 
     // i18n + router + animation + icon + charts.
@@ -159,11 +196,16 @@ pub mod prelude {
     pub use crate::{has_icon, icon, icon_names};
     pub use crate::{
         use_animation, use_back_handler, use_i18n, use_i18n_provider, AnimatedOutlet,
-        AnimationControls, Axis, AxisOrientation, AxisType, BasicSeries, ChartEvent, ChartOption,
-        ChartParseError, DataPoint, DataValue, Dataset, Diagnostic, ECharts, EChartsProps,
-        GraphSeries, Grid, I18nContext, Legend, LinkData, MapFeature, MapSeries, Motion,
-        MountTransition, NodeData, Routable, RouteTransition, Router, SankeySeries, Series, Title,
-        Tooltip, TransitionPreset, VisualStyle,
+        AnimationControls, Axis, AxisLabelStyle, AxisLine, AxisOrientation, AxisTick, AxisType,
+        BasicSeries, ChartAction, ChartActionKind, ChartActionTarget, ChartAppendData,
+        ChartController, ChartCoordinateFinder, ChartCoordinatePoint, ChartEvent, ChartOption,
+        ChartParseError, ChartRuntimeEvent, ChartRuntimeEventBatchItem, ChartSelectedItems,
+        DataPoint, DataValue, Dataset, Diagnostic, ECharts, EChartsProps, GraphSeries, Grid,
+        I18nContext, ItemStyle, LabelLayoutCallback, LabelLayoutCallbackParams,
+        LabelLayoutCallbackResult, LabelLayoutOptions, LabelStyle, Legend, LineStyle, LinkData,
+        MapFeature, MapOptions, MapPolygon, MapSeries, Motion, MountTransition, NodeData, Routable,
+        RouteTransition, Router, SankeySeries, Series, SeriesOptions, Title, Tooltip,
+        TransitionPreset, VisualStyle,
     };
 
     // shadcn components + theme.

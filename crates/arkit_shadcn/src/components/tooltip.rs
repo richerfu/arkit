@@ -65,11 +65,11 @@ pub fn Tooltip(
             set_open.call(true);
             let label = content.clone();
             let frame = *trigger_frame.read();
-            let overlay_frame = show_overlay.overlay_frame();
+            let viewport = show_overlay.viewport();
             let placement = if let Some(placement) = pointer.and_then(|pointer| {
                 FloatingPanelPlacement::from_pointer(
                     pointer,
-                    overlay_frame,
+                    viewport,
                     panel_width,
                     TOOLTIP_ESTIMATED_HEIGHT,
                     FloatingSide::Top,
@@ -81,7 +81,7 @@ pub fn Tooltip(
             } else if frame.is_measured() {
                 FloatingPanelPlacement::from_trigger(
                     frame,
-                    overlay_frame,
+                    viewport,
                     panel_width,
                     TOOLTIP_ESTIMATED_HEIGHT,
                     FloatingSide::Top,
@@ -89,7 +89,7 @@ pub fn Tooltip(
                     spacing::XXS,
                 )
             } else {
-                FloatingPanelPlacement::fallback()
+                FloatingPanelPlacement::fallback(viewport)
             };
             let dismiss_overlay = show_overlay.clone();
             let dismiss = EventHandler::new(move |_: ()| {

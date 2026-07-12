@@ -90,6 +90,7 @@ impl SunburstRenderState<'_> {
                 if self.series.options.label.show && node_sweep * outer > 18.0 {
                     let middle = cursor + node_sweep / 2.0;
                     let radius = (inner + outer) / 2.0;
+                    set_next_data_index(data_index);
                     draw_text(
                         canvas,
                         &node.name,

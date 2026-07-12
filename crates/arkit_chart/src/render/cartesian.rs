@@ -4,14 +4,16 @@ use ohos_drawing_binding::Canvas;
 
 use super::geometry::Plot;
 use super::hit::HitRegion;
-use super::scale::{CartesianLayout, ScaleTick};
+use super::scale::{CartesianLayout, Scale, ScaleTick};
 use super::series;
-use super::surface::{draw_text, fill_rect, stroke_line};
+use super::style::with_opacity;
+use super::surface::{draw_rotated_text, draw_text, fill_rect, stroke_line};
 use super::viewport::ZoomWindow;
-use crate::model::{ChartEvent, ChartOption};
+use crate::model::{AxisLabelStyle, ChartEvent, ChartOption, LineStyle};
 
 pub(super) struct CartesianChartRenderContext<'a> {
     pub(super) option: &'a ChartOption,
+    pub(super) domain_option: &'a ChartOption,
     pub(super) series_indices: &'a [usize],
     pub(super) plot: &'a Plot,
     pub(super) axis_indices: (usize, usize),
@@ -20,11 +22,14 @@ pub(super) struct CartesianChartRenderContext<'a> {
     pub(super) hits: &'a mut Vec<HitRegion>,
     pub(super) zoom_windows: &'a [ZoomWindow],
     pub(super) selected: Option<&'a ChartEvent>,
+    pub(super) draw_x_axis: bool,
+    pub(super) draw_y_axis: bool,
 }
 
 pub(super) fn render(context: CartesianChartRenderContext<'_>) {
     let CartesianChartRenderContext {
         option,
+        domain_option,
         series_indices,
         plot,
         axis_indices,
@@ -33,16 +38,18 @@ pub(super) fn render(context: CartesianChartRenderContext<'_>) {
         hits,
         zoom_windows,
         selected,
+        draw_x_axis,
+        draw_y_axis,
     } = context;
     let layout = CartesianLayout::collect(
-        option,
+        domain_option,
         series_indices,
         axis_indices.0,
         axis_indices.1,
         zoom_windows,
     );
     if let Some(canvas) = canvas {
-        draw_axes(canvas, option, plot, &layout);
+        draw_axes(canvas, option, plot, &layout, draw_x_axis, draw_y_axis);
     }
     series::render_cartesian_set(option, series_indices, plot, &layout, palette, canvas, hits);
     if let (Some(canvas), Some(selected)) = (canvas, selected) {
@@ -130,113 +137,277 @@ fn draw_axis_pointer(
     }
 }
 
-fn draw_axes(canvas: &Canvas, option: &ChartOption, plot: &Plot, layout: &CartesianLayout) {
-    let x_ticks = sampled_ticks(layout.x.ticks(), 7);
-    let y_ticks = sampled_ticks(layout.y.ticks(), 6);
+fn draw_axes(
+    canvas: &Canvas,
+    option: &ChartOption,
+    plot: &Plot,
+    layout: &CartesianLayout,
+    draw_x_axis: bool,
+    draw_y_axis: bool,
+) {
+    let x_scale_ticks = layout.x.ticks();
+    let y_scale_ticks = layout.y.ticks();
+    let x_ticks = visible_ticks(x_scale_ticks.clone(), layout.x.axis_label_style(), 7);
+    let y_ticks = visible_ticks(y_scale_ticks.clone(), layout.y.axis_label_style(), 6);
 
-    if layout.y.draws_split_line() {
-        for tick in &y_ticks {
+    if draw_y_axis && layout.y.draws_split_line() {
+        let (color, width) = resolved_line_style(
+            layout.y.split_line_style(),
+            option.visual_style.split_line_color,
+        );
+        for tick in &y_scale_ticks {
             let y = layout.y.position(plot, Some(tick.value), tick.index, true);
-            stroke_line(
-                canvas,
-                plot.x,
-                y,
-                plot.x + plot.width,
-                y,
-                option.visual_style.split_line_color,
-                0.7,
-            );
+            stroke_line(canvas, plot.x, y, plot.x + plot.width, y, color, width);
         }
     }
-    if layout.x.draws_split_line() {
-        for tick in &x_ticks {
+    if draw_x_axis && layout.x.draws_split_line() {
+        let (color, width) = resolved_line_style(
+            layout.x.split_line_style(),
+            option.visual_style.split_line_color,
+        );
+        for tick in &x_scale_ticks {
             let x = layout.x.position(plot, Some(tick.value), tick.index, false);
-            stroke_line(
-                canvas,
-                x,
-                plot.y,
-                x,
-                plot.y + plot.height,
-                option.visual_style.split_line_color,
-                0.7,
-            );
+            stroke_line(canvas, x, plot.y, x, plot.y + plot.height, color, width);
         }
     }
 
-    if layout.y.is_visible() {
+    let x_axis_y = x_axis_coordinate(plot, layout);
+    let y_axis_x = y_axis_coordinate(plot, layout);
+    if draw_y_axis && layout.y.is_visible() {
+        let (color, width) = resolved_line_style(
+            &layout.y.axis_line().line_style,
+            option.visual_style.axis_color,
+        );
         stroke_line(
             canvas,
-            plot.x,
+            y_axis_x,
             plot.y,
-            plot.x,
+            y_axis_x,
             plot.y + plot.height,
-            option.visual_style.axis_color,
-            1.0,
+            color,
+            width,
         );
     }
-    if layout.x.is_visible() {
+    if draw_x_axis && layout.x.is_visible() {
+        let (color, width) = resolved_line_style(
+            &layout.x.axis_line().line_style,
+            option.visual_style.axis_color,
+        );
         stroke_line(
             canvas,
             plot.x,
-            plot.y + plot.height,
+            x_axis_y,
             plot.x + plot.width,
-            plot.y + plot.height,
-            option.visual_style.axis_color,
-            1.0,
+            x_axis_y,
+            color,
+            width,
         );
     }
 
-    if layout.x.draws_labels() {
+    if draw_x_axis {
+        draw_axis_ticks(canvas, option, plot, &layout.x, false, x_axis_y);
+    }
+    if draw_y_axis {
+        draw_axis_ticks(canvas, option, plot, &layout.y, true, y_axis_x);
+    }
+
+    if draw_x_axis && layout.x.draws_labels() {
+        let style = layout.x.axis_label_style();
+        let bottom = layout.x.axis_position() != "top";
         for tick in &x_ticks {
             let x = layout.x.position(plot, Some(tick.value), tick.index, false);
-            draw_text(
+            let label = format_axis_label(style, &tick.label);
+            let width = estimate_label_width(&label, style.font_size);
+            let baseline = if bottom {
+                x_axis_y + style.margin + style.font_size
+            } else {
+                x_axis_y - style.margin
+            };
+            draw_rotated_text(
                 canvas,
-                &tick.label,
-                x - estimate_label_width(&tick.label, 10.0) / 2.0,
-                plot.y + plot.height + 17.0,
-                10.0,
-                option.visual_style.text_color,
-                400,
+                &label,
+                x - width / 2.0,
+                baseline,
+                x,
+                baseline,
+                style.rotate,
+                style.font_size as f64,
+                style.color.unwrap_or(option.visual_style.text_color),
+                style.font_weight,
             );
         }
     }
-    if layout.y.draws_labels() {
+    if draw_y_axis && layout.y.draws_labels() {
+        let style = layout.y.axis_label_style();
+        let right = layout.y.axis_position() == "right";
         for tick in &y_ticks {
             let y = layout.y.position(plot, Some(tick.value), tick.index, true);
-            draw_text(
+            let label = format_axis_label(style, &tick.label);
+            let width = estimate_label_width(&label, style.font_size);
+            let x = if right {
+                y_axis_x + style.margin
+            } else {
+                y_axis_x - style.margin - width
+            };
+            let baseline = y + style.font_size * 0.35;
+            draw_rotated_text(
                 canvas,
-                &tick.label,
-                plot.x - estimate_label_width(&tick.label, 10.0) - 7.0,
-                y + 4.0,
-                10.0,
-                option.visual_style.text_color,
-                400,
+                &label,
+                x,
+                baseline,
+                if right { x } else { x + width },
+                baseline,
+                style.rotate,
+                style.font_size as f64,
+                style.color.unwrap_or(option.visual_style.text_color),
+                style.font_weight,
             );
         }
     }
 
-    if let Some(name) = layout.x.name() {
+    if let Some(name) = draw_x_axis.then(|| layout.x.name()).flatten() {
+        let top = layout.x.axis_position() == "top";
         draw_text(
             canvas,
             name,
             plot.x + plot.width + 5.0,
-            plot.y + plot.height + 4.0,
+            if top { x_axis_y - 4.0 } else { x_axis_y + 12.0 },
             10.0,
             option.visual_style.text_color,
             400,
         );
     }
-    if let Some(name) = layout.y.name() {
+    if let Some(name) = draw_y_axis.then(|| layout.y.name()).flatten() {
+        let right = layout.y.axis_position() == "right";
         draw_text(
             canvas,
             name,
-            plot.x + 4.0,
+            if right {
+                y_axis_x + 4.0
+            } else {
+                y_axis_x - estimate_label_width(name, 10.0)
+            },
             plot.y - 7.0,
             10.0,
             option.visual_style.text_color,
             400,
         );
     }
+}
+
+fn x_axis_coordinate(plot: &Plot, layout: &CartesianLayout) -> f32 {
+    if layout.x.axis_line().on_zero
+        && layout.x.offset() <= f32::EPSILON
+        && !layout.y.is_category()
+        && layout.y.contains(Some(0.0), 0)
+    {
+        return layout.y.position(plot, Some(0.0), 0, true);
+    }
+    if layout.x.axis_position() == "top" {
+        plot.y - layout.x.offset()
+    } else {
+        plot.y + plot.height + layout.x.offset()
+    }
+}
+
+fn y_axis_coordinate(plot: &Plot, layout: &CartesianLayout) -> f32 {
+    if layout.y.axis_line().on_zero
+        && layout.y.offset() <= f32::EPSILON
+        && !layout.x.is_category()
+        && layout.x.contains(Some(0.0), 0)
+    {
+        return layout.x.position(plot, Some(0.0), 0, false);
+    }
+    if layout.y.axis_position() == "right" {
+        plot.x + plot.width + layout.y.offset()
+    } else {
+        plot.x - layout.y.offset()
+    }
+}
+
+fn draw_axis_ticks(
+    canvas: &Canvas,
+    option: &ChartOption,
+    plot: &Plot,
+    scale: &Scale,
+    vertical: bool,
+    coordinate: f32,
+) {
+    if !scale.draws_ticks() {
+        return;
+    }
+    let tick = scale.axis_tick();
+    let outside_direction = if vertical {
+        if scale.axis_position() == "right" {
+            1.0
+        } else {
+            -1.0
+        }
+    } else if scale.axis_position() == "top" {
+        -1.0
+    } else {
+        1.0
+    };
+    let direction = if tick.inside {
+        -outside_direction
+    } else {
+        outside_direction
+    };
+    let (color, width) = resolved_line_style(&tick.line_style, option.visual_style.axis_color);
+    for position in scale.tick_positions(plot, vertical) {
+        if vertical {
+            stroke_line(
+                canvas,
+                coordinate,
+                position,
+                coordinate + direction * tick.length,
+                position,
+                color,
+                width,
+            );
+        } else {
+            stroke_line(
+                canvas,
+                position,
+                coordinate,
+                position,
+                coordinate + direction * tick.length,
+                color,
+                width,
+            );
+        }
+    }
+}
+
+fn resolved_line_style(style: &LineStyle, fallback: u32) -> (u32, f32) {
+    (
+        with_opacity(style.color.unwrap_or(fallback), style.opacity),
+        style.width.max(0.5),
+    )
+}
+
+fn visible_ticks(
+    ticks: Vec<ScaleTick>,
+    style: &AxisLabelStyle,
+    automatic_limit: usize,
+) -> Vec<ScaleTick> {
+    if let Some(interval) = style.interval {
+        let step = interval.saturating_add(1);
+        return ticks
+            .into_iter()
+            .enumerate()
+            .filter_map(|(index, tick)| (index % step == 0).then_some(tick))
+            .collect();
+    }
+    sampled_ticks(ticks, automatic_limit)
+}
+
+fn format_axis_label(style: &AxisLabelStyle, value: &str) -> String {
+    style
+        .formatter
+        .as_deref()
+        .unwrap_or("{value}")
+        .replace("{value}", value)
 }
 
 fn sampled_ticks(ticks: Vec<ScaleTick>, limit: usize) -> Vec<ScaleTick> {
@@ -273,5 +444,30 @@ mod tests {
         assert_eq!(sampled.first().unwrap().index, 0);
         assert_eq!(sampled.last().unwrap().index, 19);
         assert!(sampled.len() <= 7);
+    }
+
+    #[test]
+    fn explicit_axis_label_interval_zero_keeps_every_tick() {
+        let ticks = (0..12)
+            .map(|index| ScaleTick {
+                value: index as f64,
+                index,
+                label: index.to_string(),
+            })
+            .collect();
+        let style = AxisLabelStyle {
+            interval: Some(0),
+            ..AxisLabelStyle::default()
+        };
+        assert_eq!(visible_ticks(ticks, &style, 6).len(), 12);
+    }
+
+    #[test]
+    fn axis_label_formatter_replaces_echarts_value_token() {
+        let style = AxisLabelStyle {
+            formatter: Some(String::from("{value} °C")),
+            ..AxisLabelStyle::default()
+        };
+        assert_eq!(format_axis_label(&style, "25"), "25 °C");
     }
 }

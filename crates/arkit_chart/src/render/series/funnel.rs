@@ -26,7 +26,12 @@ pub(super) fn render(series: &BasicSeries, context: &mut FreeRenderContext<'_>) 
     let gap = compat::number(options, "gap", 0.0).max(0.0) as f32;
     let orient = compat::string(options, "orient").unwrap_or("vertical");
     let align = compat::string(options, "funnelAlign").unwrap_or("center");
-    let mut items: Vec<(usize, &DataPoint)> = series.data.iter().enumerate().collect();
+    let mut items: Vec<(usize, &DataPoint)> = series
+        .data
+        .iter()
+        .enumerate()
+        .filter(|(_, point)| point.number_opt(0).is_some())
+        .collect();
     match compat::string(options, "sort").unwrap_or("descending") {
         "ascending" => items.sort_by(|left, right| left.1.number(0).total_cmp(&right.1.number(0))),
         "none" => {}
@@ -115,9 +120,10 @@ pub(super) fn render(series: &BasicSeries, context: &mut FreeRenderContext<'_>) 
                     bounds.0 + bounds.2 + 7.0
                 };
                 let label_y = bounds.1 + bounds.3 / 2.0 + label.font_size / 2.0;
+                set_next_data_index(*data_index);
                 draw_text(
                     canvas,
-                    &format_label(label, series, point, *data_index),
+                    &format_label(&label, series, point, *data_index),
                     label_x,
                     label_y,
                     label.font_size as f64,

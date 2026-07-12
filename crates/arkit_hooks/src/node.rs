@@ -178,6 +178,7 @@ impl arkit_runtime::ScopeNodeResolver for ArkHost {
 /// ```
 #[track_caller]
 pub fn use_ark_host_provider() -> ArkHost {
+    let _window_metrics = crate::safe_area::use_window_metrics_provider();
     let host = use_context_provider(ArkHost::new);
     // Register the host with the runtime so post-render passes can resolve
     // `use_ark_node` lookups and install the overlay portal root.
@@ -193,8 +194,17 @@ pub fn use_ark_host_provider() -> ArkHost {
 pub fn OverlayRoot() -> Element {
     let host = use_context::<ArkHost>();
     let frame_host = host.clone();
+    let window_metrics = dioxus_core::try_consume_context::<arkit_runtime::WindowMetricsHandle>();
     crate::layout::use_layout_frame(move |frame| {
         frame_host.set_overlay_frame(frame);
+        if let Some(metrics) = window_metrics.as_ref() {
+            metrics.report_content_rect(arkit_runtime::PhysicalRect {
+                top: frame.y.round() as i32,
+                left: frame.x.round() as i32,
+                width: frame.width.round() as i32,
+                height: frame.height.round() as i32,
+            });
+        }
     });
     let content = host.overlay_content();
     let current = content();

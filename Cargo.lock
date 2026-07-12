@@ -69,7 +69,10 @@ dependencies = [
  "ohos-arkui-binding 0.2.0",
  "ohos-display-binding 0.1.0",
  "ohos-drawing-binding",
+ "ohos-image-native-binding",
+ "ohos-native-drawing-sys",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]

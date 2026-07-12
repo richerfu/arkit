@@ -12,6 +12,7 @@ use std::rc::Rc;
 
 use crate::layout::LayoutFrame;
 use crate::node::{use_ark_host, ArkHost};
+use crate::safe_area::use_safe_area;
 
 // Bring the ArkUI element descriptors (`stack`, `row`, `column`, ...) and
 // event descriptors into scope for `rsx!`.
@@ -54,13 +55,25 @@ impl Default for ModalOverlaySpec {
 /// overlay-content signal; this struct only tracks whether content is open.
 struct OverlayState {
     host: ArkHost,
+    window_metrics: Option<arkit_runtime::WindowMetricsHandle>,
     open: bool,
 }
 
 impl OverlayState {
-    fn new(host: ArkHost) -> Self {
-        Self { host, open: false }
+    fn new(host: ArkHost, window_metrics: Option<arkit_runtime::WindowMetricsHandle>) -> Self {
+        Self {
+            host,
+            window_metrics,
+            open: false,
+        }
     }
+}
+
+/// Full overlay frame plus the current effective visual safe insets.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct OverlayViewport {
+    pub frame: LayoutFrame,
+    pub safe_area: arkit_runtime::EdgeInsets,
 }
 
 /// Handle returned by [`use_overlay`]. Cloning shares the underlying state.
@@ -120,6 +133,19 @@ impl OverlayApi {
         self.inner.borrow().host.overlay_frame_value()
     }
 
+    /// Current positioning viewport for floating content.
+    pub fn viewport(&self) -> OverlayViewport {
+        let state = self.inner.borrow();
+        OverlayViewport {
+            frame: state.host.overlay_frame_value(),
+            safe_area: state
+                .window_metrics
+                .as_ref()
+                .map(|metrics| metrics.get().safe_area)
+                .unwrap_or_default(),
+        }
+    }
+
     /// Shared helper: render the content closure to an `Element` and publish it
     /// on the host's overlay-content signal, marking the overlay open.
     fn set_content(&self, content: impl FnOnce() -> Element + 'static) {
@@ -142,6 +168,42 @@ fn dismiss_if_allowed(spec: ModalOverlaySpec, dismiss: &Rc<dyn Fn()>) {
 }
 
 fn modal_overlay_layer(spec: ModalOverlaySpec, panel: Element, dismiss: Rc<dyn Fn()>) -> Element {
+    rsx! {
+        ModalOverlayLayer {
+            spec,
+            panel,
+            dismiss,
+        }
+    }
+}
+
+#[derive(Clone, Props)]
+struct ModalOverlayLayerProps {
+    spec: ModalOverlaySpec,
+    panel: Element,
+    dismiss: Rc<dyn Fn()>,
+}
+
+impl PartialEq for ModalOverlayLayerProps {
+    fn eq(&self, _other: &Self) -> bool {
+        // Modal content may close over reactive business state. Rebuilding it
+        // also lets safe-area changes update panel constraints immediately.
+        false
+    }
+}
+
+#[allow(non_snake_case)]
+fn ModalOverlayLayer(props: ModalOverlayLayerProps) -> Element {
+    let ModalOverlayLayerProps {
+        spec,
+        panel,
+        dismiss,
+    } = props;
+    let safe_area = use_safe_area();
+    let inset_top = spec.viewport_inset + safe_area.top;
+    let inset_right = spec.viewport_inset + safe_area.right;
+    let inset_bottom = spec.viewport_inset + safe_area.bottom;
+    let inset_left = spec.viewport_inset + safe_area.left;
     let backdrop_dismiss = dismiss.clone();
     let overlay_panel = match spec.presentation {
         ModalPresentation::CenteredDialog => {
@@ -151,10 +213,10 @@ fn modal_overlay_layer(spec: ModalOverlaySpec, panel: Element, dismiss: Rc<dyn F
                     percent_width: 1.0,
                     percent_height: 1.0,
                     alignment: STACK_ALIGN_CENTER,
-                    padding_top: spec.viewport_inset,
-                    padding_right: spec.viewport_inset,
-                    padding_bottom: spec.viewport_inset,
-                    padding_left: spec.viewport_inset,
+                    padding_top: inset_top,
+                    padding_right: inset_right,
+                    padding_bottom: inset_bottom,
+                    padding_left: inset_left,
                     onclick: move |evt| {
                         evt.stop_propagation();
                         dismiss_if_allowed(spec, &outside_dismiss);
@@ -174,10 +236,10 @@ fn modal_overlay_layer(spec: ModalOverlaySpec, panel: Element, dismiss: Rc<dyn F
                     percent_width: 1.0,
                     percent_height: 1.0,
                     justify_content: "end",
-                    padding_top: spec.viewport_inset,
-                    padding_right: spec.viewport_inset,
-                    padding_bottom: spec.viewport_inset,
-                    padding_left: spec.viewport_inset,
+                    padding_top: inset_top,
+                    padding_right: inset_right,
+                    padding_bottom: inset_bottom,
+                    padding_left: inset_left,
                     onclick: move |evt| {
                         evt.stop_propagation();
                         dismiss_if_allowed(spec, &outside_dismiss);
@@ -200,10 +262,10 @@ fn modal_overlay_layer(spec: ModalOverlaySpec, panel: Element, dismiss: Rc<dyn F
                     percent_width: 1.0,
                     percent_height: 1.0,
                     justify_content: "end",
-                    padding_top: spec.viewport_inset,
-                    padding_right: spec.viewport_inset,
-                    padding_bottom: spec.viewport_inset,
-                    padding_left: spec.viewport_inset,
+                    padding_top: inset_top,
+                    padding_right: inset_right,
+                    padding_bottom: inset_bottom,
+                    padding_left: inset_left,
                     onclick: move |evt| {
                         evt.stop_propagation();
                         dismiss_if_allowed(spec, &outside_dismiss);
@@ -245,8 +307,9 @@ fn modal_overlay_layer(spec: ModalOverlaySpec, panel: Element, dismiss: Rc<dyn F
 /// actually mounts.
 pub fn use_overlay() -> OverlayApi {
     let host = use_ark_host();
+    let window_metrics = dioxus_core::try_consume_context::<arkit_runtime::WindowMetricsHandle>();
     use_hook(|| {
-        let state = OverlayState::new(host.clone());
+        let state = OverlayState::new(host.clone(), window_metrics.clone());
         OverlayApi {
             inner: Rc::new(RefCell::new(state)),
         }

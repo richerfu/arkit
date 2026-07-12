@@ -1648,7 +1648,7 @@ fn carousel_frame(
     count: i32,
     preview: Element,
     on_page: EventHandler<i32>,
-    remove_bottom_safe_area: bool,
+    reserve_bottom_controls: bool,
 ) -> Element {
     let current = page.clamp(1, count);
     let prev_disabled = current == 1;
@@ -1663,7 +1663,7 @@ fn carousel_frame(
                 percent_height: 1.0,
                 align_items: "center",
                 justify_content: "center",
-                padding_bottom: if remove_bottom_safe_area { 0.0 } else { 48.0 + spacing::LG },
+                padding_bottom: if reserve_bottom_controls { 48.0 + spacing::LG } else { 0.0 },
                 {preview}
             }
             column {
@@ -1782,7 +1782,7 @@ fn select_carousel(
             }
         },
         on_page,
-        false,
+        true,
     )
 }
 
@@ -1855,7 +1855,7 @@ fn text_carousel(page: i32, on_page: EventHandler<i32>) -> Element {
         },
     };
 
-    carousel_frame(page, 3, preview, on_page, true)
+    carousel_frame(page, 3, preview, on_page, false)
 }
 
 #[component]

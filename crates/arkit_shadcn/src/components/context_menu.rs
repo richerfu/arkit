@@ -79,13 +79,13 @@ pub fn ContextMenu(
                     set_open.call(true);
                     let entries = items.clone();
                     let frame = *trigger_frame.read();
-                    let overlay_frame = overlay.overlay_frame();
+                    let viewport = overlay.viewport();
                     let panel_height = menu_closed_panel_height(&entries);
                     let pointer = evt.data().pointer;
                     let placement = if let Some(placement) = pointer.and_then(|pointer| {
                         MenuOverlayPlacement::from_pointer(
                             pointer,
-                            overlay_frame,
+                            viewport,
                             style.width,
                             panel_height,
                             style.side_offset_vp,
@@ -95,13 +95,13 @@ pub fn ContextMenu(
                     } else if frame.is_measured() {
                         MenuOverlayPlacement::from_trigger(
                             frame,
-                            overlay_frame,
+                            viewport,
                             style.width,
                             panel_height,
                             style.side_offset_vp,
                         )
                     } else {
-                        MenuOverlayPlacement::fallback()
+                        MenuOverlayPlacement::fallback(viewport)
                     };
                     let session = MenuOverlaySession::new(placement, None);
                     overlay_session.set(Some(session));

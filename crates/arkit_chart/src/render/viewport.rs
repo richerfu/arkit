@@ -113,6 +113,7 @@ fn category_value_index(value: &DataValue, labels: &[String]) -> Option<usize> {
             .or_else(|| value.parse().ok()),
         DataValue::Number(value) if value.is_finite() && *value >= 0.0 => Some(*value as usize),
         DataValue::Number(_) => None,
+        DataValue::Null => None,
     }
 }
 

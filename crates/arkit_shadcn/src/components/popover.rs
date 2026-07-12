@@ -66,11 +66,11 @@ pub fn Popover(
             set_open.call(true);
             let panel = children.clone();
             let frame = *trigger_frame.read();
-            let overlay_frame = overlay.overlay_frame();
+            let viewport = overlay.viewport();
             let placement = if let Some(placement) = pointer.and_then(|pointer| {
                 FloatingPanelPlacement::from_pointer(
                     pointer,
-                    overlay_frame,
+                    viewport,
                     panel_width,
                     POPOVER_ESTIMATED_HEIGHT,
                     FloatingSide::Bottom,
@@ -82,7 +82,7 @@ pub fn Popover(
             } else if frame.is_measured() {
                 FloatingPanelPlacement::from_trigger(
                     frame,
-                    overlay_frame,
+                    viewport,
                     panel_width,
                     POPOVER_ESTIMATED_HEIGHT,
                     FloatingSide::Bottom,
@@ -90,7 +90,7 @@ pub fn Popover(
                     spacing::XXS,
                 )
             } else {
-                FloatingPanelPlacement::fallback()
+                FloatingPanelPlacement::fallback(viewport)
             };
             let dismiss_overlay = overlay.clone();
             let dismiss = EventHandler::new(move |_: ()| {

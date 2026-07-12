@@ -7,7 +7,10 @@
 use super::geometry::Plot;
 use super::series;
 use super::viewport::{self, AxisZoom, ZoomWindow};
-use crate::model::{Axis, AxisOrientation, AxisType, ChartOption, DataValue, Series};
+use crate::model::{
+    Axis, AxisLabelStyle, AxisLine, AxisOrientation, AxisTick, AxisType, ChartOption, DataValue,
+    LineStyle, Series,
+};
 
 #[derive(Debug, Clone)]
 pub(super) struct CartesianLayout {
@@ -23,12 +26,6 @@ impl CartesianLayout {
         y_axis_index: usize,
         zoom_windows: &[ZoomWindow],
     ) -> Self {
-        let mut domain = Domain::default();
-        for series_index in series_indices {
-            domain.collect_series(&option.series[*series_index]);
-        }
-        domain.collect_stacks(option, series_indices);
-
         let x_axis = option
             .x_axis
             .get(x_axis_index)
@@ -39,13 +36,23 @@ impl CartesianLayout {
             .get(y_axis_index)
             .cloned()
             .unwrap_or_else(Axis::value);
+        let horizontal_bar = y_axis.axis_type == AxisType::Category
+            && x_axis.axis_type != AxisType::Category
+            && series_indices
+                .iter()
+                .any(|index| matches!(option.series[*index], Series::Bar(_)));
+        let mut domain = Domain::default();
+        for series_index in series_indices {
+            domain.collect_series(&option.series[*series_index], horizontal_bar);
+        }
+        domain.collect_stacks(option, series_indices, horizontal_bar);
 
         Self {
             x: Scale::from_axis(
                 x_axis,
                 &domain.x_values,
                 domain.x_count,
-                false,
+                horizontal_bar,
                 viewport::axis_window(option, zoom_windows, AxisOrientation::X, x_axis_index),
             ),
             y: Scale::from_axis(
@@ -153,19 +160,50 @@ impl Scale {
     }
 
     pub(super) fn is_visible(&self) -> bool {
-        self.axis.show
+        self.axis.show && self.axis.axis_line.show
     }
 
     pub(super) fn draws_split_line(&self) -> bool {
-        self.axis.split_line
+        self.axis.show && self.axis.split_line
     }
 
     pub(super) fn draws_labels(&self) -> bool {
-        self.axis.axis_label
+        self.axis.show && self.axis.axis_label
+    }
+
+    pub(super) fn draws_ticks(&self) -> bool {
+        self.axis.show && self.axis.axis_tick.show
+    }
+
+    pub(super) fn axis_position(&self) -> &str {
+        &self.axis.position
+    }
+
+    pub(super) fn offset(&self) -> f32 {
+        self.axis.offset
+    }
+
+    pub(super) fn axis_line(&self) -> &AxisLine {
+        &self.axis.axis_line
+    }
+
+    pub(super) fn axis_tick(&self) -> &AxisTick {
+        &self.axis.axis_tick
+    }
+
+    pub(super) fn split_line_style(&self) -> &LineStyle {
+        &self.axis.split_line_style
+    }
+
+    pub(super) fn axis_label_style(&self) -> &AxisLabelStyle {
+        &self.axis.axis_label_style
     }
 
     pub(super) fn name(&self) -> Option<&str> {
-        self.axis.name.as_deref()
+        self.axis
+            .show
+            .then_some(self.axis.name.as_deref())
+            .flatten()
     }
 
     pub(super) fn count(&self) -> usize {
@@ -181,6 +219,27 @@ impl Scale {
         value: Option<f64>,
         index: usize,
         vertical: bool,
+    ) -> f32 {
+        self.position_impl(plot, value, index, vertical, true)
+    }
+
+    pub(super) fn position_unclamped(
+        &self,
+        plot: &Plot,
+        value: Option<f64>,
+        index: usize,
+        vertical: bool,
+    ) -> f32 {
+        self.position_impl(plot, value, index, vertical, false)
+    }
+
+    fn position_impl(
+        &self,
+        plot: &Plot,
+        value: Option<f64>,
+        index: usize,
+        vertical: bool,
+        clamp: bool,
     ) -> f32 {
         let normalized = match &self.kind {
             ScaleKind::Category { start, end, .. } => {
@@ -204,8 +263,12 @@ impl Scale {
                 let value = value.unwrap_or(index as f64).max(f64::MIN_POSITIVE);
                 (value.ln() - min.ln()) / (max.ln() - min.ln()).max(1e-12)
             }
-        }
-        .clamp(0.0, 1.0);
+        };
+        let normalized = if clamp {
+            normalized.clamp(0.0, 1.0)
+        } else {
+            normalized
+        };
         let normalized = if self.axis.inverse {
             1.0 - normalized
         } else {
@@ -245,6 +308,38 @@ impl Scale {
 
     pub(super) fn zero_position(&self, plot: &Plot, vertical: bool) -> f32 {
         self.position(plot, Some(0.0), 0, vertical)
+    }
+
+    pub(super) fn extent_position(&self, plot: &Plot, start: bool, vertical: bool) -> f32 {
+        let mut normalized = if start { 0.0 } else { 1.0 };
+        if self.axis.inverse {
+            normalized = 1.0 - normalized;
+        }
+        if vertical {
+            plot.y + plot.height * (1.0 - normalized)
+        } else {
+            plot.x + plot.width * normalized
+        }
+    }
+
+    pub(super) fn value_at_position(&self, plot: &Plot, position: f32, vertical: bool) -> f64 {
+        let mut normalized = if vertical {
+            1.0 - (position - plot.y) as f64 / plot.height.max(1e-12) as f64
+        } else {
+            (position - plot.x) as f64 / plot.width.max(1e-12) as f64
+        };
+        if self.axis.inverse {
+            normalized = 1.0 - normalized;
+        }
+        match &self.kind {
+            ScaleKind::Category { start, end, .. } => {
+                *start as f64 + normalized * end.saturating_sub(*start).saturating_sub(1) as f64
+            }
+            ScaleKind::Linear { min, max, .. } | ScaleKind::Time { min, max, .. } => {
+                min + normalized * (max - min)
+            }
+            ScaleKind::Log { min, max } => (min.ln() + normalized * (max.ln() - min.ln())).exp(),
+        }
     }
 
     pub(super) fn contains(&self, value: Option<f64>, index: usize) -> bool {
@@ -329,6 +424,34 @@ impl Scale {
             }
         }
     }
+
+    pub(super) fn tick_positions(&self, plot: &Plot, vertical: bool) -> Vec<f32> {
+        if let ScaleKind::Category { start, end, .. } = &self.kind {
+            if self.axis.boundary_gap && !self.axis.axis_tick.align_with_label {
+                let count = end.saturating_sub(*start).max(1);
+                return (0..=count)
+                    .map(|index| self.project(plot, index as f64 / count as f64, vertical))
+                    .collect();
+            }
+        }
+        self.ticks()
+            .into_iter()
+            .map(|tick| self.position(plot, Some(tick.value), tick.index, vertical))
+            .collect()
+    }
+
+    fn project(&self, plot: &Plot, normalized: f64, vertical: bool) -> f32 {
+        let normalized = if self.axis.inverse {
+            1.0 - normalized
+        } else {
+            normalized
+        } as f32;
+        if vertical {
+            plot.y + plot.height * (1.0 - normalized)
+        } else {
+            plot.x + plot.width * normalized
+        }
+    }
 }
 
 #[derive(Default)]
@@ -340,39 +463,59 @@ struct Domain {
 }
 
 impl Domain {
-    fn collect_series(&mut self, value: &Series) {
+    fn collect_series(&mut self, value: &Series, horizontal_bar: bool) {
         let data = series::data(value);
         self.x_count = self.x_count.max(data.len());
         match value {
+            Series::Bar(_) if horizontal_bar => {
+                self.y_count = self.y_count.max(data.len());
+                for (index, point) in data.iter().enumerate() {
+                    if point.values.len() > 1 {
+                        if let Some(x) = point.number_opt(0) {
+                            self.x_values.push(x);
+                        }
+                        if let Some(y) = point.number_opt(1) {
+                            self.y_values.push(y);
+                        }
+                    } else if let Some(value) = point.number_opt(0) {
+                        self.x_values.push(value);
+                        self.y_values.push(index as f64);
+                    }
+                }
+            }
             Series::Line(_) | Series::Bar(_) | Series::PictorialBar(_) => {
                 for (index, point) in data.iter().enumerate() {
                     if point.values.len() > 1 {
-                        self.x_values.push(point.number(0));
-                        self.y_values.push(point.number(1));
+                        if let (Some(x), Some(y)) = (point.number_opt(0), point.number_opt(1)) {
+                            self.x_values.push(x);
+                            self.y_values.push(y);
+                        }
                     } else {
                         self.x_values.push(index as f64);
-                        self.y_values.push(point.number(0));
+                        if let Some(value) = point.number_opt(0) {
+                            self.y_values.push(value);
+                        }
                     }
                 }
             }
             Series::Scatter(_) | Series::EffectScatter(_) => {
                 for (index, point) in data.iter().enumerate() {
-                    self.x_values.push(if point.values.len() > 1 {
-                        point.number(0)
+                    let (x, y) = if point.values.len() > 1 {
+                        (point.number_opt(0), point.number_opt(1))
                     } else {
-                        index as f64
-                    });
-                    self.y_values.push(if point.values.len() > 1 {
-                        point.number(1)
-                    } else {
-                        point.number(0)
-                    });
+                        (Some(index as f64), point.number_opt(0))
+                    };
+                    if let (Some(x), Some(y)) = (x, y) {
+                        self.x_values.push(x);
+                        self.y_values.push(y);
+                    }
                 }
             }
             Series::Heatmap(_) => {
                 for point in data {
-                    let x = point.number(0);
-                    let y = point.number(1);
+                    let (Some(x), Some(y)) = (point.number_opt(0), point.number_opt(1)) else {
+                        continue;
+                    };
                     self.x_values.push(x);
                     self.y_values.push(y);
                     self.x_count = self.x_count.max(x.max(0.0) as usize + 1);
@@ -407,14 +550,22 @@ impl Domain {
         }
     }
 
-    fn collect_stacks(&mut self, option: &ChartOption, series_indices: &[usize]) {
+    fn collect_stacks(
+        &mut self,
+        option: &ChartOption,
+        series_indices: &[usize],
+        horizontal_bar: bool,
+    ) {
         let mut accumulators: std::collections::BTreeMap<String, Vec<(f64, f64)>> =
             std::collections::BTreeMap::new();
         for series_index in series_indices {
-            let (data, stack) = match &option.series[*series_index] {
-                Series::Line(series) | Series::Bar(series) => {
-                    (&series.data, series.options.stack.as_deref())
-                }
+            let (data, stack, horizontal) = match &option.series[*series_index] {
+                Series::Line(series) => (&series.data, series.options.stack.as_deref(), false),
+                Series::Bar(series) => (
+                    &series.data,
+                    series.options.stack.as_deref(),
+                    horizontal_bar,
+                ),
                 _ => continue,
             };
             let Some(stack) = stack else { continue };
@@ -423,17 +574,26 @@ impl Domain {
                 .or_insert_with(|| vec![(0.0, 0.0); data.len()]);
             accumulator.resize(data.len(), (0.0, 0.0));
             for (index, point) in data.iter().enumerate() {
-                let value = if point.values.len() > 1 {
-                    point.number(1)
+                let value = if point.values.len() > 1 && !horizontal {
+                    point.number_opt(1)
                 } else {
-                    point.number(0)
+                    point.number_opt(0)
                 };
+                let Some(value) = value else { continue };
                 if value >= 0.0 {
                     accumulator[index].0 += value;
-                    self.y_values.push(accumulator[index].0);
+                    if horizontal {
+                        self.x_values.push(accumulator[index].0);
+                    } else {
+                        self.y_values.push(accumulator[index].0);
+                    }
                 } else {
                     accumulator[index].1 += value;
-                    self.y_values.push(accumulator[index].1);
+                    if horizontal {
+                        self.x_values.push(accumulator[index].1);
+                    } else {
+                        self.y_values.push(accumulator[index].1);
+                    }
                 }
             }
         }
@@ -467,6 +627,7 @@ fn category_index(value: &DataValue, labels: &[String]) -> Option<usize> {
             .or_else(|| value.parse().ok()),
         DataValue::Number(value) if value.is_finite() && *value >= 0.0 => Some(*value as usize),
         DataValue::Number(_) => None,
+        DataValue::Null => None,
     }
 }
 
@@ -723,6 +884,50 @@ mod tests {
     }
 
     #[test]
+    fn horizontal_bar_uses_x_as_value_domain_and_y_as_category_domain() {
+        let option = ChartOption::new()
+            .x_axis(Axis::value())
+            .y_axis(Axis::category(["A", "B"]))
+            .push_series({
+                let mut series = Series::bar("first", [5.0, 8.0]);
+                let Series::Bar(value) = &mut series else {
+                    unreachable!();
+                };
+                value.options.stack = Some(String::from("total"));
+                series
+            })
+            .push_series({
+                let mut series = Series::bar("second", [7.0, 3.0]);
+                let Series::Bar(value) = &mut series else {
+                    unreachable!();
+                };
+                value.options.stack = Some(String::from("total"));
+                series
+            });
+        let layout = CartesianLayout::collect(&option, &[0, 1], 0, 0, &[]);
+        let plot = Plot {
+            x: 0.0,
+            y: 0.0,
+            width: 130.0,
+            height: 100.0,
+        };
+
+        assert_eq!(layout.y.count(), 2);
+        assert_eq!(
+            layout
+                .y
+                .ticks()
+                .into_iter()
+                .map(|tick| tick.label)
+                .collect::<Vec<_>>(),
+            ["A", "B"]
+        );
+        assert_eq!(layout.x.position(&plot, Some(0.0), 0, false), plot.x);
+        assert!(layout.x.contains(Some(12.0), 0));
+        assert!(layout.x.position(&plot, Some(12.0), 0, false) > plot.x);
+    }
+
+    #[test]
     fn candle_domain_only_uses_ohlc_values_for_y() {
         let option = ChartOption::new().push_series(Series::candlestick(
             "ohlc",
@@ -813,5 +1018,26 @@ mod tests {
             end_value: None,
         };
         assert_eq!(category_window(12, &labels, Some(&zoom)), (1, 9));
+    }
+
+    #[test]
+    fn category_ticks_use_band_edges_until_align_with_label_is_enabled() {
+        let plot = Plot {
+            x: 10.0,
+            y: 0.0,
+            width: 120.0,
+            height: 80.0,
+        };
+        let axis = Axis::category(["A", "B", "C"]);
+        let scale = Scale::from_axis(axis.clone(), &[], 3, false, None);
+        assert_eq!(
+            scale.tick_positions(&plot, false),
+            [10.0, 50.0, 90.0, 130.0]
+        );
+
+        let mut aligned = axis;
+        aligned.axis_tick.align_with_label = true;
+        let scale = Scale::from_axis(aligned, &[], 3, false, None);
+        assert_eq!(scale.tick_positions(&plot, false), [30.0, 70.0, 110.0]);
     }
 }

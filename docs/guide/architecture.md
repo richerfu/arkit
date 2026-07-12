@@ -64,6 +64,14 @@ Gesture recognizer、callback context 和目标 native wrapper 由对应 HostNod
 
 `OverlayRoot` 是应用唯一浮层出口。浮层内容仍属于同一 Dioxus tree，不创建第二个 VirtualDom。受控菜单在保持打开时必须把最新 props 重新发布到同一个 overlay subtree；关闭再打开才能看到新状态属于 stale `Element` snapshot bug。重新发布时必须保留 overlay-local hook state，例如已展开的 submenu path。
 
+## Window metrics 与安全区
+
+`arkit_runtime` 是窗口几何的唯一来源。它把 OpenHarmony 的 `avoidAreaChange`、`windowRectChange`、surface resize 和 keyboard 事件归一成 `WindowMetrics`，并在事件变化时使 Dioxus tree 重新渲染。avoid-area rectangle 必须先与 XComponent `content_rect` 求交集，再从物理像素转换为 vp；这样非全屏宿主已经完成的系统栏避让不会被重复应用。
+
+普通 `#[entry]` 默认使用 `SafeAreaPolicy::Safe`。框架 root 保持一个覆盖完整 XComponent 的 window stack，业务 subtree 位于 safe content viewport，`OverlayRoot` 与它并列：backdrop 可以覆盖整个窗口，而 Dialog、Sheet、Menu、Popover 等面板被约束在 safe viewport 内。沉浸式页面可使用 `#[entry(edge_to_edge)]`，此时业务 subtree 填满 XComponent，但 `use_window_metrics()`、`use_safe_area()` 以及框架浮层避让仍然有效。宿主还需配置对应的 window edge-to-edge 模式。
+
+System、Cutout 与 NavigationIndicator 合并为 visual safe area；SystemGesture 和 IME 保持独立。键盘高度不能作为全局页面 padding，滚动容器和输入法协调逻辑应单独消费 `ime_area` / `keyboard_height`。
+
 ## Escape hatch
 
 业务 UI 默认写 `rsx!`。只有 ArkUI 无法声明式表达的能力才使用 `arkit_hooks` 获取 native node，例如布局观测、NodeAdapter 虚拟化、动画、原生图表或嵌入 WebView。`arkit_chart` 把 Custom canvas escape hatch 封装在 `ECharts` 组件内，业务代码只传受控 props。

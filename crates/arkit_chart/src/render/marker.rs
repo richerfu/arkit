@@ -397,18 +397,18 @@ fn series_points(series: &Series, context: &CartesianRenderContext<'_>) -> Vec<S
             let (x_value, y_value) = match series {
                 Series::Line(_) | Series::Bar(_) => {
                     if point.values.len() > 1 {
-                        (Some(point.number(0)), point.number(1))
+                        (Some(point.number_opt(0)?), point.number_opt(1)?)
                     } else {
-                        (None, point.number(0))
+                        (None, point.number_opt(0)?)
                     }
                 }
                 Series::Scatter(_) | Series::EffectScatter(_) | Series::Heatmap(_) => {
-                    (Some(point.number(0)), point.number(1))
+                    (Some(point.number_opt(0)?), point.number_opt(1)?)
                 }
-                Series::Candlestick(_) => (None, point.number(1)),
-                Series::Boxplot(_) => (None, point.number(2)),
-                Series::PictorialBar(_) => (None, point.number(0)),
-                _ => (None, point.number(0)),
+                Series::Candlestick(_) => (None, point.number_opt(1)?),
+                Series::Boxplot(_) => (None, point.number_opt(2)?),
+                Series::PictorialBar(_) => (None, point.number_opt(0)?),
+                _ => (None, point.number_opt(0)?),
             };
             if !context.layout.x.contains(x_value, index)
                 || !context.layout.y.contains(Some(y_value), index)

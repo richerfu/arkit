@@ -74,5 +74,7 @@ openharmony-ability = { git = "https://github.com/harmony-contrib/openharmony-ab
 
 ohos-arkui-binding = { version = "0.2.0", default-features = false, features = ["napi", "image", "drawing", "api-20"] }
 ohos-drawing-binding = "0.2.0"
+ohos-native-drawing-sys = "0.2.0"
+ohos-image-native-binding = "0.0.1"
 ohos-display-binding = "0.1.0"
 ohos-hilog-binding = "0.2.0"

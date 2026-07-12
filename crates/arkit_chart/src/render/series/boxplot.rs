@@ -8,7 +8,13 @@ pub(super) fn render(series: &BasicSeries, context: &mut CartesianRenderContext<
     let canvas = context.canvas;
     let hits = &mut *context.hits;
     let count = series.data.len().max(1);
-    let width = layout.x.band_width(plot, false, count) * 0.5;
+    let slot = layout.x.band_width(plot, false, count);
+    let width = series
+        .options
+        .bar_width
+        .map(|width| width.resolve(slot))
+        .unwrap_or(slot * 0.5)
+        .clamp(1.0, slot);
 
     for (index, point) in series.data.iter().enumerate() {
         if point.values.len() < 5 {
@@ -17,13 +23,14 @@ pub(super) fn render(series: &BasicSeries, context: &mut CartesianRenderContext<
         if !layout.x.contains(None, index) {
             continue;
         }
-        let values = [
-            point.number(0),
-            point.number(1),
-            point.number(2),
-            point.number(3),
-            point.number(4),
-        ];
+        let Some(values): Option<[f64; 5]> = point.values[..5]
+            .iter()
+            .map(DataValue::as_f64)
+            .collect::<Option<Vec<_>>>()
+            .and_then(|values| values.try_into().ok())
+        else {
+            continue;
+        };
         if !layout.y.contains(Some(values[0]), index) && !layout.y.contains(Some(values[4]), index)
         {
             continue;
@@ -34,12 +41,11 @@ pub(super) fn render(series: &BasicSeries, context: &mut CartesianRenderContext<
         let bottom = ys[4].max(ys[0]);
         let box_top = ys[3].min(ys[1]);
         let box_height = (ys[3] - ys[1]).abs().max(1.0);
-        let stroke = series
-            .options
-            .item_style
+        let style = effective_item_style(series, Some(point));
+        let stroke = style
             .border_color
             .unwrap_or_else(|| color(palette, series_index));
-        let stroke_width = series.options.item_style.border_width.max(1.5);
+        let stroke_width = style.border_width.max(1.5);
         if let Some(canvas) = canvas {
             stroke_line(canvas, x, top, x, bottom, stroke, stroke_width);
             stroke_line(
@@ -66,11 +72,9 @@ pub(super) fn render(series: &BasicSeries, context: &mut CartesianRenderContext<
                 box_top,
                 width,
                 box_height,
-                series
-                    .options
-                    .item_style
+                style
                     .color
-                    .map(|color| with_opacity(color, series.options.item_style.opacity))
+                    .map(|color| with_opacity(color, style.opacity))
                     .unwrap_or(0x22FFFFFF | (stroke & 0x00FFFFFF)),
             );
             stroke_rect(

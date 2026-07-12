@@ -74,17 +74,16 @@ pub(super) fn render(series: &SankeySeries, context: &mut FreeRenderContext<'_>)
         } else {
             (area.x, area.y, area.width, area.height)
         };
+        let style = merge_item_style(&series.options.item_style, &node.item_style);
         let fill = with_opacity(
-            series
-                .options
-                .item_style
+            style
                 .color
                 .unwrap_or_else(|| color(palette, node.category.unwrap_or(index))),
-            series.options.item_style.opacity,
+            style.opacity,
         );
         if let Some(canvas) = canvas {
-            fill_rect(canvas, x, y, width, height, fill);
-            if let Some(border_color) = series.options.item_style.border_color {
+            fill_rounded_rect(canvas, x, y, width, height, style.border_radius, fill);
+            if let Some(border_color) = style.border_color.filter(|_| style.border_width > 0.0) {
                 stroke_rect(
                     canvas,
                     x,
@@ -92,18 +91,20 @@ pub(super) fn render(series: &SankeySeries, context: &mut FreeRenderContext<'_>)
                     width,
                     height,
                     border_color,
-                    series.options.item_style.border_width.max(1.0),
+                    style.border_width,
                 );
             }
-            if series.options.label.show || !series.nodes.is_empty() {
+            let label = merge_label_style(&series.options.label, &node.label);
+            if label.show || !series.nodes.is_empty() {
+                set_next_data_index(index);
                 draw_text(
                     canvas,
                     &node.name,
                     x + width + 4.0,
                     y + height / 2.0 + 4.0,
-                    series.options.label.font_size as f64,
-                    series.options.label.color.unwrap_or(0xFF333333),
-                    series.options.label.font_weight,
+                    label.font_size as f64,
+                    label.color.unwrap_or(0xFF333333),
+                    label.font_weight,
                 );
             }
         }

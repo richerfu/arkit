@@ -29,8 +29,13 @@ use ohos_arkui_binding::common::handle::ArkUIHandle;
 use openharmony_ability::{Event as AbilityEvent, OpenHarmonyApp, OpenHarmonyWaker};
 
 mod webview;
+mod window;
 
 pub use webview::{EmbeddedWebViewController, EmbeddedWebViewInit, WebViewFrame, WebViewStyle};
+pub use window::{
+    EdgeInsets, PhysicalRect, SafeAreaPolicy, WindowMetrics, WindowMetricsHandle,
+    WindowMetricsSubscription,
+};
 
 pub use dioxus_core::VirtualDom;
 
@@ -232,6 +237,20 @@ fn log_panic_payload(context: &str, payload: &(dyn Any + Send)) {
     ohos_hilog_binding::error(format!("arkit_runtime: panic in {context}: {message}"));
 }
 
+#[cfg(debug_assertions)]
+fn log_window_metrics(metrics: WindowMetrics) {
+    ohos_hilog_binding::info(format!(
+        "arkit_runtime: window_metrics content={:?} window={:?} scale={} safe={:?} gesture={:?} ime={:?} keyboard_height={}",
+        metrics.content_rect,
+        metrics.window_rect,
+        metrics.scale,
+        metrics.safe_area,
+        metrics.gesture_area,
+        metrics.ime_area,
+        metrics.keyboard_height,
+    ));
+}
+
 struct RuntimeInner {
     dom: VirtualDom,
     renderer: ArkUIRenderer,
@@ -359,7 +378,17 @@ impl ArkRuntime {
     pub fn from_virtual_dom(
         slot: ArkUIHandle,
         app: OpenHarmonyApp,
+        dom: VirtualDom,
+    ) -> Result<Self> {
+        Self::from_virtual_dom_with_policy(slot, app, dom, SafeAreaPolicy::Safe)
+    }
+
+    /// Create and mount a runtime with an explicit root safe-area policy.
+    pub fn from_virtual_dom_with_policy(
+        slot: ArkUIHandle,
+        app: OpenHarmonyApp,
         mut dom: VirtualDom,
+        safe_area_policy: SafeAreaPolicy,
     ) -> Result<Self> {
         install_panic_hook();
 
@@ -369,6 +398,15 @@ impl ArkRuntime {
         // captures the same phase-isolated native event boundary.
         let sink = Rc::new(RuntimeEventSink::default());
         renderer.set_sink(sink.clone());
+
+        // Window state is owned by the native runtime and provided before the
+        // first rebuild so the framework root and every business component see
+        // the same initial snapshot.
+        let window_metrics = WindowMetricsHandle::new(WindowMetrics::from_app(&app, None));
+        #[cfg(debug_assertions)]
+        log_window_metrics(window_metrics.get());
+        dom.provide_root_context(window_metrics.clone());
+        dom.provide_root_context(safe_area_policy);
 
         // Initial mount: build the real DOM tree onto the slot.
         dom.rebuild(&mut renderer);
@@ -392,13 +430,40 @@ impl ArkRuntime {
         let weak_inner = Rc::downgrade(&inner);
         let loop_task_waker = task_waker.clone();
         let loop_sink = sink.clone();
+        let loop_metrics = window_metrics.clone();
+        let metrics_app = app.clone();
+        let mut keyboard_height_px = None;
         app.run_loop(move |event| {
-            if matches!(event, AbilityEvent::UserEvent) {
+            let is_user_event = matches!(&event, AbilityEvent::UserEvent);
+            let refresh_window_metrics = matches!(
+                &event,
+                AbilityEvent::WindowCreate
+                    | AbilityEvent::SurfaceCreate
+                    | AbilityEvent::WindowResize(_)
+                    | AbilityEvent::ContentRectChange(_)
+                    | AbilityEvent::AvoidAreaChange(_)
+                    | AbilityEvent::ConfigChanged(_)
+                    | AbilityEvent::KeyboardEvent(_)
+            );
+
+            if let AbilityEvent::KeyboardEvent(height) = &event {
+                keyboard_height_px = Some(*height);
+            }
+
+            if is_user_event || refresh_window_metrics {
                 if let Err(payload) = panic::catch_unwind(AssertUnwindSafe(|| {
-                    run_ui_loop_effects();
                     if let Some(inner) = weak_inner.upgrade() {
-                        if let Some(runtime) = weak_runtime.upgrade() {
-                            loop_sink.dispatch_pending(&runtime);
+                        if refresh_window_metrics {
+                            let next = WindowMetrics::from_app(&metrics_app, keyboard_height_px);
+                            if loop_metrics.update(next) {
+                                inner.borrow_mut().dom.mark_all_dirty();
+                            }
+                        }
+                        if is_user_event {
+                            run_ui_loop_effects();
+                            if let Some(runtime) = weak_runtime.upgrade() {
+                                loop_sink.dispatch_pending(&runtime);
+                            }
                         }
                         render_ready_work(&inner, &loop_task_waker);
                     }
@@ -460,6 +525,16 @@ pub fn mount_virtual_dom(
     dom: VirtualDom,
 ) -> Result<ArkRuntime> {
     ArkRuntime::from_virtual_dom(slot, app, dom)
+}
+
+/// Mount a VirtualDom with an explicit root safe-area policy.
+pub fn mount_virtual_dom_with_policy(
+    slot: ArkUIHandle,
+    app: OpenHarmonyApp,
+    dom: VirtualDom,
+    safe_area_policy: SafeAreaPolicy,
+) -> Result<ArkRuntime> {
+    ArkRuntime::from_virtual_dom_with_policy(slot, app, dom, safe_area_policy)
 }
 
 fn map_arkui_error<E: ToString>(error: E) -> Error {

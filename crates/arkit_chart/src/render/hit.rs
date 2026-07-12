@@ -25,16 +25,25 @@ pub(super) enum HitShape {
         start: f32,
         sweep: f32,
     },
+    MultiPolygon {
+        polygons: Vec<HitPolygon>,
+    },
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct HitRegion {
+pub(super) struct HitPolygon {
+    pub(super) exterior: Vec<(f32, f32)>,
+    pub(super) holes: Vec<Vec<(f32, f32)>>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct HitRegion {
     pub(super) shape: HitShape,
-    pub(super) event: ChartEvent,
+    pub(crate) event: ChartEvent,
 }
 
 impl HitRegion {
-    pub(super) fn hit(&self, x: f32, y: f32) -> Option<f32> {
+    pub(crate) fn hit(&self, x: f32, y: f32) -> Option<f32> {
         match self.shape {
             HitShape::Point {
                 x: px,
@@ -78,8 +87,71 @@ impl HitRegion {
                 }
                 (local <= sweep.abs()).then_some((outer - distance).abs())
             }
+            HitShape::MultiPolygon { ref polygons } => polygons
+                .iter()
+                .any(|polygon| {
+                    point_in_ring((x, y), &polygon.exterior)
+                        && !polygon.holes.iter().any(|hole| point_in_ring((x, y), hole))
+                })
+                .then_some(0.0),
         }
     }
+}
+
+pub(super) fn polygon_hit(
+    component: &str,
+    series_index: usize,
+    data_index: usize,
+    series_name: Option<String>,
+    point: &DataPoint,
+    center: (f32, f32),
+    polygons: Vec<HitPolygon>,
+) -> HitRegion {
+    HitRegion {
+        shape: HitShape::MultiPolygon { polygons },
+        event: chart_event(
+            component,
+            series_index,
+            data_index,
+            series_name,
+            point,
+            center.0,
+            center.1,
+        ),
+    }
+}
+
+fn point_in_ring(point: (f32, f32), ring: &[(f32, f32)]) -> bool {
+    if ring.len() < 3 {
+        return false;
+    }
+    let mut inside = false;
+    let mut previous = ring.len() - 1;
+    for current in 0..ring.len() {
+        let (xi, yi) = ring[current];
+        let (xj, yj) = ring[previous];
+        if point_on_segment(point, (xi, yi), (xj, yj)) {
+            return true;
+        }
+        let crosses = (yi > point.1) != (yj > point.1)
+            && point.0 < (xj - xi) * (point.1 - yi) / (yj - yi) + xi;
+        if crosses {
+            inside = !inside;
+        }
+        previous = current;
+    }
+    inside
+}
+
+fn point_on_segment(point: (f32, f32), start: (f32, f32), end: (f32, f32)) -> bool {
+    let cross = (point.1 - start.1) * (end.0 - start.0) - (point.0 - start.0) * (end.1 - start.1);
+    if cross.abs() > 1e-4 {
+        return false;
+    }
+    point.0 >= start.0.min(end.0) - 1e-4
+        && point.0 <= start.0.max(end.0) + 1e-4
+        && point.1 >= start.1.min(end.1) - 1e-4
+        && point.1 <= start.1.max(end.1) + 1e-4
 }
 
 pub(super) fn point_hit(
@@ -152,5 +224,23 @@ pub(super) fn chart_event(
         x,
         y,
         component_type: component.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn polygon_hit_excludes_holes_and_bounding_box_gaps() {
+        let polygon = HitPolygon {
+            exterior: vec![(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)],
+            holes: vec![vec![(3.0, 3.0), (7.0, 3.0), (7.0, 7.0), (3.0, 7.0)]],
+        };
+        let point = DataPoint::named("region", 1.0);
+        let hit = polygon_hit("map", 0, 0, None, &point, (5.0, 5.0), vec![polygon]);
+        assert!(hit.hit(1.0, 1.0).is_some());
+        assert!(hit.hit(5.0, 5.0).is_none());
+        assert!(hit.hit(11.0, 5.0).is_none());
     }
 }

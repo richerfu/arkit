@@ -5,13 +5,16 @@
 //! renderers are independent compositions over shared canvas, geometry, and
 //! hit-testing atoms.
 
+mod animation;
 mod component;
+mod export;
 mod model;
 mod parser;
 mod registry;
 mod render;
+mod state;
 
-pub use component::{ECharts, EChartsProps};
+pub use component::{ChartController, ECharts, EChartsProps};
 pub use model::*;
 pub use registry::{register_map, register_map_str, unregister_map, MapRegistrationError};
 pub use render::hit_test;
@@ -40,6 +43,12 @@ mod tests {
             y: None,
             category: None,
             symbol_size: None,
+            symbol_size_dimensions: None,
+            symbol: None,
+            symbol_rotate: 0.0,
+            item_style: ItemStyle::default(),
+            label: LabelStyle::default(),
+            extra: std::collections::BTreeMap::new(),
         }];
         let option = ChartOption::new().series([
             Series::line("line", [1.0]),
@@ -62,11 +71,11 @@ mod tests {
             Series::sankey("sankey", nodes, Vec::new()),
             Series::map(
                 "map",
-                vec![MapFeature {
-                    name: String::from("feature"),
-                    value: 1.0,
-                    polygons: vec![vec![(0.0, 0.0), (1.0, 0.0), (1.0, 1.0)]],
-                }],
+                vec![MapFeature::new(
+                    "feature",
+                    vec![MapPolygon::new([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0)])],
+                )
+                .with_value(1.0)],
             ),
             Series::lines(
                 "lines",
@@ -74,6 +83,7 @@ mod tests {
                     name: Some(String::from("route")),
                     from: (0.0, 0.0),
                     to: (1.0, 1.0),
+                    coords: vec![(0.0, 0.0), (1.0, 1.0)],
                     value: 1.0,
                 }],
             ),

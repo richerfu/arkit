@@ -1,6 +1,7 @@
 use super::super::compat;
 use super::super::layout::tree_layout;
 use super::super::prelude::*;
+use super::super::symbol::{draw_symbol, SymbolSpec};
 
 pub(super) fn render(series: &GraphSeries, context: &mut FreeRenderContext<'_>) {
     let series_index = context.series_index;
@@ -55,47 +56,63 @@ pub(super) fn render(series: &GraphSeries, context: &mut FreeRenderContext<'_>) 
         let Some((x, y)) = positions.get(index).copied() else {
             continue;
         };
-        let radius = node
+        let size = node
             .symbol_size
             .unwrap_or(series.options.symbol_size)
-            .max(2.0)
-            / 2.0;
+            .max(2.0);
+        let dimensions = node
+            .symbol_size_dimensions
+            .or(series.options.symbol_size_dimensions)
+            .unwrap_or([size, size]);
+        let radius = dimensions[0].max(dimensions[1]) / 2.0;
+        let symbol = SymbolSpec {
+            name: node.symbol.as_deref().unwrap_or(&series.options.symbol),
+            size: dimensions,
+            rotate: if node.symbol_rotate.abs() > f32::EPSILON {
+                node.symbol_rotate
+            } else {
+                series.options.symbol_rotate
+            },
+            offset: [0.0, 0.0],
+        };
+        let style = merge_item_style(&series.options.item_style, &node.item_style);
         let fill = with_opacity(
-            series
-                .options
-                .item_style
+            style
                 .color
                 .unwrap_or_else(|| color(palette, node.category.unwrap_or(series_index))),
-            series.options.item_style.opacity,
+            style.opacity,
         );
         if let Some(canvas) = canvas {
-            fill_circle(canvas, x, y, radius, fill);
-            if let (Some(border_color), border_width) = (
-                series.options.item_style.border_color,
-                series.options.item_style.border_width,
-            ) {
-                if border_width > 0.0 {
-                    stroke_circle(canvas, x, y, radius, border_color, border_width);
-                }
-            }
-            if series.options.label.show {
+            let node_border = (style.border_width > 0.0)
+                .then(|| style.border_color.map(|color| (color, style.border_width)))
+                .flatten();
+            draw_symbol(canvas, &symbol, x, y, fill, node_border);
+            let label = merge_label_style(&series.options.label, &node.label);
+            if label.show {
                 let (label_x, label_y) = match orientation {
-                    "RL" => (x - radius - node.name.chars().count() as f32 * 6.0, y + 4.0),
+                    "RL" => (
+                        x - radius - label.distance - node.name.chars().count() as f32 * 6.0,
+                        y + 4.0,
+                    ),
                     "TB" => (
                         x - node.name.chars().count() as f32 * 3.0,
-                        y + radius + 14.0,
+                        y + radius + label.distance + label.font_size,
                     ),
-                    "BT" => (x - node.name.chars().count() as f32 * 3.0, y - radius - 4.0),
-                    _ => (x + radius + 4.0, y + 4.0),
+                    "BT" => (
+                        x - node.name.chars().count() as f32 * 3.0,
+                        y - radius - label.distance,
+                    ),
+                    _ => (x + radius + label.distance, y + 4.0),
                 };
+                set_next_data_index(index);
                 draw_text(
                     canvas,
                     &node.name,
                     label_x,
                     label_y,
-                    series.options.label.font_size as f64,
-                    series.options.label.color.unwrap_or(0xFF333333),
-                    series.options.label.font_weight,
+                    label.font_size as f64,
+                    label.color.unwrap_or(0xFF333333),
+                    label.font_weight,
                 );
             }
         }
@@ -103,7 +120,7 @@ pub(super) fn render(series: &GraphSeries, context: &mut FreeRenderContext<'_>) 
             shape: HitShape::Point {
                 x,
                 y,
-                radius: radius.max(12.0),
+                radius: symbol.hit_radius().max(12.0),
             },
             event: ChartEvent {
                 series_index,

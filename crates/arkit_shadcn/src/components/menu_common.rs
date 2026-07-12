@@ -151,12 +151,13 @@ impl MenuOverlayPassThroughRegion {
 impl MenuOverlayPlacement {
     pub(crate) fn from_trigger(
         trigger: arkit_hooks::LayoutFrame,
-        overlay: arkit_hooks::LayoutFrame,
+        viewport: arkit_hooks::OverlayViewport,
         panel_width: f32,
         panel_height: f32,
         side_offset: f32,
     ) -> Self {
         let ratio = display_vp_ratio();
+        let overlay = viewport.frame;
         let viewport_width = if overlay.is_measured() {
             overlay.width / ratio
         } else {
@@ -182,15 +183,20 @@ impl MenuOverlayPlacement {
         let trigger_x = (trigger.x - overlay_x).max(0.0) / ratio;
         let trigger_y = (trigger.y - overlay_y).max(0.0) / ratio;
         let trigger_height = trigger.height / ratio;
+        let min_x = viewport.safe_area.left + MENU_VIEWPORT_PADDING;
+        let min_y = viewport.safe_area.top + MENU_VIEWPORT_PADDING;
         let max_x =
-            (viewport_width - panel_width - MENU_VIEWPORT_PADDING).max(MENU_VIEWPORT_PADDING);
+            (viewport_width - viewport.safe_area.right - panel_width - MENU_VIEWPORT_PADDING)
+                .max(min_x);
         let trigger_bottom = trigger_y + trigger_height;
         let below_y = trigger_bottom + side_offset;
         let above_y = trigger_y - panel_height - side_offset;
         let max_y =
-            (viewport_height - panel_height - MENU_VIEWPORT_PADDING).max(MENU_VIEWPORT_PADDING);
-        let below_fits = below_y + panel_height <= viewport_height - MENU_VIEWPORT_PADDING;
-        let above_fits = above_y >= MENU_VIEWPORT_PADDING;
+            (viewport_height - viewport.safe_area.bottom - panel_height - MENU_VIEWPORT_PADDING)
+                .max(min_y);
+        let below_fits = below_y + panel_height
+            <= viewport_height - viewport.safe_area.bottom - MENU_VIEWPORT_PADDING;
+        let above_fits = above_y >= min_y;
         let y = if below_fits || !above_fits {
             below_y
         } else {
@@ -198,14 +204,14 @@ impl MenuOverlayPlacement {
         };
 
         Self {
-            x: trigger_x.clamp(MENU_VIEWPORT_PADDING, max_x),
-            y: y.clamp(MENU_VIEWPORT_PADDING, max_y),
+            x: trigger_x.clamp(min_x, max_x),
+            y: y.clamp(min_y, max_y),
         }
     }
 
     pub(crate) fn from_pointer(
         pointer: dioxus_elements::event::PointerPayload,
-        overlay: arkit_hooks::LayoutFrame,
+        viewport: arkit_hooks::OverlayViewport,
         panel_width: f32,
         panel_height: f32,
         side_offset: f32,
@@ -229,17 +235,17 @@ impl MenuOverlayPlacement {
         };
         Some(Self::from_trigger(
             trigger,
-            overlay,
+            viewport,
             panel_width,
             panel_height,
             side_offset,
         ))
     }
 
-    pub(crate) fn fallback() -> Self {
+    pub(crate) fn fallback(viewport: arkit_hooks::OverlayViewport) -> Self {
         Self {
-            x: MENU_VIEWPORT_PADDING,
-            y: 96.0,
+            x: viewport.safe_area.left + MENU_VIEWPORT_PADDING,
+            y: (viewport.safe_area.top + MENU_VIEWPORT_PADDING).max(96.0),
         }
     }
 }

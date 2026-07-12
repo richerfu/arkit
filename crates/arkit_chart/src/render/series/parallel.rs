@@ -25,7 +25,7 @@ pub(super) fn render(series: &BasicSeries, context: &mut FreeRenderContext<'_>) 
             let values: Vec<f64> = series
                 .data
                 .iter()
-                .map(|point| point.number(dimension))
+                .filter_map(|point| point.number_opt(dimension))
                 .collect();
             let data_min = values.iter().copied().reduce(f64::min).unwrap_or(0.0);
             let data_max = values.iter().copied().reduce(f64::max).unwrap_or(1.0);
@@ -77,11 +77,17 @@ pub(super) fn render(series: &BasicSeries, context: &mut FreeRenderContext<'_>) 
     }
 
     for (data_index, point) in series.data.iter().enumerate() {
+        let Some(values) = (0..dimension_count)
+            .map(|dimension| point.number_opt(dimension))
+            .collect::<Option<Vec<_>>>()
+        else {
+            continue;
+        };
         let mut path = Path::new();
         for (dimension, (min, max)) in extents.iter().copied().enumerate() {
             let x = plot.x + plot.width * dimension as f32 / (dimension_count - 1) as f32;
             let normalized =
-                ((point.number(dimension) - min) / (max - min).max(1e-12)).clamp(0.0, 1.0) as f32;
+                ((values[dimension] - min) / (max - min).max(1e-12)).clamp(0.0, 1.0) as f32;
             let y = plot.y + 20.0 + (plot.height - 40.0) * (1.0 - normalized);
             if dimension == 0 {
                 path.move_to(x, y);

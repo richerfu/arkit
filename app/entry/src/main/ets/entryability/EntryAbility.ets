@@ -15,7 +15,7 @@ export default class EntryAbility extends NativeAbility {
 
   async onWindowStageCreate(windowStage: window.WindowStage): Promise<void> {
     const win = windowStage.getMainWindowSync();
-    await win.setWindowLayoutFullScreen(false);
+    await win.setWindowLayoutFullScreen(true);
     super.onWindowStageCreate(windowStage);
     await windowStage.loadContent("pages/Index");
   }
