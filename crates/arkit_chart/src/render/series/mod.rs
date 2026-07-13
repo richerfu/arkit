@@ -407,6 +407,7 @@ fn bar_like_options(series: &Series) -> Option<&SeriesOptions> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn render_free(
     option: &ChartOption,
     series_index: usize,

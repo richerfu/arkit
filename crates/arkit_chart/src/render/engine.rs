@@ -110,6 +110,7 @@ pub(crate) fn nearest_axis_event(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn render_option(
     option: &ChartOption,
     selected: Option<&ChartEvent>,

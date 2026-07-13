@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+arkit_animation.workspace = true
 arkit_hooks.workspace = true
 arkit_prelude.workspace = true
 arkit_runtime.workspace = true

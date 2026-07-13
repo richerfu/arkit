@@ -1,57 +1,172 @@
-//! Shared ECharts-style enter/update interpolation for every native renderer.
+//! Shared ECharts-style interpolation and redraw clock driven by AnimationHost.
 
-use std::time::{Duration, Instant};
+use std::cell::Cell;
+use std::rc::Rc;
+
+use arkit_animation::{Animatable, Easing, TimeSpan};
 
 use crate::model::*;
 
-#[derive(Debug, Clone)]
+thread_local! {
+    static ANIMATION_TIME_SECONDS: Cell<f64> = const { Cell::new(0.0) };
+}
+
+struct AnimationTimeGuard {
+    previous: f64,
+}
+
+impl Drop for AnimationTimeGuard {
+    fn drop(&mut self) {
+        ANIMATION_TIME_SECONDS.with(|time| time.set(self.previous));
+    }
+}
+
+pub(crate) fn with_animation_time<R>(seconds: f64, render: impl FnOnce() -> R) -> R {
+    let previous = ANIMATION_TIME_SECONDS.with(|time| time.replace(seconds));
+    let _guard = AnimationTimeGuard { previous };
+    render()
+}
+
+pub(crate) fn animation_time_seconds() -> f64 {
+    ANIMATION_TIME_SECONDS.with(Cell::get)
+}
+
+#[derive(Clone)]
 pub(crate) struct ChartTransition {
     from: ChartOption,
     to: ChartOption,
-    started: Instant,
     timing: AnimationTiming,
+    driver: ChartTransitionDriver,
+}
+
+#[derive(Clone)]
+pub(crate) struct ChartTransitionDriver {
+    progress: Option<Animatable<f32>>,
+}
+
+impl ChartTransitionDriver {
+    pub(crate) fn new(progress: Animatable<f32>) -> Self {
+        Self {
+            progress: Some(progress),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn immediate() -> Self {
+        Self { progress: None }
+    }
+
+    fn start(&self, timing: &AnimationTiming) {
+        if let Some(progress) = &self.progress {
+            progress.animate(
+                0.0,
+                1.0,
+                TimeSpan::from_millis(timing.duration),
+                TimeSpan::from_millis(timing.delay),
+                Easing::Linear,
+            );
+        }
+    }
+
+    fn progress(&self) -> f32 {
+        self.progress
+            .as_ref()
+            .map_or(1.0, |progress| progress.get().clamp(0.0, 1.0))
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct ChartAnimationClock {
+    pulse: Animatable<f32>,
+    running: Rc<Cell<bool>>,
+}
+
+impl ChartAnimationClock {
+    pub(crate) fn new(pulse: Animatable<f32>) -> Self {
+        Self {
+            pulse,
+            running: Rc::new(Cell::new(false)),
+        }
+    }
+
+    pub(crate) fn set_invalidator(&self, invalidator: impl Fn() + 'static) {
+        self.pulse.set_invalidator(invalidator);
+    }
+
+    pub(crate) fn on_tick(&self, tick: impl Fn() + 'static) {
+        self.pulse.controls().on_loop(move |_| tick());
+    }
+
+    pub(crate) fn start(&self) {
+        if self.running.replace(true) {
+            return;
+        }
+        self.pulse
+            .animate_repeating(0.0, 1.0, TimeSpan::from_millis(33), Easing::Linear);
+    }
+
+    pub(crate) fn stop(&self) {
+        if self.running.replace(false) {
+            self.pulse.controls().pause();
+        }
+    }
+
+    pub(crate) fn poke(&self) {
+        self.pulse.controls().resume();
+    }
+
+    pub(crate) fn is_running(&self) -> bool {
+        self.running.get()
+    }
 }
 
 impl ChartTransition {
-    pub(crate) fn initial(option: &ChartOption) -> Option<Self> {
-        animation_allowed(option).then(|| Self {
-            from: collapsed_option(option),
-            to: option.clone(),
-            started: Instant::now(),
-            timing: option.animation.initial.clone(),
+    pub(crate) fn initial(option: &ChartOption, driver: ChartTransitionDriver) -> Option<Self> {
+        animation_allowed(option).then(|| {
+            driver.start(&option.animation.initial);
+            Self {
+                from: collapsed_option(option),
+                to: option.clone(),
+                timing: option.animation.initial.clone(),
+                driver,
+            }
         })
     }
 
-    pub(crate) fn update(from: &ChartOption, to: &ChartOption) -> Option<Self> {
-        (animation_allowed(to) && from != to).then(|| Self {
-            from: from.clone(),
-            to: to.clone(),
-            started: Instant::now(),
-            timing: to.animation.update.clone(),
+    pub(crate) fn update(
+        from: &ChartOption,
+        to: &ChartOption,
+        driver: ChartTransitionDriver,
+    ) -> Option<Self> {
+        (animation_allowed(to) && from != to).then(|| {
+            driver.start(&to.animation.update);
+            Self {
+                from: from.clone(),
+                to: to.clone(),
+                timing: to.animation.update.clone(),
+                driver,
+            }
         })
     }
 
-    pub(crate) fn state(from: &ChartOption, to: &ChartOption) -> Option<Self> {
-        (to.animation.enabled && from != to && to.animation.state.duration > 0).then(|| Self {
-            from: from.clone(),
-            to: to.clone(),
-            started: Instant::now(),
-            timing: to.animation.state.clone(),
+    pub(crate) fn state(
+        from: &ChartOption,
+        to: &ChartOption,
+        driver: ChartTransitionDriver,
+    ) -> Option<Self> {
+        (to.animation.enabled && from != to && to.animation.state.duration > 0).then(|| {
+            driver.start(&to.animation.state);
+            Self {
+                from: from.clone(),
+                to: to.clone(),
+                timing: to.animation.state.clone(),
+                driver,
+            }
         })
     }
 
     pub(crate) fn snapshot(&self) -> (ChartOption, bool) {
-        let elapsed = self.started.elapsed();
-        let delay = Duration::from_millis(self.timing.delay);
-        if elapsed <= delay {
-            return (self.from.clone(), false);
-        }
-        if self.timing.duration == 0 {
-            return (self.to.clone(), true);
-        }
-        let progress = ((elapsed - delay).as_secs_f64()
-            / Duration::from_millis(self.timing.duration).as_secs_f64())
-        .clamp(0.0, 1.0) as f32;
+        let progress = self.driver.progress();
         let finished = progress >= 1.0;
         (
             interpolate_option(&self.from, &self.to, easing(&self.timing.easing, progress)),

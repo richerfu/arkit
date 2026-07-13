@@ -28,6 +28,9 @@ export default defineConfig({
         text: '框架能力',
         items: [
           { text: '异步任务与接口请求', link: '/guide/async-workflows' },
+          { text: 'Animation v2', link: '/guide/animation' },
+          { text: 'Animation 可执行语义', link: '/guide/animation-semantics' },
+          { text: 'Animation 验证记录', link: '/guide/animation-v2-verification' },
           { text: '页面路由', link: '/guide/router-workflows' },
           { text: '国际化', link: '/guide/i18n-workflows' },
           { text: '业务 UI 与组件库', link: '/guide/ui-workflows' },

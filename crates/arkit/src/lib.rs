@@ -46,12 +46,34 @@ pub use arkit_router::{
 
 // --- Animation ---
 pub use arkit_animation as animation;
+pub use arkit_animation::WindowMetrics as AnimationWindowMetrics;
 pub use arkit_animation::{
-    stagger, use_animation, use_animation_target, use_timeline, use_timeline_group,
-    AnimationControls, AnimationDelta, AnimationState, AnimationTarget, Easing, Motion,
-    MountTransition, PlaybackState, Stagger, StaggerDirection, StaggerFrom, Timeline,
-    TimelineControls, TimelineGroup, TimelineGroupControls, TimelineGroupError, TimelineKeyframe,
-    TimelineTrack, TransitionPreset,
+    stagger, use_animatable, use_animatable_with_defaults, use_animate_presence, use_animation,
+    use_animation_host_provider, use_animation_layout, use_animation_scope, use_animation_snapshot,
+    use_animation_target, use_draggable, use_layout_snapshot, use_scoped_animation,
+    use_scroll_observer, Angle, Animatable, AnimatableDefaults, AnimatableValue, AnimatePresence,
+    Animation, AnimationAdapterError, AnimationBackend, AnimationBuildError, AnimationControls,
+    AnimationFinished, AnimationHostError, AnimationInstanceSnapshot, AnimationOutcome,
+    AnimationPerformanceCounters, AnimationScope, AnimationScopeDefaults, AnimationSelector,
+    AnimationSubscription, AnimationTarget, AnimationValue, AutoScroll, BackendRejection,
+    BuiltinEase, CallPolicy, CapabilityRequirements, Composition, DiscreteValue, DragAxis,
+    DragConstraints, DragPhase, DragSnap, DragUpdate, Draggable, DraggableCallbacks,
+    DraggableConfig, DraggableHandle, EaseDirection, Easing, EasingError, ExecutionPolicy,
+    ExitCancelPolicy, InvalidationClass, IrregularEase, IterationCount, JumpMode, LabelName,
+    LayoutAnimation, LayoutAnimationMode, LayoutChangeKind, LayoutDelta, LayoutEngine, LayoutId,
+    LayoutMountState, LayoutNode, LayoutNodeId, LayoutSnapshot, Length, LengthUnit, LinearPoint,
+    LinearRgba, LoweringReport, Modifier, MountTransition, NativeCapability, NativeLoweringError,
+    PlaybackDirection, PlaybackRate, PlaybackSettings, PlaybackState, PresenceEntry,
+    PresenceHandle, PresenceKey, PresenceMode, PresencePhase, Property, PropertyKeyframe,
+    PropertyName, ScopeCleanupPolicy, ScopeMethodName, ScrollAxis, ScrollCallbacks,
+    ScrollDirection, ScrollObserver, ScrollRange, ScrollSample, ScrollSync, ScrollThreshold,
+    ShadowValue, SharedElementProjection, SpringSpec, Stagger, StaggerAxis, StaggerDirection,
+    StaggerFrom, StaggerGrid, TargetName, TimeError, TimeOffset, TimePoint, TimeSpan, Timeline,
+    TimelinePosition, TransformValue, TransitionPreset, UnsupportedFeature, ValueError, ValueKind,
+    Vec2, Vec3, VelocityTracker, WindowCondition, ASPECT_RATIO, BACKGROUND_COLOR, BLUR,
+    BORDER_COLOR, BORDER_RADIUS, BORDER_WIDTH, BRIGHTNESS, CONTRAST, FONT_COLOR, FONT_SIZE,
+    FOREGROUND_COLOR, GRAYSCALE, HEIGHT, INVERT, LETTER_SPACING, LINE_HEIGHT, OPACITY, POSITION_X,
+    POSITION_Y, ROTATION, SATURATION, SCALE_X, SCALE_Y, SEPIA, TRANSLATE_X, TRANSLATE_Y, WIDTH,
 };
 
 // --- Icon ---
@@ -125,6 +147,7 @@ pub fn mount_entry_with_policy(
 
 fn arkit_entry_root(props: EntryRootProps) -> Element {
     let _host = use_ark_host_provider();
+    arkit_animation::use_animation_host_provider();
     let policy = use_safe_area_policy();
     let measured_safe_area = use_safe_area();
     let safe_area = if policy == SafeAreaPolicy::Safe {
@@ -199,21 +222,43 @@ pub mod prelude {
     pub use crate::t;
     pub use crate::{has_icon, icon, icon_names};
     pub use crate::{
-        stagger, use_animation, use_animation_target, use_back_handler, use_i18n,
-        use_i18n_provider, use_timeline, use_timeline_group, AnimatedOutlet, AnimationControls,
-        AnimationDelta, AnimationState, AnimationTarget, Axis, AxisLabelStyle, AxisLine,
-        AxisOrientation, AxisTick, AxisType, BasicSeries, ChartAction, ChartActionKind,
+        stagger, use_animatable, use_animatable_with_defaults, use_animate_presence, use_animation,
+        use_animation_layout, use_animation_scope, use_animation_snapshot, use_animation_target,
+        use_back_handler, use_draggable, use_i18n, use_i18n_provider, use_layout_snapshot,
+        use_scoped_animation, use_scroll_observer, Angle, Animatable, AnimatableDefaults,
+        AnimatableValue, AnimatePresence, AnimatedOutlet, Animation, AnimationAdapterError,
+        AnimationBackend, AnimationBuildError, AnimationControls, AnimationFinished,
+        AnimationHostError, AnimationInstanceSnapshot, AnimationOutcome,
+        AnimationPerformanceCounters, AnimationScope, AnimationScopeDefaults, AnimationSelector,
+        AnimationSubscription, AnimationTarget, AnimationValue, AnimationWindowMetrics, AutoScroll,
+        Axis, AxisLabelStyle, AxisLine, AxisOrientation, AxisTick, AxisType, BackendRejection,
+        BasicSeries, BuiltinEase, CallPolicy, CapabilityRequirements, ChartAction, ChartActionKind,
         ChartActionTarget, ChartAppendData, ChartController, ChartCoordinateFinder,
         ChartCoordinatePoint, ChartEvent, ChartOption, ChartParseError, ChartRuntimeEvent,
-        ChartRuntimeEventBatchItem, ChartSelectedItems, DataPoint, DataValue, Dataset, Diagnostic,
-        ECharts, EChartsProps, Easing, GraphSeries, Grid, I18nContext, ItemStyle,
+        ChartRuntimeEventBatchItem, ChartSelectedItems, Composition, DataPoint, DataValue, Dataset,
+        Diagnostic, DiscreteValue, DragAxis, DragConstraints, DragPhase, DragSnap, DragUpdate,
+        Draggable, DraggableCallbacks, DraggableConfig, DraggableHandle, ECharts, EChartsProps,
+        EaseDirection, Easing, EasingError, ExecutionPolicy, ExitCancelPolicy, GraphSeries, Grid,
+        I18nContext, InvalidationClass, IrregularEase, ItemStyle, IterationCount, JumpMode,
         LabelLayoutCallback, LabelLayoutCallbackParams, LabelLayoutCallbackResult,
-        LabelLayoutOptions, LabelStyle, Legend, LineStyle, LinkData, MapFeature, MapOptions,
-        MapPolygon, MapSeries, Motion, MountTransition, NodeData, PlaybackState, Routable,
-        RouteTransition, Router, SankeySeries, Series, SeriesOptions, Stagger, StaggerDirection,
-        StaggerFrom, Timeline, TimelineControls, TimelineGroup, TimelineGroupControls,
-        TimelineGroupError, TimelineKeyframe, TimelineTrack, Title, Tooltip, TransitionPreset,
-        VisualStyle,
+        LabelLayoutOptions, LabelName, LabelStyle, LayoutAnimation, LayoutAnimationMode,
+        LayoutChangeKind, LayoutDelta, LayoutEngine, LayoutId, LayoutMountState, LayoutNode,
+        LayoutNodeId, LayoutSnapshot, Legend, Length, LengthUnit, LineStyle, LinearPoint,
+        LinearRgba, LinkData, LoweringReport, MapFeature, MapOptions, MapPolygon, MapSeries,
+        Modifier, MountTransition, NativeCapability, NativeLoweringError, NodeData,
+        PlaybackDirection, PlaybackRate, PlaybackSettings, PlaybackState, PresenceEntry,
+        PresenceHandle, PresenceKey, PresenceMode, PresencePhase, Property, PropertyKeyframe,
+        PropertyName, Routable, RouteTransition, Router, SankeySeries, ScopeCleanupPolicy,
+        ScopeMethodName, ScrollAxis, ScrollCallbacks, ScrollDirection, ScrollObserver, ScrollRange,
+        ScrollSample, ScrollSync, ScrollThreshold, Series, SeriesOptions, ShadowValue,
+        SharedElementProjection, SpringSpec, Stagger, StaggerAxis, StaggerDirection, StaggerFrom,
+        StaggerGrid, TargetName, TimeError, TimeOffset, TimePoint, TimeSpan, Timeline,
+        TimelinePosition, Title, Tooltip, TransformValue, TransitionPreset, UnsupportedFeature,
+        ValueError, ValueKind, Vec2, Vec3, VelocityTracker, VisualStyle, WindowCondition,
+        ASPECT_RATIO, BACKGROUND_COLOR, BLUR, BORDER_COLOR, BORDER_RADIUS, BORDER_WIDTH,
+        BRIGHTNESS, CONTRAST, FONT_COLOR, FONT_SIZE, FOREGROUND_COLOR, GRAYSCALE, HEIGHT, INVERT,
+        LETTER_SPACING, LINE_HEIGHT, OPACITY, POSITION_X, POSITION_Y, ROTATION, SATURATION,
+        SCALE_X, SCALE_Y, SEPIA, TRANSLATE_X, TRANSLATE_Y, WIDTH,
     };
 
     // shadcn components + theme.

@@ -83,8 +83,12 @@ impl ArkHost {
     /// to call multiple times in the same component scope (e.g. a component
     /// calling it directly + a layout hook calling it internally) — all callers
     /// share one resolver slot per scope, so none overwrites another.
-    pub(crate) fn register_scope(&self, scope: ScopeId, slot: Signal<Option<HostNode>>) {
-        self.inner.borrow_mut().pending.entry(scope).or_insert(slot);
+    pub(crate) fn register_scope(
+        &self,
+        scope: ScopeId,
+        slot: Signal<Option<HostNode>>,
+    ) -> Signal<Option<HostNode>> {
+        *self.inner.borrow_mut().pending.entry(scope).or_insert(slot)
     }
 
     /// Snapshot of all scopes awaiting node resolution (called by the runtime
@@ -286,16 +290,12 @@ impl ArkNodeRef {
 pub fn use_ark_node() -> ArkNodeRef {
     let host = use_ark_host();
     let scope = current_scope_id();
-    let signal = use_hook(|| {
-        let slot: Signal<Option<HostNode>> = Signal::new(None);
-        host.register_scope(scope, slot);
-        slot
-    });
+    let signal = use_hook(|| host.register_scope(scope, Signal::new(None)));
 
     // Re-register on every render in case the host was reset (cheap no-op when
     // the slot is unchanged). `use_hook` only runs the initializer once, so we
     // ensure the mapping is current here.
-    host.register_scope(scope, signal);
+    let _ = host.register_scope(scope, signal);
 
     // Revoke on unmount.
     let host_for_drop = host;

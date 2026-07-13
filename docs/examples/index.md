@@ -4,7 +4,7 @@
 | --- | --- |
 | `counter` | `use_signal`、`rsx!`、native click event |
 | `async_task` | `use_resource`、Tokio、scheduler wake |
-| `animation` | fade、slide、zoom、rotate 挂载动效与 replay |
+| `animation` | Animation v2 完整交互展厅：Timeline、Easing、Presence/Layout、Drag/Scroll、Scope/Typed Properties |
 | `chart` | ECharts-like typed/JSON option、多图表、signal 实时更新、点击命中 |
 | `complex_cases` | ArkUI NodeAdapter 虚拟列表/网格 |
 | `router` | Routable enum、Router、ArkUI Link、route transition |

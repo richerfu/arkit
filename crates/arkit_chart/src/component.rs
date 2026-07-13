@@ -12,7 +12,7 @@ use ohos_arkui_binding::component::attribute::{ArkUIAttributeBasic, ArkUIEvent};
 use ohos_arkui_binding::types::advanced::NodeDirtyFlag;
 use ohos_drawing_binding::Canvas;
 
-use crate::animation::ChartTransition;
+use crate::animation::{ChartAnimationClock, ChartTransition, ChartTransitionDriver};
 use crate::export::{save_chart_image, ExportContext};
 use crate::model::{
     BrushArea, ChartAction, ChartActionKind, ChartActionTarget, ChartAppendData,
@@ -296,9 +296,12 @@ struct ChartRenderState {
     media_size: Rc<Cell<(f32, f32)>>,
     transition: Rc<RefCell<Option<ChartTransition>>>,
     state_transition: Rc<RefCell<Option<ChartTransition>>>,
+    transition_driver: ChartTransitionDriver,
+    state_transition_driver: ChartTransitionDriver,
     state_key: Rc<RefCell<StateKey>>,
     state_last_option: Rc<RefCell<Option<ChartOption>>>,
-    timeline_last_advance: Rc<RefCell<std::time::Instant>>,
+    timeline_elapsed_ms: Rc<Cell<u64>>,
+    effect_elapsed_ms: Rc<Cell<u64>>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -339,11 +342,24 @@ struct BrushDrag {
 }
 
 impl ChartRenderState {
+    #[cfg(test)]
     fn new(option: ChartOption) -> Self {
+        Self::with_drivers(
+            option,
+            ChartTransitionDriver::immediate(),
+            ChartTransitionDriver::immediate(),
+        )
+    }
+
+    fn with_drivers(
+        option: ChartOption,
+        transition_driver: ChartTransitionDriver,
+        state_transition_driver: ChartTransitionDriver,
+    ) -> Self {
         let zoom_windows = initial_windows(&option);
         let selected_items = initial_selected_items(&option);
         let hidden_series = initial_hidden_series(&option);
-        let transition = ChartTransition::initial(&option);
+        let transition = ChartTransition::initial(&option, transition_driver.clone());
         Self {
             prop_option: Rc::new(RefCell::new(option.clone())),
             source_option: Rc::new(RefCell::new(option.clone())),
@@ -370,9 +386,12 @@ impl ChartRenderState {
             media_size: Rc::new(Cell::new((0.0, 0.0))),
             transition: Rc::new(RefCell::new(transition)),
             state_transition: Rc::new(RefCell::new(None)),
+            transition_driver,
+            state_transition_driver,
             state_key: Rc::new(RefCell::new(StateKey::default())),
             state_last_option: Rc::new(RefCell::new(None)),
-            timeline_last_advance: Rc::new(RefCell::new(std::time::Instant::now())),
+            timeline_elapsed_ms: Rc::new(Cell::new(0)),
+            effect_elapsed_ms: Rc::new(Cell::new(0)),
         }
     }
 
@@ -414,8 +433,11 @@ impl ChartRenderState {
         drop(selected);
         if *self.state_key.borrow() != key {
             let from = self.state_last_option.borrow().clone().unwrap_or(base);
-            self.state_transition
-                .replace(ChartTransition::state(&from, &target));
+            self.state_transition.replace(ChartTransition::state(
+                &from,
+                &target,
+                self.state_transition_driver.clone(),
+            ));
             self.state_key.replace(key);
         }
         let state_snapshot = self
@@ -577,7 +599,8 @@ impl ChartRenderState {
                 });
             let initial_selected = initial_selected_items(&next);
             let initial_zoom = reset_zoom.then(|| initial_windows(&next));
-            let transition = ChartTransition::update(&previous_visual, &next);
+            let transition =
+                ChartTransition::update(&previous_visual, &next, self.transition_driver.clone());
             self.option.replace(next);
             self.transition.replace(transition);
             self.selected.replace(None);
@@ -661,8 +684,11 @@ impl ChartRenderState {
         }
         append_data_to_option(&mut self.source_option.borrow_mut(), chunk);
         let target = self.option.borrow().clone();
-        self.transition
-            .replace(ChartTransition::update(&previous_visual, &target));
+        self.transition.replace(ChartTransition::update(
+            &previous_visual,
+            &target,
+            self.transition_driver.clone(),
+        ));
         true
     }
 
@@ -951,7 +977,8 @@ impl ChartRenderState {
         self.media_timeline_index.set(restore_timeline_index);
         let hidden_series = initial_hidden_series(&option);
         let previous_visual = self.animated_option();
-        let transition = ChartTransition::update(&previous_visual, &option);
+        let transition =
+            ChartTransition::update(&previous_visual, &option, self.transition_driver.clone());
         self.option.replace(option);
         self.transition.replace(transition);
         self.zoom_windows.replace(windows.clone());
@@ -1032,8 +1059,11 @@ impl ChartRenderState {
                 let target = changed.then(|| option.clone());
                 drop(option);
                 if let Some(target) = target {
-                    self.transition
-                        .replace(ChartTransition::update(&previous_visual, &target));
+                    self.transition.replace(ChartTransition::update(
+                        &previous_visual,
+                        &target,
+                        self.transition_driver.clone(),
+                    ));
                 }
                 changed
             }
@@ -1042,7 +1072,7 @@ impl ChartRenderState {
                 let timeline = option.timeline.as_mut()?;
                 let changed = timeline.auto_play != *play_state;
                 timeline.auto_play = *play_state;
-                *self.timeline_last_advance.borrow_mut() = std::time::Instant::now();
+                self.timeline_elapsed_ms.set(0);
                 changed
             }
             ChartActionKind::Restore => {
@@ -1213,7 +1243,7 @@ impl ChartRenderState {
                 if let Some(timeline) = option.timeline.as_mut() {
                     timeline.auto_play = !timeline.auto_play;
                 }
-                *self.timeline_last_advance.borrow_mut() = std::time::Instant::now();
+                self.timeline_elapsed_ms.set(0);
                 return true;
             }
             _ => (hit.data_index < count).then_some(hit.data_index),
@@ -1222,10 +1252,73 @@ impl ChartRenderState {
         let target = changed.then(|| option.clone());
         drop(option);
         if let Some(target) = target {
-            self.transition
-                .replace(ChartTransition::update(&previous_visual, &target));
+            self.transition.replace(ChartTransition::update(
+                &previous_visual,
+                &target,
+                self.transition_driver.clone(),
+            ));
         }
         changed
+    }
+
+    fn needs_animation_clock(&self) -> bool {
+        let option = self.option.borrow();
+        option
+            .timeline
+            .as_ref()
+            .is_some_and(|timeline| timeline.auto_play && option.timeline_options.len() > 1)
+            || option.series.iter().any(|series| match series {
+                crate::model::Series::EffectScatter(_) => true,
+                crate::model::Series::Lines(series) => series
+                    .options
+                    .extra
+                    .get("effect")
+                    .and_then(serde_json::Value::as_object)
+                    .and_then(|effect| effect.get("show"))
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false),
+                _ => false,
+            })
+    }
+
+    fn advance_animation_clock(&self, elapsed_ms: u64) -> bool {
+        const EFFECT_CLOCK_WRAP_MS: u64 = 86_400_000;
+        self.effect_elapsed_ms
+            .set(self.effect_elapsed_ms.get().saturating_add(elapsed_ms) % EFFECT_CLOCK_WRAP_MS);
+        let interval = {
+            let option = self.option.borrow();
+            option
+                .timeline
+                .as_ref()
+                .filter(|timeline| timeline.auto_play && option.timeline_options.len() > 1)
+                .map(|timeline| timeline.play_interval)
+        };
+        let Some(interval) = interval else {
+            self.timeline_elapsed_ms.set(0);
+            return false;
+        };
+        let accumulated = self.timeline_elapsed_ms.get().saturating_add(elapsed_ms);
+        if accumulated < interval {
+            self.timeline_elapsed_ms.set(accumulated);
+            return false;
+        }
+        self.timeline_elapsed_ms.set(accumulated % interval.max(1));
+        let previous_visual = self.animated_option();
+        let advanced = self.option.borrow_mut().advance_timeline();
+        if advanced {
+            self.selected.replace(None);
+            let target = self.option.borrow().clone();
+            self.transition.replace(ChartTransition::update(
+                &previous_visual,
+                &target,
+                self.transition_driver.clone(),
+            ));
+        }
+        advanced
+    }
+
+    fn animation_time_seconds(&self) -> f64 {
+        self.effect_elapsed_ms.get() as f64 / 1_000.0
     }
 
     fn toggle_legend(&self, series_index: usize) -> bool {
@@ -1668,81 +1761,43 @@ impl ArkUIEvent for CustomEventNode<'_> {}
 /// the existing native node without remounting it.
 #[component]
 pub fn ECharts(props: EChartsProps) -> Element {
-    let state = use_hook(|| ChartRenderState::new(props.option.clone()));
+    let transition_progress = arkit_animation::use_animatable(0.0_f32);
+    let state_progress = arkit_animation::use_animatable(0.0_f32);
+    let clock_pulse = arkit_animation::use_animatable(0.0_f32);
+    let transition_driver = ChartTransitionDriver::new(transition_progress.clone());
+    let state_transition_driver = ChartTransitionDriver::new(state_progress.clone());
+    let animation_clock = ChartAnimationClock::new(clock_pulse);
+    let initial_option = props.option.clone();
+    let state = use_hook(move || {
+        ChartRenderState::with_drivers(initial_option, transition_driver, state_transition_driver)
+    });
     state.update_option(&props.option);
 
     let node_ref = use_ark_node();
-    let animation_state = state.clone();
-    let animation_node = node_ref;
-    use_future(move || {
-        let animation_state = animation_state.clone();
-        let animation_node = animation_node;
-        async move {
-            let runtime = arkit_runtime::tokio_handle();
-            loop {
-                let (animating, transitioning, timeline_delay) = {
-                    let option = animation_state.option.borrow();
-                    let animating = option.series.iter().any(|series| match series {
-                        crate::model::Series::EffectScatter(_) => true,
-                        crate::model::Series::Lines(series) => series
-                            .options
-                            .extra
-                            .get("effect")
-                            .and_then(serde_json::Value::as_object)
-                            .and_then(|effect| effect.get("show"))
-                            .and_then(serde_json::Value::as_bool)
-                            .unwrap_or(false),
-                        _ => false,
-                    });
-                    let timeline_delay = option
-                        .timeline
-                        .as_ref()
-                        .filter(|timeline| timeline.auto_play && option.timeline_options.len() > 1)
-                        .map(|timeline| timeline.play_interval);
-                    (
-                        animating,
-                        animation_state.transition.borrow().is_some()
-                            || animation_state.state_transition.borrow().is_some(),
-                        timeline_delay,
-                    )
-                };
-                let delay = if transitioning {
-                    16
-                } else if animating {
-                    33
-                } else {
-                    timeline_delay.unwrap_or(1_000).min(1_000)
-                };
-                let _ = runtime
-                    .spawn(async move {
-                        tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
-                    })
-                    .await;
-                let advance_timeline = timeline_delay.is_some_and(|interval| {
-                    animation_state.timeline_last_advance.borrow().elapsed()
-                        >= std::time::Duration::from_millis(interval)
-                });
-                let advanced = if advance_timeline {
-                    let previous_visual = animation_state.animated_option();
-                    let advanced = animation_state.option.borrow_mut().advance_timeline();
-                    *animation_state.timeline_last_advance.borrow_mut() = std::time::Instant::now();
-                    if advanced {
-                        animation_state.selected.replace(None);
-                        let target = animation_state.option.borrow().clone();
-                        animation_state
-                            .transition
-                            .replace(ChartTransition::update(&previous_visual, &target));
-                    }
-                    advanced
-                } else {
-                    false
-                };
-                if animating || transitioning || advanced {
-                    if let Some(node) = animation_node.peek() {
-                        let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
-                    }
-                }
-            }
+    let invalidate_node = node_ref;
+    animation_clock.set_invalidator(move || {
+        if let Some(node) = invalidate_node.peek() {
+            let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
+        }
+    });
+    let transition_node = node_ref;
+    transition_progress.set_invalidator(move || {
+        if let Some(node) = transition_node.peek() {
+            let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
+        }
+    });
+    let state_node = node_ref;
+    state_progress.set_invalidator(move || {
+        if let Some(node) = state_node.peek() {
+            let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
+        }
+    });
+    let clock_state = state.clone();
+    let tick_clock = animation_clock.clone();
+    animation_clock.on_tick(move || {
+        clock_state.advance_animation_clock(33);
+        if !clock_state.needs_animation_clock() {
+            tick_clock.stop();
         }
     });
     let registered_node = use_hook(|| Rc::new(Cell::new(None::<usize>)));
@@ -1765,6 +1820,7 @@ pub fn ECharts(props: EChartsProps) -> Element {
         }
         if let Some(controller) = props.controller.clone() {
             let command_state = state.clone();
+            let command_clock = animation_clock.clone();
             let command_node = node_ref;
             let command_events = event_handler.clone();
             let option_state = state.clone();
@@ -1785,6 +1841,11 @@ pub fn ECharts(props: EChartsProps) -> Element {
                     };
                     if let Some(node) = command_node.peek() {
                         let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
+                    }
+                    if command_state.needs_animation_clock() {
+                        command_clock.start();
+                    } else {
+                        command_clock.stop();
                     }
                     if let (Some(event), Some(handler)) = (event, command_events.get()) {
                         handler.call(event);
@@ -1809,6 +1870,9 @@ pub fn ECharts(props: EChartsProps) -> Element {
     });
     let draw_state = state.clone();
     let registered_for_effect = registered_node.clone();
+    let draw_clock = animation_clock.clone();
+    let draw_transition_progress = transition_progress.clone();
+    let draw_state_progress = state_progress.clone();
 
     use_effect(move || {
         let Some(node) = node_ref.get() else {
@@ -1839,16 +1903,21 @@ pub fn ECharts(props: EChartsProps) -> Element {
                 let tooltip = action_tooltip.as_ref().or(selected.as_ref());
                 canvas.save();
                 canvas.scale(pixel_ratio, pixel_ratio);
-                let hits = draw_option_with_domain(
-                    &option,
-                    &domain_option,
-                    tooltip,
-                    &draw_state.hidden_series.borrow(),
-                    &draw_state.zoom_windows.borrow(),
-                    &draw_state.selected_items.borrow(),
-                    Some(&canvas),
-                    logical_size.0,
-                    logical_size.1,
+                let hits = crate::animation::with_animation_time(
+                    draw_state.animation_time_seconds(),
+                    || {
+                        draw_option_with_domain(
+                            &option,
+                            &domain_option,
+                            tooltip,
+                            &draw_state.hidden_series.borrow(),
+                            &draw_state.zoom_windows.borrow(),
+                            &draw_state.selected_items.borrow(),
+                            Some(&canvas),
+                            logical_size.0,
+                            logical_size.1,
+                        )
+                    },
                 );
                 draw_state.draw_hits.replace(hits);
                 if let Some(drag) = *draw_state.toolbox_zoom_drag.borrow() {
@@ -1864,6 +1933,18 @@ pub fn ECharts(props: EChartsProps) -> Element {
             });
             registered_for_effect.set(Some(native_key));
         }
+        // The initial commands may have been queued before the native node was
+        // mounted. Resume once to wake the root FrameDriver with a valid node.
+        draw_transition_progress.controls().resume();
+        draw_state_progress.controls().resume();
+        if draw_state.needs_animation_clock() {
+            draw_clock.start();
+            if draw_clock.is_running() {
+                draw_clock.poke();
+            }
+        } else {
+            draw_clock.stop();
+        }
         let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
     });
 
@@ -1873,6 +1954,7 @@ pub fn ECharts(props: EChartsProps) -> Element {
         props.height
     };
     let click_state = state.clone();
+    let click_clock = animation_clock.clone();
     let click_handler = select_handler.clone();
     let click_events = event_handler.clone();
     rsx! {
@@ -2245,7 +2327,11 @@ pub fn ECharts(props: EChartsProps) -> Element {
                 } else if let Some(hit) = hit.as_ref().filter(|hit| hit.component_type == "timeline") {
                     if click_state.activate_timeline(hit) {
                         click_state.selected.replace(Some(hit.clone()));
-                        *click_state.timeline_last_advance.borrow_mut() = std::time::Instant::now();
+                        if click_state.needs_animation_clock() {
+                            click_clock.start();
+                        } else {
+                            click_clock.stop();
+                        }
                     }
                 } else if let Some(hit) = hit.as_ref().filter(|hit| hit.component_type == "legend") {
                     if click_state.toggle_legend(hit.series_index) {

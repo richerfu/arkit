@@ -380,6 +380,7 @@ pub(super) fn draw_text(
     typography.paint(canvas, x as f64, (y - size as f32) as f64);
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn draw_rotated_text(
     canvas: &Canvas,
     text: &str,

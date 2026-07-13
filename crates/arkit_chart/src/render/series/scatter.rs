@@ -1,5 +1,4 @@
 use ohos_drawing_binding::{Canvas, Rect};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::super::compat;
 use super::super::label_layout::draw_rotated_text;
@@ -38,11 +37,7 @@ fn render_geo(series: &BasicSeries, context: &mut FreeRenderContext<'_>, effect:
     if super::should_draw_geo_base(context.option, series_index, geo_index) {
         super::map::draw_geo_component(context.option, context.plot, geo_index, context.canvas);
     }
-    let animation_time = effect.then(|| {
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_or(0.0, |duration| duration.as_secs_f64())
-    });
+    let animation_time = effect.then(crate::animation::animation_time_seconds);
     for (index, point) in series.data.iter().enumerate() {
         let (Some(longitude), Some(latitude)) = (point.number_opt(0), point.number_opt(1)) else {
             continue;
@@ -103,11 +98,7 @@ pub(super) fn render_polar(
         .unwrap_or(0) as usize;
     let config =
         super::line::PolarConfig::from_option(context.option, polar_index, context.plot, series);
-    let animation_time = effect.then(|| {
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_or(0.0, |duration| duration.as_secs_f64())
-    });
+    let animation_time = effect.then(crate::animation::animation_time_seconds);
     if let Some(canvas) = context.canvas {
         config.draw_axes(canvas, context.option.visual_style.text_color);
     }
@@ -313,11 +304,7 @@ fn render_single_axis(series: &BasicSeries, context: &mut FreeRenderContext<'_>,
             );
         }
     }
-    let animation_time = effect.then(|| {
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_or(0.0, |duration| duration.as_secs_f64())
-    });
+    let animation_time = effect.then(crate::animation::animation_time_seconds);
     for (index, point) in series.data.iter().enumerate() {
         let Some(value) = point.number_opt(0) else {
             continue;
@@ -392,11 +379,7 @@ fn render_impl(series: &BasicSeries, context: &mut CartesianRenderContext<'_>, e
     let canvas = context.canvas;
     let visual_map = context.visual_map;
     let hits = &mut *context.hits;
-    let animation_time = effect.then(|| {
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_or(0.0, |duration| duration.as_secs_f64())
-    });
+    let animation_time = effect.then(crate::animation::animation_time_seconds);
 
     if let Some(canvas) = canvas {
         if series.options.clip {

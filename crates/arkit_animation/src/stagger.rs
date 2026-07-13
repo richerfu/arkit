@@ -1,6 +1,7 @@
-//! Dioxus-friendly staggered timing for lists of animated components.
+//! Deterministic time/value distribution for one- and multi-dimensional target sets.
 
-/// Where a staggered sequence starts within a collection.
+use arkit_animation_core::{AnimationValue, Easing, Modifier, TimeSpan};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum StaggerFrom {
     #[default]
@@ -10,7 +11,6 @@ pub enum StaggerFrom {
     Index(usize),
 }
 
-/// Ordering applied after calculating distance from [`StaggerFrom`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum StaggerDirection {
     #[default]
@@ -18,107 +18,238 @@ pub enum StaggerDirection {
     Reverse,
 }
 
-/// A reusable delay distributor, equivalent to Anime.js-style `stagger()` for
-/// Dioxus list components.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Stagger {
-    step_ms: u32,
-    start_ms: u32,
-    from: StaggerFrom,
-    direction: StaggerDirection,
+pub enum StaggerAxis {
+    X,
+    Y,
+    Z,
+    Radial,
 }
 
-/// Create a stagger distributor with `step_ms` between adjacent positions.
-pub const fn stagger(step_ms: u32) -> Stagger {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StaggerGrid {
+    pub columns: usize,
+    pub rows: usize,
+    pub layers: usize,
+}
+
+impl StaggerGrid {
+    pub const fn new(columns: usize, rows: usize) -> Self {
+        Self {
+            columns,
+            rows,
+            layers: 1,
+        }
+    }
+
+    pub const fn with_layers(mut self, layers: usize) -> Self {
+        self.layers = layers;
+        self
+    }
+
+    fn normalized(self) -> Self {
+        Self {
+            columns: self.columns.max(1),
+            rows: self.rows.max(1),
+            layers: self.layers.max(1),
+        }
+    }
+
+    fn point(self, index: usize) -> [f32; 3] {
+        let grid = self.normalized();
+        let layer_size = grid.columns.saturating_mul(grid.rows).max(1);
+        let index = index.min(layer_size.saturating_mul(grid.layers).saturating_sub(1));
+        [
+            (index % grid.columns) as f32,
+            ((index / grid.columns) % grid.rows) as f32,
+            (index / layer_size) as f32,
+        ]
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Stagger {
+    step_ms: f32,
+    start_ms: f32,
+    from: StaggerFrom,
+    direction: StaggerDirection,
+    grid: Option<StaggerGrid>,
+    axis: StaggerAxis,
+    easing: Easing,
+    modifier: Modifier,
+    jitter: f32,
+    seed: u64,
+}
+
+pub fn stagger(step_ms: u32) -> Stagger {
     Stagger::new(step_ms)
 }
 
 impl Stagger {
-    pub const fn new(step_ms: u32) -> Self {
+    pub fn new(step_ms: u32) -> Self {
         Self {
-            step_ms,
-            start_ms: 0,
+            step_ms: step_ms as f32,
+            start_ms: 0.0,
             from: StaggerFrom::First,
             direction: StaggerDirection::Normal,
+            grid: None,
+            axis: StaggerAxis::Radial,
+            easing: Easing::Linear,
+            modifier: Modifier::Identity,
+            jitter: 0.0,
+            seed: 0,
         }
     }
 
-    pub const fn start_ms(mut self, value: u32) -> Self {
-        self.start_ms = value;
+    pub fn start_ms(mut self, value: u32) -> Self {
+        self.start_ms = value as f32;
         self
     }
 
-    pub const fn from(mut self, value: StaggerFrom) -> Self {
+    pub fn from(mut self, value: StaggerFrom) -> Self {
         self.from = value;
         self
     }
 
-    pub const fn from_center(self) -> Self {
+    pub fn from_center(self) -> Self {
         self.from(StaggerFrom::Center)
     }
 
-    pub const fn from_last(self) -> Self {
+    pub fn from_last(self) -> Self {
         self.from(StaggerFrom::Last)
     }
 
-    pub const fn reverse(mut self) -> Self {
+    pub fn reverse(mut self) -> Self {
         self.direction = StaggerDirection::Reverse;
         self
     }
 
-    pub const fn step_ms(self) -> u32 {
-        self.step_ms
+    pub fn grid(mut self, grid: StaggerGrid) -> Self {
+        self.grid = Some(grid.normalized());
+        self
     }
 
-    /// Calculate the delay for `index` in a collection containing `total`
-    /// items. Out-of-range indexes are clamped to the final item.
-    pub fn delay(self, index: usize, total: usize) -> u32 {
-        if total <= 1 {
-            return self.start_ms;
-        }
-
-        let distance = self.distance(index, total);
-        self.start_ms
-            .saturating_add((distance * self.step_ms as f32).round() as u32)
+    pub fn axis(mut self, axis: StaggerAxis) -> Self {
+        self.axis = axis;
+        self
     }
 
-    /// Distribute a numeric value using the same origin and direction as the
-    /// delay sequence. Positions with the minimum delay map to `from`, and
-    /// positions with the maximum delay map to `to`.
-    pub fn value(self, from: f32, to: f32, index: usize, total: usize) -> f32 {
+    pub fn easing(mut self, easing: Easing) -> Self {
+        self.easing = easing;
+        self
+    }
+
+    pub fn modifier(mut self, modifier: Modifier) -> Self {
+        self.modifier = modifier;
+        self
+    }
+
+    pub fn jitter(mut self, amount: f32, seed: u64) -> Self {
+        self.jitter = amount.clamp(0.0, 1.0);
+        self.seed = seed;
+        self
+    }
+
+    pub fn step_ms(&self) -> u32 {
+        self.step_ms.round().clamp(0.0, u32::MAX as f32) as u32
+    }
+
+    pub fn delay(&self, index: usize, total: usize) -> u32 {
+        self.delay_span(index, total)
+            .as_millis_f64()
+            .round()
+            .clamp(0.0, u32::MAX as f64) as u32
+    }
+
+    pub fn delay_span(&self, index: usize, total: usize) -> TimeSpan {
+        let value = self.distributed(
+            self.start_ms,
+            self.start_ms + self.step_ms * self.max_distance(total),
+            index,
+            total,
+        );
+        TimeSpan::try_from_millis_f64(f64::from(value.max(0.0)))
+            .unwrap_or(TimeSpan::from_nanos(u64::MAX))
+    }
+
+    pub fn value(&self, from: f32, to: f32, index: usize, total: usize) -> f32 {
+        self.distributed(from, to, index, total)
+    }
+
+    fn distributed(&self, from: f32, to: f32, index: usize, total: usize) -> f32 {
         if total <= 1 {
             return from;
         }
         let max_distance = self.max_distance(total);
-        if max_distance <= f32::EPSILON {
-            from
+        let raw = if max_distance <= f32::EPSILON {
+            0.0
         } else {
-            let factor = self.distance(index, total) / max_distance;
-            from + (to - from) * factor
+            self.distance(index, total) / max_distance
+        };
+        let directed = match self.direction {
+            StaggerDirection::Normal => raw,
+            StaggerDirection::Reverse => 1.0 - raw,
+        };
+        let jitter = self.seeded_jitter(index) / max_distance.max(1.0);
+        let progress = self.easing.sample((directed + jitter).clamp(0.0, 1.0));
+        let value = from + (to - from) * progress;
+        match self.modifier.apply(AnimationValue::Scalar(value)) {
+            Ok(AnimationValue::Scalar(value)) => value,
+            _ => value,
         }
     }
 
-    fn origin(self, total: usize) -> f32 {
+    fn origin_index(&self, total: usize) -> usize {
         match self.from {
-            StaggerFrom::First => 0.0,
-            StaggerFrom::Center => (total - 1) as f32 / 2.0,
-            StaggerFrom::Last => (total - 1) as f32,
-            StaggerFrom::Index(value) => value.min(total - 1) as f32,
+            StaggerFrom::First => 0,
+            StaggerFrom::Center => total.saturating_sub(1) / 2,
+            StaggerFrom::Last => total.saturating_sub(1),
+            StaggerFrom::Index(value) => value.min(total.saturating_sub(1)),
         }
     }
 
-    fn max_distance(self, total: usize) -> f32 {
-        let origin = self.origin(total);
-        origin.max((total - 1) as f32 - origin)
+    fn max_distance(&self, total: usize) -> f32 {
+        if total <= 1 {
+            return 0.0;
+        }
+        (0..total)
+            .map(|index| self.distance(index, total))
+            .fold(0.0, f32::max)
     }
 
-    fn distance(self, index: usize, total: usize) -> f32 {
-        let origin = self.origin(total);
-        let distance = (index.min(total - 1) as f32 - origin).abs();
-        match self.direction {
-            StaggerDirection::Normal => distance,
-            StaggerDirection::Reverse => self.max_distance(total) - distance,
+    fn distance(&self, index: usize, total: usize) -> f32 {
+        let index = index.min(total.saturating_sub(1));
+        let origin = self.origin_index(total);
+        let Some(grid) = self.grid else {
+            return index.abs_diff(origin) as f32;
+        };
+        let point = grid.point(index);
+        let origin = grid.point(origin);
+        let delta = [
+            (point[0] - origin[0]).abs(),
+            (point[1] - origin[1]).abs(),
+            (point[2] - origin[2]).abs(),
+        ];
+        match self.axis {
+            StaggerAxis::X => delta[0],
+            StaggerAxis::Y => delta[1],
+            StaggerAxis::Z => delta[2],
+            StaggerAxis::Radial => delta.iter().map(|value| value * value).sum::<f32>().sqrt(),
         }
+    }
+
+    fn seeded_jitter(&self, index: usize) -> f32 {
+        if self.jitter <= f32::EPSILON {
+            return 0.0;
+        }
+        let mut value = self.seed ^ (index as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+        value ^= value >> 30;
+        value = value.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        value ^= value >> 27;
+        value = value.wrapping_mul(0x94D0_49BB_1331_11EB);
+        value ^= value >> 31;
+        let unit = (value >> 40) as f32 / ((1_u32 << 24) - 1) as f32;
+        (unit * 2.0 - 1.0) * self.jitter
     }
 }
 
@@ -127,38 +258,31 @@ mod tests {
     use super::*;
 
     #[test]
-    fn distributes_from_first_and_last() {
-        let first = stagger(40).start_ms(10);
+    fn distributes_linear_and_grid_axes() {
+        let linear = stagger(40).start_ms(10);
         assert_eq!(
-            [first.delay(0, 4), first.delay(1, 4), first.delay(3, 4)],
+            [linear.delay(0, 4), linear.delay(1, 4), linear.delay(3, 4)],
             [10, 50, 130]
         );
-
-        let last = stagger(40).from_last();
+        let grid = stagger(10)
+            .grid(StaggerGrid::new(3, 3))
+            .from_center()
+            .axis(StaggerAxis::X);
         assert_eq!(
-            [last.delay(0, 4), last.delay(2, 4), last.delay(3, 4)],
-            [120, 40, 0]
+            (0..3).map(|index| grid.delay(index, 9)).collect::<Vec<_>>(),
+            [10, 0, 10]
         );
     }
 
     #[test]
-    fn distributes_from_center_and_reverses() {
-        let center = stagger(40).from_center();
-        assert_eq!(
-            (0..5)
-                .map(|index| center.delay(index, 5))
-                .collect::<Vec<_>>(),
-            [80, 40, 0, 40, 80]
-        );
-
-        let reversed = center.reverse();
-        assert_eq!(
-            (0..5)
-                .map(|index| reversed.delay(index, 5))
-                .collect::<Vec<_>>(),
-            [0, 40, 80, 40, 0]
-        );
-        assert_eq!(center.value(1.0, 0.5, 2, 5), 1.0);
-        assert_eq!(center.value(1.0, 0.5, 0, 5), 0.5);
+    fn seeded_jitter_is_repeatable() {
+        let distribution = stagger(20).jitter(0.8, 42);
+        let first = (0..10)
+            .map(|index| distribution.delay(index, 10))
+            .collect::<Vec<_>>();
+        let second = (0..10)
+            .map(|index| distribution.delay(index, 10))
+            .collect::<Vec<_>>();
+        assert_eq!(first, second);
     }
 }

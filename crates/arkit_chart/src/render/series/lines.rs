@@ -1,5 +1,3 @@
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use super::super::prelude::*;
 use super::super::surface::stroke_path_style;
 use super::super::symbol::{draw_symbol, SymbolSpec};
@@ -66,11 +64,7 @@ pub(super) fn render(series: &LinesSeries, context: &mut FreeRenderContext<'_>) 
         .and_then(|effect| effect.get("show"))
         .and_then(serde_json::Value::as_bool)
         .unwrap_or(false);
-    let animation_time = effect_show.then(|| {
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_or(0.0, |duration| duration.as_secs_f64())
-    });
+    let animation_time = effect_show.then(crate::animation::animation_time_seconds);
 
     for (index, segment) in series.data.iter().enumerate() {
         let points = segment_coordinates(segment)

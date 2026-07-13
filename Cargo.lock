@@ -53,10 +53,22 @@ dependencies = [
 name = "arkit_animation"
 version = "0.1.0"
 dependencies = [
+ "arkit_animation_core",
  "arkit_hooks",
  "arkit_prelude",
  "ohos-arkui-binding 0.2.0",
  "ohos-hilog-binding",
+ "oxc_index",
+ "rustc-hash",
+]
+
+[[package]]
+name = "arkit_animation_core"
+version = "0.1.0"
+dependencies = [
+ "oxc_index",
+ "rustc-hash",
+ "smallvec",
 ]
 
 [[package]]
@@ -73,6 +85,7 @@ dependencies = [
 name = "arkit_chart"
 version = "0.1.0"
 dependencies = [
+ "arkit_animation",
  "arkit_hooks",
  "arkit_prelude",
  "arkit_runtime",
@@ -1613,6 +1626,12 @@ dependencies = [
  "ohos-web-binding",
  "ohos-xcomponent-binding 0.2.0",
 ]
+
+[[package]]
+name = "oxc_index"
+version = "5.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "191884bee6c3744909a51acc7d78d4ae370d817b25875b10642f632327b6296e"
 
 [[package]]
 name = "parking_lot"

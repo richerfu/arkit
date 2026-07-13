@@ -194,6 +194,7 @@ fn coordinate_axis_output(axis: &crate::model::Axis, value: f64) -> crate::model
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_option(
     option: &crate::model::ChartOption,
     selected: Option<&crate::model::ChartEvent>,
