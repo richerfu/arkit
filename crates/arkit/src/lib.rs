@@ -47,7 +47,11 @@ pub use arkit_router::{
 // --- Animation ---
 pub use arkit_animation as animation;
 pub use arkit_animation::{
-    use_animation, AnimationControls, Motion, MountTransition, TransitionPreset,
+    stagger, use_animation, use_animation_target, use_timeline, use_timeline_group,
+    AnimationControls, AnimationDelta, AnimationState, AnimationTarget, Easing, Motion,
+    MountTransition, PlaybackState, Stagger, StaggerDirection, StaggerFrom, Timeline,
+    TimelineControls, TimelineGroup, TimelineGroupControls, TimelineGroupError, TimelineKeyframe,
+    TimelineTrack, TransitionPreset,
 };
 
 // --- Icon ---
@@ -195,17 +199,21 @@ pub mod prelude {
     pub use crate::t;
     pub use crate::{has_icon, icon, icon_names};
     pub use crate::{
-        use_animation, use_back_handler, use_i18n, use_i18n_provider, AnimatedOutlet,
-        AnimationControls, Axis, AxisLabelStyle, AxisLine, AxisOrientation, AxisTick, AxisType,
-        BasicSeries, ChartAction, ChartActionKind, ChartActionTarget, ChartAppendData,
-        ChartController, ChartCoordinateFinder, ChartCoordinatePoint, ChartEvent, ChartOption,
-        ChartParseError, ChartRuntimeEvent, ChartRuntimeEventBatchItem, ChartSelectedItems,
-        DataPoint, DataValue, Dataset, Diagnostic, ECharts, EChartsProps, GraphSeries, Grid,
-        I18nContext, ItemStyle, LabelLayoutCallback, LabelLayoutCallbackParams,
-        LabelLayoutCallbackResult, LabelLayoutOptions, LabelStyle, Legend, LineStyle, LinkData,
-        MapFeature, MapOptions, MapPolygon, MapSeries, Motion, MountTransition, NodeData, Routable,
-        RouteTransition, Router, SankeySeries, Series, SeriesOptions, Title, Tooltip,
-        TransitionPreset, VisualStyle,
+        stagger, use_animation, use_animation_target, use_back_handler, use_i18n,
+        use_i18n_provider, use_timeline, use_timeline_group, AnimatedOutlet, AnimationControls,
+        AnimationDelta, AnimationState, AnimationTarget, Axis, AxisLabelStyle, AxisLine,
+        AxisOrientation, AxisTick, AxisType, BasicSeries, ChartAction, ChartActionKind,
+        ChartActionTarget, ChartAppendData, ChartController, ChartCoordinateFinder,
+        ChartCoordinatePoint, ChartEvent, ChartOption, ChartParseError, ChartRuntimeEvent,
+        ChartRuntimeEventBatchItem, ChartSelectedItems, DataPoint, DataValue, Dataset, Diagnostic,
+        ECharts, EChartsProps, Easing, GraphSeries, Grid, I18nContext, ItemStyle,
+        LabelLayoutCallback, LabelLayoutCallbackParams, LabelLayoutCallbackResult,
+        LabelLayoutOptions, LabelStyle, Legend, LineStyle, LinkData, MapFeature, MapOptions,
+        MapPolygon, MapSeries, Motion, MountTransition, NodeData, PlaybackState, Routable,
+        RouteTransition, Router, SankeySeries, Series, SeriesOptions, Stagger, StaggerDirection,
+        StaggerFrom, Timeline, TimelineControls, TimelineGroup, TimelineGroupControls,
+        TimelineGroupError, TimelineKeyframe, TimelineTrack, Title, Tooltip, TransitionPreset,
+        VisualStyle,
     };
 
     // shadcn components + theme.

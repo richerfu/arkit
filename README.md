@@ -45,6 +45,7 @@ There is no parallel Element tree or message/update runtime. Dioxus owns compone
 
 - `examples/counter`: signals and native events.
 - `examples/async_task`: `use_resource` with a Tokio-backed future.
+- `examples/animation`: reusable animation states and mount-transition presets.
 - `examples/chart`: native ECharts-compatible chart types and signal-driven realtime updates.
 - `examples/router`: typed `dioxus-router` routes and ArkUI links.
 - `examples/i18n`: reactive locale context.

@@ -12,6 +12,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "animation"
+version = "0.1.0"
+dependencies = [
+ "arkit",
+ "napi-build-ohos",
+ "napi-derive-ohos",
+ "napi-ohos",
+]
+
+[[package]]
 name = "anyhow"
 version = "1.0.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"

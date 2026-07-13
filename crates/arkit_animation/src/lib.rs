@@ -8,6 +8,15 @@
 //!
 //! [`Motion`] is a builder for the ArkUI `Animation` option object (duration,
 //! delay, iterations, tempo, curve, mode), ported from the legacy crate.
+//! [`AnimationState`] covers the common opacity/translation/scale/rotation
+//! properties plus optional color, radius, blur, and size properties, while
+//! [`MountTransition`] provides ready-to-use entrance effects for mounted
+//! Dioxus subtrees. [`Timeline`] and [`use_timeline`] provide frame-driven
+//! keyframes, per-segment easing, repeat/alternate playback, seeking,
+//! reversing, callbacks, and imperative Dioxus event controls.
+//! [`TimelineGroup`] drives multiple [`use_animation_target`] nodes from one
+//! clock with labels and relative track positions. [`stagger`] distributes
+//! delays or values across independently rendered list items.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -20,6 +29,19 @@ use ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
 use ohos_arkui_binding::r#type::animation_mode::AnimationMode;
 use ohos_arkui_binding::r#type::curve::Curve;
 use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
+
+mod group;
+mod stagger;
+mod timeline;
+
+pub use group::{
+    use_animation_target, use_timeline_group, AnimationTarget, TimelineGroup,
+    TimelineGroupControls, TimelineGroupError, TimelineTrack,
+};
+pub use stagger::{stagger, Stagger, StaggerDirection, StaggerFrom};
+pub use timeline::{
+    use_timeline, Easing, PlaybackState, Timeline, TimelineControls, TimelineKeyframe,
+};
 
 thread_local! {
     static RETAINED_ANIMATIONS: RefCell<Vec<RetainedAnimation>> = const { RefCell::new(Vec::new()) };
@@ -128,6 +150,303 @@ impl Default for Motion {
     }
 }
 
+/// A reusable set of animatable visual properties.
+///
+/// The default value is the identity state: fully opaque, untranslated,
+/// unscaled, and unrotated. Builder methods can be chained to describe either
+/// the starting state or target state of an animation.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AnimationState {
+    pub opacity: f32,
+    pub translate_x: f32,
+    pub translate_y: f32,
+    pub scale_x: f32,
+    pub scale_y: f32,
+    pub rotation_degrees: f32,
+    /// Optional background color in ArkUI ARGB format (`0xAARRGGBB`).
+    pub background_color: Option<u32>,
+    /// Optional text color in ArkUI ARGB format (`0xAARRGGBB`).
+    pub font_color: Option<u32>,
+    /// Optional uniform corner radius in viewport pixels.
+    pub border_radius: Option<f32>,
+    /// Optional node blur radius.
+    pub blur: Option<f32>,
+    /// Optional explicit layout width in viewport pixels.
+    pub width: Option<f32>,
+    /// Optional explicit layout height in viewport pixels.
+    pub height: Option<f32>,
+}
+
+impl AnimationState {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn opacity(mut self, value: f32) -> Self {
+        self.opacity = value.clamp(0.0, 1.0);
+        self
+    }
+
+    pub fn translate(mut self, x: f32, y: f32) -> Self {
+        self.translate_x = x;
+        self.translate_y = y;
+        self
+    }
+
+    pub fn scale(mut self, x: f32, y: f32) -> Self {
+        self.scale_x = x;
+        self.scale_y = y;
+        self
+    }
+
+    pub fn uniform_scale(self, value: f32) -> Self {
+        self.scale(value, value)
+    }
+
+    /// Set a rotation around the Z axis, in degrees.
+    pub fn rotate(mut self, degrees: f32) -> Self {
+        self.rotation_degrees = degrees;
+        self
+    }
+
+    pub fn background_color(mut self, argb: u32) -> Self {
+        self.background_color = Some(argb);
+        self
+    }
+
+    pub fn font_color(mut self, argb: u32) -> Self {
+        self.font_color = Some(argb);
+        self
+    }
+
+    pub fn border_radius(mut self, value: f32) -> Self {
+        self.border_radius = Some(value.max(0.0));
+        self
+    }
+
+    pub fn blur(mut self, value: f32) -> Self {
+        self.blur = Some(value.max(0.0));
+        self
+    }
+
+    pub fn size(mut self, width: f32, height: f32) -> Self {
+        self.width = Some(width.max(0.0));
+        self.height = Some(height.max(0.0));
+        self
+    }
+
+    pub fn width(mut self, value: f32) -> Self {
+        self.width = Some(value.max(0.0));
+        self
+    }
+
+    pub fn height(mut self, value: f32) -> Self {
+        self.height = Some(value.max(0.0));
+        self
+    }
+}
+
+impl Default for AnimationState {
+    fn default() -> Self {
+        Self {
+            opacity: 1.0,
+            translate_x: 0.0,
+            translate_y: 0.0,
+            scale_x: 1.0,
+            scale_y: 1.0,
+            rotation_degrees: 0.0,
+            background_color: None,
+            font_color: None,
+            border_radius: None,
+            blur: None,
+            width: None,
+            height: None,
+        }
+    }
+}
+
+/// Relative changes applied to the previous keyframe by
+/// [`Timeline::to_relative`]. Translation/rotation/layout values are additive;
+/// scale values are multiplicative.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AnimationDelta {
+    opacity: f32,
+    translate_x: f32,
+    translate_y: f32,
+    scale_x: f32,
+    scale_y: f32,
+    rotation_degrees: f32,
+    border_radius: f32,
+    blur: f32,
+    width: f32,
+    height: f32,
+}
+
+impl AnimationDelta {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn opacity_by(mut self, value: f32) -> Self {
+        self.opacity = value;
+        self
+    }
+
+    pub fn translate_by(mut self, x: f32, y: f32) -> Self {
+        self.translate_x = x;
+        self.translate_y = y;
+        self
+    }
+
+    pub fn scale_by(mut self, x: f32, y: f32) -> Self {
+        self.scale_x = x;
+        self.scale_y = y;
+        self
+    }
+
+    pub fn uniform_scale_by(self, value: f32) -> Self {
+        self.scale_by(value, value)
+    }
+
+    pub fn rotate_by(mut self, degrees: f32) -> Self {
+        self.rotation_degrees = degrees;
+        self
+    }
+
+    pub fn border_radius_by(mut self, value: f32) -> Self {
+        self.border_radius = value;
+        self
+    }
+
+    pub fn blur_by(mut self, value: f32) -> Self {
+        self.blur = value;
+        self
+    }
+
+    pub fn resize_by(mut self, width: f32, height: f32) -> Self {
+        self.width = width;
+        self.height = height;
+        self
+    }
+
+    fn apply(self, state: AnimationState) -> AnimationState {
+        AnimationState {
+            opacity: (state.opacity + self.opacity).clamp(0.0, 1.0),
+            translate_x: state.translate_x + self.translate_x,
+            translate_y: state.translate_y + self.translate_y,
+            scale_x: state.scale_x * self.scale_x,
+            scale_y: state.scale_y * self.scale_y,
+            rotation_degrees: state.rotation_degrees + self.rotation_degrees,
+            background_color: state.background_color,
+            font_color: state.font_color,
+            border_radius: state
+                .border_radius
+                .map(|value| (value + self.border_radius).max(0.0)),
+            blur: state.blur.map(|value| (value + self.blur).max(0.0)),
+            width: state.width.map(|value| (value + self.width).max(0.0)),
+            height: state.height.map(|value| (value + self.height).max(0.0)),
+        }
+    }
+}
+
+impl Default for AnimationDelta {
+    fn default() -> Self {
+        Self {
+            opacity: 0.0,
+            translate_x: 0.0,
+            translate_y: 0.0,
+            scale_x: 1.0,
+            scale_y: 1.0,
+            rotation_degrees: 0.0,
+            border_radius: 0.0,
+            blur: 0.0,
+            width: 0.0,
+            height: 0.0,
+        }
+    }
+}
+
+pub(crate) fn apply_state(node: &ArkUINode, state: AnimationState) {
+    let attributes = [
+        (
+            "opacity",
+            node.set_attribute(ArkUINodeAttributeType::Opacity, state.opacity.into()),
+        ),
+        (
+            "translate",
+            node.set_attribute(
+                ArkUINodeAttributeType::Translate,
+                vec![state.translate_x, state.translate_y, 0.0_f32].into(),
+            ),
+        ),
+        (
+            "scale",
+            node.set_attribute(
+                ArkUINodeAttributeType::Scale,
+                vec![state.scale_x, state.scale_y].into(),
+            ),
+        ),
+        (
+            "rotate",
+            node.set_attribute(
+                ArkUINodeAttributeType::Rotate,
+                vec![0.0_f32, 0.0, 1.0, state.rotation_degrees, 0.0].into(),
+            ),
+        ),
+    ];
+
+    for (name, result) in attributes {
+        if let Err(error) = result {
+            ohos_hilog_binding::warn(format!("arkit_animation: setting {name} failed: {error:?}"));
+        }
+    }
+
+    let optional_attributes = [
+        state.background_color.map(|value| {
+            (
+                "background_color",
+                node.set_attribute(ArkUINodeAttributeType::BackgroundColor, value.into()),
+            )
+        }),
+        state.font_color.map(|value| {
+            (
+                "font_color",
+                node.set_attribute(ArkUINodeAttributeType::FontColor, value.into()),
+            )
+        }),
+        state.border_radius.map(|value| {
+            (
+                "border_radius",
+                node.set_attribute(ArkUINodeAttributeType::BorderRadius, vec![value; 4].into()),
+            )
+        }),
+        state.blur.map(|value| {
+            (
+                "blur",
+                node.set_attribute(ArkUINodeAttributeType::Blur, value.into()),
+            )
+        }),
+        state.width.map(|value| {
+            (
+                "width",
+                node.set_attribute(ArkUINodeAttributeType::Width, value.into()),
+            )
+        }),
+        state.height.map(|value| {
+            (
+                "height",
+                node.set_attribute(ArkUINodeAttributeType::Height, value.into()),
+            )
+        }),
+    ];
+
+    for (name, result) in optional_attributes.into_iter().flatten() {
+        if let Err(error) = result {
+            ohos_hilog_binding::warn(format!("arkit_animation: setting {name} failed: {error:?}"));
+        }
+    }
+}
+
 /// Signal-backed controls for an animation bound to a native ArkUI node.
 ///
 /// `is_running` flips while `play`'s `animate_to` block is in flight. `progress`
@@ -164,6 +483,51 @@ impl AnimationControls {
     /// rerun after the renderer resolves the scope on first mount.
     pub fn is_ready(&self) -> bool {
         self.node_ref.get().is_some()
+    }
+
+    /// Apply a visual state immediately, without animation.
+    ///
+    /// This is useful for establishing an animation's starting state before
+    /// calling [`AnimationControls::animate_to`]. It is a no-op until the
+    /// component's native node has mounted.
+    pub fn set(&self, state: AnimationState) {
+        let Some(node) = self.node_ref.peek() else {
+            return;
+        };
+        apply_state(&node.borrow(), state);
+    }
+
+    /// Animate the common visual properties to `state` using this control's
+    /// [`Motion`].
+    pub fn animate_to(&self, state: AnimationState) {
+        self.play(move |node| apply_state(node, state));
+    }
+
+    /// Animate to `state` after ArkUI has committed one frame.
+    ///
+    /// Use this after [`AnimationControls::set`] when establishing a new
+    /// starting state. Deferring the target mutation prevents ArkUI from
+    /// coalescing the start and end values into a single frame.
+    pub fn animate_to_next_frame(&self, state: AnimationState) {
+        let controls = *self;
+        self.next_frame(move || controls.animate_to(state));
+    }
+
+    fn next_frame(&self, callback: impl Fn() + 'static) {
+        let Some(node) = self.node_ref.peek() else {
+            return;
+        };
+        let callback: Rc<dyn Fn()> = Rc::new(callback);
+        let frame_callback = callback.clone();
+        let result = node
+            .borrow()
+            .post_frame_callback(move |_, _| frame_callback());
+        if let Err(error) = result {
+            ohos_hilog_binding::warn(format!(
+                "arkit_animation: post_frame_callback failed: {error:?}"
+            ));
+            callback();
+        }
     }
 
     /// Start the animation. Attribute changes made inside `apply` are animated
@@ -249,43 +613,89 @@ pub enum TransitionPreset {
     SlideDown,
     SlideLeft,
     SlideRight,
+    ZoomIn,
+    ZoomOut,
+    RotateClockwise,
+    RotateCounterClockwise,
+}
+
+impl TransitionPreset {
+    /// Starting visual state for this entrance effect.
+    pub fn initial_state(self) -> AnimationState {
+        const SLIDE_DISTANCE: f32 = 24.0;
+        const ROTATION_DEGREES: f32 = 14.0;
+
+        match self {
+            Self::Fade => AnimationState::new().opacity(0.0),
+            Self::SlideUp => AnimationState::new()
+                .opacity(0.0)
+                .translate(0.0, SLIDE_DISTANCE),
+            Self::SlideDown => AnimationState::new()
+                .opacity(0.0)
+                .translate(0.0, -SLIDE_DISTANCE),
+            Self::SlideLeft => AnimationState::new()
+                .opacity(0.0)
+                .translate(SLIDE_DISTANCE, 0.0),
+            Self::SlideRight => AnimationState::new()
+                .opacity(0.0)
+                .translate(-SLIDE_DISTANCE, 0.0),
+            Self::ZoomIn => AnimationState::new().opacity(0.0).uniform_scale(0.82),
+            Self::ZoomOut => AnimationState::new().opacity(0.0).uniform_scale(1.18),
+            Self::RotateClockwise => AnimationState::new()
+                .opacity(0.0)
+                .uniform_scale(0.92)
+                .rotate(-ROTATION_DEGREES),
+            Self::RotateCounterClockwise => AnimationState::new()
+                .opacity(0.0)
+                .uniform_scale(0.92)
+                .rotate(ROTATION_DEGREES),
+        }
+    }
 }
 
 /// Animate a subtree when its Dioxus component is mounted.
 ///
-/// This component deliberately follows normal Dioxus composition: callers key
-/// it to remount and replay the transition, and routers can wrap an `Outlet`
-/// without changing router semantics.
+/// Routers can wrap an `Outlet` without changing router semantics. Change
+/// `replay_id` when a mounted subtree should replay without being remounted.
 #[component]
 pub fn MountTransition(
     children: Element,
     #[props(default)] preset: Option<TransitionPreset>,
     #[props(default)] duration_ms: Option<i32>,
     #[props(default)] delay_ms: Option<i32>,
+    /// Changing this value replays the transition without remounting the child.
+    #[props(default)]
+    replay_id: Option<u64>,
     #[props(default)] fill: Option<bool>,
 ) -> Element {
-    let _preset = preset.unwrap_or_default();
+    let preset = preset.unwrap_or_default();
     let duration_ms = duration_ms.unwrap_or(180);
     let delay_ms = delay_ms.unwrap_or(0);
+    let replay_id = replay_id.unwrap_or(0);
     let fill = fill.unwrap_or(false);
     let controls = use_animation(Motion::new().duration_ms(duration_ms).delay_ms(delay_ms));
-    let mut entered = use_signal(|| false);
+    let entered = use_signal(|| false);
+    let mut active_request = use_signal(|| None::<(TransitionPreset, i32, i32, u64)>);
     let has_entered = entered();
+    let request = (preset, duration_ms, delay_ms, replay_id);
 
     use_effect(move || {
-        if has_entered || !controls.is_ready() {
+        if !controls.is_ready() || *active_request.peek() == Some(request) {
             return;
         }
 
-        controls.play(|node| {
-            if let Err(error) = node.set_attribute(ArkUINodeAttributeType::Opacity, 1.0_f32.into())
-            {
-                ohos_hilog_binding::warn(format!(
-                    "arkit_animation: setting transition opacity failed: {error:?}"
-                ));
+        active_request.set(Some(request));
+        let mut entered = entered;
+        entered.set(false);
+        controls.set(preset.initial_state());
+        controls.next_frame(move || {
+            if *active_request.peek() != Some(request) {
+                return;
             }
+            controls.animate_to(AnimationState::default());
+            let mut entered = entered;
+            entered.set(true);
         });
-        entered.set(true);
     });
 
     if fill {
@@ -306,5 +716,39 @@ pub fn MountTransition(
                 {children}
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn animation_state_defaults_to_identity() {
+        assert_eq!(AnimationState::new(), AnimationState::default());
+        assert_eq!(AnimationState::new().opacity(-1.0).opacity, 0.0);
+        assert_eq!(AnimationState::new().opacity(2.0).opacity, 1.0);
+    }
+
+    #[test]
+    fn transition_presets_have_distinct_starting_transforms() {
+        assert!(TransitionPreset::SlideUp.initial_state().translate_y > 0.0);
+        assert!(TransitionPreset::SlideDown.initial_state().translate_y < 0.0);
+        assert!(TransitionPreset::SlideLeft.initial_state().translate_x > 0.0);
+        assert!(TransitionPreset::SlideRight.initial_state().translate_x < 0.0);
+        assert!(TransitionPreset::ZoomIn.initial_state().scale_x < 1.0);
+        assert!(TransitionPreset::ZoomOut.initial_state().scale_x > 1.0);
+        assert!(
+            TransitionPreset::RotateClockwise
+                .initial_state()
+                .rotation_degrees
+                < 0.0
+        );
+        assert!(
+            TransitionPreset::RotateCounterClockwise
+                .initial_state()
+                .rotation_degrees
+                > 0.0
+        );
     }
 }

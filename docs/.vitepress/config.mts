@@ -41,6 +41,7 @@ export default defineConfig({
           { text: '示例索引', link: '/examples/' },
           { text: 'counter', link: '/examples/counter' },
           { text: 'async_task', link: '/examples/async-task' },
+          { text: 'animation', link: '/examples/animation' },
           { text: 'chart', link: '/examples/chart' },
           { text: 'router', link: '/examples/router' },
           { text: 'i18n', link: '/examples/i18n' },

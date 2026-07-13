@@ -16,6 +16,7 @@ members = [
     "crates/arkit_icon",
     "examples/counter",
     "examples/async_task",
+    "examples/animation",
     "examples/chart",
     "examples/complex_cases",
     "examples/i18n",
