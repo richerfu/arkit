@@ -12,8 +12,9 @@ use arkit::shadcn::components::{
     Calendar, Card, CardContent, CardFooter, CardHeader, Carousel, CarouselControlsPlacement,
     CarouselIndicatorVariant, CarouselStyle, Checkbox, Collapsible, ContextMenu, DatePicker,
     Dialog, DialogFooter, DialogHeader, DropdownMenu, HoverCard, Input, Label, MenuEntry, Menubar,
-    MenubarMenuSpec, Popover, Progress, RadioGroup, Select, Separator, Skeleton, Spinner, Switch,
-    Table, Tabs, Text, TextVariant, Textarea, Toggle, ToggleGroup, Tooltip,
+    MenubarMenuSpec, Popover, Progress, RadioGroup, Select, Separator, Skeleton, Sonner,
+    SonnerToast, Spinner, Switch, Table, Tabs, Text, TextVariant, Textarea, Toggle, ToggleGroup,
+    Tooltip,
 };
 use arkit::shadcn::icon::icon_placeholder;
 use arkit::shadcn::theme::{
@@ -157,6 +158,10 @@ const COMPONENTS: &[ComponentSpec] = &[
     ComponentSpec {
         slug: "skeleton",
         name: "Skeleton",
+    },
+    ComponentSpec {
+        slug: "sonner",
+        name: "Sonner",
     },
     ComponentSpec {
         slug: "spinner",
@@ -766,6 +771,12 @@ fn demo_canvas_policy(slug: &str) -> DemoCanvasPolicy {
             fill_height: true,
             padding: [spacing::LG, spacing::LG, spacing::LG, spacing::LG],
         },
+        "sonner" => DemoCanvasPolicy {
+            center_x: false,
+            center_y: false,
+            fill_height: true,
+            padding: [spacing::XXL, spacing::LG, spacing::XXL, spacing::LG],
+        },
         _ => DemoCanvasPolicy {
             center_x: true,
             center_y: true,
@@ -809,6 +820,9 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let mut switch_checked = use_signal(|| false);
     let mut toggle_pressed = use_signal(|| false);
     let mut toggle_values = use_signal(|| vec!["bold".to_string()]);
+    let sonner_toasts = use_signal(Vec::<SonnerToast>::new);
+    let sonner_next_id = use_signal(|| 1_u64);
+    let sonner_status = use_signal(|| "Tap a type to show a toast.".to_string());
 
     let theme = arkit_shadcn::theme::use_theme();
     let on_page = EventHandler::new(move |value: i32| page.set(value.max(1)));
@@ -1692,6 +1706,132 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 }
             }
         },
+        "sonner" => rsx! {
+            fixed_width {
+                width: 420.0,
+                column {
+                    percent_width: 1.0,
+                    align_items: "start",
+                    text {
+                        percent_width: 1.0,
+                        content: "Notifications".to_string(),
+                        font_size: typography::XXL,
+                        font_weight: 700_i32,
+                        font_color: theme.colors.foreground,
+                        line_height: 32.0,
+                    }
+                    v_gap { height: spacing::SM }
+                    text {
+                        percent_width: 1.0,
+                        content: "Toast messages are rendered at the app root, above the bottom safe area. Swipe down or sideways to dismiss.".to_string(),
+                        font_size: typography::SM,
+                        font_weight: 400_i32,
+                        font_color: theme.colors.muted_foreground,
+                        line_height: 20.0,
+                    }
+                    v_gap { height: spacing::XXL }
+                    row {
+                        percent_width: 1.0,
+                        Button {
+                            variant: ButtonVariant::Outline,
+                            percent_width: Some(0.48),
+                            onclick: move |_| enqueue_sonner_toast(
+                                sonner_toasts,
+                                sonner_next_id,
+                                move |id| SonnerToast::new(id, "Event has been created.")
+                                    .description("Monday, January 3rd at 6:00pm")
+                                    .action("Undo")
+                                    .duration_ms(0)
+                                    .on_action(move || {
+                                        let mut status = sonner_status;
+                                        status.set(format!("Action selected for toast #{id}."));
+                                    }),
+                            ),
+                            "Default"
+                        }
+                        row { layout_weight: 1.0 }
+                        Button {
+                            percent_width: Some(0.48),
+                            onclick: move |_| enqueue_sonner_toast(
+                                sonner_toasts,
+                                sonner_next_id,
+                                |id| SonnerToast::success(id, "Changes saved")
+                                    .description("Your profile is up to date."),
+                            ),
+                            "Success"
+                        }
+                    }
+                    v_gap { height: spacing::MD }
+                    row {
+                        percent_width: 1.0,
+                        Button {
+                            variant: ButtonVariant::Secondary,
+                            percent_width: Some(0.48),
+                            onclick: move |_| enqueue_sonner_toast(
+                                sonner_toasts,
+                                sonner_next_id,
+                                |id| SonnerToast::info(id, "New version available")
+                                    .description("Update when you are ready."),
+                            ),
+                            "Info"
+                        }
+                        row { layout_weight: 1.0 }
+                        Button {
+                            variant: ButtonVariant::Outline,
+                            percent_width: Some(0.48),
+                            onclick: move |_| enqueue_sonner_toast(
+                                sonner_toasts,
+                                sonner_next_id,
+                                |id| SonnerToast::warning(id, "Storage almost full")
+                                    .description("Free up space to keep syncing."),
+                            ),
+                            "Warning"
+                        }
+                    }
+                    v_gap { height: spacing::MD }
+                    row {
+                        percent_width: 1.0,
+                        Button {
+                            variant: ButtonVariant::Destructive,
+                            percent_width: Some(0.48),
+                            onclick: move |_| enqueue_sonner_toast(
+                                sonner_toasts,
+                                sonner_next_id,
+                                |id| SonnerToast::error(id, "Upload failed")
+                                    .description("Check your connection and try again."),
+                            ),
+                            "Error"
+                        }
+                        row { layout_weight: 1.0 }
+                        Button {
+                            variant: ButtonVariant::Outline,
+                            percent_width: Some(0.48),
+                            onclick: move |_| enqueue_sonner_toast(
+                                sonner_toasts,
+                                sonner_next_id,
+                                |id| SonnerToast::loading(id, "Uploading photos")
+                                    .description("This toast stays until dismissed."),
+                            ),
+                            "Loading"
+                        }
+                    }
+                    v_gap { height: spacing::XL }
+                    text {
+                        percent_width: 1.0,
+                        content: sonner_status(),
+                        font_size: typography::XS,
+                        font_weight: 400_i32,
+                        font_color: theme.colors.muted_foreground,
+                        line_height: 18.0,
+                    }
+                }
+            }
+            Sonner {
+                toasts: sonner_toasts(),
+                visible_toasts: 3,
+                rich_colors: true,
+            }
+        },
         "spinner" => rsx! {
             fixed_width {
                 width: 320.0,
@@ -1902,6 +2042,33 @@ fn fixed_width(width: f32, children: Element) -> Element {
             }
         }
     }
+}
+
+fn enqueue_sonner_toast(
+    mut toasts: Signal<Vec<SonnerToast>>,
+    mut next_id: Signal<u64>,
+    build: impl FnOnce(u64) -> SonnerToast,
+) {
+    let id = next_id();
+    next_id.set(
+        id.checked_add(1)
+            .expect("showcase toast id space exhausted"),
+    );
+    let dismiss_toasts = toasts;
+    let toast = build(id).on_dismiss(move || {
+        let mut toasts = dismiss_toasts;
+        toasts.with_mut(|items| toast_retain_without_id(items, id));
+    });
+    toasts.with_mut(|items| {
+        if items.len() >= 8 {
+            items.remove(0);
+        }
+        items.push(toast);
+    });
+}
+
+fn toast_retain_without_id(toasts: &mut Vec<SonnerToast>, dismissed_id: u64) {
+    toasts.retain(|toast| toast.id != dismissed_id);
 }
 
 #[component]

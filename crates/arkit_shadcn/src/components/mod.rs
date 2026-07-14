@@ -128,7 +128,8 @@ pub use skeleton::{Skeleton, SkeletonProps};
 pub use slider::{Slider, SliderProps};
 pub use spinner::{Spinner, SpinnerProps};
 pub use surfaces::{
-    Sonner, SonnerProps, Toast, ToastDestructive, ToastDestructiveProps, ToastProps,
+    Sonner, SonnerPosition, SonnerProps, SonnerStyle, SonnerToast, Toast, ToastDestructive,
+    ToastDestructiveProps, ToastProps, ToastStyle, ToastSwipeDirection, ToastVariant,
 };
 pub use switch::{Switch, SwitchProps};
 pub use table::{Table, TableProps};

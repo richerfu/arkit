@@ -200,7 +200,9 @@ dependencies = [
  "arkit_hooks",
  "arkit_icon",
  "arkit_prelude",
+ "arkit_runtime",
  "ohos-display-binding",
+ "tokio",
 ]
 
 [[package]]

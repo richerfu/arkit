@@ -199,6 +199,24 @@ Completed for `Spinner`:
   `[473,1622][529,1678]`. Consecutive screenshots show both native indicators
   and the custom icon at different rotation positions.
 
+### 2026-07-14 Sonner Verification
+
+Completed for `Sonner`:
+
+- Replaced the legacy in-flow message cards with a root overlay stack that is
+  safe-area aware and defaults to the mobile bottom-center position. Empty
+  overlay space remains pass-through while toast cards accept gestures.
+- Added default, success, info, warning, error, and loading variants; title and
+  description content; custom icons; actions; close controls; rich semantic
+  colors; configurable position, duration, visible count, and style tokens.
+- Automatic dismissal, action callbacks, close dismissal, and vertical or
+  horizontal swipe dismissal all remove the same stable toast id. ArkUI pointer
+  deltas are handled in viewport units so the swipe threshold is density-safe.
+- Verified on a 1320×2856 device: the bottom toast card is
+  `[56,2465][1264,2702]`, clears automatically after its duration, invokes the
+  `Undo` action, closes from its 40vp dismiss target, and dismisses after a
+  downward swipe without moving the page content.
+
 ## Component Checklist
 
 Status values:
@@ -239,6 +257,7 @@ Status values:
 | Select | `select.rs` | pending | Compare trigger, menu width, selected check alignment. |
 | Separator | `separator.rs` | done | Verified horizontal/vertical thickness and spacing on device; demo content now shares the RNR left edge while the fixed-width example remains centered. |
 | Skeleton | `skeleton.rs` | pending | Compare dimensions and radius. |
+| Sonner | `surfaces.rs` | done | Root overlay, safe-area bottom placement, semantic/loading variants, timer, Undo callback, close target, and swipe dismissal verified on device. |
 | Spinner | `spinner.rs` | done | Native LoadingProgress and a custom rotating Lucide icon verified at 16/24/32vp with semantic colors and a disabled-button loading state. |
 | Switch | `switch.rs` | pending | Compare track/thumb size, checked colors, disabled state. |
 | Table | `table.rs` | pending | Compare row height, separators, header weight. |
