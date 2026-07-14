@@ -9,10 +9,11 @@ use arkit::shadcn::components::{
     Accordion, AccordionItemSpec, Alert, AlertDescription, AlertDialog, AlertList, AlertTitle,
     AlertVariant, AspectRatio, Avatar, AvatarFallback, Badge, BadgeVariant, BottomNavigation,
     BottomNavigationItem, BottomSheet, BottomSheetTextInput, Button, ButtonSize, ButtonVariant,
-    Calendar, Card, CardContent, CardFooter, CardHeader, Checkbox, Collapsible, ContextMenu,
-    DatePicker, Dialog, DialogFooter, DialogHeader, DropdownMenu, HoverCard, Input, Label,
-    MenuEntry, Menubar, MenubarMenuSpec, Popover, Progress, RadioGroup, Select, Separator,
-    Skeleton, Switch, Table, Tabs, Text, TextVariant, Textarea, Toggle, ToggleGroup, Tooltip,
+    Calendar, Card, CardContent, CardFooter, CardHeader, Carousel, CarouselControlsPlacement,
+    CarouselIndicatorVariant, CarouselStyle, Checkbox, Collapsible, ContextMenu, DatePicker,
+    Dialog, DialogFooter, DialogHeader, DropdownMenu, HoverCard, Input, Label, MenuEntry, Menubar,
+    MenubarMenuSpec, Popover, Progress, RadioGroup, Select, Separator, Skeleton, Switch, Table,
+    Tabs, Text, TextVariant, Textarea, Toggle, ToggleGroup, Tooltip,
 };
 use arkit::shadcn::icon::icon_placeholder;
 use arkit::shadcn::theme::{
@@ -84,6 +85,10 @@ const COMPONENTS: &[ComponentSpec] = &[
     ComponentSpec {
         slug: "card",
         name: "Card",
+    },
+    ComponentSpec {
+        slug: "carousel",
+        name: "Carousel",
     },
     ComponentSpec {
         slug: "checkbox",
@@ -727,6 +732,12 @@ fn demo_canvas_policy(slug: &str) -> DemoCanvasPolicy {
             fill_height: false,
             padding: [spacing::LG, spacing::LG, spacing::LG, spacing::LG],
         },
+        "carousel" => DemoCanvasPolicy {
+            center_x: true,
+            center_y: false,
+            fill_height: false,
+            padding: [spacing::LG, spacing::LG, spacing::LG, spacing::LG],
+        },
         "bottom-navigation" => DemoCanvasPolicy {
             center_x: false,
             center_y: false,
@@ -771,6 +782,8 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let mut bottom_sheet_username = use_signal(|| "@peduarte".to_string());
     let mut calendar_selected = use_signal(|| None::<String>);
     let mut calendar_selected_dates = use_signal(Vec::<String>::new);
+    let mut carousel_index = use_signal(|| 0_usize);
+    let mut carousel_overlay_index = use_signal(|| 0_usize);
     let mut date_picker_selected = use_signal(|| None::<String>);
     let mut date_picker_open = use_signal(|| false);
     let mut popover_open = use_signal(|| false);
@@ -1123,6 +1136,143 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 }
             }
         },
+        "carousel" => {
+            let slides = [
+                (
+                    "mountain",
+                    "Plan your next escape",
+                    "Save places and build a trip that fits your pace.",
+                ),
+                (
+                    "compass",
+                    "Find something nearby",
+                    "Explore hand-picked places, food, and experiences.",
+                ),
+                (
+                    "calendar",
+                    "Keep plans together",
+                    "Dates, bookings, and reminders stay in one place.",
+                ),
+                (
+                    "map-pin",
+                    "Navigate with confidence",
+                    "Get the details you need before heading out.",
+                ),
+            ]
+            .into_iter()
+            .enumerate()
+            .map(|(index, (icon, title, description))| {
+                rsx! {
+                    column {
+                        percent_width: 1.0,
+                        percent_height: 1.0,
+                        align_items: "center",
+                        justify_content: "center",
+                        padding_top: spacing::XXL,
+                        padding_right: spacing::XXL,
+                        padding_bottom: spacing::XXL,
+                        padding_left: spacing::XXL,
+                        background_color: theme.colors.card,
+                        {icon_placeholder(icon, 42.0, theme.colors.primary)}
+                        v_gap { height: spacing::XL }
+                        text {
+                            content: title,
+                            font_size: typography::XL,
+                            font_weight: 600_i32,
+                            font_color: theme.colors.card_foreground,
+                            line_height: 28.0,
+                            text_align: 1_i32,
+                        }
+                        v_gap { height: spacing::SM }
+                        text {
+                            content: description,
+                            font_size: typography::SM,
+                            font_color: theme.colors.muted_foreground,
+                            line_height: 20.0,
+                            text_align: 1_i32,
+                        }
+                        v_gap { height: spacing::XL }
+                        text {
+                            content: format!("{} / 4", index + 1),
+                            font_size: typography::XS,
+                            font_weight: 500_i32,
+                            font_color: theme.colors.muted_foreground,
+                            line_height: 16.0,
+                        }
+                    }
+                }
+            })
+            .collect();
+            let overlay_slides = ["First", "Second", "Third", "Fourth"]
+                .into_iter()
+                .enumerate()
+                .map(|(index, label)| {
+                    rsx! {
+                        column {
+                            percent_width: 1.0,
+                            percent_height: 1.0,
+                            align_items: "center",
+                            justify_content: "center",
+                            background_color: theme.colors.muted,
+                            text {
+                                content: (index + 1).to_string(),
+                                font_size: 64.0,
+                                font_weight: 700_i32,
+                                font_color: theme.colors.foreground,
+                                line_height: 72.0,
+                            }
+                            v_gap { height: spacing::SM }
+                            text {
+                                content: label,
+                                font_size: typography::SM,
+                                font_weight: 500_i32,
+                                font_color: theme.colors.muted_foreground,
+                                line_height: 20.0,
+                            }
+                        }
+                    }
+                })
+                .collect();
+
+            rsx! {
+                fixed_width {
+                    width: 336.0,
+                    column {
+                        percent_width: 1.0,
+                        Carousel {
+                            slides,
+                            index: Some(carousel_index()),
+                            height: 300.0,
+                            indicator_variant: CarouselIndicatorVariant::Pill,
+                            style: CarouselStyle {
+                                viewport_radius: Some(theme.radii.xxl),
+                                navigation_background: Some(theme.colors.primary),
+                                navigation_foreground: Some(theme.colors.primary_foreground),
+                                indicator_active_color: Some(theme.colors.primary),
+                                ..CarouselStyle::default()
+                            },
+                            on_change: move |index| carousel_index.set(index),
+                        }
+                        v_gap { height: spacing::XXL }
+                        Carousel {
+                            slides: overlay_slides,
+                            index: Some(carousel_overlay_index()),
+                            height: 220.0,
+                            show_indicators: false,
+                            controls_placement: CarouselControlsPlacement::OverlayCenter,
+                            style: CarouselStyle {
+                                viewport_radius: Some(theme.radii.xxl),
+                                viewport_border_width: 1.0,
+                                navigation_background: Some(theme.colors.background),
+                                navigation_foreground: Some(theme.colors.foreground),
+                                ..CarouselStyle::default()
+                            },
+                            on_change: move |index| carousel_overlay_index.set(index),
+                        }
+                    }
+                }
+            }
+        }
         "checkbox" => rsx! {
             fixed_width {
                 width: 384.0,

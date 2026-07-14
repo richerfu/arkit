@@ -199,11 +199,12 @@ define_element! {
 define_element! {
     /// Swiper container (ArkUI `Swiper`).
     swiper => "Swiper" {
-        swiper_index, swiper_loop, swiper_cached_count, swiper_display_count,
-        swiper_vertical, swiper_interval, swiper_duration, background_color, padding,
-        margin, margin_top, margin_bottom, margin_left, margin_right,
+        swiper_index, swiper_swipe_to_index, swiper_loop, swiper_auto_play, swiper_show_indicator,
+        swiper_disable_swipe, swiper_cached_count, swiper_display_count,
+        swiper_vertical, swiper_interval, swiper_duration, swiper_curve, swiper_item_space,
+        background_color, padding, margin, margin_top, margin_bottom, margin_left, margin_right,
         percent_width, percent_height, width, height, opacity, border_radius,
-        border_width, border_color, visibility, enabled, clip, hit_test_behavior,
+        border_width, border_color, border_style, shadow, visibility, enabled, clip, hit_test_behavior,
         aspect_ratio, position, z_index,
     }
 }

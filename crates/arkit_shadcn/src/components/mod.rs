@@ -82,7 +82,10 @@ pub use card::{
     Card, CardContent, CardContentProps, CardDescription, CardDescriptionProps, CardFooter,
     CardFooterProps, CardHeader, CardHeaderProps, CardProps, CardTitle, CardTitleProps,
 };
-pub use carousel::{Carousel, CarouselProps};
+pub use carousel::{
+    Carousel, CarouselControlsPlacement, CarouselIndicatorVariant, CarouselProps, CarouselStyle,
+    CarouselTransitionCurve,
+};
 pub use chart::{Chart, ChartCard, ChartCardProps, ChartProps};
 pub use checkbox::{Checkbox, CheckboxProps};
 pub use collapsible::{Collapsible, CollapsibleProps};

@@ -155,6 +155,31 @@ Completed for `BottomNavigation`:
   `[660,2537][990,2758]`, and `[990,2537][1320,2758]`. Home, Explore, Alerts,
   and Profile each update the page icon, title, description, and active item.
 
+### 2026-07-14 Carousel Verification
+
+Completed for `Carousel`:
+
+- Replaced the legacy panel wrapper with a native ArkUI Swiper component that
+  supports controlled and uncontrolled selection, looping, autoplay, item
+  spacing, duration, transition curve, and touch swiping.
+- Added animated programmatic selection for previous/next and indicator
+  presses. Native swipe completion is mirrored back into the controlled index,
+  keeping content and custom indicators on the same page.
+- Added mobile-sized navigation targets and configurable `Dot`, `Pill`, and
+  `Fraction` indicators. Controls can sit below the viewport, overlay its
+  bottom edge, or align with its vertical center; `CarouselStyle` exposes
+  viewport, navigation, and indicator colors, sizes, radius, border, shadow,
+  and spacing.
+- Added a second showcase example with previous/next controls centered inside
+  the Swiper and no current-index indicator.
+- Verified on a 1320×2856 device: the Swiper is
+  `[72,439][1248,1489]`; a left swipe changes page 1 to page 2 and activates
+  the second pill, the next button changes page 2 to page 3 and activates the
+  third pill, and pressing the first indicator returns both content and state
+  to page 1. The indicator-free Swiper is `[72,1769][1248,2539]`; its controls
+  share the Swiper's vertical center, and pressing next changes `First` to
+  `Second` without rendering an index indicator.
+
 ## Component Checklist
 
 Status values:
@@ -177,6 +202,7 @@ Status values:
 | Button | `button.rs` | done | Verified on device: iOS demo sizing, variants, disabled state, and icon/text overlap fixed. |
 | Calendar | `calendar.tsx` | done | Verified full month layout, previous/next navigation, today accent, blue single selection, orange multi-selection, and deselection on device. |
 | Card | `card.rs` | done | Verified on device: shell radius/border, p-6 header/content/footer, left-aligned title/description/content/footer. |
+| Carousel | `carousel.rs` | done | Native Swiper verified with bidirectional swipe/control state, large mobile touch targets, custom styles, indicator variants, and animated page selection. |
 | Checkbox | `checkbox.rs` | in_progress | Recheck label alignment, card checkbox layout, checked state. |
 | Collapsible | `collapsible.rs` | pending | Compare fixed width, row spacing, chevron and content indentation. |
 | Context Menu | `context_menu.rs` | in_progress | Native long-press bridge implemented; verify short tap does nothing and 500ms hold opens exactly once. |

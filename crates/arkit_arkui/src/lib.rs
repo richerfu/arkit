@@ -1751,7 +1751,9 @@ fn extract_payload(
             .map(ArkEventPayload::Layout)
             .unwrap_or_default(),
         // Swiper change: new index i32(0).
-        SwiperEventOnChange => ArkEventPayload::Int(event.i32_value(0).unwrap_or(0)),
+        SwiperEventOnChange | SwiperEventOnAnimationEnd => {
+            ArkEventPayload::Int(event.i32_value(0).unwrap_or(0))
+        }
         // Hover: i32(0) is the is-hovering boolean (1 = entered, 0 = exited).
         OnHover => ArkEventPayload::Bool(event.i32_value(0).unwrap_or(0) != 0),
         OnClick | OnClickEvent | TouchEvent | OnHoverMove | OnDragStart | OnDragMove
@@ -1854,8 +1856,10 @@ fn event_type_for_name(name: &str, tag: &str) -> Option<NodeEventType> {
         (ArkEventKind::Scroll, "waterflow") => WaterFlowOnScrollIndex,
         (ArkEventKind::Scroll, "scroll") => ScrollEventOnScroll,
 
-        // Swiper change.
-        (ArkEventKind::SwiperChange, "swiper") => SwiperEventOnChange,
+        // Swiper change. Animation-end is used as the stable selection
+        // boundary: unlike the early change callback, it fires after the
+        // native viewport has committed its new index.
+        (ArkEventKind::SwiperChange, "swiper") => SwiperEventOnAnimationEnd,
 
         // Refresh trigger.
         (ArkEventKind::Refresh, "refresh") => RefreshOnRefresh,
@@ -1892,5 +1896,9 @@ mod event_tests {
             Some(NodeEventType::OnHoverMove)
         );
         assert_eq!(event_type_for_name("scroll", "grid"), None);
+        assert_eq!(
+            event_type_for_name("_swiper_change", "swiper"),
+            Some(NodeEventType::SwiperEventOnAnimationEnd)
+        );
     }
 }

@@ -35,6 +35,7 @@ enum EncodedAttrValue {
     U32(u32),
     String(String),
     VecF32(Vec<f32>),
+    VecI32(Vec<i32>),
     ScrollOffset { x: f32, y: f32, options: Vec<i32> },
     FlexOptionPart(usize, i32),
     Shadow(i32),
@@ -49,6 +50,7 @@ impl EncodedAttrValue {
             Self::U32(v) => (*v).into(),
             Self::String(v) => v.clone().into(),
             Self::VecF32(v) => v.clone().into(),
+            Self::VecI32(v) => v.clone().into(),
             Self::ScrollOffset { x, y, options } => {
                 let mut values = Vec::with_capacity(2 + options.len());
                 values.push(ArkUINodeAttributeNumber::Float(*x));
@@ -868,9 +870,29 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
             ArkUINodeAttributeType::SwiperIndex,
             EncodedAttrValue::I32(as_i32(value)?),
         ),
+        "swiper_swipe_to_index" if tag == "swiper" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::SwiperSwipeToIndex,
+            EncodedAttrValue::VecI32(vec![as_i32(value)?, 1]),
+        ),
         "swiper_loop" if tag == "swiper" => EncodedAttr::new(
             name,
             ArkUINodeAttributeType::SwiperLoop,
+            EncodedAttrValue::Bool(as_bool(value)?),
+        ),
+        "swiper_auto_play" if tag == "swiper" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::SwiperAutoPlay,
+            EncodedAttrValue::Bool(as_bool(value)?),
+        ),
+        "swiper_show_indicator" if tag == "swiper" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::SwiperShowIndicator,
+            EncodedAttrValue::Bool(as_bool(value)?),
+        ),
+        "swiper_disable_swipe" if tag == "swiper" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::SwiperDisableSwipe,
             EncodedAttrValue::Bool(as_bool(value)?),
         ),
         "swiper_cached_count" if tag == "swiper" => EncodedAttr::new(
@@ -897,6 +919,16 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
             name,
             ArkUINodeAttributeType::SwiperDuration,
             EncodedAttrValue::I32(as_i32(value)?),
+        ),
+        "swiper_curve" if tag == "swiper" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::SwiperCurve,
+            EncodedAttrValue::I32(as_i32(value)?),
+        ),
+        "swiper_item_space" if tag == "swiper" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::SwiperItemSpace,
+            EncodedAttrValue::F32(as_f32(value)?),
         ),
         "grid_column_template" if tag == "grid" => EncodedAttr::new(
             name,
