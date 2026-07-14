@@ -1,5 +1,5 @@
-//! Shadcn component registry — 50 components migrated from the original Elm
-//! builder API to dioxus 0.7 `#[component]` + `rsx!`.
+//! Shadcn component registry — migrated components plus Arkit mobile
+//! extensions, implemented with dioxus 0.7 `#[component]` + `rsx!`.
 //!
 //! Each component preserves its original styling logic (colors/radii/spacing/
 //! typography/shadow) but renders via dioxus elements instead of the old
@@ -14,6 +14,7 @@ mod alert_dialog;
 mod aspect_ratio;
 mod avatar;
 mod badge;
+mod bottom_navigation;
 mod bottom_sheet;
 mod breadcrumb;
 mod button;
@@ -70,6 +71,7 @@ pub use alert_dialog::{AlertDialog, AlertDialogProps};
 pub use aspect_ratio::{AspectRatio, AspectRatioProps};
 pub use avatar::{Avatar, AvatarFallback, AvatarFallbackProps, AvatarProps};
 pub use badge::{Badge, BadgeProps, BadgeVariant};
+pub use bottom_navigation::{BottomNavigation, BottomNavigationItem, BottomNavigationProps};
 pub use bottom_sheet::{
     BottomSheet, BottomSheetProps, BottomSheetTextInput, BottomSheetTextInputProps,
 };

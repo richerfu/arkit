@@ -140,6 +140,21 @@ Completed for `DatePicker`:
   it again clears both states, Close removes the overlay, and a selected value
   remains visible after closing.
 
+### 2026-07-14 Bottom Navigation Verification
+
+Completed for `BottomNavigation`:
+
+- Added an Arkit mobile extension with icon-and-label destinations, theme-aware
+  active/inactive colors, equal-width touch targets, and controlled or
+  uncontrolled selection.
+- The showcase uses a production-shaped full-page layout: page content fills
+  the available viewport and the navigation bar sits directly above the
+  system bottom area without a centered mock-device wrapper.
+- Verified on a 1320×2856 device: the four targets are
+  `[0,2537][330,2758]`, `[330,2537][660,2758]`,
+  `[660,2537][990,2758]`, and `[990,2537][1320,2758]`. Home, Explore, Alerts,
+  and Profile each update the page icon, title, description, and active item.
+
 ## Component Checklist
 
 Status values:
@@ -157,6 +172,7 @@ Status values:
 | Aspect Ratio | `aspect_ratio.rs` | in_progress | Recheck image fill, radius, full-width canvas. |
 | Avatar | `avatar.rs` | pending | Compare image size, fallback text, overlap/ring. |
 | Badge | `badge.rs` | in_progress | Recheck icon slot, pill min size, variant colors. |
+| Bottom Navigation | `bottom_navigation.rs` | done | Full-page mobile layout verified with four equal-width targets, theme-aware active state, and Home/Explore/Alerts/Profile switching. |
 | Bottom Sheet | `bottom_sheet.rs` | done | Verified RNR profile form, `[0,1437][1320,2856]` bottom placement, trigger open, close button, and backdrop dismiss on device. |
 | Button | `button.rs` | done | Verified on device: iOS demo sizing, variants, disabled state, and icon/text overlap fixed. |
 | Calendar | `calendar.tsx` | done | Verified full month layout, previous/next navigation, today accent, blue single selection, orange multi-selection, and deselection on device. |
@@ -176,7 +192,7 @@ Status values:
 | Progress | `progress.rs` | pending | Compare track height, fill color, radius. |
 | Radio Group | `radio_group.rs` | in_progress | Recheck option spacing, dot size, label alignment. |
 | Select | `select.rs` | pending | Compare trigger, menu width, selected check alignment. |
-| Separator | `separator.rs` | pending | Compare orientation, thickness, margins. |
+| Separator | `separator.rs` | done | Verified horizontal/vertical thickness and spacing on device; demo content now shares the RNR left edge while the fixed-width example remains centered. |
 | Skeleton | `skeleton.rs` | pending | Compare dimensions and radius. |
 | Switch | `switch.rs` | pending | Compare track/thumb size, checked colors, disabled state. |
 | Table | `table.rs` | pending | Compare row height, separators, header weight. |

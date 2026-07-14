@@ -7,12 +7,12 @@ use arkit::prelude::*;
 use arkit::shadcn as arkit_shadcn;
 use arkit::shadcn::components::{
     Accordion, AccordionItemSpec, Alert, AlertDescription, AlertDialog, AlertList, AlertTitle,
-    AlertVariant, AspectRatio, Avatar, AvatarFallback, Badge, BadgeVariant, BottomSheet,
-    BottomSheetTextInput, Button, ButtonSize, ButtonVariant, Calendar, Card, CardContent,
-    CardFooter, CardHeader, Checkbox, Collapsible, ContextMenu, DatePicker, Dialog, DialogFooter,
-    DialogHeader, DropdownMenu, HoverCard, Input, Label, MenuEntry, Menubar, MenubarMenuSpec,
-    Popover, Progress, RadioGroup, Select, Separator, Skeleton, Switch, Table, Tabs, Text,
-    TextVariant, Textarea, Toggle, ToggleGroup, Tooltip,
+    AlertVariant, AspectRatio, Avatar, AvatarFallback, Badge, BadgeVariant, BottomNavigation,
+    BottomNavigationItem, BottomSheet, BottomSheetTextInput, Button, ButtonSize, ButtonVariant,
+    Calendar, Card, CardContent, CardFooter, CardHeader, Checkbox, Collapsible, ContextMenu,
+    DatePicker, Dialog, DialogFooter, DialogHeader, DropdownMenu, HoverCard, Input, Label,
+    MenuEntry, Menubar, MenubarMenuSpec, Popover, Progress, RadioGroup, Select, Separator,
+    Skeleton, Switch, Table, Tabs, Text, TextVariant, Textarea, Toggle, ToggleGroup, Tooltip,
 };
 use arkit::shadcn::icon::icon_placeholder;
 use arkit::shadcn::theme::{
@@ -64,6 +64,10 @@ const COMPONENTS: &[ComponentSpec] = &[
     ComponentSpec {
         slug: "badge",
         name: "Badge",
+    },
+    ComponentSpec {
+        slug: "bottom-navigation",
+        name: "Bottom Navigation",
     },
     ComponentSpec {
         slug: "bottom-sheet",
@@ -629,6 +633,11 @@ fn ComponentListItem(
 fn DemoCanvas(slug: &'static str) -> Element {
     let theme = arkit_shadcn::theme::use_theme();
     let policy = demo_canvas_policy(slug);
+    let bottom_padding = if slug == "bottom-navigation" {
+        policy.padding[2]
+    } else {
+        policy.padding[2] + spacing::XXL
+    };
 
     if policy.fill_height {
         rsx! {
@@ -649,7 +658,7 @@ fn DemoCanvas(slug: &'static str) -> Element {
                         justify_content: if policy.center_y { "center" } else { "start" },
                         padding_top: policy.padding[0],
                         padding_right: policy.padding[1],
-                        padding_bottom: policy.padding[2] + spacing::XXL,
+                        padding_bottom: bottom_padding,
                         padding_left: policy.padding[3],
                         ComponentDemo { slug }
                     }
@@ -674,7 +683,7 @@ fn DemoCanvas(slug: &'static str) -> Element {
                         justify_content: if policy.center_y { "center" } else { "start" },
                         padding_top: policy.padding[0],
                         padding_right: policy.padding[1],
-                        padding_bottom: policy.padding[2] + spacing::XXL,
+                        padding_bottom: bottom_padding,
                         padding_left: policy.padding[3],
                         ComponentDemo { slug }
                     }
@@ -718,6 +727,12 @@ fn demo_canvas_policy(slug: &str) -> DemoCanvasPolicy {
             fill_height: false,
             padding: [spacing::LG, spacing::LG, spacing::LG, spacing::LG],
         },
+        "bottom-navigation" => DemoCanvasPolicy {
+            center_x: false,
+            center_y: false,
+            fill_height: true,
+            padding: [0.0, 0.0, 0.0, 0.0],
+        },
         "context-menu" | "dropdown-menu" => DemoCanvasPolicy {
             center_x: true,
             center_y: false,
@@ -750,6 +765,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let mut page = use_signal(|| 1_i32);
     let mut dialog_open = use_signal(|| false);
     let mut alert_open = use_signal(|| false);
+    let mut bottom_navigation_selected = use_signal(|| 0_usize);
     let mut bottom_sheet_open = use_signal(|| false);
     let mut bottom_sheet_name = use_signal(|| "Pedro Duarte".to_string());
     let mut bottom_sheet_username = use_signal(|| "@peduarte".to_string());
@@ -961,6 +977,54 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 }
             }
         },
+        "bottom-navigation" => {
+            let (page_title, page_description, page_icon) = match bottom_navigation_selected() {
+                1 => ("Explore", "Discover something new today.", "compass"),
+                2 => ("Alerts", "You are all caught up.", "bell"),
+                3 => ("Profile", "Manage your account and preferences.", "user"),
+                _ => ("Home", "Your latest activity is ready.", "house"),
+            };
+
+            rsx! {
+                column {
+                    percent_width: 1.0,
+                    percent_height: 1.0,
+                    background_color: theme.colors.card,
+                    column {
+                        percent_width: 1.0,
+                        layout_weight: 1.0,
+                        align_items: "center",
+                        justify_content: "center",
+                        {icon_placeholder(page_icon, 42.0, theme.colors.primary)}
+                        v_gap { height: spacing::LG }
+                        text {
+                            content: page_title.to_string(),
+                            font_size: typography::XXL,
+                            font_weight: 600_i32,
+                            font_color: theme.colors.foreground,
+                            line_height: 32.0,
+                        }
+                        v_gap { height: spacing::SM }
+                        text {
+                            content: page_description.to_string(),
+                            font_size: typography::SM,
+                            font_color: theme.colors.muted_foreground,
+                            line_height: 20.0,
+                        }
+                    }
+                    BottomNavigation {
+                        items: vec![
+                            BottomNavigationItem::new("Home", "house"),
+                            BottomNavigationItem::new("Explore", "compass"),
+                            BottomNavigationItem::new("Alerts", "bell"),
+                            BottomNavigationItem::new("Profile", "user"),
+                        ],
+                        selected: Some(bottom_navigation_selected()),
+                        on_select: move |index| bottom_navigation_selected.set(index),
+                    }
+                }
+            }
+        }
         "bottom-sheet" => rsx! {
             Button {
                 onclick: move |_| bottom_sheet_open.set(true),
@@ -1430,8 +1494,10 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 width: 320.0,
                 column {
                     percent_width: 1.0,
+                    align_items: "start",
                     column {
                         percent_width: 1.0,
+                        align_items: "start",
                         Text { content: "Radix Primitives".to_string(), variant: TextVariant::Small }
                         v_gap { height: 4.0 }
                         Text { content: "An open-source UI component library.".to_string(), variant: TextVariant::Muted }
