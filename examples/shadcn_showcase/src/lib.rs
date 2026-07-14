@@ -8,8 +8,8 @@ use arkit::shadcn as arkit_shadcn;
 use arkit::shadcn::components::{
     Accordion, AccordionItemSpec, Alert, AlertDescription, AlertDialog, AlertList, AlertTitle,
     AlertVariant, AspectRatio, Avatar, AvatarFallback, Badge, BadgeVariant, BottomSheet,
-    BottomSheetTextInput, Button, ButtonSize, ButtonVariant, Card, CardContent, CardFooter,
-    CardHeader, Checkbox, Collapsible, ContextMenu, Dialog, DialogFooter, DialogHeader,
+    BottomSheetTextInput, Button, ButtonSize, ButtonVariant, Calendar, Card, CardContent,
+    CardFooter, CardHeader, Checkbox, Collapsible, ContextMenu, Dialog, DialogFooter, DialogHeader,
     DropdownMenu, HoverCard, Input, Label, MenuEntry, Menubar, MenubarMenuSpec, Popover, Progress,
     RadioGroup, Select, Separator, Skeleton, Switch, Table, Tabs, Text, TextVariant, Textarea,
     Toggle, ToggleGroup, Tooltip,
@@ -72,6 +72,10 @@ const COMPONENTS: &[ComponentSpec] = &[
     ComponentSpec {
         slug: "button",
         name: "Button",
+    },
+    ComponentSpec {
+        slug: "calendar",
+        name: "Calendar",
     },
     ComponentSpec {
         slug: "card",
@@ -704,6 +708,12 @@ fn demo_canvas_policy(slug: &str) -> DemoCanvasPolicy {
             fill_height: false,
             padding: [0.0, spacing::LG, 0.0, spacing::LG],
         },
+        "calendar" => DemoCanvasPolicy {
+            center_x: false,
+            center_y: false,
+            fill_height: false,
+            padding: [spacing::LG, spacing::LG, spacing::LG, spacing::LG],
+        },
         "context-menu" | "dropdown-menu" => DemoCanvasPolicy {
             center_x: true,
             center_y: false,
@@ -739,6 +749,8 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let mut bottom_sheet_open = use_signal(|| false);
     let mut bottom_sheet_name = use_signal(|| "Pedro Duarte".to_string());
     let mut bottom_sheet_username = use_signal(|| "@peduarte".to_string());
+    let mut calendar_selected = use_signal(|| None::<String>);
+    let mut calendar_selected_dates = use_signal(Vec::<String>::new);
     let mut popover_open = use_signal(|| false);
     let mut hover_open = use_signal(|| false);
     let mut tooltip_open = use_signal(|| false);
@@ -998,6 +1010,30 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 Button { variant: ButtonVariant::Ghost, onclick: move |_| {}, "Ghost" }
                 v_gap { height: spacing::XL }
                 Button { variant: ButtonVariant::Link, size: ButtonSize::Sm, onclick: move |_| {}, "Link sm" }
+            }
+        },
+        "calendar" => rsx! {
+            column {
+                percent_width: 1.0,
+                Calendar {
+                    selected: calendar_selected(),
+                    on_day_press: move |date| calendar_selected.set(Some(date)),
+                }
+                v_gap { height: spacing::XXL }
+                Calendar {
+                    selected_dates: calendar_selected_dates(),
+                    selection_color: Some(0xFFF97316u32),
+                    today_color: Some(0xFFF97316u32),
+                    on_day_press: move |date: String| {
+                        let mut dates = calendar_selected_dates();
+                        if let Some(index) = dates.iter().position(|selected| selected == &date) {
+                            dates.remove(index);
+                        } else {
+                            dates.push(date);
+                        }
+                        calendar_selected_dates.set(dates);
+                    },
+                }
             }
         },
         "card" => rsx! {

@@ -107,6 +107,22 @@ Completed for `BottomSheet`:
   `[0,1437][1320,2856]`; trigger open, close-button dismiss, and backdrop
   dismiss all complete successfully.
 
+### 2026-07-14 Calendar Verification
+
+Completed for `Calendar`:
+
+- Replaced the compact ArkUI `CalendarPicker` wrapper with a full month grid
+  matching the iOS RNR `react-native-calendars` showcase: month navigation,
+  weekday headings, six stable week rows, outside-month dates, and today
+  highlighting.
+- Added controlled single- and multi-selection APIs. The Showcase now contains
+  the RNR blue single-select calendar and orange multi-select calendar.
+- Verified on a 1320×2856 device: calendar panels are
+  `[56,360][1264,1542]` and `[56,1626][1264,2808]`; selecting day 20 produces
+  `#0284C7`, navigating advances July 2026 to August 2026, selecting days 20
+  and 21 produces two `#F97316` cells, and pressing day 20 again deselects only
+  that cell.
+
 ## Component Checklist
 
 Status values:
@@ -126,6 +142,7 @@ Status values:
 | Badge | `badge.rs` | in_progress | Recheck icon slot, pill min size, variant colors. |
 | Bottom Sheet | `bottom_sheet.rs` | done | Verified RNR profile form, `[0,1437][1320,2856]` bottom placement, trigger open, close button, and backdrop dismiss on device. |
 | Button | `button.rs` | done | Verified on device: iOS demo sizing, variants, disabled state, and icon/text overlap fixed. |
+| Calendar | `calendar.tsx` | done | Verified full month layout, previous/next navigation, today accent, blue single selection, orange multi-selection, and deselection on device. |
 | Card | `card.rs` | done | Verified on device: shell radius/border, p-6 header/content/footer, left-aligned title/description/content/footer. |
 | Checkbox | `checkbox.rs` | in_progress | Recheck label alignment, card checkbox layout, checked state. |
 | Collapsible | `collapsible.rs` | pending | Compare fixed width, row spacing, chevron and content indentation. |
