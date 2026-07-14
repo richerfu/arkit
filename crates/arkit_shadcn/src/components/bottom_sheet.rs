@@ -56,13 +56,14 @@ fn use_bottom_sheet_overlay(
     };
 
     let effect_overlay = overlay.clone();
+    let effect_panel = panel.clone();
     use_effect(use_reactive((&open,), move |(open,)| {
         if !changed {
             return;
         }
 
         if open {
-            let panel = panel.clone();
+            let panel = effect_panel.clone();
             effect_overlay.show_modal_with_dismiss(
                 spec,
                 move || panel.clone(),
@@ -72,6 +73,24 @@ fn use_bottom_sheet_overlay(
             effect_overlay.dismiss();
         }
     }));
+
+    // OverlayRoot stores an Element snapshot. Republish an already-open sheet
+    // on every owner render so controlled children (calendar selection, form
+    // values, validation state) receive their latest props without closing the
+    // sheet. Reconciliation preserves overlay-local hook state.
+    let refresh_overlay = overlay.clone();
+    let refresh_panel = panel.clone();
+    let mut refresh = use_effect(move || {
+        if open && refresh_overlay.is_open() {
+            let panel = refresh_panel.clone();
+            refresh_overlay.show_modal_with_dismiss(
+                spec,
+                move || panel.clone(),
+                move || on_dismiss.call(()),
+            );
+        }
+    });
+    refresh.mark_dirty();
 
     let cleanup_overlay = overlay.clone();
     let cleanup_last_open = last_open.clone();
@@ -92,6 +111,7 @@ pub fn BottomSheet(
     title: String,
     open: Option<bool>,
     default_open: Option<bool>,
+    show_header: Option<bool>,
     on_close: Option<EventHandler<()>>,
     children: Element,
 ) -> Element {
@@ -115,6 +135,7 @@ pub fn BottomSheet(
     let panel = rsx! {
         BottomSheetPanel {
             title,
+            show_header: show_header.unwrap_or(true),
             on_close: close,
             {children}
         }
@@ -127,6 +148,7 @@ pub fn BottomSheet(
 #[derive(Clone, Props)]
 struct BottomSheetPanelProps {
     title: String,
+    show_header: bool,
     on_close: EventHandler<()>,
     children: Element,
 }
@@ -146,6 +168,11 @@ fn BottomSheetPanel(props: BottomSheetPanelProps) -> Element {
     let on_close = props.on_close;
     let top_radius = format!("{0},{0},0,0", theme.radii.xl);
     let body_bottom_padding = safe_area.bottom + spacing::LG;
+    let body_top_padding = if props.show_header {
+        spacing::XXL
+    } else {
+        spacing::SM
+    };
 
     rsx! {
         column {
@@ -213,46 +240,48 @@ fn BottomSheetPanel(props: BottomSheetPanelProps) -> Element {
                     opacity: 0.4_f32,
                 }
             }
-            row {
-                percent_width: 1.0,
-                height: BOTTOM_SHEET_HEADER_HEIGHT,
-                align_items: "center",
-                padding_left: spacing::LG,
-                border_width: "0,0,1,0",
-                border_color: theme.colors.border,
-                border_style: ARKUI_BORDER_STYLE_SOLID,
+            if props.show_header {
                 row {
-                    layout_weight: 1.0,
-                    text {
-                        percent_width: 1.0,
-                        font_size: typography::XL,
-                        font_weight: 700_i32,
-                        font_color: theme.colors.foreground,
-                        line_height: 25.0,
-                        text_align: 1_i32,
-                        "{props.title}"
-                    }
-                }
-                button {
-                    button_type: ARKUI_BUTTON_TYPE_NORMAL,
-                    width: 48.0,
-                    height: 48.0,
-                    padding: 0.0,
-                    background_color: 0x00000000,
-                    border_width: 0.0,
+                    percent_width: 1.0,
+                    height: BOTTOM_SHEET_HEADER_HEIGHT,
+                    align_items: "center",
+                    padding_left: spacing::LG,
+                    border_width: "0,0,1,0",
+                    border_color: theme.colors.border,
                     border_style: ARKUI_BORDER_STYLE_SOLID,
-                    border_radius: theme.radii.md,
-                    clip: true,
-                    focusable: false,
-                    focus_on_touch: false,
-                    alignment: 4_i32,
-                    onclick: move |_| on_close.call(()),
-                    {icon_placeholder("x", 24.0, theme.colors.muted_foreground)}
+                    row {
+                        layout_weight: 1.0,
+                        text {
+                            percent_width: 1.0,
+                            font_size: typography::XL,
+                            font_weight: 700_i32,
+                            font_color: theme.colors.foreground,
+                            line_height: 25.0,
+                            text_align: 1_i32,
+                            "{props.title}"
+                        }
+                    }
+                    button {
+                        button_type: ARKUI_BUTTON_TYPE_NORMAL,
+                        width: 48.0,
+                        height: 48.0,
+                        padding: 0.0,
+                        background_color: 0x00000000,
+                        border_width: 0.0,
+                        border_style: ARKUI_BORDER_STYLE_SOLID,
+                        border_radius: theme.radii.md,
+                        clip: true,
+                        focusable: false,
+                        focus_on_touch: false,
+                        alignment: 4_i32,
+                        onclick: move |_| on_close.call(()),
+                        {icon_placeholder("x", 24.0, theme.colors.muted_foreground)}
+                    }
                 }
             }
             column {
                 percent_width: 1.0,
-                padding_top: spacing::XXL,
+                padding_top: body_top_padding,
                 padding_right: spacing::LG,
                 padding_bottom: body_bottom_padding,
                 padding_left: spacing::LG,

@@ -52,6 +52,10 @@ pub struct CalendarProps {
     pub selection_color: Option<u32>,
     /// Today and navigation accent. Defaults to `selection_color`.
     pub today_color: Option<u32>,
+    /// Removes the standalone card border, radius, and shadow when the
+    /// calendar is embedded in another surface such as a bottom sheet.
+    #[props(default)]
+    pub embedded: bool,
     /// Called with a `YYYY-MM-DD` date for every enabled day press.
     #[props(default)]
     pub on_day_press: EventHandler<String>,
@@ -76,6 +80,7 @@ pub fn Calendar(props: CalendarProps) -> Element {
     };
     let selection_color = props.selection_color.unwrap_or(default_accent);
     let today_color = props.today_color.unwrap_or(selection_color);
+    let embedded = props.embedded;
     let selected = props.selected.clone();
     let selected_dates = props.selected_dates.clone();
     let on_day_press = props.on_day_press;
@@ -165,11 +170,11 @@ pub fn Calendar(props: CalendarProps) -> Element {
         column {
             percent_width: 1.0,
             background_color: theme.colors.card,
-            border_width: 1.0,
+            border_width: if embedded { 0.0 } else { 1.0 },
             border_color: theme.colors.border,
             border_style: ARKUI_BORDER_STYLE_SOLID,
-            border_radius: theme.radii.lg,
-            shadow: 1_i32,
+            border_radius: if embedded { 0.0 } else { theme.radii.lg },
+            shadow: if embedded { 0_i32 } else { 1_i32 },
             clip: true,
             padding_top: CALENDAR_PADDING,
             padding_right: CALENDAR_PADDING,

@@ -123,6 +123,23 @@ Completed for `Calendar`:
   and 21 produces two `#F97316` cells, and pressing day 20 again deselects only
   that cell.
 
+### 2026-07-14 Date Picker Verification
+
+Completed for `DatePicker`:
+
+- Replaced the inline ArkUI wheel wrapper with the iOS RNR mobile flow: a
+  calendar-icon outline trigger opens the shared Calendar in a headerless
+  Bottom Sheet with a full-width Close action.
+- The Calendar uses its embedded surface mode in Date Picker, removing the
+  standalone card border, radius, and shadow to match the borderless RNR sheet.
+- Bottom Sheet now republishes open content when controlled child props change,
+  so a selected date updates both the calendar cell and the trigger label
+  without dismissing the sheet.
+- Verified on a 1320×2856 device: the sheet is `[0,1223][1320,2856]`; pressing
+  day 20 changes its fill to `#0284C7` and the trigger to `2026-07-20`, pressing
+  it again clears both states, Close removes the overlay, and a selected value
+  remains visible after closing.
+
 ## Component Checklist
 
 Status values:
@@ -147,6 +164,7 @@ Status values:
 | Checkbox | `checkbox.rs` | in_progress | Recheck label alignment, card checkbox layout, checked state. |
 | Collapsible | `collapsible.rs` | pending | Compare fixed width, row spacing, chevron and content indentation. |
 | Context Menu | `context_menu.rs` | in_progress | Native long-press bridge implemented; verify short tap does nothing and 500ms hold opens exactly once. |
+| Date Picker | `date-picker.tsx` | done | Verified outline trigger, headerless bottom sheet, calendar selection/deselection, live label refresh, Close dismissal, and selected-value persistence on device. |
 | Dialog | `dialog.rs` | in_progress | Header size/alignment, overlay inset, and flex-col-reverse footer updated; needs device overlay screenshot and dismiss verification. |
 | Dropdown Menu | `dropdown_menu.rs` | in_progress | Controlled entry refresh implemented; recheck popup placement, submenu expansion, shortcut alignment. |
 | Hover Card | `hover_card.rs` | in_progress | Center anchor and start-aligned content restored; needs final placement/hover interaction acceptance. |

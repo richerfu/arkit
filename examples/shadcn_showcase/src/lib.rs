@@ -9,10 +9,10 @@ use arkit::shadcn::components::{
     Accordion, AccordionItemSpec, Alert, AlertDescription, AlertDialog, AlertList, AlertTitle,
     AlertVariant, AspectRatio, Avatar, AvatarFallback, Badge, BadgeVariant, BottomSheet,
     BottomSheetTextInput, Button, ButtonSize, ButtonVariant, Calendar, Card, CardContent,
-    CardFooter, CardHeader, Checkbox, Collapsible, ContextMenu, Dialog, DialogFooter, DialogHeader,
-    DropdownMenu, HoverCard, Input, Label, MenuEntry, Menubar, MenubarMenuSpec, Popover, Progress,
-    RadioGroup, Select, Separator, Skeleton, Switch, Table, Tabs, Text, TextVariant, Textarea,
-    Toggle, ToggleGroup, Tooltip,
+    CardFooter, CardHeader, Checkbox, Collapsible, ContextMenu, DatePicker, Dialog, DialogFooter,
+    DialogHeader, DropdownMenu, HoverCard, Input, Label, MenuEntry, Menubar, MenubarMenuSpec,
+    Popover, Progress, RadioGroup, Select, Separator, Skeleton, Switch, Table, Tabs, Text,
+    TextVariant, Textarea, Toggle, ToggleGroup, Tooltip,
 };
 use arkit::shadcn::icon::icon_placeholder;
 use arkit::shadcn::theme::{
@@ -92,6 +92,10 @@ const COMPONENTS: &[ComponentSpec] = &[
     ComponentSpec {
         slug: "context-menu",
         name: "Context Menu",
+    },
+    ComponentSpec {
+        slug: "date-picker",
+        name: "Date Picker",
     },
     ComponentSpec {
         slug: "dialog",
@@ -751,6 +755,8 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let mut bottom_sheet_username = use_signal(|| "@peduarte".to_string());
     let mut calendar_selected = use_signal(|| None::<String>);
     let mut calendar_selected_dates = use_signal(Vec::<String>::new);
+    let mut date_picker_selected = use_signal(|| None::<String>);
+    let mut date_picker_open = use_signal(|| false);
     let mut popover_open = use_signal(|| false);
     let mut hover_open = use_signal(|| false);
     let mut tooltip_open = use_signal(|| false);
@@ -1200,6 +1206,14 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         }
                     }
                 }
+            }
+        },
+        "date-picker" => rsx! {
+            DatePicker {
+                selected: date_picker_selected(),
+                open: Some(date_picker_open()),
+                on_change: move |date| date_picker_selected.set(date),
+                on_open_change: move |open| date_picker_open.set(open),
             }
         },
         "dialog" => rsx! {
