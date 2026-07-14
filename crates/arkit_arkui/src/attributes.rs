@@ -5,7 +5,7 @@
 //! through the same encoder used for desired-state replay. This keeps immediate
 //! mutation writes and attach/patch replays byte-for-byte consistent.
 
-use ohos_arkui_binding::common::attribute::ArkUINodeAttributeItem;
+use ohos_arkui_binding::common::attribute::{ArkUINodeAttributeItem, ArkUINodeAttributeNumber};
 use ohos_arkui_binding::common::error::ArkUIResult;
 use ohos_arkui_binding::common::node::ArkUINode;
 use ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
@@ -27,7 +27,7 @@ const BUTTON_DEFAULT_FOREGROUND: u32 = 0xFFFF_FFFF;
 const BUTTON_DEFAULT_FONT_SIZE: f32 = 16.0;
 const BUTTON_DEFAULT_FONT_WEIGHT: i32 = 500;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 enum EncodedAttrValue {
     F32(f32),
     I32(i32),
@@ -35,6 +35,7 @@ enum EncodedAttrValue {
     U32(u32),
     String(String),
     VecF32(Vec<f32>),
+    ScrollOffset { x: f32, y: f32, options: Vec<i32> },
     FlexOptionPart(usize, i32),
     Shadow(i32),
 }
@@ -48,13 +49,20 @@ impl EncodedAttrValue {
             Self::U32(v) => (*v).into(),
             Self::String(v) => v.clone().into(),
             Self::VecF32(v) => v.clone().into(),
+            Self::ScrollOffset { x, y, options } => {
+                let mut values = Vec::with_capacity(2 + options.len());
+                values.push(ArkUINodeAttributeNumber::Float(*x));
+                values.push(ArkUINodeAttributeNumber::Float(*y));
+                values.extend(options.iter().copied().map(ArkUINodeAttributeNumber::Int));
+                ArkUINodeAttributeItem::NumberValue(values)
+            }
             Self::FlexOptionPart(index, value) => flex_option_with(*index, *value).into(),
             Self::Shadow(v) => vec![*v].into(),
         }
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 struct EncodedAttr {
     name: String,
     ty: ArkUINodeAttributeType,
@@ -95,16 +103,40 @@ pub(crate) struct DesiredAttrs {
     attrs: Vec<EncodedAttr>,
 }
 
+#[derive(Clone, Copy)]
+pub(crate) enum AttrMutation {
+    Unchanged,
+    Set,
+    Removed(ArkUINodeAttributeType),
+}
+
 impl DesiredAttrs {
-    pub(crate) fn set(&mut self, tag: &str, name: &str, value: &dioxus_core::AttributeValue) {
+    pub(crate) fn set(
+        &mut self,
+        tag: &str,
+        name: &str,
+        value: &dioxus_core::AttributeValue,
+    ) -> AttrMutation {
+        if matches!(value, dioxus_core::AttributeValue::None) {
+            return self
+                .attrs
+                .iter()
+                .position(|item| item.name == name)
+                .map(|index| AttrMutation::Removed(self.attrs.remove(index).ty))
+                .unwrap_or(AttrMutation::Unchanged);
+        }
         let Some(attr) = encode_attr(tag, name, value) else {
-            return;
+            return AttrMutation::Unchanged;
         };
         if let Some(existing) = self.attrs.iter_mut().find(|item| item.name == attr.name) {
+            if *existing == attr {
+                return AttrMutation::Unchanged;
+            }
             *existing = attr;
         } else {
             self.attrs.push(attr);
         }
+        AttrMutation::Set
     }
 
     fn get(&self, name: &str) -> Option<&EncodedAttr> {
@@ -207,6 +239,23 @@ impl DesiredAttrs {
         }
     }
 
+    pub(crate) fn apply_mutation(
+        &self,
+        node: &mut ArkUINode,
+        tag: &str,
+        name: &str,
+        mutation: AttrMutation,
+    ) {
+        match mutation {
+            AttrMutation::Unchanged => return,
+            AttrMutation::Removed(ty) => {
+                let _ = node.reset_attribute(ty);
+            }
+            AttrMutation::Set => {}
+        }
+        self.apply_named(node, tag, &[name]);
+    }
+
     pub(crate) fn apply_button_text_attrs(&self, node: &mut ArkUINode) {
         if !self.has_any(&["font_color", "foreground_color"]) {
             let _ = node.set_attribute(
@@ -292,6 +341,26 @@ impl DesiredAttrs {
             }
         }
         let _ = node.set_attribute(ArkUINodeAttributeType::FlexOption, fields.into());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_scroll_offset;
+
+    #[test]
+    fn scroll_offset_preserves_float_offsets_and_integer_options() {
+        assert_eq!(
+            parse_scroll_offset("12.5, 24.25, 0, 3"),
+            Some((12.5, 24.25, vec![0, 3]))
+        );
+    }
+
+    #[test]
+    fn scroll_offset_rejects_invalid_or_excess_options() {
+        assert_eq!(parse_scroll_offset("0"), None);
+        assert_eq!(parse_scroll_offset("0,0,0,1,0,0,0,1"), None);
+        assert_eq!(parse_scroll_offset("0,0,fast"), None);
     }
 }
 
@@ -782,6 +851,18 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
             ArkUINodeAttributeType::ScrollEdgeEffect,
             EncodedAttrValue::I32(as_i32(value)?),
         ),
+        "scroll_offset" if tag == "scroll" => {
+            let text = match value {
+                dioxus_core::AttributeValue::Text(text) => text,
+                _ => return None,
+            };
+            let (x, y, options) = parse_scroll_offset(text)?;
+            EncodedAttr::new(
+                name,
+                ArkUINodeAttributeType::ScrollOffset,
+                EncodedAttrValue::ScrollOffset { x, y, options },
+            )
+        }
         "swiper_index" if tag == "swiper" => EncodedAttr::new(
             name,
             ArkUINodeAttributeType::SwiperIndex,
@@ -974,6 +1055,20 @@ fn parse_f32_list(value: &str) -> Option<Vec<f32>> {
     }
 }
 
+fn parse_scroll_offset(value: &str) -> Option<(f32, f32, Vec<i32>)> {
+    let mut fields = value.split(',').map(str::trim);
+    let x = fields.next()?.parse().ok()?;
+    let y = fields.next()?.parse().ok()?;
+    let options = fields
+        .map(str::parse::<i32>)
+        .collect::<Result<Vec<_>, _>>()
+        .ok()?;
+    if options.len() > 5 {
+        return None;
+    }
+    Some((x, y, options))
+}
+
 fn flex_option_with(index: usize, value: i32) -> Vec<i32> {
     let mut fields = vec![0, 0, 1, 1, 1];
     if index < fields.len() {
@@ -1157,36 +1252,6 @@ impl DesiredAttrs {
                 STACK_ALIGNMENT_CENTER.into(),
             );
         }
-        self.apply_named(
-            node,
-            "button",
-            &[
-                "height",
-                "width",
-                "percent_width",
-                "padding",
-                "padding_top",
-                "padding_right",
-                "padding_bottom",
-                "padding_left",
-                "background_color",
-                "border_style",
-                "border_width",
-                "border_color",
-                "border_radius",
-                "clip",
-                "font_color",
-                "font_size",
-                "font_weight",
-                "opacity",
-                "enabled",
-                "alignment",
-                "focusable",
-                "focus_on_touch",
-                "hit_test_behavior",
-                "shadow",
-            ],
-        );
     }
 
     pub(crate) fn apply_content(&self, node: &mut ArkUINode, tag: &str) {

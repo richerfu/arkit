@@ -9,11 +9,6 @@ use std::rc::Rc;
 
 use arkit::entry;
 use arkit::prelude::*;
-use arkit_runtime as runtime;
-use dioxus_core::use_drop;
-use dioxus_core_macro::{component, Props};
-use dioxus_hooks::{use_context, use_context_provider};
-use dioxus_signals::{ReadableExt, WritableExt};
 
 const RUST_URL: &str = "https://www.rust-lang.org";
 const DOCS_URL: &str = "https://docs.rs";
@@ -219,7 +214,7 @@ fn WebviewArea(
         let title_cb_sig = title_sig;
         init.on_title_change = Some(Rc::new(move |new_title| {
             let mut sig = title_cb_sig;
-            runtime::queue_ui_loop(move || {
+            queue_ui_loop(move || {
                 sig.set(new_title);
             });
         }));
@@ -236,7 +231,7 @@ fn WebviewArea(
         match result {
             Ok(()) if webview_for_frame.is_mounted() => {
                 let mut sig = status_sig;
-                runtime::queue_ui_loop(move || {
+                queue_ui_loop(move || {
                     sig.set(String::from("webview mounted"));
                 });
             }
@@ -244,7 +239,7 @@ fn WebviewArea(
             Err(err) => {
                 let mut sig = status_sig;
                 let msg = err.to_string();
-                runtime::queue_ui_loop(move || {
+                queue_ui_loop(move || {
                     sig.set(format!("webview mount failed: {msg}"));
                 });
             }

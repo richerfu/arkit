@@ -21,13 +21,20 @@
 mod layout;
 mod node;
 mod overlay;
+mod safe_area;
 mod virtual_list;
 mod virtual_range;
 
+pub use arkit_runtime::{
+    EdgeInsets, SafeAreaPolicy, WindowMetrics, WindowMetricsHandle, WindowMetricsSubscription,
+};
 pub use layout::{
     use_layout_frame, use_layout_frame_node, use_layout_size, LayoutFrame, LayoutSize,
 };
 pub use node::{use_ark_host_provider, use_ark_node, ArkHost, ArkNodeRef, HostNode, OverlayRoot};
-pub use overlay::{use_overlay, ModalOverlaySpec, ModalPresentation, OverlayApi};
+pub use overlay::{use_overlay, ModalOverlaySpec, ModalPresentation, OverlayApi, OverlayViewport};
+pub use safe_area::{
+    use_safe_area, use_safe_area_policy, use_window_metrics, SafeArea, SafeAreaEdges, SafeAreaProps,
+};
 pub use virtual_list::{use_virtual_list, VirtualListHandle};
 pub use virtual_range::{use_virtual_range, VirtualVisibleRange};

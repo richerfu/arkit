@@ -25,5 +25,5 @@ features:
   - title: 类型化路由
     details: 直接复用 dioxus-router，并提供 ArkUI 原生 Link 与返回键桥接。
   - title: 原生能力
-    details: 提供布局测量、overlay、虚拟列表、动画、图标、i18n、shadcn 和 WebView。
+    details: 提供布局测量、overlay、虚拟列表、动画、ECharts-like 原生图表、图标、i18n、shadcn 和 WebView。
 ---

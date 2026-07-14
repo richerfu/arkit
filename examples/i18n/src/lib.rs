@@ -1,11 +1,11 @@
 //! i18n example — `arkit_i18n` dioxus context + `t!` macro, locale toggled
 //! via a `Signal<String>` (the active locale id).
 
-use arkit::entry;
-use arkit::prelude::*;
-use arkit_i18n::{t, use_i18n, use_i18n_provider};
+use framework::entry;
+use framework::prelude::*;
+use framework::{t, use_i18n, use_i18n_provider};
 
-arkit_i18n::i18n! {
+framework::i18n! {
     pub mod tr {
         path: "locales",
         fallback: "zh-CN",

@@ -10,8 +10,7 @@
 //! item. Items are disposed when ArkUI removes them from the adapter.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
 use ohos_arkui_binding::api::attribute_option::{NodeAdapter, NodeAdapterEvent};
 use ohos_arkui_binding::common::error::ArkUIResult;
@@ -19,6 +18,7 @@ use ohos_arkui_binding::common::node::ArkUINode;
 use ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
 use ohos_arkui_binding::types::advanced::NodeAdapterEventType;
 use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
+use rustc_hash::FxHashMap;
 
 /// Kind of virtual container — selects which `*NodeAdapter` attribute to set
 /// on the host node and which item-wrapper to use.
@@ -58,8 +58,9 @@ struct AdapterState {
     total_count: u32,
     render_item: RenderItem,
     /// Mounted items keyed by index, so we can dispose them on removal.
-    mounted: HashMap<u32, ArkUINode>,
+    mounted: FxHashMap<u32, ArkUINode>,
     adapter: Option<NodeAdapter>,
+    attached_host: Option<ArkUINode>,
 }
 
 /// A virtual list/grid adapter attached to a host `list`/`grid`/`waterflow`
@@ -78,8 +79,9 @@ impl VirtualListAdapter {
                 kind,
                 total_count,
                 render_item,
-                mounted: HashMap::new(),
+                mounted: FxHashMap::default(),
                 adapter: None,
+                attached_host: None,
             })),
         }
     }
@@ -89,20 +91,68 @@ impl VirtualListAdapter {
     /// receiver, and sets the `*NodeAdapter` attribute on the host. Idempotent
     /// for the same host (re-attaching replaces the adapter).
     pub fn attach(&self, host: &ArkUINode) -> ArkUIResult<()> {
+        let host_handle = host.raw_handle();
+        let already_attached = {
+            let state = self.state.borrow();
+            state.adapter.is_some()
+                && state
+                    .attached_host
+                    .as_ref()
+                    .is_some_and(|current| current.raw_handle() == host_handle)
+        };
+        if already_attached {
+            return Ok(());
+        }
+        self.detach()?;
+
         let kind = self.state.borrow().kind;
         let total = self.state.borrow().total_count;
 
         let mut adapter = NodeAdapter::new()?;
-        adapter.set_total_node_count(total)?;
+        if let Err(error) = adapter.set_total_node_count(total) {
+            adapter.dispose();
+            return Err(error);
+        }
 
-        let state = self.state.clone();
-        adapter.register_event_receiver(move |event| {
+        let state = Rc::downgrade(&self.state);
+        if let Err(error) = adapter.register_event_receiver(move |event| {
             handle_adapter_event(&state, event);
-        })?;
+        }) {
+            adapter.dispose();
+            return Err(error);
+        }
 
-        host.set_attribute(kind.adapter_attr(), (&adapter).into())?;
-        self.state.borrow_mut().adapter = Some(adapter);
+        if let Err(error) = host.set_attribute(kind.adapter_attr(), (&adapter).into()) {
+            adapter.dispose();
+            return Err(error);
+        }
+        let mut state = self.state.borrow_mut();
+        state.adapter = Some(adapter);
+        state.attached_host = Some(host.clone());
         Ok(())
+    }
+
+    /// Detach and dispose the native adapter and every mounted item.
+    pub fn detach(&self) -> ArkUIResult<()> {
+        let (kind, host, adapter, mounted) = {
+            let mut state = self.state.borrow_mut();
+            (
+                state.kind,
+                state.attached_host.take(),
+                state.adapter.take(),
+                std::mem::take(&mut state.mounted),
+            )
+        };
+        // Cleanup must not be skipped when the host was already detached by
+        // ArkUI and resetting its attribute reports an error.
+        let reset_result = host.map_or(Ok(()), |host| host.reset_attribute(kind.adapter_attr()));
+        for (_, mut node) in mounted {
+            let _ = node.dispose();
+        }
+        if let Some(adapter) = adapter {
+            adapter.dispose();
+        }
+        reset_result
     }
 
     /// Update the total item count and notify the adapter to reload.
@@ -121,16 +171,15 @@ impl Drop for VirtualListAdapter {
     fn drop(&mut self) {
         // Only dispose when the last reference drops.
         if Rc::strong_count(&self.state) == 1 {
-            let mut state = self.state.borrow_mut();
-            state.mounted.clear();
-            if let Some(adapter) = state.adapter.take() {
-                adapter.dispose();
-            }
+            let _ = self.detach();
         }
     }
 }
 
-fn handle_adapter_event(state: &Rc<RefCell<AdapterState>>, event: &mut NodeAdapterEvent) {
+fn handle_adapter_event(state: &Weak<RefCell<AdapterState>>, event: &mut NodeAdapterEvent) {
+    let Some(state) = state.upgrade() else {
+        return;
+    };
     match event.event_type() {
         NodeAdapterEventType::OnGetNodeId => {
             // Use the item index as its node id.
@@ -144,14 +193,17 @@ fn handle_adapter_event(state: &Rc<RefCell<AdapterState>>, event: &mut NodeAdapt
                 (s.kind, s.render_item.clone())
             };
             match build_item(kind, index, &render_item) {
-                Ok(node) => {
+                Ok(mut node) => {
                     if let Err(e) = event.set_item(&node) {
+                        let _ = node.dispose();
                         ohos_hilog_binding::error(format!(
                             "arkit_arkui: virtual adapter set_item failed: {e}"
                         ));
                         return;
                     }
-                    state.borrow_mut().mounted.insert(index, node);
+                    if let Some(mut replaced) = state.borrow_mut().mounted.insert(index, node) {
+                        let _ = replaced.dispose();
+                    }
                 }
                 Err(e) => {
                     ohos_hilog_binding::error(format!(
@@ -174,7 +226,16 @@ fn handle_adapter_event(state: &Rc<RefCell<AdapterState>>, event: &mut NodeAdapt
 /// containing the content node returned by `render_item`.
 fn build_item(kind: VirtualKind, index: u32, render_item: &RenderItem) -> ArkUIResult<ArkUINode> {
     let mut wrapper = kind.create_item_wrapper()?;
-    let content = render_item(index)?;
-    wrapper.add_child(content)?;
+    let content = match render_item(index) {
+        Ok(content) => content,
+        Err(error) => {
+            let _ = wrapper.dispose();
+            return Err(error);
+        }
+    };
+    if let Err(error) = wrapper.add_child(content) {
+        let _ = wrapper.dispose();
+        return Err(error);
+    }
     Ok(wrapper)
 }

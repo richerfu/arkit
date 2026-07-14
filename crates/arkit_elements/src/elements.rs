@@ -59,6 +59,16 @@ define_element! {
 }
 
 define_element! {
+    /// Custom drawing surface (ArkUI `Custom`).
+    custom => "Custom" {
+        background_color, padding, margin, margin_top, margin_bottom, margin_left,
+        margin_right, percent_width, percent_height, width, height, opacity,
+        border_radius, border_width, border_color, visibility, enabled, clip,
+        hit_test_behavior, aspect_ratio, position, z_index,
+    }
+}
+
+define_element! {
     /// Stack layout container (ArkUI `Stack`).
     stack => "Stack" {
         background_color, padding, padding_top, padding_right, padding_bottom, padding_left, margin,
@@ -178,7 +188,7 @@ define_element! {
 define_element! {
     /// Scroll container (ArkUI `Scroll`).
     scroll => "Scroll" {
-        scroll_bar, scroll_enabled, scroll_edge_effect, background_color, padding, margin,
+        scroll_bar, scroll_enabled, scroll_edge_effect, scroll_offset, background_color, padding, margin,
         margin_top, margin_bottom, margin_left, margin_right,
         percent_width, percent_height, width, height, opacity, border_radius,
         border_width, border_color, visibility, enabled, clip, hit_test_behavior,
@@ -327,6 +337,7 @@ define_element! {
 pub mod completions {
     pub enum CompleteWithBraces {
         column {},
+        custom {},
         row {},
         stack {},
         flex {},

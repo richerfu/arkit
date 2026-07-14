@@ -7,13 +7,70 @@
 //! (e.g. [`ClickData`], [`ChangeData`]).
 //!
 //! ## Payload carrying
-//! Each typed data type ([`ChangeData`], [`ScrollData`], ...) reads its fields
-//! out of [`ArkEventData::payload`] via [`ArkEventPayload`]. When the runtime
-//! sink does not yet populate the payload (the foundation runtime constructs an
-//! empty [`ArkEventData::new`]), the `From` impls yield a default value, so the
-//! event still fires and triggers a rerender — only the typed fields are
-//! missing. Wiring the native event values through the sink is a runtime-level
-//! follow-up.
+//! Each typed data type ([`ChangeData`], [`ScrollData`], ...) reads fields from
+//! [`ArkEventData::payload`]. Native payloads are populated at the ArkUI event
+//! boundary; `None` remains the explicit representation for payload-free
+//! events such as refresh and submit-fire.
+
+/// Semantic identity of an ArkUI event listener.
+///
+/// Dioxus passes listener names to renderers after removing the leading
+/// `on`, while the public RSX surface intentionally accepts both compact
+/// (`onclick`) and readable (`on_click`) spellings. Keeping this classification
+/// in the event-owning crate prevents the renderer and runtime from developing
+/// different alias tables.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ArkEventKind {
+    Click,
+    LongPress,
+    Change,
+    Submit,
+    Scroll,
+    SwiperChange,
+    Refresh,
+    AreaChange,
+    Hover,
+    HoverMove,
+    DragStart,
+    DragMove,
+    DragEnd,
+    DragLeave,
+    DragEnter,
+    Touch,
+}
+
+impl ArkEventKind {
+    /// Whether Dioxus should propagate this event through ancestor listeners.
+    pub const fn bubbles(self) -> bool {
+        matches!(self, Self::Click | Self::LongPress | Self::Touch)
+    }
+}
+
+/// Classify either an RSX attribute name or the stripped listener name passed
+/// by Dioxus to a renderer.
+pub fn classify_event_name(name: &str) -> Option<ArkEventKind> {
+    let name = name.strip_prefix("on").unwrap_or(name);
+    let name = name.strip_prefix('_').unwrap_or(name);
+    Some(match name {
+        "click" | "press" => ArkEventKind::Click,
+        "longpress" | "long_press" => ArkEventKind::LongPress,
+        "change" | "input" | "toggle" => ArkEventKind::Change,
+        "submit" => ArkEventKind::Submit,
+        "scroll" => ArkEventKind::Scroll,
+        "swiperchange" | "swiper_change" | "swiper" => ArkEventKind::SwiperChange,
+        "refresh" => ArkEventKind::Refresh,
+        "area" | "area_change" | "layout" | "layout_change" => ArkEventKind::AreaChange,
+        "hover" => ArkEventKind::Hover,
+        "hovermove" | "hover_move" => ArkEventKind::HoverMove,
+        "dragstart" | "drag_start" => ArkEventKind::DragStart,
+        "dragmove" | "drag_move" => ArkEventKind::DragMove,
+        "dragend" | "drag_end" => ArkEventKind::DragEnd,
+        "dragleave" | "drag_leave" => ArkEventKind::DragLeave,
+        "dragenter" | "drag_enter" => ArkEventKind::DragEnter,
+        "touch" => ArkEventKind::Touch,
+        _ => return None,
+    })
+}
 
 /// Typed payload carried by an [`ArkEventData`].
 ///
@@ -36,6 +93,8 @@ pub enum ArkEventPayload {
     String(String),
     /// A scroll-index payload (list/grid/water-flow visible range).
     ScrollIndex(ScrollIndexPayload),
+    /// A physical scroll offset payload (generic Scroll and scroll observers).
+    ScrollOffset(ScrollOffsetPayload),
     /// Layout frame payload for element-bound area/layout change events.
     Layout(LayoutPayload),
     /// Pointer payload for click/touch/drag events.
@@ -51,6 +110,12 @@ pub struct ScrollIndexPayload {
     pub last: i32,
     /// Center index (list only; 0 for grid/water-flow).
     pub center: i32,
+}
+
+#[derive(Default, Clone, Copy, Debug, PartialEq)]
+pub struct ScrollOffsetPayload {
+    pub x: f32,
+    pub y: f32,
 }
 
 /// Element layout frame in physical pixels, relative to the window.
@@ -71,6 +136,18 @@ impl LayoutPayload {
 /// Pointer coordinates and target bounds carried by ArkUI input events.
 #[derive(Default, Clone, Copy, Debug, PartialEq)]
 pub struct PointerPayload {
+    /// Native touch phase. Click/drag events that do not expose a touch phase
+    /// use [`PointerAction::Unknown`].
+    pub action: PointerAction,
+    /// Monotonic platform event timestamp in nanoseconds, or zero when the
+    /// native event does not expose one.
+    pub timestamp_nanos: u64,
+    /// Stable native contact identifier for the current pointer.
+    pub pointer_id: i32,
+    /// Pressed mouse/stylus buttons represented as a platform bit mask.
+    pub buttons: u64,
+    /// Contact pressure in the platform-normalized range when available.
+    pub pressure: f32,
     /// Pointer x relative to the event target.
     pub x: f32,
     /// Pointer y relative to the event target.
@@ -87,6 +164,17 @@ pub struct PointerPayload {
     pub target_width: f32,
     /// Event target height.
     pub target_height: f32,
+}
+
+/// Platform-neutral pointer phase used by touch-capable components.
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PointerAction {
+    #[default]
+    Unknown,
+    Cancel,
+    Down,
+    Move,
+    Up,
 }
 
 impl PointerPayload {
@@ -221,6 +309,7 @@ impl From<&ArkEventData> for ChangeData {
             ArkEventPayload::Int(i) => out.float_value = *i as f32,
             ArkEventPayload::String(s) => out.string_value = s.clone(),
             ArkEventPayload::ScrollIndex(_)
+            | ArkEventPayload::ScrollOffset(_)
             | ArkEventPayload::Layout(_)
             | ArkEventPayload::Pointer(_)
             | ArkEventPayload::None => {}
@@ -259,6 +348,12 @@ pub struct ScrollData {
     pub last_index: i32,
     /// Center visible item index (list only).
     pub center_index: i32,
+    /// Horizontal scroll offset in physical pixels.
+    pub offset_x: f32,
+    /// Vertical scroll offset in physical pixels.
+    pub offset_y: f32,
+    /// Whether this event carried offsets instead of visible indices.
+    pub has_offset: bool,
 }
 
 impl From<ArkEventData> for ScrollData {
@@ -274,6 +369,13 @@ impl From<&ArkEventData> for ScrollData {
                 first_index: s.first,
                 last_index: s.last,
                 center_index: s.center,
+                ..ScrollData::default()
+            },
+            ArkEventPayload::ScrollOffset(offset) => ScrollData {
+                offset_x: offset.x,
+                offset_y: offset.y,
+                has_offset: true,
+                ..ScrollData::default()
             },
             _ => ScrollData::default(),
         }
@@ -338,5 +440,23 @@ impl From<ArkEventData> for RefreshData {
 impl From<&ArkEventData> for RefreshData {
     fn from(_data: &ArkEventData) -> Self {
         RefreshData
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{classify_event_name, ArkEventKind};
+
+    #[test]
+    fn event_aliases_share_one_semantic_identity() {
+        for name in ["onclick", "click", "on_press", "_press"] {
+            assert_eq!(classify_event_name(name), Some(ArkEventKind::Click));
+        }
+        for name in ["onlongpress", "longpress", "on_long_press", "_long_press"] {
+            assert_eq!(classify_event_name(name), Some(ArkEventKind::LongPress));
+        }
+        assert!(ArkEventKind::Click.bubbles());
+        assert!(ArkEventKind::LongPress.bubbles());
+        assert!(!ArkEventKind::Change.bubbles());
     }
 }

@@ -6,7 +6,7 @@ import { DefaultXComponent } from "@ohos-rs/ability";
 @Entry
 @Component
 struct Index {
-  @State moduleName: string = "shadcn_showcase";
+  @State moduleName: string = "animation";
 
   aboutToAppear(): void {
     const stored = AppStorage.get<string>("moduleName");

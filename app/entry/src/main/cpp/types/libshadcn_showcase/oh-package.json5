@@ -1,6 +1,0 @@
-{
-  "name": "libshadcn_showcase.so",
-  "types": "./Index.d.ts",
-  "version": "1.0.0",
-  "description": "arkit shadcn_showcase example napi bindings"
-}

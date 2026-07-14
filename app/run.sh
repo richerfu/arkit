@@ -2,7 +2,7 @@
 # 把指定 arkit example 打包成 hap 安装到 OpenHarmony 模拟器并启动。
 #
 # 用法: ./run.sh <example-dir> [install|build|start|log]
-#   example-dir: counter | async_task | complex_cases | i18n | router | shadcn_showcase | webview
+#   example-dir: counter | async_task | animation | complex_cases | i18n | router | shadcn_showcase | webview
 #
 # 每个 example 的 .so 名 = lib<crate-name>.so（crate-name 取自 examples/<dir>/Cargo.toml）。
 # 切换 example 时同步更新 app 壳的 moduleName / lib 依赖 / cpp/types，保持名字一致。
@@ -63,9 +63,9 @@ EOF
 }
 EOF
   # EntryAbility moduleName + Index 默认值
-  perl -0pi -e 's/(public moduleName: string = ")[^"]*(")/${1}'"$CRATE"'${2}/' \
+  LC_ALL=C LANG=C perl -0pi -e 's/(public moduleName: string = ")[^"]*(")/${1}'"$CRATE"'${2}/' \
     "$APP/entry/src/main/ets/entryability/EntryAbility.ets"
-  perl -0pi -e 's/(@State moduleName: string = ")[^"]*(")/${1}'"$CRATE"'${2}/' \
+  LC_ALL=C LANG=C perl -0pi -e 's/(@State moduleName: string = ")[^"]*(")/${1}'"$CRATE"'${2}/' \
     "$APP/entry/src/main/ets/pages/Index.ets"
 }
 
@@ -76,10 +76,8 @@ do_build() {
   (cd "$APP" && "$HVIGWORW" assembleHap --no-daemon --mode module -p product=default -p buildMode=debug --no-hvigorw-daemon)
 }
 
-HAP=$(find "$APP/entry/build" -name "*.hap" -path "*outputs*" 2>/dev/null | head -1)
-
 do_install() {
-  HAP=$(find "$APP/entry/build" -name "*.hap" -path "*outputs*" 2>/dev/null | head -1)
+  HAP=$(find "$APP/entry/build" -name "*.hap" -path "*outputs*" 2>/dev/null | head -1 || true)
   [ -n "$HAP" ] || { echo "no hap found, build first"; exit 1; }
   echo ">> hdc install $HAP"
   hdc install -r "$HAP" 2>&1 | tail -3
@@ -92,7 +90,10 @@ do_start() {
 
 case "$ACTION" in
   sync) sync_shell ;;
-  build) do_build ;;
+  build)
+    sync_shell
+    do_build
+    ;;
   install) do_install ;;
   start) do_start ;;
   log) hdc hilog | grep -iE "arkit|ArkUI|dioxus|error|fatal" ;;

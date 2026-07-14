@@ -2,12 +2,15 @@
 //!
 //! Provides the `i18n!` macro: a compile-time `.ftl` resolver that generates a
 //! typed `Locale` enum, an `I18n` helper, message-constructor functions, and a
-//! `pub static CATALOG` for runtime translation. Behavior is preserved from the
-//! legacy implementation; only `CATALOG` is now `pub` so dioxus context layers
-//! can reference it.
+//! `pub static CATALOG` for runtime translation. Fluent resources are parsed
+//! as Fluent syntax (including selects, references, terms, and attributes),
+//! and locale/key/variable parity is validated before code generation.
 
+use fluent_syntax::ast;
+use fluent_syntax::parser;
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
+use proc_macro_crate::{crate_name, FoundCrate};
 use quote::{format_ident, quote};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -15,6 +18,7 @@ use std::path::PathBuf;
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::{braced, bracketed, parse_macro_input, LitStr, Token, Visibility};
+use unic_langid::LanguageIdentifier;
 
 #[proc_macro]
 pub fn i18n(input: TokenStream) -> TokenStream {
@@ -91,7 +95,6 @@ impl Parse for I18nInput {
 
 #[derive(Debug, Clone)]
 struct Template {
-    pattern: String,
     vars: BTreeSet<String>,
 }
 
@@ -103,8 +106,15 @@ fn expand_i18n(input: I18nInput) -> syn::Result<TokenStream2> {
 
     let mut locale_ids = Vec::new();
     let mut catalogs = Vec::new();
+    let mut locale_paths = Vec::new();
     for locale in &input.locales {
         let locale_id = locale.value();
+        locale_id.parse::<LanguageIdentifier>().map_err(|error| {
+            syn::Error::new(
+                locale.span(),
+                format!("invalid Unicode locale identifier `{locale_id}`: {error}"),
+            )
+        })?;
         let path = base.join(format!("{locale_id}.ftl"));
         let source = fs::read_to_string(&path).map_err(|error| {
             syn::Error::new(
@@ -124,6 +134,14 @@ fn expand_i18n(input: I18nInput) -> syn::Result<TokenStream2> {
         })?;
         locale_ids.push(locale_id);
         catalogs.push(messages);
+        let tracked_path = path.canonicalize().unwrap_or(path);
+        let tracked_path = tracked_path.to_str().ok_or_else(|| {
+            syn::Error::new(
+                locale.span(),
+                "locale path is not valid UTF-8 and cannot be used by include_str!",
+            )
+        })?;
+        locale_paths.push(LitStr::new(tracked_path, locale.span()));
     }
 
     let fallback_index = locale_ids
@@ -137,12 +155,20 @@ fn expand_i18n(input: I18nInput) -> syn::Result<TokenStream2> {
         input.fallback.span(),
     )?;
 
+    let declaration_span = input.fallback.span();
+    let runtime = i18n_runtime_path(declaration_span)?;
     let visibility = input.visibility;
     let module = input.module;
     let locale_variants = locale_ids
         .iter()
         .map(|locale| locale_variant(locale))
         .collect::<Vec<_>>();
+    ensure_unique_identifiers(
+        &locale_ids,
+        &locale_variants,
+        "locale variants",
+        declaration_span,
+    )?;
     let fallback_variant = &locale_variants[fallback_index];
     let locale_match_arms = locale_variants
         .iter()
@@ -161,6 +187,17 @@ fn expand_i18n(input: I18nInput) -> syn::Result<TokenStream2> {
         .map(|variant| quote! { Locale::#variant });
 
     let fallback_catalog = &catalogs[fallback_index];
+    let function_keys = fallback_catalog.keys().cloned().collect::<Vec<_>>();
+    let function_idents = function_keys
+        .iter()
+        .map(|key| message_function(key))
+        .collect::<Vec<_>>();
+    ensure_unique_identifiers(
+        &function_keys,
+        &function_idents,
+        "message functions",
+        declaration_span,
+    )?;
     let functions = fallback_catalog.iter().map(|(key, template)| {
         let function = message_function(key);
         let params = template
@@ -172,43 +209,35 @@ fn expand_i18n(input: I18nInput) -> syn::Result<TokenStream2> {
 
         if params.is_empty() {
             quote! {
-                pub fn #function() -> ::arkit_i18n::TypedMessage {
-                    ::arkit_i18n::TypedMessage::new(#key)
+                pub fn #function() -> #runtime::TypedMessage {
+                    #runtime::TypedMessage::new(#key)
                 }
             }
         } else {
             quote! {
                 pub fn #function(
-                    #(#params: impl Into<::arkit_i18n::I18nValue>),*
-                ) -> ::arkit_i18n::TypedMessage {
-                    ::arkit_i18n::TypedMessage::new(#key)
+                    #(#params: impl Into<#runtime::I18nValue>),*
+                ) -> #runtime::TypedMessage {
+                    #runtime::TypedMessage::new(#key)
                         #(.with_arg(#names, #params))*
                 }
             }
         }
     });
 
-    let locale_catalogs = locale_ids
+    let mut catalog_sources = locale_ids
         .iter()
-        .zip(catalogs.iter())
-        .map(|(locale, catalog)| {
-            let messages = catalog.iter().map(|(key, template)| {
-                let pattern = &template.pattern;
-                quote! {
-                    ::arkit_i18n::Message {
-                        key: #key,
-                        pattern: #pattern,
-                    }
-                }
-            });
-
-            quote! {
-                ::arkit_i18n::LocaleCatalog {
-                    id: #locale,
-                    messages: &[#(#messages),*],
-                }
+        .zip(locale_paths.iter())
+        .collect::<Vec<_>>();
+    catalog_sources.sort_by_key(|(locale, _)| locale.as_str());
+    let locale_catalogs = catalog_sources.iter().map(|(locale, path)| {
+        quote! {
+            #runtime::LocaleCatalog {
+                id: #locale,
+                source: include_str!(#path),
             }
-        });
+        }
+    });
 
     Ok(quote! {
         #visibility mod #module {
@@ -270,15 +299,15 @@ fn expand_i18n(input: I18nInput) -> syn::Result<TokenStream2> {
                     Locale::all()
                 }
 
-                pub fn tr(&self, message: ::arkit_i18n::TypedMessage) -> String {
-                    ::arkit_i18n::translate(&CATALOG, self.locale.id(), message)
+                pub fn tr(&self, message: #runtime::TypedMessage) -> String {
+                    #runtime::translate(&CATALOG, self.locale.id(), message)
                 }
 
                 pub fn try_tr(
                     &self,
-                    message: ::arkit_i18n::TypedMessage,
-                ) -> Result<String, ::arkit_i18n::I18nError> {
-                    ::arkit_i18n::try_translate(&CATALOG, self.locale.id(), message)
+                    message: #runtime::TypedMessage,
+                ) -> Result<String, #runtime::I18nError> {
+                    #runtime::try_translate(&CATALOG, self.locale.id(), message)
                 }
             }
 
@@ -292,7 +321,7 @@ fn expand_i18n(input: I18nInput) -> syn::Result<TokenStream2> {
 
             /// The static catalog for this i18n module. Public so dioxus context
             /// providers (e.g. `arkit_i18n::use_i18n_provider`) can reference it.
-            pub static CATALOG: ::arkit_i18n::Catalog = ::arkit_i18n::Catalog {
+            pub static CATALOG: #runtime::Catalog = #runtime::Catalog {
                 fallback: #fallback_id,
                 locales: &[#(#locale_catalogs),*],
             };
@@ -348,97 +377,198 @@ fn validate_catalogs(
     Ok(())
 }
 
+#[derive(Debug, Clone, Default)]
+struct PatternUsage {
+    vars: BTreeSet<String>,
+    references: Vec<ReferenceUsage>,
+}
+
+#[derive(Debug, Clone)]
+struct ReferenceUsage {
+    key: String,
+    bound: BTreeSet<String>,
+}
+
 fn parse_ftl(source: &str) -> Result<BTreeMap<String, Template>, String> {
-    let mut messages: BTreeMap<String, Template> = BTreeMap::new();
-    let mut current_key: Option<String> = None;
+    let resource = parser::parse(source).map_err(|(_, errors)| {
+        let errors = errors
+            .into_iter()
+            .map(|error| format!("{error:?}"))
+            .collect::<Vec<_>>()
+            .join("; ");
+        format!("Fluent parse failed: {errors}")
+    })?;
+    let mut definitions = BTreeMap::<String, PatternUsage>::new();
+    let mut public_keys = Vec::new();
 
-    for (line_index, line) in source.lines().enumerate() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with('#') {
-            continue;
+    for entry in &resource.body {
+        match entry {
+            ast::Entry::Message(message) => {
+                let id = message.id.name;
+                if let Some(pattern) = &message.value {
+                    insert_pattern(&mut definitions, id.to_string(), pattern)?;
+                    public_keys.push(id.to_string());
+                }
+                for attribute in &message.attributes {
+                    let key = format!("{id}.{}", attribute.id.name);
+                    insert_pattern(&mut definitions, key.clone(), &attribute.value)?;
+                    public_keys.push(key);
+                }
+            }
+            ast::Entry::Term(term) => {
+                let id = format!("-{}", term.id.name);
+                insert_pattern(&mut definitions, id.clone(), &term.value)?;
+                for attribute in &term.attributes {
+                    insert_pattern(
+                        &mut definitions,
+                        format!("{id}.{}", attribute.id.name),
+                        &attribute.value,
+                    )?;
+                }
+            }
+            ast::Entry::Junk { .. } => {
+                return Err("Fluent resource contains an invalid junk entry".to_string());
+            }
+            ast::Entry::Comment(_)
+            | ast::Entry::GroupComment(_)
+            | ast::Entry::ResourceComment(_) => {}
         }
-
-        if line.starts_with(' ') || line.starts_with('\t') {
-            let Some(key) = current_key.as_ref() else {
-                return Err(format!(
-                    "line {} has a continuation without a message",
-                    line_index + 1
-                ));
-            };
-            let template = messages
-                .get_mut(key)
-                .expect("current key points to an existing message");
-            template.pattern.push('\n');
-            template.pattern.push_str(trimmed);
-            template.vars = extract_vars(&template.pattern)?;
-            continue;
-        }
-
-        let Some((raw_key, raw_value)) = line.split_once('=') else {
-            return Err(format!("line {} is not a message", line_index + 1));
-        };
-        let key = raw_key.trim();
-        if key.is_empty() {
-            return Err(format!("line {} has an empty message id", line_index + 1));
-        }
-        if !is_valid_message_id(key) {
-            return Err(format!(
-                "line {} has invalid message id `{key}`",
-                line_index + 1
-            ));
-        }
-        if messages.contains_key(key) {
-            return Err(format!(
-                "line {} duplicates message `{key}`",
-                line_index + 1
-            ));
-        }
-
-        let pattern = raw_value.trim().to_string();
-        let vars = extract_vars(&pattern)?;
-        messages.insert(key.to_string(), Template { pattern, vars });
-        current_key = Some(key.to_string());
+    }
+    if public_keys.is_empty() {
+        return Err("locale does not define any translatable messages".to_string());
     }
 
-    if messages.is_empty() {
-        return Err("locale does not define any messages".to_string());
+    let mut cache = BTreeMap::<String, BTreeSet<String>>::new();
+    let mut messages = BTreeMap::new();
+    for key in public_keys {
+        let vars = resolve_vars(&key, &definitions, &mut cache, &mut BTreeSet::new())?;
+        messages.insert(key, Template { vars });
     }
-
     Ok(messages)
 }
 
-fn extract_vars(pattern: &str) -> Result<BTreeSet<String>, String> {
-    let mut vars = BTreeSet::new();
-    let mut rest = pattern;
-    while let Some(start) = rest.find("{$") {
-        let name_start = start + 2;
-        let Some(relative_end) = rest[name_start..].find('}') else {
-            return Err("unterminated variable placeholder".to_string());
-        };
-        let name = &rest[name_start..name_start + relative_end];
-        if name.is_empty() || !is_valid_arg_name(name) {
-            return Err(format!("invalid variable name `{name}`"));
-        }
-        vars.insert(name.to_string());
-        rest = &rest[name_start + relative_end + 1..];
+fn insert_pattern(
+    definitions: &mut BTreeMap<String, PatternUsage>,
+    key: String,
+    pattern: &ast::Pattern<&str>,
+) -> Result<(), String> {
+    let mut usage = PatternUsage::default();
+    collect_pattern(pattern, &mut usage);
+    if definitions.insert(key.clone(), usage).is_some() {
+        return Err(format!("duplicate Fluent message or attribute `{key}`"));
     }
+    Ok(())
+}
 
+fn resolve_vars(
+    key: &str,
+    definitions: &BTreeMap<String, PatternUsage>,
+    cache: &mut BTreeMap<String, BTreeSet<String>>,
+    visiting: &mut BTreeSet<String>,
+) -> Result<BTreeSet<String>, String> {
+    if let Some(vars) = cache.get(key) {
+        return Ok(vars.clone());
+    }
+    if !visiting.insert(key.to_string()) {
+        return Err(format!("cyclic Fluent reference involving `{key}`"));
+    }
+    let usage = definitions
+        .get(key)
+        .ok_or_else(|| format!("Fluent reference targets missing message or term `{key}`"))?;
+    let mut vars = usage.vars.clone();
+    for reference in &usage.references {
+        let referenced = resolve_vars(&reference.key, definitions, cache, visiting)?;
+        vars.extend(
+            referenced
+                .into_iter()
+                .filter(|name| !reference.bound.contains(name)),
+        );
+    }
+    visiting.remove(key);
+    cache.insert(key.to_string(), vars.clone());
     Ok(vars)
 }
 
-fn is_valid_message_id(value: &str) -> bool {
-    value
-        .chars()
-        .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' || ch == '.')
+fn collect_pattern(pattern: &ast::Pattern<&str>, usage: &mut PatternUsage) {
+    for element in &pattern.elements {
+        if let ast::PatternElement::Placeable { expression } = element {
+            collect_expression(expression, usage);
+        }
+    }
 }
 
-fn is_valid_arg_name(value: &str) -> bool {
-    let mut chars = value.chars();
-    let Some(first) = chars.next() else {
-        return false;
+fn collect_expression(expression: &ast::Expression<&str>, usage: &mut PatternUsage) {
+    match expression {
+        ast::Expression::Inline(expression) => collect_inline(expression, usage),
+        ast::Expression::Select { selector, variants } => {
+            collect_inline(selector, usage);
+            for variant in variants {
+                collect_pattern(&variant.value, usage);
+            }
+        }
+    }
+}
+
+fn collect_inline(expression: &ast::InlineExpression<&str>, usage: &mut PatternUsage) {
+    match expression {
+        ast::InlineExpression::VariableReference { id } => {
+            usage.vars.insert(id.name.to_string());
+        }
+        ast::InlineExpression::FunctionReference { arguments, .. } => {
+            collect_arguments(arguments, usage);
+        }
+        ast::InlineExpression::MessageReference { id, attribute } => {
+            usage.references.push(ReferenceUsage {
+                key: referenced_key(id.name, attribute.as_ref().map(|value| value.name), false),
+                bound: BTreeSet::new(),
+            });
+        }
+        ast::InlineExpression::TermReference {
+            id,
+            attribute,
+            arguments,
+        } => {
+            let mut bound = BTreeSet::new();
+            if let Some(arguments) = arguments {
+                bound.extend(
+                    arguments
+                        .named
+                        .iter()
+                        .map(|argument| argument.name.name.to_string()),
+                );
+                collect_arguments(arguments, usage);
+            }
+            usage.references.push(ReferenceUsage {
+                key: referenced_key(id.name, attribute.as_ref().map(|value| value.name), true),
+                bound,
+            });
+        }
+        ast::InlineExpression::Placeable { expression } => collect_expression(expression, usage),
+        ast::InlineExpression::StringLiteral { .. }
+        | ast::InlineExpression::NumberLiteral { .. } => {}
+    }
+}
+
+fn collect_arguments(arguments: &ast::CallArguments<&str>, usage: &mut PatternUsage) {
+    for argument in &arguments.positional {
+        collect_inline(argument, usage);
+    }
+    for argument in &arguments.named {
+        collect_inline(&argument.value, usage);
+    }
+}
+
+fn referenced_key(id: &str, attribute: Option<&str>, term: bool) -> String {
+    let mut key = if term {
+        format!("-{id}")
+    } else {
+        id.to_string()
     };
-    (first.is_ascii_alphabetic() || first == '_')
-        && chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+    if let Some(attribute) = attribute {
+        key.push('.');
+        key.push_str(attribute);
+    }
+    key
 }
 
 fn message_function(key: &str) -> Ident {
@@ -532,4 +662,48 @@ fn is_rust_keyword(value: &str) -> bool {
             | "await"
             | "dyn"
     )
+}
+
+fn ensure_unique_identifiers(
+    sources: &[String],
+    identifiers: &[Ident],
+    kind: &str,
+    span: Span,
+) -> syn::Result<()> {
+    let mut generated = BTreeMap::<String, &str>::new();
+    for (source, identifier) in sources.iter().zip(identifiers) {
+        let identifier = identifier.to_string();
+        if let Some(previous) = generated.insert(identifier.clone(), source) {
+            return Err(syn::Error::new(
+                span,
+                format!(
+                    "{kind} `{previous}` and `{source}` both normalize to Rust identifier `{identifier}`"
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn i18n_runtime_path(span: Span) -> syn::Result<TokenStream2> {
+    if let Some(path) = dependency_path("arkit_i18n") {
+        return Ok(path);
+    }
+    if let Some(framework) = dependency_path("arkit") {
+        return Ok(quote!(#framework::i18n));
+    }
+    Err(syn::Error::new(
+        span,
+        "i18n! requires a direct dependency on `arkit_i18n` or the `arkit` facade with its `i18n` feature",
+    ))
+}
+
+fn dependency_path(package: &str) -> Option<TokenStream2> {
+    match crate_name(package).ok()? {
+        FoundCrate::Itself => Some(quote!(crate)),
+        FoundCrate::Name(name) => {
+            let ident = Ident::new(&name.replace('-', "_"), Span::call_site());
+            Some(quote!(::#ident))
+        }
+    }
 }

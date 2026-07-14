@@ -2,7 +2,7 @@
 
 路径：`examples/shadcn_showcase`
 
-展示 `arkit_shadcn` 的 Dioxus 组件、主题预设、controlled/uncontrolled state、overlay 与交互事件。showcase 当前集中在 `src/lib.rs`，便于作为单一设备验收入口。
+展示 `arkit::shadcn` facade 下的 Dioxus 组件、主题预设、controlled/uncontrolled state、overlay 与交互事件。showcase 当前集中在 `src/lib.rs`，便于作为单一设备验收入口。
 
 ## 当前交互契约
 

@@ -7,11 +7,14 @@
 
 mod embed;
 
+use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::str;
-use std::sync::{Mutex, OnceLock};
+use std::sync::Arc;
 
 use arkit_arkui::ArkImageSource;
 use arkit_prelude::*;
+use rustc_hash::FxHashMap;
 
 use crate::embed::embedded_icon;
 pub use embed::{has_icon, icon_names};
@@ -55,7 +58,40 @@ impl IconSpec {
     }
 }
 
-static SVG_CACHE: OnceLock<Mutex<std::collections::BTreeMap<String, String>>> = OnceLock::new();
+const SVG_CACHE_CAPACITY: usize = 128;
+
+#[derive(Default)]
+struct SvgCache {
+    entries: FxHashMap<String, Arc<str>>,
+    order: VecDeque<String>,
+}
+
+impl SvgCache {
+    fn get(&self, key: &str) -> Option<Arc<str>> {
+        self.entries.get(key).cloned()
+    }
+
+    fn insert(&mut self, key: String, value: Arc<str>) {
+        if let Some(entry) = self.entries.get_mut(&key) {
+            *entry = value;
+            return;
+        }
+        self.entries.insert(key.clone(), value);
+        self.order.push_back(key);
+        while self.entries.len() > SVG_CACHE_CAPACITY {
+            if let Some(evicted) = self.order.pop_front() {
+                self.entries.remove(&evicted);
+            }
+        }
+    }
+}
+
+thread_local! {
+    // Arkit's Dioxus runtime is UI-thread confined. A thread-local cache keeps
+    // icon rendering off a process-wide mutex while retaining a hard bound per
+    // runtime thread.
+    static SVG_CACHE: RefCell<SvgCache> = RefCell::new(SvgCache::default());
+}
 
 /// Render an icon by name as a dioxus `Element`.
 ///
@@ -81,16 +117,18 @@ pub fn icon_with_stroke(
     };
     let edge = spec.size;
     let render_key = spec.render_key();
+    let element_key = render_key.clone();
 
     // Render the SVG (from embedded asset or fallback), then wrap as an
     // ArkImageSource that the renderer resolves to a native DrawableDescriptor.
-    let svg = rendered_icon_svg(&spec).unwrap_or_else(|_| missing_icon_svg(&spec));
+    let svg = rendered_icon_svg(&spec, &render_key)
+        .unwrap_or_else(|_| Arc::<str>::from(missing_icon_svg(&spec)));
     let px_edge = spec.raster_edge();
-    let source = ArkImageSource::svg(render_key, svg, px_edge, px_edge);
+    let source = ArkImageSource::svg_shared(render_key, svg, px_edge, px_edge);
 
     rsx! {
         image {
-            key: "{spec.render_key()}",
+            key: "{element_key}",
             src: dioxus_core::AttributeValue::any_value(source),
             object_fit: 1,
             width: edge,
@@ -99,29 +137,20 @@ pub fn icon_with_stroke(
     }
 }
 
-fn rendered_icon_svg(spec: &IconSpec) -> Result<String, String> {
-    let cache_key = spec.render_key();
-    if let Ok(cache) = SVG_CACHE
-        .get_or_init(|| Mutex::new(std::collections::BTreeMap::new()))
-        .lock()
-    {
-        if let Some(svg) = cache.get(&cache_key) {
-            return Ok(svg.clone());
-        }
+fn rendered_icon_svg(spec: &IconSpec, cache_key: &str) -> Result<Arc<str>, String> {
+    if let Some(svg) = SVG_CACHE.with_borrow(|cache| cache.get(cache_key)) {
+        return Ok(svg);
     }
 
     let embedded =
         embedded_icon(&spec.name).ok_or_else(|| format!("icon not found: {}", spec.name))?;
     let raw_svg = str::from_utf8(embedded.data.as_ref()).map_err(|e| e.to_string())?;
     let body = extract_svg_body(raw_svg, &spec.name)?;
-    let svg = compose_svg(spec, body);
+    let svg = Arc::<str>::from(compose_svg(spec, body));
 
-    if let Ok(mut cache) = SVG_CACHE
-        .get_or_init(|| Mutex::new(std::collections::BTreeMap::new()))
-        .lock()
-    {
-        cache.insert(cache_key, svg.clone());
-    }
+    SVG_CACHE.with_borrow_mut(|cache| {
+        cache.insert(cache_key.to_owned(), svg.clone());
+    });
 
     Ok(svg)
 }

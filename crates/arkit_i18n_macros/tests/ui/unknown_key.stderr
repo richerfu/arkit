@@ -1,0 +1,5 @@
+error: expected `path`, `fallback`, or `locales`
+ --> tests/ui/unknown_key.rs:6:9
+  |
+6 |         namespace: "app",
+  |         ^^^^^^^^^

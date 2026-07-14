@@ -1,0 +1,5 @@
+error: #[entry] function must not have arguments
+ --> tests/ui/entry_arguments.rs:2:8
+  |
+2 | fn app(_input: ()) {}
+  |        ^^^^^^^^^^

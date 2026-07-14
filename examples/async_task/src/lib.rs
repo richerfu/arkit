@@ -2,7 +2,7 @@
 //!
 //! A button increments a request-id signal; `use_resource` reruns whenever the
 //! id changes and awaits a real 800 ms `tokio::time::sleep` (driven by the
-//! framework's tokio runtime via `arkit_runtime::tokio_handle`) before
+//! framework's tokio runtime via `arkit::tokio_handle`) before
 //! producing a result string.
 
 use std::time::Duration;

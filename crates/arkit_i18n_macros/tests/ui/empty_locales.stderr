@@ -1,0 +1,5 @@
+error: `locales` cannot be empty
+ --> tests/ui/empty_locales.rs:2:13
+  |
+2 |     pub mod tr {
+  |             ^^

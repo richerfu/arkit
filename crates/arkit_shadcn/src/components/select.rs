@@ -88,13 +88,13 @@ pub fn Select(
         set_open.call(true);
 
         let frame = *trigger_frame.read();
-        let overlay_frame = overlay.overlay_frame();
+        let viewport = overlay.viewport();
         let panel_width = select_panel_width(pointer, frame);
         let panel_height = select_panel_estimated_height(count);
         let placement = if let Some(placement) = pointer.and_then(|pointer| {
             FloatingPanelPlacement::from_pointer(
                 pointer,
-                overlay_frame,
+                viewport,
                 panel_width,
                 panel_height,
                 FloatingSide::Bottom,
@@ -106,7 +106,7 @@ pub fn Select(
         } else if frame.is_measured() {
             FloatingPanelPlacement::from_trigger(
                 frame,
-                overlay_frame,
+                viewport,
                 panel_width,
                 panel_height,
                 FloatingSide::Bottom,
@@ -114,7 +114,7 @@ pub fn Select(
                 SELECT_PANEL_SIDE_OFFSET,
             )
         } else {
-            FloatingPanelPlacement::fallback()
+            FloatingPanelPlacement::fallback(viewport)
         };
 
         let dismiss_overlay = overlay.clone();

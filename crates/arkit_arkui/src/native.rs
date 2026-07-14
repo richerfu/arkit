@@ -7,8 +7,8 @@
 use ohos_arkui_binding::common::error::ArkUIResult;
 use ohos_arkui_binding::common::node::ArkUINode;
 use ohos_arkui_binding::component::built_in_component::{
-    CalendarPicker, Checkbox, Column, DatePicker, Flex, FlowItem, Grid, GridItem, Image, List,
-    ListItem, Progress, Radio, Refresh, Row, Scroll, Slider, Stack, Swiper, Text, TextArea,
+    CalendarPicker, Checkbox, Column, Custom, DatePicker, Flex, FlowItem, Grid, GridItem, Image,
+    List, ListItem, Progress, Radio, Refresh, Row, Scroll, Slider, Stack, Swiper, Text, TextArea,
     TextInput, Toggle, WaterFlow,
 };
 
@@ -21,6 +21,7 @@ pub enum NodeKind {
     CalendarPicker,
     Checkbox,
     Column,
+    Custom,
     DatePicker,
     Flex,
     FlowItem,
@@ -55,6 +56,7 @@ pub fn create_node(kind: NodeKind) -> ArkUIResult<ArkUINode> {
         NodeKind::CalendarPicker => CalendarPicker::new()?.into(),
         NodeKind::Checkbox => Checkbox::new()?.into(),
         NodeKind::Column => Column::new()?.into(),
+        NodeKind::Custom => Custom::new()?.into(),
         NodeKind::DatePicker => DatePicker::new()?.into(),
         NodeKind::Flex => Flex::new()?.into(),
         NodeKind::FlowItem => FlowItem::new()?.into(),
@@ -89,6 +91,7 @@ pub fn kind_from_tag(tag: &str) -> Option<NodeKind> {
         "calendar" | "calendarpicker" | "Calendar" | "CalendarPicker" => NodeKind::CalendarPicker,
         "checkbox" | "Checkbox" => NodeKind::Checkbox,
         "column" | "Column" => NodeKind::Column,
+        "custom" | "Custom" => NodeKind::Custom,
         "datepicker" | "DatePicker" => NodeKind::DatePicker,
         "flex" | "Flex" => NodeKind::Flex,
         "flowitem" | "FlowItem" => NodeKind::FlowItem,
@@ -139,6 +142,7 @@ pub fn canonical_tag(tag: &str) -> &'static str {
         "calendar" | "calendarpicker" | "Calendar" | "CalendarPicker" => "calendarpicker",
         "checkbox" | "Checkbox" => "checkbox",
         "column" | "Column" => "column",
+        "custom" | "Custom" => "custom",
         "datepicker" | "DatePicker" => "datepicker",
         "flex" | "Flex" => "flex",
         "flowitem" | "FlowItem" => "flowitem",

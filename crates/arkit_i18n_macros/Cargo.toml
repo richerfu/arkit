@@ -2,7 +2,11 @@
 name = "arkit_i18n_macros"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 proc-macro = true
@@ -11,3 +15,9 @@ proc-macro = true
 syn.workspace = true
 quote.workspace = true
 proc-macro2.workspace = true
+proc-macro-crate.workspace = true
+fluent-syntax.workspace = true
+unic-langid.workspace = true
+
+[dev-dependencies]
+trybuild.workspace = true

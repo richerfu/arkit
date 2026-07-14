@@ -83,7 +83,7 @@ pub(crate) struct FloatingPanelPlacement {
 impl FloatingPanelPlacement {
     pub(crate) fn from_trigger(
         trigger: arkit_hooks::LayoutFrame,
-        overlay: arkit_hooks::LayoutFrame,
+        viewport: arkit_hooks::OverlayViewport,
         panel_width: f32,
         panel_height: f32,
         side: FloatingSide,
@@ -91,12 +91,19 @@ impl FloatingPanelPlacement {
         side_offset: f32,
     ) -> Self {
         let ratio = display_vp_ratio();
+        let overlay = viewport.frame;
         let viewport_width = if overlay.is_measured() {
             overlay.width / ratio
         } else {
             ohos_display_binding::default_display_width() as f32 / ratio
         }
         .max(panel_width + (spacing::LG * 2.0));
+        let viewport_height = if overlay.is_measured() {
+            overlay.height / ratio
+        } else {
+            ohos_display_binding::default_display_height() as f32 / ratio
+        }
+        .max(panel_height + (spacing::LG * 2.0));
 
         let overlay_x = if overlay.is_measured() {
             overlay.x
@@ -112,7 +119,12 @@ impl FloatingPanelPlacement {
         let trigger_y = (trigger.y - overlay_y).max(0.0) / ratio;
         let trigger_width = trigger.width / ratio;
         let trigger_height = trigger.height / ratio;
-        let max_x = (viewport_width - panel_width - spacing::LG).max(spacing::LG);
+        let min_x = viewport.safe_area.left + spacing::LG;
+        let min_y = viewport.safe_area.top + spacing::LG;
+        let max_x =
+            (viewport_width - viewport.safe_area.right - panel_width - spacing::LG).max(min_x);
+        let max_y =
+            (viewport_height - viewport.safe_area.bottom - panel_height - spacing::LG).max(min_y);
 
         let raw_x = match align {
             FloatingAlign::Start => trigger_x,
@@ -126,14 +138,14 @@ impl FloatingPanelPlacement {
         };
 
         Self {
-            x: raw_x.clamp(spacing::LG, max_x),
-            y: raw_y.max(spacing::LG),
+            x: raw_x.clamp(min_x, max_x),
+            y: raw_y.clamp(min_y, max_y),
         }
     }
 
     pub(crate) fn from_pointer(
         pointer: dioxus_elements::event::PointerPayload,
-        overlay: arkit_hooks::LayoutFrame,
+        viewport: arkit_hooks::OverlayViewport,
         panel_width: f32,
         panel_height: f32,
         side: FloatingSide,
@@ -159,7 +171,7 @@ impl FloatingPanelPlacement {
         };
         Some(Self::from_trigger(
             trigger,
-            overlay,
+            viewport,
             panel_width,
             panel_height,
             side,
@@ -168,10 +180,10 @@ impl FloatingPanelPlacement {
         ))
     }
 
-    pub(crate) fn fallback() -> Self {
+    pub(crate) fn fallback(viewport: arkit_hooks::OverlayViewport) -> Self {
         Self {
-            x: spacing::LG,
-            y: 96.0,
+            x: viewport.safe_area.left + spacing::LG,
+            y: (viewport.safe_area.top + spacing::LG).max(96.0),
         }
     }
 }
@@ -283,5 +295,40 @@ mod tests {
     fn side_from_name_defaults_to_bottom() {
         assert_eq!(side_from_name("right"), FloatingSide::Right);
         assert_eq!(side_from_name("nonsense"), FloatingSide::Bottom);
+    }
+
+    #[test]
+    fn placement_is_clamped_inside_safe_viewport() {
+        let viewport = arkit_hooks::OverlayViewport {
+            frame: arkit_hooks::LayoutFrame {
+                x: 0.0,
+                y: 0.0,
+                width: 400.0,
+                height: 800.0,
+            },
+            safe_area: arkit_hooks::EdgeInsets {
+                top: 40.0,
+                right: 10.0,
+                bottom: 30.0,
+                left: 20.0,
+            },
+        };
+        let placement = FloatingPanelPlacement::from_trigger(
+            arkit_hooks::LayoutFrame {
+                x: 0.0,
+                y: 0.0,
+                width: 10.0,
+                height: 10.0,
+            },
+            viewport,
+            100.0,
+            50.0,
+            FloatingSide::Top,
+            FloatingAlign::Start,
+            4.0,
+        );
+
+        assert!(placement.x >= 20.0 + spacing::LG);
+        assert!(placement.y >= 40.0 + spacing::LG);
     }
 }
