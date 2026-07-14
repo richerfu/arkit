@@ -93,6 +93,20 @@ Remaining modal work:
 - `Dialog` still needs a separate screenshot/dump pass after the shared overlay-centering fix.
 - Sheet/Drawer use other modal presentations and must be rechecked because their placement still depends on Row/Column positioning.
 
+### 2026-07-14 Bottom Sheet Verification
+
+Completed for `BottomSheet`:
+
+- Added the RNR native profile editor demo, controlled/uncontrolled open state,
+  backdrop and close-button dismissal, safe-area padding, and pan-down dismiss
+  threshold on the handle.
+- Bottom presentation uses an in-flow full-width panel plus a weighted spacer.
+  This avoids zero-size `Stack`, transition, and absolute-position wrappers
+  that caused ArkUI API 24 to paint the panel from the viewport top.
+- Verified on device at 1320×2856: the expanded panel root is
+  `[0,1437][1320,2856]`; trigger open, close-button dismiss, and backdrop
+  dismiss all complete successfully.
+
 ## Component Checklist
 
 Status values:
@@ -110,6 +124,7 @@ Status values:
 | Aspect Ratio | `aspect_ratio.rs` | in_progress | Recheck image fill, radius, full-width canvas. |
 | Avatar | `avatar.rs` | pending | Compare image size, fallback text, overlap/ring. |
 | Badge | `badge.rs` | in_progress | Recheck icon slot, pill min size, variant colors. |
+| Bottom Sheet | `bottom_sheet.rs` | done | Verified RNR profile form, `[0,1437][1320,2856]` bottom placement, trigger open, close button, and backdrop dismiss on device. |
 | Button | `button.rs` | done | Verified on device: iOS demo sizing, variants, disabled state, and icon/text overlap fixed. |
 | Card | `card.rs` | done | Verified on device: shell radius/border, p-6 header/content/footer, left-aligned title/description/content/footer. |
 | Checkbox | `checkbox.rs` | in_progress | Recheck label alignment, card checkbox layout, checked state. |

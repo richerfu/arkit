@@ -291,16 +291,26 @@ fn ModalOverlayLayer(props: ModalOverlayLayerProps) -> Element {
                 column {
                     percent_width: 1.0,
                     percent_height: 1.0,
-                    justify_content: "end",
                     padding_top: inset_top,
                     padding_right: inset_right,
-                    padding_bottom: inset_bottom,
+                    // Bottom-anchored surfaces own their internal safe-area
+                    // padding so their background reaches the screen edge.
+                    padding_bottom: 0.0,
                     padding_left: inset_left,
                     onclick: move |evt| {
                         evt.stop_propagation();
                         dismiss_if_allowed(spec, &outside_dismiss);
                     },
-                    stack {
+                    // API 24 does not reliably honor bottom alignment on
+                    // full-height Column/Stack nodes. A weighted spacer uses
+                    // the measured remaining height and pins the intrinsic
+                    // sheet to the bottom without needing to know its height.
+                    row {
+                        percent_width: 1.0,
+                        layout_weight: 1.0,
+                    }
+                    column {
+                        percent_width: 1.0,
                         clip: false,
                         onclick: move |evt| evt.stop_propagation(),
                         {panel}

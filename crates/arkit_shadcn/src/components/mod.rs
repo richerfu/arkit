@@ -14,6 +14,7 @@ mod alert_dialog;
 mod aspect_ratio;
 mod avatar;
 mod badge;
+mod bottom_sheet;
 mod breadcrumb;
 mod button;
 mod calendar;
@@ -69,6 +70,9 @@ pub use alert_dialog::{AlertDialog, AlertDialogProps};
 pub use aspect_ratio::{AspectRatio, AspectRatioProps};
 pub use avatar::{Avatar, AvatarFallback, AvatarFallbackProps, AvatarProps};
 pub use badge::{Badge, BadgeProps, BadgeVariant};
+pub use bottom_sheet::{
+    BottomSheet, BottomSheetProps, BottomSheetTextInput, BottomSheetTextInputProps,
+};
 pub use breadcrumb::{Breadcrumb, BreadcrumbItem, BreadcrumbItemProps, BreadcrumbProps};
 pub use button::{Button, ButtonProps, ButtonSize, ButtonVariant};
 pub use calendar::{Calendar, CalendarProps};

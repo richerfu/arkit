@@ -7,11 +7,12 @@ use arkit::prelude::*;
 use arkit::shadcn as arkit_shadcn;
 use arkit::shadcn::components::{
     Accordion, AccordionItemSpec, Alert, AlertDescription, AlertDialog, AlertList, AlertTitle,
-    AlertVariant, AspectRatio, Avatar, AvatarFallback, Badge, BadgeVariant, Button, ButtonSize,
-    ButtonVariant, Card, CardContent, CardFooter, CardHeader, Checkbox, Collapsible, ContextMenu,
-    Dialog, DialogFooter, DialogHeader, DropdownMenu, HoverCard, Input, Label, MenuEntry, Menubar,
-    MenubarMenuSpec, Popover, Progress, RadioGroup, Select, Separator, Skeleton, Switch, Table,
-    Tabs, Text, TextVariant, Textarea, Toggle, ToggleGroup, Tooltip,
+    AlertVariant, AspectRatio, Avatar, AvatarFallback, Badge, BadgeVariant, BottomSheet,
+    BottomSheetTextInput, Button, ButtonSize, ButtonVariant, Card, CardContent, CardFooter,
+    CardHeader, Checkbox, Collapsible, ContextMenu, Dialog, DialogFooter, DialogHeader,
+    DropdownMenu, HoverCard, Input, Label, MenuEntry, Menubar, MenubarMenuSpec, Popover, Progress,
+    RadioGroup, Select, Separator, Skeleton, Switch, Table, Tabs, Text, TextVariant, Textarea,
+    Toggle, ToggleGroup, Tooltip,
 };
 use arkit::shadcn::icon::icon_placeholder;
 use arkit::shadcn::theme::{
@@ -63,6 +64,10 @@ const COMPONENTS: &[ComponentSpec] = &[
     ComponentSpec {
         slug: "badge",
         name: "Badge",
+    },
+    ComponentSpec {
+        slug: "bottom-sheet",
+        name: "Bottom Sheet",
     },
     ComponentSpec {
         slug: "button",
@@ -731,6 +736,9 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let mut page = use_signal(|| 1_i32);
     let mut dialog_open = use_signal(|| false);
     let mut alert_open = use_signal(|| false);
+    let mut bottom_sheet_open = use_signal(|| false);
+    let mut bottom_sheet_name = use_signal(|| "Pedro Duarte".to_string());
+    let mut bottom_sheet_username = use_signal(|| "@peduarte".to_string());
     let mut popover_open = use_signal(|| false);
     let mut hover_open = use_signal(|| false);
     let mut tooltip_open = use_signal(|| false);
@@ -931,6 +939,40 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         Badge { content: "99".to_string(), variant: BadgeVariant::Destructive, pill: Some(true) }
                         h_gap { width: spacing::SM }
                         Badge { content: "20+".to_string(), variant: BadgeVariant::Outline, pill: Some(true) }
+                    }
+                }
+            }
+        },
+        "bottom-sheet" => rsx! {
+            Button {
+                onclick: move |_| bottom_sheet_open.set(true),
+                "Open"
+            }
+            BottomSheet {
+                title: "Edit your profile".to_string(),
+                open: Some(bottom_sheet_open()),
+                default_open: Some(false),
+                on_close: move |_| bottom_sheet_open.set(false),
+                column {
+                    percent_width: 1.0,
+                    Label { content: "Name".to_string() }
+                    v_gap { height: 10.0 }
+                    BottomSheetTextInput {
+                        value: Some(bottom_sheet_name()),
+                        on_change: move |value| bottom_sheet_name.set(value),
+                    }
+                    v_gap { height: spacing::XXL }
+                    Label { content: "Username".to_string() }
+                    v_gap { height: 10.0 }
+                    BottomSheetTextInput {
+                        value: Some(bottom_sheet_username()),
+                        on_change: move |value| bottom_sheet_username.set(value),
+                    }
+                    v_gap { height: spacing::XL }
+                    Button {
+                        percent_width: Some(1.0),
+                        onclick: move |_| bottom_sheet_open.set(false),
+                        "Save Changes"
                     }
                 }
             }
