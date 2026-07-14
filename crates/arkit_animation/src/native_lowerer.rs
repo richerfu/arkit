@@ -24,6 +24,12 @@ pub enum UnsupportedFeature {
     LayoutInvalidation,
     CustomEasing,
     Property,
+    Reset,
+    Revert,
+    Refresh,
+    Stretch,
+    PlaybackRate,
+    ExternalAdvance,
     BackendUnavailable,
 }
 
@@ -334,7 +340,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn composition_forces_a_reported_sampled_fallback() {
+    fn animator_clock_preserves_composition_through_core_sampling() {
         let report = NativeLowerer
             .lower(
                 ExecutionPolicy::Auto,
@@ -344,13 +350,26 @@ mod tests {
                 },
             )
             .unwrap();
+        assert_eq!(report.selected, AnimationBackend::ArkUiAnimator);
+        assert!(report.fallback_reason.is_none());
+    }
+
+    #[test]
+    fn reverse_requirement_uses_the_fully_defined_sampled_state_machine() {
+        let report = NativeLowerer
+            .lower(
+                ExecutionPolicy::Auto,
+                CapabilityRequirements {
+                    reverse: true,
+                    ..CapabilityRequirements::default()
+                },
+            )
+            .unwrap();
         assert_eq!(report.selected, AnimationBackend::Sampled);
-        assert!(report.fallback_reason.is_some());
-        assert!(report.rejections.iter().all(|rejection| {
-            rejection
-                .unsupported
-                .contains(&UnsupportedFeature::Composition)
-        }));
+        assert!(report
+            .rejections
+            .iter()
+            .all(|rejection| { rejection.unsupported.contains(&UnsupportedFeature::Reverse) }));
     }
 
     #[test]

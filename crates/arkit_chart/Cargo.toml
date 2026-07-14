@@ -2,17 +2,20 @@
 name = "arkit_chart"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
+
+[lints]
+workspace = true
 
 [dependencies]
 arkit_animation.workspace = true
 arkit_hooks.workspace = true
 arkit_prelude.workspace = true
-arkit_runtime.workspace = true
 ohos-arkui-binding.workspace = true
 ohos-drawing-binding.workspace = true
 ohos-native-drawing-sys.workspace = true
 ohos-image-native-binding.workspace = true
 ohos-display-binding.workspace = true
 serde_json.workspace = true
-tokio.workspace = true
+rustc-hash.workspace = true

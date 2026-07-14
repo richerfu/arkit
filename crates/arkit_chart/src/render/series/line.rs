@@ -261,6 +261,8 @@ fn draw_end_label(canvas: &Canvas, series: &BasicSeries, points: &[ScreenPoint<'
 fn begin_clip(canvas: &Canvas, plot: &crate::render::geometry::Plot) {
     canvas.save();
     let rect = Rect::new(plot.x, plot.y, plot.x + plot.width, plot.y + plot.height);
+    // SAFETY: canvas and rect are live for the synchronous clip call; the
+    // matching end-clip path restores the saved canvas state.
     unsafe {
         ohos_native_drawing_sys::OH_Drawing_CanvasClipRect(
             canvas.as_ptr(),
@@ -581,6 +583,8 @@ fn begin_polar_clip(canvas: &Canvas, config: &PolarConfig) {
         config.outer_radius,
         ohos_native_drawing_sys::OH_Drawing_PathDirection_PATH_DIRECTION_CW,
     );
+    // SAFETY: canvas and clip path are live for this synchronous call; the
+    // saved canvas state is restored by the matching polar clip teardown.
     unsafe {
         ohos_native_drawing_sys::OH_Drawing_CanvasClipPath(
             canvas.as_ptr(),

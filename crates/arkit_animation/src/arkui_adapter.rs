@@ -2,8 +2,8 @@ use std::cell::RefCell;
 
 use arkit_animation_core::{
     AdapterId, AdapterPropertyId, AdapterTargetId, Angle, AnimationValue, Length, LengthUnit,
-    LinearRgba, PropertyName, PropertyUpdate, ResolutionTarget, ResolvedProperty, ResolvedTarget,
-    SourceTarget, TargetLayoutSnapshot, TargetName,
+    LinearRgba, OutputSeek, PropertyName, PropertyUpdate, ResolutionTarget, ResolvedProperty,
+    ResolvedTarget, SourceTarget, TargetLayoutSnapshot, TargetName, TimePoint,
 };
 use arkit_hooks::HostNode;
 use ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
@@ -43,6 +43,13 @@ impl ArkUiAdapter {
         self.targets.borrow_mut().unregister(target)
     }
 
+    pub(crate) fn node(&self, target: AdapterTargetId) -> Option<HostNode> {
+        self.targets
+            .borrow()
+            .get(target)
+            .map(|binding| binding.node.clone())
+    }
+
     pub fn set_members(
         &self,
         set: arkit_animation_core::TargetSetName,
@@ -56,6 +63,22 @@ impl ArkUiAdapter {
             .get(property)
             .map(|descriptor| descriptor.name.as_str())
             .ok_or(AnimationAdapterError::UnknownPropertyId(property))
+    }
+
+    pub(crate) fn output_seek(
+        &self,
+        target: &TargetName,
+        property: &PropertyName,
+        position: TimePoint,
+    ) -> Option<OutputSeek> {
+        let target = self.targets.borrow().id_for_name(target)?;
+        let (property, _) = self.properties.resolve(property).ok()?;
+        Some(OutputSeek {
+            adapter: self.id,
+            target,
+            property,
+            position,
+        })
     }
 }
 
@@ -263,5 +286,42 @@ impl TargetAdapter for ArkUiAdapter {
             .get_mut(update.target)
             .ok_or(AnimationAdapterError::UnknownTargetId(update.target))?;
         property_writer::write(binding, update.property, name, &update.value)
+    }
+
+    fn apply_batch(&self, updates: &[PropertyUpdate]) -> Result<(), AnimationAdapterError> {
+        let mut targets = self.targets.borrow_mut();
+        let mut index = 0;
+        while index < updates.len() {
+            let update = &updates[index];
+            let name = self.property_name(update.property)?;
+            let binding = targets
+                .get_mut(update.target)
+                .ok_or(AnimationAdapterError::UnknownTargetId(update.target))?;
+            if let Some(next) = updates.get(index + 1).filter(|next| {
+                next.target == update.target
+                    && matches!(
+                        (name, self.property_name(next.property).unwrap_or_default()),
+                        ("translate_x", "translate_y")
+                            | ("scale_x", "scale_y")
+                            | ("position_x", "position_y")
+                    )
+            }) {
+                let next_name = self.property_name(next.property)?;
+                property_writer::write_compound_pair(
+                    binding,
+                    update.property,
+                    name,
+                    &update.value,
+                    next.property,
+                    next_name,
+                    &next.value,
+                )?;
+                index += 2;
+                continue;
+            }
+            property_writer::write(binding, update.property, name, &update.value)?;
+            index += 1;
+        }
+        Ok(())
     }
 }

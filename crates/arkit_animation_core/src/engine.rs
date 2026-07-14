@@ -9,10 +9,11 @@ use rustc_hash::FxHashMap;
 use crate::{
     AdapterId, AdapterPropertyId, AdapterTargetId, AnimationOutcome, AnimationRuntimeError,
     AnimationSampler, AnimationValue, CallPolicy, CompiledAnimation, CompiledEvent, EngineCommand,
-    EngineEvent, EngineOutputId, FrameBatch, FrameId, InstanceId, InvalidationClass, OutputId,
-    PlaybackDirection, PlaybackRate, PlaybackState, PropertyDescriptor, PropertyUpdate, SeekMode,
-    TimeDomainId, TimeDomainMapper, TimeDomainOptions, TimeDomainPhase, TimeDomainSample,
-    TimeExtent, TimePoint, TimeSpan, TimelineNodeId, TrackCursor, TrackId, TrackSampleContext,
+    EngineEvent, EngineOutputId, FrameBatch, FrameId, InstanceId, InstanceKey, InvalidationClass,
+    OutputId, OutputSeek, PlaybackDirection, PlaybackRate, PlaybackState, PropertyDescriptor,
+    PropertyUpdate, SeekMode, TimeDomainId, TimeDomainMapper, TimeDomainOptions, TimeDomainPhase,
+    TimeDomainSample, TimeExtent, TimePoint, TimeSpan, TimelineNodeId, TrackCursor, TrackId,
+    TrackSampleContext,
 };
 
 pub struct AnimationBaselineSnapshot {
@@ -40,7 +41,7 @@ struct GlobalOutputKey {
 
 #[derive(Debug, Clone, Copy)]
 struct OutputContributor {
-    instance: InstanceId,
+    instance: InstanceKey,
     output: OutputId,
 }
 
@@ -92,6 +93,18 @@ pub struct AnimationInstanceSnapshot {
     pub alternate: bool,
 }
 
+/// Selects who advances an animation instance's absolute clock.
+///
+/// External clocks are used by platform animators: the native backend owns
+/// scheduling and feeds positions back through [`EngineCommand::Seek`], while
+/// the engine remains the sole owner of sampling, composition, and events.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub enum AnimationClockMode {
+    #[default]
+    Internal,
+    External,
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct EngineDiagnostics {
     pub live_instances: usize,
@@ -103,7 +116,8 @@ pub struct EngineDiagnostics {
 
 pub struct AnimationEngine {
     instances: IndexVec<InstanceId, Option<AnimationInstance>>,
-    active: Vec<InstanceId>,
+    generations: IndexVec<InstanceId, u64>,
+    active: Vec<InstanceKey>,
     command_queue: VecDeque<EngineCommand>,
     event_queue: Vec<EngineEvent>,
     frame_batch: FrameBatch,
@@ -127,6 +141,7 @@ impl AnimationEngine {
     pub fn new() -> Self {
         Self {
             instances: IndexVec::new(),
+            generations: IndexVec::new(),
             active: Vec::new(),
             command_queue: VecDeque::new(),
             event_queue: Vec::new(),
@@ -146,25 +161,122 @@ impl AnimationEngine {
         &mut self,
         plan: Arc<CompiledAnimation>,
         baselines: AnimationBaselineSnapshot,
-    ) -> Result<InstanceId, AnimationRuntimeError> {
+    ) -> Result<InstanceKey, AnimationRuntimeError> {
+        self.insert_with_clock(plan, baselines, AnimationClockMode::Internal)
+    }
+
+    pub fn insert_with_clock(
+        &mut self,
+        plan: Arc<CompiledAnimation>,
+        baselines: AnimationBaselineSnapshot,
+        clock_mode: AnimationClockMode,
+    ) -> Result<InstanceKey, AnimationRuntimeError> {
         validate_baselines(&plan, &baselines)?;
-        let instance_id = self
+        let slot = self
             .instances
             .iter_enumerated()
             .find_map(|(id, instance)| instance.is_none().then_some(id))
             .unwrap_or_else(|| InstanceId::new(self.instances.len()));
-        let output_slots = self.register_outputs(instance_id, &plan)?;
-        let instance = Some(AnimationInstance::new(plan, baselines, output_slots));
-        if instance_id.index() == self.instances.len() {
-            let inserted = self.instances.push(instance);
-            debug_assert_eq!(inserted, instance_id);
+        let generation = if slot.index() == self.instances.len() {
+            1
         } else {
-            self.instances[instance_id] = instance;
+            self.generations[slot]
+                .checked_add(1)
+                .ok_or(AnimationRuntimeError::InstanceGenerationExhausted(slot))?
+        };
+        let instance = InstanceKey::from_parts(slot, generation);
+        let output_slots = self.register_outputs(instance, &plan)?;
+        let value = Some(AnimationInstance::new(
+            plan,
+            baselines,
+            output_slots,
+            clock_mode,
+        ));
+        if slot.index() == self.instances.len() {
+            let inserted = self.instances.push(value);
+            let generation_slot = self.generations.push(generation);
+            debug_assert_eq!(inserted, slot);
+            debug_assert_eq!(generation_slot, slot);
+        } else {
+            self.generations[slot] = generation;
+            self.instances[slot] = value;
         }
-        Ok(instance_id)
+        Ok(instance)
+    }
+
+    /// Changes the clock owner without changing playback state or position.
+    /// The first internal frame after a handoff establishes a new time origin,
+    /// so backend setup/fallback latency is never added to animation elapsed
+    /// time.
+    pub fn set_clock_mode(
+        &mut self,
+        instance: InstanceKey,
+        clock_mode: AnimationClockMode,
+    ) -> Result<(), AnimationRuntimeError> {
+        if let Some(frame) = self.pending_frame {
+            return Err(AnimationRuntimeError::FrameNotAcknowledged(frame));
+        }
+        let instance_id = instance.slot();
+        if self.generations.raw.get(instance_id.index()).copied() != Some(instance.generation()) {
+            return Err(AnimationRuntimeError::UnknownInstance(instance));
+        }
+        let Some(value) = self.instances[instance_id].as_mut() else {
+            return Err(AnimationRuntimeError::UnknownInstance(instance));
+        };
+        if value.clock_mode == clock_mode {
+            return Ok(());
+        }
+        value.clock_mode = clock_mode;
+        value.last_frame = None;
+        match clock_mode {
+            AnimationClockMode::Internal if value.state == PlaybackState::Running => {
+                ensure_active(&mut self.active, instance);
+            }
+            AnimationClockMode::External => {
+                self.active.retain(|candidate| *candidate != instance);
+            }
+            AnimationClockMode::Internal => {}
+        }
+        Ok(())
     }
 
     pub fn enqueue(&mut self, command: EngineCommand) {
+        if let Some(pending) = self.command_queue.back_mut() {
+            match (pending, command) {
+                (
+                    EngineCommand::Seek {
+                        instance: pending_instance,
+                        position: pending_position,
+                        mode: SeekMode::SuppressEvents,
+                    },
+                    EngineCommand::Seek {
+                        instance,
+                        position,
+                        mode: SeekMode::SuppressEvents,
+                    },
+                ) if *pending_instance == instance => {
+                    *pending_position = position;
+                    return;
+                }
+                (
+                    EngineCommand::SeekOutputs {
+                        instance: pending_instance,
+                        first: pending_first,
+                        second: pending_second,
+                    },
+                    EngineCommand::SeekOutputs {
+                        instance,
+                        first,
+                        second,
+                    },
+                ) if *pending_instance == instance => {
+                    *pending_first = first;
+                    *pending_second = second;
+                    return;
+                }
+                _ => {}
+            }
+        }
         self.command_queue.push_back(command);
     }
 
@@ -186,30 +298,35 @@ impl AnimationEngine {
         let instances = &mut self.instances;
         let events = &mut self.event_queue;
         let output_slots = &mut self.output_slots;
-        for instance_id in self.active.iter().copied() {
-            if let Some(instance) = instances[instance_id].as_mut() {
-                advance_instance(
-                    instance_id,
-                    instance,
-                    frame_time,
-                    frame,
-                    events,
-                    &mut self.frame_events,
-                    output_slots,
-                );
+        for instance_key in self.active.iter().copied() {
+            let instance_id = instance_key.slot();
+            if self.generations[instance_id] == instance_key.generation() {
+                if let Some(instance) = instances[instance_id].as_mut() {
+                    advance_instance(
+                        instance_key,
+                        instance,
+                        frame_time,
+                        frame,
+                        events,
+                        &mut self.frame_events,
+                        output_slots,
+                    );
+                }
             }
         }
         flush_output_slots(
             &self.instances,
+            &self.generations,
             &mut self.output_slots,
             &self.ordered_outputs,
             &mut self.frame_batch,
             &mut self.event_queue,
         );
-        self.active.retain(|instance_id| {
-            self.instances[*instance_id]
-                .as_ref()
-                .is_some_and(|instance| instance.state == PlaybackState::Running)
+        self.active.retain(|instance| {
+            self.generations[instance.slot()] == instance.generation()
+                && self.instances[instance.slot()]
+                    .as_ref()
+                    .is_some_and(|instance| instance.state == PlaybackState::Running)
         });
         self.pending_frame = Some(frame);
         Ok(frame)
@@ -232,7 +349,7 @@ impl AnimationEngine {
             };
             if instance.pending_render_frame == Some(frame) {
                 self.event_queue.push(EngineEvent::Render {
-                    instance: instance_id,
+                    instance: InstanceKey::from_parts(instance_id, self.generations[instance_id]),
                     at: instance.pending_render_at,
                 });
                 instance.pending_render_frame = None;
@@ -269,7 +386,7 @@ impl AnimationEngine {
 
     pub fn replace_resolution(
         &mut self,
-        instance_id: InstanceId,
+        instance: InstanceKey,
         plan: Arc<CompiledAnimation>,
         baselines: AnimationBaselineSnapshot,
     ) -> Result<(), AnimationRuntimeError> {
@@ -278,17 +395,22 @@ impl AnimationEngine {
         }
         validate_baselines(&plan, &baselines)?;
         self.validate_output_contracts(&plan)?;
+        let instance_id = instance.slot();
+        if self.generations.raw.get(instance_id.index()).copied() != Some(instance.generation()) {
+            return Err(AnimationRuntimeError::UnknownInstance(instance));
+        }
         let Some(previous) = self
             .instances
             .raw
             .get_mut(instance_id.index())
             .and_then(Option::take)
         else {
-            return Err(AnimationRuntimeError::UnknownInstance(instance_id));
+            return Err(AnimationRuntimeError::UnknownInstance(instance));
         };
-        self.unregister_outputs(instance_id, &previous.output_slots);
-        let output_slots = self.register_outputs(instance_id, &plan)?;
-        let mut refreshed = AnimationInstance::new(plan, baselines, output_slots);
+        self.unregister_outputs(instance, &previous.output_slots);
+        let output_slots = self.register_outputs(instance, &plan)?;
+        let mut refreshed =
+            AnimationInstance::new(plan, baselines, output_slots, previous.clock_mode);
         refreshed.inherit_runtime(&previous);
         refreshed.update_local_time();
         touch_instance_outputs(&refreshed, &mut self.output_slots);
@@ -296,10 +418,13 @@ impl AnimationEngine {
         Ok(())
     }
 
-    pub fn snapshot(&self, instance: InstanceId) -> Option<AnimationInstanceSnapshot> {
+    pub fn snapshot(&self, instance: InstanceKey) -> Option<AnimationInstanceSnapshot> {
+        if self.generations.raw.get(instance.slot().index()).copied()? != instance.generation() {
+            return None;
+        }
         self.instances
             .raw
-            .get(instance.index())?
+            .get(instance.slot().index())?
             .as_ref()
             .map(AnimationInstance::snapshot)
     }
@@ -346,7 +471,9 @@ impl AnimationEngine {
                         .any(|candidate| {
                             candidate.adapter == adapter && candidate.adapter_target == target
                         })
-                        .then_some(instance_id)
+                        .then(|| {
+                            InstanceKey::from_parts(instance_id, self.generations[instance_id])
+                        })
                 })
             })
             .collect::<Vec<_>>();
@@ -362,8 +489,10 @@ impl AnimationEngine {
             });
             self.remove_instance(instance);
         }
-        self.active
-            .retain(|instance| self.instances[*instance].is_some());
+        self.active.retain(|instance| {
+            self.generations[instance.slot()] == instance.generation()
+                && self.instances[instance.slot()].is_some()
+        });
         let removed_slots = self
             .ordered_outputs
             .iter()
@@ -396,7 +525,9 @@ impl AnimationEngine {
                         .targets()
                         .iter()
                         .any(|candidate| candidate.adapter == adapter)
-                        .then_some(instance_id)
+                        .then(|| {
+                            InstanceKey::from_parts(instance_id, self.generations[instance_id])
+                        })
                 })
             })
             .collect::<Vec<_>>();
@@ -412,8 +543,10 @@ impl AnimationEngine {
             });
             self.remove_instance(instance);
         }
-        self.active
-            .retain(|instance| self.instances[*instance].is_some());
+        self.active.retain(|instance| {
+            self.generations[instance.slot()] == instance.generation()
+                && self.instances[instance.slot()].is_some()
+        });
         let removed_slots = self
             .ordered_outputs
             .iter()
@@ -434,7 +567,7 @@ impl AnimationEngine {
 
     fn register_outputs(
         &mut self,
-        instance: InstanceId,
+        instance: InstanceKey,
         plan: &CompiledAnimation,
     ) -> Result<IndexVec<OutputId, EngineOutputId>, AnimationRuntimeError> {
         self.validate_output_contracts(plan)?;
@@ -514,21 +647,21 @@ impl AnimationEngine {
 
     fn unregister_outputs(
         &mut self,
-        instance_id: InstanceId,
+        instance: InstanceKey,
         output_slots: &oxc_index::IndexSlice<OutputId, [EngineOutputId]>,
     ) {
         for slot_id in output_slots.iter().copied() {
             let slot = &mut self.output_slots[slot_id];
             slot.contributors
-                .retain(|contributor| contributor.instance != instance_id);
+                .retain(|contributor| contributor.instance != instance);
             slot.touched = true;
         }
     }
 
     fn process_command(&mut self, command: EngineCommand, frame_time: TimePoint, frame: FrameId) {
-        let instance_id = command_instance(command);
+        let instance_key = command_instance(command);
         if matches!(command, EngineCommand::Remove(_)) {
-            self.remove_instance(instance_id);
+            self.remove_instance(instance_key);
             return;
         }
         let activation_sequence = matches!(
@@ -536,18 +669,30 @@ impl AnimationEngine {
             EngineCommand::Play(_) | EngineCommand::Resume(_) | EngineCommand::Restart(_)
         )
         .then(|| {
-            self.next_activation_sequence = self.next_activation_sequence.saturating_add(1);
+            self.next_activation_sequence = self
+                .next_activation_sequence
+                .checked_add(1)
+                .expect("animation activation sequence space exhausted");
             self.next_activation_sequence
         });
-        let Some(instance) = self
-            .instances
+        let instance_id = instance_key.slot();
+        let generation_matches = self
+            .generations
             .raw
-            .get_mut(instance_id.index())
-            .and_then(Option::as_mut)
+            .get(instance_id.index())
+            .is_some_and(|generation| *generation == instance_key.generation());
+        let Some(instance) = generation_matches
+            .then(|| {
+                self.instances
+                    .raw
+                    .get_mut(instance_id.index())
+                    .and_then(Option::as_mut)
+            })
+            .flatten()
         else {
             self.event_queue.push(EngineEvent::Error {
-                instance: instance_id,
-                error: AnimationRuntimeError::UnknownInstance(instance_id),
+                instance: instance_key,
+                error: AnimationRuntimeError::UnknownInstance(instance_key),
             });
             return;
         };
@@ -567,9 +712,11 @@ impl AnimationEngine {
                     instance.last_frame = Some(frame_time);
                     instance.activation_sequence = activation_sequence.unwrap_or_default();
                     touch_instance_outputs(instance, &mut self.output_slots);
-                    ensure_active(&mut self.active, instance_id);
+                    if instance.clock_mode == AnimationClockMode::Internal {
+                        ensure_active(&mut self.active, instance_key);
+                    }
                     self.event_queue.push(EngineEvent::StateChanged {
-                        instance: instance_id,
+                        instance: instance_key,
                         state: PlaybackState::Running,
                     });
                 }
@@ -578,10 +725,10 @@ impl AnimationEngine {
                 instance.state = PlaybackState::Paused;
                 instance.last_frame = None;
                 self.event_queue.push(EngineEvent::Pause {
-                    instance: instance_id,
+                    instance: instance_key,
                 });
                 self.event_queue.push(EngineEvent::StateChanged {
-                    instance: instance_id,
+                    instance: instance_key,
                     state: PlaybackState::Paused,
                 });
             }
@@ -590,9 +737,11 @@ impl AnimationEngine {
                 instance.last_frame = Some(frame_time);
                 instance.activation_sequence = activation_sequence.unwrap_or_default();
                 touch_instance_outputs(instance, &mut self.output_slots);
-                ensure_active(&mut self.active, instance_id);
+                if instance.clock_mode == AnimationClockMode::Internal {
+                    ensure_active(&mut self.active, instance_key);
+                }
                 self.event_queue.push(EngineEvent::StateChanged {
-                    instance: instance_id,
+                    instance: instance_key,
                     state: PlaybackState::Running,
                 });
             }
@@ -602,9 +751,11 @@ impl AnimationEngine {
                 instance.last_frame = Some(frame_time);
                 instance.activation_sequence = activation_sequence.unwrap_or_default();
                 touch_instance_outputs(instance, &mut self.output_slots);
-                ensure_active(&mut self.active, instance_id);
+                if instance.clock_mode == AnimationClockMode::Internal {
+                    ensure_active(&mut self.active, instance_key);
+                }
                 self.event_queue.push(EngineEvent::StateChanged {
-                    instance: instance_id,
+                    instance: instance_key,
                     state: PlaybackState::Running,
                 });
             }
@@ -615,7 +766,7 @@ impl AnimationEngine {
                 instance.alternate = enabled;
                 instance.update_local_time();
                 sample_and_emit_update(
-                    instance_id,
+                    instance_key,
                     instance,
                     frame,
                     &mut self.event_queue,
@@ -626,12 +777,38 @@ impl AnimationEngine {
                 instance.elapsed = position;
                 instance.update_local_time();
                 if mode == SeekMode::FireCrossingEvents {
-                    fire_crossing_events(instance_id, instance, &mut self.frame_events.deferred);
+                    fire_crossing_events(instance_key, instance, &mut self.frame_events.deferred);
                 }
                 sample_and_emit_update(
-                    instance_id,
+                    instance_key,
                     instance,
                     frame,
+                    &mut self.event_queue,
+                    &mut self.output_slots,
+                );
+            }
+            EngineCommand::AdvanceExternal { position, .. }
+                if instance.clock_mode == AnimationClockMode::External
+                    && instance.state == PlaybackState::Running =>
+            {
+                advance_instance_to(
+                    instance_key,
+                    instance,
+                    position,
+                    frame,
+                    &mut self.event_queue,
+                    &mut self.frame_events,
+                    &mut self.output_slots,
+                );
+            }
+            EngineCommand::AdvanceExternal { .. } => {}
+            EngineCommand::SeekOutputs { first, second, .. } => {
+                sample_output_seeks(
+                    instance_key,
+                    instance,
+                    frame,
+                    first,
+                    second,
                     &mut self.event_queue,
                     &mut self.output_slots,
                 );
@@ -643,21 +820,24 @@ impl AnimationEngine {
                 ) => {}
             EngineCommand::Complete(_) => match instance.parent_extent() {
                 TimeExtent::Infinite => self.event_queue.push(EngineEvent::Error {
-                    instance: instance_id,
-                    error: AnimationRuntimeError::InfiniteAnimationCannotComplete(instance_id),
+                    instance: instance_key,
+                    error: AnimationRuntimeError::InfiniteAnimationCannotComplete(instance_key),
                 }),
                 TimeExtent::Finite(duration) => {
-                    instance.elapsed = TimePoint::from_nanos(duration.as_nanos());
+                    instance.elapsed = match instance.direction {
+                        PlaybackDirection::Forward => TimePoint::from_nanos(duration.as_nanos()),
+                        PlaybackDirection::Reverse => TimePoint::ZERO,
+                    };
                     instance.update_local_time();
                     if !instance.begin_emitted {
                         instance.begin_emitted = true;
                         self.event_queue.push(EngineEvent::Begin {
-                            instance: instance_id,
+                            instance: instance_key,
                         });
                     }
-                    fire_crossing_events(instance_id, instance, &mut self.frame_events.deferred);
+                    fire_crossing_events(instance_key, instance, &mut self.frame_events.deferred);
                     sample_and_emit_update(
-                        instance_id,
+                        instance_key,
                         instance,
                         frame,
                         &mut self.event_queue,
@@ -665,14 +845,14 @@ impl AnimationEngine {
                     );
                     instance.state = PlaybackState::Completed;
                     self.frame_events.deferred.push(EngineEvent::Complete {
-                        instance: instance_id,
+                        instance: instance_key,
                     });
                     self.frame_events.deferred.push(EngineEvent::StateChanged {
-                        instance: instance_id,
+                        instance: instance_key,
                         state: PlaybackState::Completed,
                     });
                     self.frame_events.deferred.push(EngineEvent::Settled {
-                        instance: instance_id,
+                        instance: instance_key,
                         outcome: AnimationOutcome::Completed,
                     });
                 }
@@ -686,14 +866,14 @@ impl AnimationEngine {
                 instance.state = PlaybackState::Cancelled;
                 instance.last_frame = None;
                 self.frame_events.deferred.push(EngineEvent::Cancel {
-                    instance: instance_id,
+                    instance: instance_key,
                 });
                 self.frame_events.deferred.push(EngineEvent::StateChanged {
-                    instance: instance_id,
+                    instance: instance_key,
                     state: PlaybackState::Cancelled,
                 });
                 self.frame_events.deferred.push(EngineEvent::Settled {
-                    instance: instance_id,
+                    instance: instance_key,
                     outcome: AnimationOutcome::Cancelled,
                 });
             }
@@ -702,14 +882,14 @@ impl AnimationEngine {
                 instance.update_local_time();
                 instance.state = PlaybackState::Idle;
                 sample_and_emit_update(
-                    instance_id,
+                    instance_key,
                     instance,
                     frame,
                     &mut self.event_queue,
                     &mut self.output_slots,
                 );
                 self.event_queue.push(EngineEvent::StateChanged {
-                    instance: instance_id,
+                    instance: instance_key,
                     state: PlaybackState::Idle,
                 });
             }
@@ -723,14 +903,14 @@ impl AnimationEngine {
                     instance.pending_render_at = TimePoint::ZERO;
                 }
                 self.frame_events.deferred.push(EngineEvent::Revert {
-                    instance: instance_id,
+                    instance: instance_key,
                 });
                 self.frame_events.deferred.push(EngineEvent::StateChanged {
-                    instance: instance_id,
+                    instance: instance_key,
                     state: PlaybackState::Reverted,
                 });
                 self.frame_events.deferred.push(EngineEvent::Settled {
-                    instance: instance_id,
+                    instance: instance_key,
                     outcome: AnimationOutcome::Reverted,
                 });
             }
@@ -738,7 +918,7 @@ impl AnimationEngine {
                 instance.stretched_duration = Some(duration);
                 instance.update_local_time();
                 sample_and_emit_update(
-                    instance_id,
+                    instance_key,
                     instance,
                     frame,
                     &mut self.event_queue,
@@ -749,7 +929,7 @@ impl AnimationEngine {
                 instance.last_frame =
                     (instance.state == PlaybackState::Running).then_some(frame_time);
                 self.event_queue.push(EngineEvent::RefreshRequested {
-                    instance: instance_id,
+                    instance: instance_key,
                     at: instance.local_time,
                 });
             }
@@ -763,22 +943,34 @@ impl AnimationEngine {
         }
     }
 
-    fn remove_instance(&mut self, instance_id: InstanceId) {
-        let Some(instance) = self
+    fn remove_instance(&mut self, instance: InstanceKey) {
+        let instance_id = instance.slot();
+        if self.generations.raw.get(instance_id.index()).copied() != Some(instance.generation()) {
+            self.event_queue.push(EngineEvent::Error {
+                instance,
+                error: AnimationRuntimeError::UnknownInstance(instance),
+            });
+            return;
+        }
+        let Some(instance_value) = self
             .instances
             .raw
             .get(instance_id.index())
             .and_then(Option::as_ref)
         else {
             self.event_queue.push(EngineEvent::Error {
-                instance: instance_id,
-                error: AnimationRuntimeError::UnknownInstance(instance_id),
+                instance,
+                error: AnimationRuntimeError::UnknownInstance(instance),
             });
             return;
         };
-        let output_slots = instance.output_slots.clone();
-        self.unregister_outputs(instance_id, &output_slots);
+        let output_slots = instance_value.output_slots.clone();
+        self.unregister_outputs(instance, &output_slots);
         self.instances[instance_id] = None;
+        self.active.retain(|active| *active != instance);
+        self.command_queue
+            .retain(|command| command_instance(*command) != instance);
+        self.event_queue.push(EngineEvent::Removed { instance });
     }
 }
 
@@ -789,6 +981,7 @@ struct AnimationInstance {
     elapsed: TimePoint,
     local_time: TimePoint,
     last_frame: Option<TimePoint>,
+    clock_mode: AnimationClockMode,
     completed_iterations: u64,
     begin_emitted: bool,
     alternate: bool,
@@ -811,6 +1004,7 @@ impl AnimationInstance {
         plan: Arc<CompiledAnimation>,
         baselines: AnimationBaselineSnapshot,
         output_slots: IndexVec<OutputId, EngineOutputId>,
+        clock_mode: AnimationClockMode,
     ) -> Self {
         let alternate = plan.settings().alternate;
         let cursors = IndexVec::from_vec(vec![TrackCursor::default(); plan.tracks().len()]);
@@ -835,6 +1029,7 @@ impl AnimationInstance {
             elapsed: TimePoint::ZERO,
             local_time: TimePoint::ZERO,
             last_frame: None,
+            clock_mode,
             completed_iterations: 0,
             begin_emitted: false,
             alternate,
@@ -870,6 +1065,7 @@ impl AnimationInstance {
         self.elapsed = previous.elapsed;
         self.local_time = previous.local_time;
         self.last_frame = previous.last_frame;
+        self.clock_mode = previous.clock_mode;
         self.completed_iterations = previous.completed_iterations;
         self.begin_emitted = previous.begin_emitted;
         self.alternate = previous.alternate;
@@ -945,7 +1141,7 @@ impl AnimationInstance {
 }
 
 fn advance_instance(
-    instance_id: InstanceId,
+    instance_id: InstanceKey,
     instance: &mut AnimationInstance,
     frame_time: TimePoint,
     frame: FrameId,
@@ -953,7 +1149,9 @@ fn advance_instance(
     frame_events: &mut PendingFrameEvents,
     output_slots: &mut IndexVec<EngineOutputId, EngineOutputSlot>,
 ) {
-    if instance.state != PlaybackState::Running {
+    if instance.state != PlaybackState::Running
+        || instance.clock_mode == AnimationClockMode::External
+    {
         return;
     }
     let previous_frame = instance
@@ -963,7 +1161,7 @@ fn advance_instance(
     let elapsed = instance
         .clock_rate
         .scale(frame_time.saturating_duration_since(previous_frame));
-    instance.elapsed = match instance.direction {
+    let position = match instance.direction {
         PlaybackDirection::Forward => instance.elapsed + elapsed,
         PlaybackDirection::Reverse => TimePoint::from_nanos(
             instance
@@ -972,10 +1170,32 @@ fn advance_instance(
                 .saturating_sub(elapsed.as_nanos()),
         ),
     };
-    if let TimeExtent::Finite(duration) = instance.parent_extent() {
-        instance.elapsed =
-            TimePoint::from_nanos(instance.elapsed.as_nanos().min(duration.as_nanos()));
-    }
+    advance_instance_to(
+        instance_id,
+        instance,
+        position,
+        frame,
+        events,
+        frame_events,
+        output_slots,
+    );
+}
+
+fn advance_instance_to(
+    instance_id: InstanceKey,
+    instance: &mut AnimationInstance,
+    position: TimePoint,
+    frame: FrameId,
+    events: &mut Vec<EngineEvent>,
+    frame_events: &mut PendingFrameEvents,
+    output_slots: &mut IndexVec<EngineOutputId, EngineOutputSlot>,
+) {
+    instance.elapsed = match instance.parent_extent() {
+        TimeExtent::Finite(duration) => {
+            TimePoint::from_nanos(position.as_nanos().min(duration.as_nanos()))
+        }
+        TimeExtent::Infinite => position,
+    };
 
     let sample = instance.update_local_time();
     if !instance.begin_emitted && sample.phase == TimeDomainPhase::Active {
@@ -1024,7 +1244,7 @@ fn advance_instance(
 }
 
 fn sample_and_emit_update(
-    instance_id: InstanceId,
+    instance_id: InstanceKey,
     instance: &mut AnimationInstance,
     frame: FrameId,
     events: &mut Vec<EngineEvent>,
@@ -1048,8 +1268,111 @@ fn sample_and_emit_update(
     });
 }
 
+fn sample_output_seeks(
+    instance_id: InstanceKey,
+    instance: &mut AnimationInstance,
+    frame: FrameId,
+    first: OutputSeek,
+    second: Option<OutputSeek>,
+    events: &mut Vec<EngineEvent>,
+    output_slots: &mut IndexVec<EngineOutputId, EngineOutputSlot>,
+) {
+    events.push(EngineEvent::BeforeUpdate {
+        instance: instance_id,
+        at: first.position,
+    });
+    let mut sampled_any = false;
+    for seek in [Some(first), second].into_iter().flatten() {
+        instance.elapsed = seek.position;
+        instance.update_local_time();
+        if sample_bound_outputs(instance_id, instance, frame, seek, events, output_slots) {
+            sampled_any = true;
+        } else {
+            events.push(EngineEvent::Error {
+                instance: instance_id,
+                error: AnimationRuntimeError::UnknownOutput {
+                    instance: instance_id,
+                    adapter: seek.adapter,
+                    target: seek.target,
+                    property: seek.property,
+                },
+            });
+        }
+    }
+    if !sampled_any {
+        return;
+    }
+    let progress = match instance.plan.extent() {
+        TimeExtent::Finite(duration) if duration != TimeSpan::ZERO => {
+            instance.local_time.as_nanos() as f32 / duration.as_nanos() as f32
+        }
+        _ => 0.0,
+    };
+    events.push(EngineEvent::Update {
+        instance: instance_id,
+        at: instance.local_time,
+        progress,
+    });
+}
+
+fn sample_bound_outputs(
+    instance_id: InstanceKey,
+    instance: &mut AnimationInstance,
+    frame: FrameId,
+    seek: OutputSeek,
+    events: &mut Vec<EngineEvent>,
+    output_slots: &mut IndexVec<EngineOutputId, EngineOutputSlot>,
+) -> bool {
+    let mut matched = false;
+    for output_index in 0..instance.plan.outputs().len() {
+        let output_id = OutputId::new(output_index);
+        let matches = {
+            let output = &instance.plan.outputs()[output_id];
+            let target = &instance.plan.targets()[output.target];
+            let property = &instance.plan.properties()[output.property];
+            target.adapter == seek.adapter
+                && target.adapter_target == seek.target
+                && property.adapter == seek.adapter
+                && property.adapter_property == seek.property
+        };
+        if !matches {
+            continue;
+        }
+        matched = true;
+        let value = match sample_output(instance, output_id) {
+            Ok(value) => value,
+            Err(track_id) => {
+                events.push(EngineEvent::Error {
+                    instance: instance_id,
+                    error: AnimationRuntimeError::TrackSamplingFailed(track_id),
+                });
+                continue;
+            }
+        };
+        let precision = {
+            let output = &instance.plan.outputs()[output_id];
+            instance.plan.properties()[output.property]
+                .descriptor
+                .precision
+        };
+        let unchanged = instance.output_values[output_id]
+            .as_ref()
+            .is_some_and(|previous| previous.approximately_eq(&value, precision));
+        if unchanged {
+            continue;
+        }
+        instance.output_values[output_id] = Some(value);
+        output_slots[instance.output_slots[output_id]].touched = true;
+    }
+    if matched {
+        instance.pending_render_frame = Some(frame);
+        instance.pending_render_at = instance.local_time;
+    }
+    matched
+}
+
 fn sample_instance(
-    instance_id: InstanceId,
+    instance_id: InstanceKey,
     instance: &mut AnimationInstance,
     frame: FrameId,
     events: &mut Vec<EngineEvent>,
@@ -1204,6 +1527,7 @@ fn output_order_key(
 
 fn flush_output_slots(
     instances: &IndexVec<InstanceId, Option<AnimationInstance>>,
+    generations: &IndexVec<InstanceId, u64>,
     slots: &mut IndexVec<EngineOutputId, EngineOutputSlot>,
     ordered_outputs: &[EngineOutputId],
     frame_batch: &mut FrameBatch,
@@ -1219,7 +1543,13 @@ fn flush_output_slots(
             .contributors
             .iter()
             .filter_map(|contributor| {
-                let instance = instances.raw.get(contributor.instance.index())?.as_ref()?;
+                let instance_slot = contributor.instance.slot();
+                if generations.raw.get(instance_slot.index()).copied()?
+                    != contributor.instance.generation()
+                {
+                    return None;
+                }
+                let instance = instances.raw.get(instance_slot.index())?.as_ref()?;
                 let sampled = instance.output_values[contributor.output].as_ref()?;
                 let replace = sampled.replace.as_ref()?;
                 Some((
@@ -1235,7 +1565,13 @@ fn flush_output_slots(
             .contributors
             .iter()
             .filter_map(|contributor| {
-                let instance = instances.raw.get(contributor.instance.index())?.as_ref()?;
+                let instance_slot = contributor.instance.slot();
+                if generations.raw.get(instance_slot.index()).copied()?
+                    != contributor.instance.generation()
+                {
+                    return None;
+                }
+                let instance = instances.raw.get(instance_slot.index())?.as_ref()?;
                 instance.output_values[contributor.output].as_ref()?;
                 Some((
                     (instance.activation_sequence, contributor.instance),
@@ -1250,9 +1586,15 @@ fn flush_output_slots(
         };
         let mut composition_failed = false;
         for contributor in &slot.contributors {
+            let instance_slot = contributor.instance.slot();
+            if generations.raw.get(instance_slot.index()).copied()
+                != Some(contributor.instance.generation())
+            {
+                continue;
+            }
             let Some(instance) = instances
                 .raw
-                .get(contributor.instance.index())
+                .get(instance_slot.index())
                 .and_then(Option::as_ref)
             else {
                 continue;
@@ -1301,7 +1643,7 @@ fn flush_output_slots(
 }
 
 fn fire_crossing_events(
-    instance_id: InstanceId,
+    instance_id: InstanceKey,
     instance: &mut AnimationInstance,
     events: &mut Vec<EngineEvent>,
 ) {
@@ -1395,7 +1737,7 @@ fn fire_crossing_events(
 }
 
 fn fire_interval(
-    instance_id: InstanceId,
+    instance_id: InstanceKey,
     plan: &CompiledAnimation,
     fired_once: &mut IndexVec<TimelineNodeId, bool>,
     domain_id: TimeDomainId,
@@ -1494,7 +1836,7 @@ fn fire_call_event(
 
 #[derive(Clone, Copy)]
 struct CallCrossing {
-    instance: InstanceId,
+    instance: InstanceKey,
     from: TimePoint,
     to: TimePoint,
     forward: bool,
@@ -1550,13 +1892,13 @@ fn validate_baselines(
     Ok(())
 }
 
-fn ensure_active(active: &mut Vec<InstanceId>, instance: InstanceId) {
+fn ensure_active(active: &mut Vec<InstanceKey>, instance: InstanceKey) {
     if !active.contains(&instance) {
         active.push(instance);
     }
 }
 
-const fn command_instance(command: EngineCommand) -> InstanceId {
+const fn command_instance(command: EngineCommand) -> InstanceKey {
     match command {
         EngineCommand::Play(instance)
         | EngineCommand::Pause(instance)
@@ -1571,6 +1913,8 @@ const fn command_instance(command: EngineCommand) -> InstanceId {
         | EngineCommand::Remove(instance) => instance,
         EngineCommand::SetAlternate { instance, .. }
         | EngineCommand::Seek { instance, .. }
+        | EngineCommand::AdvanceExternal { instance, .. }
+        | EngineCommand::SeekOutputs { instance, .. }
         | EngineCommand::Stretch { instance, .. }
         | EngineCommand::SetPlaybackRate { instance, .. } => instance,
     }
@@ -1589,6 +1933,7 @@ mod tests {
     };
 
     const OPACITY: Property<f32> = Property::static_name("opacity");
+    const SCALE: Property<f32> = Property::static_name("scale");
 
     fn commit_tick(engine: &mut AnimationEngine, frame_time: TimePoint) -> FrameId {
         let frame = engine.tick(frame_time).unwrap();
@@ -1636,6 +1981,44 @@ mod tests {
             composition: Composition::Replace,
             modifier: Modifier::Identity,
         });
+        AnimationCompiler.compile(resolved).unwrap()
+    }
+
+    fn two_property_plan() -> Arc<CompiledAnimation> {
+        let mut resolved = ResolvedAnimation::default();
+        resolved.targets.push(ResolvedTarget {
+            adapter: AdapterId::new(0),
+            adapter_target: AdapterTargetId::new(0),
+        });
+        for (property, descriptor) in [
+            (AdapterPropertyId::new(0), PropertyDescriptor::new(&OPACITY)),
+            (AdapterPropertyId::new(1), PropertyDescriptor::new(&SCALE)),
+        ] {
+            resolved.properties.push(ResolvedProperty {
+                adapter: AdapterId::new(0),
+                adapter_property: property,
+                descriptor,
+            });
+        }
+        for (property, to) in [
+            (crate::PropertyId::new(0), 10.0),
+            (crate::PropertyId::new(1), 20.0),
+        ] {
+            resolved.tweens.push(ResolvedTween {
+                domain: TimeDomainId::new(0),
+                target: TargetId::new(0),
+                property,
+                start: TimePoint::ZERO,
+                delay: TimeSpan::ZERO,
+                duration: TimeSpan::from_nanos(100),
+                priority: 0,
+                from: AnimationValue::Scalar(0.0),
+                to: AnimationValue::Scalar(to),
+                easing: Easing::Linear,
+                composition: Composition::Replace,
+                modifier: Modifier::Identity,
+            });
+        }
         AnimationCompiler.compile(resolved).unwrap()
     }
 
@@ -1806,6 +2189,43 @@ mod tests {
     }
 
     #[test]
+    fn external_clock_advances_only_from_explicit_positions_and_can_handoff() {
+        let mut engine = AnimationEngine::new();
+        let instance = engine
+            .insert_with_clock(
+                finite_plan(100),
+                AnimationBaselineSnapshot::from_output_values(Vec::new()),
+                AnimationClockMode::External,
+            )
+            .unwrap();
+        engine.enqueue(EngineCommand::Play(instance));
+        commit_tick(&mut engine, TimePoint::from_nanos(10));
+        commit_tick(&mut engine, TimePoint::from_nanos(60));
+        assert_eq!(engine.snapshot(instance).unwrap().elapsed, TimePoint::ZERO);
+        assert!(!engine.has_work());
+
+        engine.enqueue(EngineCommand::AdvanceExternal {
+            instance,
+            position: TimePoint::from_nanos(50),
+        });
+        commit_tick(&mut engine, TimePoint::from_nanos(70));
+        assert_eq!(
+            engine.snapshot(instance).unwrap().elapsed,
+            TimePoint::from_nanos(50)
+        );
+
+        engine
+            .set_clock_mode(instance, AnimationClockMode::Internal)
+            .unwrap();
+        commit_tick(&mut engine, TimePoint::from_nanos(100));
+        commit_tick(&mut engine, TimePoint::from_nanos(150));
+        assert_eq!(
+            engine.snapshot(instance).unwrap().state,
+            PlaybackState::Completed
+        );
+    }
+
+    #[test]
     fn repeated_instance_mount_and_remove_reuses_dense_storage() {
         let plan = scalar_plan();
         let mut engine = AnimationEngine::new();
@@ -1818,7 +2238,8 @@ mod tests {
                     )]),
                 )
                 .unwrap();
-            assert_eq!(instance, InstanceId::new(0));
+            assert_eq!(instance.slot(), InstanceId::new(0));
+            assert_eq!(instance.generation(), iteration + 1);
             engine.enqueue(EngineCommand::Remove(instance));
             commit_tick(&mut engine, TimePoint::from_nanos(iteration));
             engine.drain_events().for_each(drop);
@@ -1827,6 +2248,64 @@ mod tests {
         assert_eq!(diagnostics.live_instances, 0);
         assert_eq!(diagnostics.output_slots, 1);
         assert!(!engine.has_work());
+    }
+
+    #[test]
+    fn target_detach_publishes_removal_before_reusing_the_dense_slot() {
+        let plan = scalar_plan();
+        let baselines =
+            || AnimationBaselineSnapshot::from_output_values(vec![AnimationValue::Scalar(0.0)]);
+        let mut engine = AnimationEngine::new();
+        let removed = engine.insert(plan.clone(), baselines()).unwrap();
+
+        assert_eq!(
+            engine.detach_target(AdapterId::new(0), AdapterTargetId::new(0)),
+            1
+        );
+        let events = engine.drain_events().collect::<Vec<_>>();
+        assert!(matches!(
+            events.last(),
+            Some(EngineEvent::Removed { instance }) if *instance == removed
+        ));
+        assert!(engine.snapshot(removed).is_none());
+
+        let reused = engine.insert(plan, baselines()).unwrap();
+        assert_eq!(reused.slot(), removed.slot());
+        assert!(reused.generation() > removed.generation());
+        assert!(engine.snapshot(reused).is_some());
+    }
+
+    #[test]
+    fn stale_remove_cannot_delete_a_reused_instance_slot() {
+        let plan = scalar_plan();
+        let baselines =
+            || AnimationBaselineSnapshot::from_output_values(vec![AnimationValue::Scalar(0.0)]);
+        let mut engine = AnimationEngine::new();
+        let retired = engine.insert(plan.clone(), baselines()).unwrap();
+
+        // This is the lifecycle interleaving produced when Controls::drop
+        // queues Remove immediately before ArkUI disposes its target.
+        engine.enqueue(EngineCommand::Remove(retired));
+        assert_eq!(
+            engine.detach_target(AdapterId::new(0), AdapterTargetId::new(0)),
+            1
+        );
+        let current = engine.insert(plan, baselines()).unwrap();
+        assert_eq!(current.slot(), retired.slot());
+        assert_ne!(current, retired);
+
+        // Even a delayed producer that re-enqueues the old command is harmless:
+        // generation validation rejects it instead of addressing `current`.
+        engine.enqueue(EngineCommand::Remove(retired));
+        commit_tick(&mut engine, TimePoint::ZERO);
+        assert!(engine.snapshot(current).is_some());
+        assert!(engine.events().iter().any(|event| matches!(
+            event,
+            EngineEvent::Error {
+                instance,
+                error: AnimationRuntimeError::UnknownInstance(error_instance),
+            } if *instance == retired && *error_instance == retired
+        )));
     }
 
     #[test]
@@ -1892,6 +2371,64 @@ mod tests {
         assert_eq!(
             engine.frame_batch().as_slice()[0].value,
             AnimationValue::Scalar(0.0)
+        );
+    }
+
+    #[test]
+    fn output_seeks_sample_two_properties_at_independent_positions() {
+        let mut engine = AnimationEngine::new();
+        let instance = engine
+            .insert(
+                two_property_plan(),
+                AnimationBaselineSnapshot::from_output_values(vec![
+                    AnimationValue::Scalar(0.0),
+                    AnimationValue::Scalar(0.0),
+                ]),
+            )
+            .unwrap();
+        let output = |property, position| OutputSeek {
+            adapter: AdapterId::new(0),
+            target: AdapterTargetId::new(0),
+            property: AdapterPropertyId::new(property),
+            position: TimePoint::from_nanos(position),
+        };
+        engine.enqueue(EngineCommand::SeekOutputs {
+            instance,
+            first: output(0, 25),
+            second: Some(output(1, 75)),
+        });
+
+        commit_tick(&mut engine, TimePoint::ZERO);
+
+        let updates = engine.frame_batch().as_slice();
+        assert_eq!(updates.len(), 2);
+        assert_eq!(updates[0].value, AnimationValue::Scalar(2.5));
+        assert_eq!(updates[1].value, AnimationValue::Scalar(15.0));
+    }
+
+    #[test]
+    fn latest_suppressed_seek_replaces_the_pending_sample() {
+        let mut engine = AnimationEngine::new();
+        let instance = engine
+            .insert(
+                scalar_plan(),
+                AnimationBaselineSnapshot::from_output_values(vec![AnimationValue::Scalar(0.0)]),
+            )
+            .unwrap();
+        for position in [10, 40, 80] {
+            engine.enqueue(EngineCommand::Seek {
+                instance,
+                position: TimePoint::from_nanos(position),
+                mode: SeekMode::SuppressEvents,
+            });
+        }
+        assert_eq!(engine.diagnostics().pending_commands, 1);
+
+        commit_tick(&mut engine, TimePoint::ZERO);
+
+        assert_eq!(
+            engine.frame_batch().as_slice()[0].value,
+            AnimationValue::Scalar(8.0)
         );
     }
 
@@ -2383,6 +2920,43 @@ mod tests {
             })
             .collect::<Vec<_>>();
         assert_eq!(after_ack, ["render", "complete", "settled"]);
+    }
+
+    #[test]
+    fn explicit_complete_uses_the_current_direction_terminal() {
+        let mut engine = AnimationEngine::new();
+        let instance = engine
+            .insert(
+                scalar_plan(),
+                AnimationBaselineSnapshot::from_output_values(vec![AnimationValue::Scalar(0.0)]),
+            )
+            .unwrap();
+        engine.enqueue(EngineCommand::Seek {
+            instance,
+            position: TimePoint::from_nanos(70),
+            mode: SeekMode::SuppressEvents,
+        });
+        commit_tick(&mut engine, TimePoint::ZERO);
+        assert_eq!(
+            engine.frame_batch().as_slice()[0].value,
+            AnimationValue::Scalar(7.0)
+        );
+
+        engine.enqueue(EngineCommand::Reverse(instance));
+        engine.enqueue(EngineCommand::Complete(instance));
+        let frame = engine.tick(TimePoint::from_nanos(1)).unwrap();
+        assert_eq!(engine.snapshot(instance).unwrap().elapsed, TimePoint::ZERO);
+        assert_eq!(
+            engine.frame_batch().as_slice()[0].value,
+            AnimationValue::Scalar(0.0)
+        );
+        engine.acknowledge_frame(frame).unwrap();
+        assert!(engine.drain_events().any(|event| matches!(
+            event,
+            EngineEvent::Complete {
+                instance: completed
+            } if completed == instance
+        )));
     }
 
     #[test]

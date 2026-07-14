@@ -1,0 +1,5 @@
+error: #[entry] function must not be async
+ --> tests/ui/async_entry.rs:2:1
+  |
+2 | async fn app() {}
+  | ^^^^^

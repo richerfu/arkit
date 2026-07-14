@@ -39,10 +39,13 @@ use ohos_arkui_binding::gesture::inner_gesture::Gesture;
 use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
 use ohos_arkui_binding::types::event::NodeEventType;
 use ohos_arkui_binding::types::gesture_event::GestureEventAction;
+use rustc_hash::FxHashMap;
 // Re-export the shared event-payload types (owned by `arkit_elements`, whose
 // lib name is `dioxus_elements`).
+use dioxus_elements::event::{classify_event_name, ArkEventKind};
 pub use dioxus_elements::event::{
-    ArkEventData, ArkEventPayload, LayoutPayload, PointerAction, PointerPayload, ScrollIndexPayload,
+    ArkEventData, ArkEventPayload, LayoutPayload, PointerAction, PointerPayload,
+    ScrollIndexPayload, ScrollOffsetPayload,
 };
 
 mod native;
@@ -59,7 +62,7 @@ pub mod node_builder;
 pub use node_builder::NodeBuilder;
 
 mod attributes;
-use attributes::DesiredAttrs;
+use attributes::{AttrMutation, DesiredAttrs};
 
 fn log_arkui_result<T, E: ToString>(context: &str, result: Result<T, E>) -> Option<T> {
     match result {
@@ -92,11 +95,17 @@ type NodeRef = Rc<RefCell<ArkUINode>>;
 const TEXT_ALIGN_START: i32 = 0;
 const LONG_PRESS_DURATION_MS: i32 = 500;
 
-#[derive(Clone, Copy)]
 struct RegisteredEventListener {
     name: &'static str,
     id: ElementId,
     native_wrapper: usize,
+    active: Rc<std::cell::Cell<bool>>,
+}
+
+impl Drop for RegisteredEventListener {
+    fn drop(&mut self) {
+        self.active.set(false);
+    }
 }
 
 struct LongPressEventContext {
@@ -140,7 +149,7 @@ impl Drop for RegisteredGestureListener {
 }
 
 enum EventRegistration {
-    Node,
+    Node(Rc<std::cell::Cell<bool>>),
     Gesture(RegisteredGestureListener),
 }
 
@@ -197,6 +206,9 @@ struct HostNode {
     /// and applies it only when the source or native node changes.
     image_source: Option<ArkImageSource>,
     retained_image_src: Option<Rc<RetainedImage>>,
+    /// Element ids currently bound to this arena slot. Cleared before the slot
+    /// enters the free list so stale ElementId mappings cannot alias reuse.
+    bound_elements: Vec<ElementId>,
 }
 
 impl HostNode {
@@ -214,6 +226,7 @@ impl HostNode {
             desired_attrs: Rc::new(RefCell::new(DesiredAttrs::default())),
             image_source: None,
             retained_image_src: None,
+            bound_elements: Vec::new(),
         }
     }
 
@@ -244,6 +257,7 @@ fn text_content_attr(tag: &str) -> Option<ArkUINodeAttributeType> {
 pub struct ArkUIRenderer {
     /// Host-node arena. Index 0 is the synthetic root.
     hosts: Vec<HostNode>,
+    free_hosts: Vec<HostId>,
     /// ElementId → HostId.
     element_to_host: Vec<Option<HostId>>,
     /// The mutation stack (host ids, top = last).
@@ -251,7 +265,7 @@ pub struct ArkUIRenderer {
     /// Cached static-template host subtrees, keyed by template address. Each
     /// entry is a ready-to-clone host subtree (kinds + structure) that
     /// `load_template` instantiates.
-    templates: std::collections::HashMap<usize, Vec<TemplateHostNode>>,
+    templates: FxHashMap<usize, Vec<TemplateHostNode>>,
     /// The NodeContent slot root, owning the mounted base node.
     root_node: RootNode,
     /// Event sink (set by the runtime after construction).
@@ -316,26 +330,37 @@ impl ArkUIRenderer {
     /// the host root (HostId 0 / ElementId 0).
     pub fn new(slot: ArkUIHandle) -> ArkUIResult<Self> {
         let mut root_node = RootNode::new(slot);
-        let root_node_ark = Stack::new()?;
-        root_node_ark.percent_width(1.0)?;
-        root_node_ark.percent_height(1.0)?;
-        let root_ark: ArkUINode = root_node_ark.into();
-        root_node.mount(root_ark.clone())?;
+        let root_ark = NodeBuilder::from_node(Stack::new()?.into())
+            .percent_width(1.0)?
+            .percent_height(1.0)?
+            .build();
+        if let Err(error) = root_node.mount(root_ark.clone()) {
+            // `RootNode::mount` retains a clone before calling native APIs.
+            // Let it release that clone when possible; otherwise dispose our
+            // still-unmounted owner so constructor failure cannot leak it.
+            if root_node.unmount().is_err() {
+                let mut root_ark = root_ark;
+                let _ = root_ark.dispose();
+            }
+            return Err(error);
+        }
         let root = Rc::new(RefCell::new(root_ark));
 
         let mut hosts = Vec::new();
         let mut root_host = HostNode::new(HostKind::Root);
         root_host.native = Some(root);
         root_host.native_attached = true;
+        root_host.bound_elements.push(ElementId(0));
         hosts.push(root_host);
 
         let element_to_host = vec![Some(0)];
 
         Ok(Self {
             hosts,
+            free_hosts: Vec::new(),
             element_to_host,
             stack: Vec::new(),
-            templates: std::collections::HashMap::new(),
+            templates: FxHashMap::default(),
             root_node,
             sink: None,
         })
@@ -349,9 +374,14 @@ impl ArkUIRenderer {
     // -- host arena helpers ------------------------------------------------
 
     fn alloc_host(&mut self, kind: HostKind) -> HostId {
-        let id = self.hosts.len();
-        self.hosts.push(HostNode::new(kind));
-        id
+        if let Some(id) = self.free_hosts.pop() {
+            self.hosts[id] = HostNode::new(kind);
+            id
+        } else {
+            let id = self.hosts.len();
+            self.hosts.push(HostNode::new(kind));
+            id
+        }
     }
 
     fn ensure_element_capacity(&mut self, id: ElementId) {
@@ -362,7 +392,26 @@ impl ArkUIRenderer {
 
     fn bind_element(&mut self, id: ElementId, host: HostId) {
         self.ensure_element_capacity(id);
+        if let Some(previous) = self.element_to_host[id.0] {
+            self.hosts[previous]
+                .bound_elements
+                .retain(|candidate| *candidate != id);
+        }
         self.element_to_host[id.0] = Some(host);
+        if !self.hosts[host].bound_elements.contains(&id) {
+            self.hosts[host].bound_elements.push(id);
+        }
+    }
+
+    fn release_host(&mut self, host: HostId) {
+        debug_assert_ne!(host, 0, "the synthetic root cannot enter the free list");
+        for element in std::mem::take(&mut self.hosts[host].bound_elements) {
+            if self.element_to_host.get(element.0).and_then(|slot| *slot) == Some(host) {
+                self.element_to_host[element.0] = None;
+            }
+        }
+        self.hosts[host] = HostNode::new(HostKind::Placeholder);
+        self.free_hosts.push(host);
     }
 
     fn host_of(&self, id: ElementId) -> HostId {
@@ -386,11 +435,17 @@ impl ArkUIRenderer {
             let content_node: ArkUINode =
                 Row::new().expect("arkit_arkui: button content Row").into();
             let content = Rc::new(RefCell::new(content_node));
-            log_arkui_result(
-                "create_native_for(button) insert content row",
-                root.borrow_mut().insert_child(content.borrow().clone(), 0),
-            );
-            let mounted_content = root.borrow().children().first().cloned().unwrap_or(content);
+            root.borrow_mut()
+                .insert_child(content.borrow().clone(), 0)
+                .unwrap_or_else(|error| {
+                    panic!("arkit_arkui: failed to create button content projection: {error}")
+                });
+            let mounted_content = root
+                .borrow()
+                .children()
+                .first()
+                .cloned()
+                .expect("button content insertion succeeded without a mounted wrapper");
             return (root, Some(mounted_content));
         }
         (root, None)
@@ -578,6 +633,7 @@ impl ArkUIRenderer {
         name: &'static str,
         id: ElementId,
         native_wrapper: usize,
+        active: Rc<std::cell::Cell<bool>>,
     ) {
         self.hosts[host]
             .registered_event_listeners
@@ -588,6 +644,7 @@ impl ArkUIRenderer {
                 name,
                 id,
                 native_wrapper,
+                active,
             });
     }
 
@@ -678,12 +735,18 @@ impl ArkUIRenderer {
         // Compute the native insertion index: the count of native roots
         // contributed by logical children preceding `child`.
         let native_index = self.projected_native_len_before(parent, child);
-        {
+        let inserted = {
             let mut parent_mut = parent_native.borrow_mut();
             log_arkui_result(
                 "attach_native insert_child",
                 parent_mut.insert_child(child_native.borrow().clone(), native_index),
-            );
+            )
+            .is_some()
+        };
+        if !inserted {
+            // Do not bind this logical child to whatever node happened to be
+            // at the requested index when native insertion failed.
+            return;
         }
 
         // `insert_child` consumes the child and wraps it in a *new* `Rc` inside
@@ -785,10 +848,14 @@ impl ArkUIRenderer {
                 continue;
             }
             if let Some(registration) = register_event(&native, name, tag, sink.clone(), id) {
-                if let EventRegistration::Gesture(registration) = registration {
-                    self.remember_gesture_registration(host, registration);
-                }
-                self.remember_event_registration(host, name, id, native_wrapper);
+                let active = match registration {
+                    EventRegistration::Node(active) => active,
+                    EventRegistration::Gesture(registration) => {
+                        self.remember_gesture_registration(host, registration);
+                        Rc::new(std::cell::Cell::new(true))
+                    }
+                };
+                self.remember_event_registration(host, name, id, native_wrapper, active);
             }
         }
     }
@@ -866,11 +933,14 @@ impl ArkUIRenderer {
                 .get(index)
                 .map(|child| !desired_raws.contains(&Self::native_raw_id(child)))
                 .unwrap_or(false);
-            if should_remove {
-                log_arkui_result(
+            if should_remove
+                && log_arkui_result(
                     "sync_native_children remove_child",
                     parent_native.borrow_mut().remove_child(index),
-                );
+                )
+                .is_none()
+            {
+                return;
             }
         }
 
@@ -889,12 +959,37 @@ impl ArkUIRenderer {
                     self.rebind_mounted_projection(child);
                 }
             } else {
-                {
+                // The desired node may already be mounted later in the same
+                // parent (a Dioxus reorder). Move that native node instead of
+                // inserting a duplicate and leaving a stale tail child.
+                let mounted_elsewhere = parent_native
+                    .borrow()
+                    .children()
+                    .iter()
+                    .position(|mounted| Self::native_raw_id(mounted) == desired_raw);
+                let node_to_insert = if let Some(index) = mounted_elsewhere {
+                    let removed = log_arkui_result(
+                        "sync_native_children detach reordered child",
+                        parent_native.borrow_mut().remove_child(index),
+                    );
+                    let Some(Some(removed)) = removed else {
+                        return;
+                    };
+                    let node = removed.borrow().clone();
+                    node
+                } else {
+                    child_native.borrow().clone()
+                };
+                let inserted = {
                     let mut parent_mut = parent_native.borrow_mut();
                     log_arkui_result(
                         "sync_native_children insert_child",
-                        parent_mut.insert_child(child_native.borrow().clone(), native_index),
-                    );
+                        parent_mut.insert_child(node_to_insert, native_index),
+                    )
+                    .is_some()
+                };
+                if !inserted {
+                    return;
                 }
                 let mounted = parent_native.borrow().children().get(native_index).cloned();
                 if let Some(mounted) = mounted {
@@ -915,13 +1010,15 @@ impl ArkUIRenderer {
         }
     }
 
-    /// Remove gesture recognizers before ArkUI disposes their native nodes.
-    fn clear_subtree_gestures(&mut self, host: HostId) {
+    /// Deactivate native event callbacks and remove gesture recognizers before
+    /// ArkUI disposes their native nodes.
+    fn clear_subtree_native_listeners(&mut self, host: HostId) {
         let children = self.hosts[host].children.clone();
         for child in children {
-            self.clear_subtree_gestures(child);
+            self.clear_subtree_native_listeners(child);
         }
         self.hosts[host].registered_gesture_listeners.clear();
+        self.hosts[host].registered_event_listeners.clear();
     }
 
     /// Clear renderer-owned state for a subtree whose native root has already
@@ -940,6 +1037,7 @@ impl ArkUIRenderer {
         self.hosts[host].children.clear();
         self.hosts[host].parent = None;
         self.clear_host_image_source(host);
+        self.release_host(host);
     }
 
     /// Dispose a host subtree and clear renderer state.
@@ -949,9 +1047,10 @@ impl ArkUIRenderer {
     /// especially for composite projections such as `button` where the
     /// renderer owns an internal content Row not represented in the HostTree.
     fn dispose_subtree(&mut self, host: HostId) {
-        // Gesture callbacks retain raw pointers to renderer-owned contexts.
-        // Remove every recognizer before ArkUI disposes the native subtree.
-        self.clear_subtree_gestures(host);
+        // Callback registrations retain renderer-owned state. Deactivate
+        // node-event tokens and remove every recognizer before ArkUI disposes
+        // the native subtree.
+        self.clear_subtree_native_listeners(host);
         if let Some(native) = self.hosts[host].native.take() {
             log_arkui_result("dispose_subtree dispose", native.borrow_mut().dispose());
             let children = self.hosts[host].children.clone();
@@ -972,6 +1071,14 @@ impl ArkUIRenderer {
         self.hosts[host].children.clear();
         self.hosts[host].parent = None;
         self.clear_host_image_source(host);
+        self.release_host(host);
+    }
+
+    fn discard_detached_hosts(&mut self, hosts: impl IntoIterator<Item = HostId>) {
+        for host in hosts {
+            debug_assert_ne!(host, 0, "the synthetic root cannot be a detached mutation");
+            self.dispose_subtree(host);
+        }
     }
 
     // -- template instantiation -------------------------------------------
@@ -1003,16 +1110,13 @@ impl ArkUIRenderer {
                 if let Some(native) = self.hosts[host].native.clone() {
                     for (name, value) in attrs {
                         let av = dioxus_core::AttributeValue::Text(value.clone());
-                        self.hosts[host]
+                        let _ = self.hosts[host]
                             .desired_attrs
                             .borrow_mut()
                             .set(tag, name, &av);
-                        let desired_attrs = self.hosts[host].desired_attrs.borrow();
-                        desired_attrs.apply_to(&mut native.borrow_mut(), tag);
                     }
-                }
-                if let Some(native) = self.hosts[host].native.clone() {
                     let desired_attrs = self.hosts[host].desired_attrs.borrow();
+                    desired_attrs.apply_to(&mut native.borrow_mut(), tag);
                     desired_attrs.after_patch(&mut native.borrow_mut(), tag);
                 }
                 self.replay_composite_content(host);
@@ -1110,10 +1214,10 @@ impl WriteMutations for ArkUIRenderer {
         let target = self.host_of(id);
         if target == 0 {
             ohos_hilog_binding::warn("arkit_arkui: replace_node_with on root not supported");
-            // Still pop the stack to stay consistent.
-            for _ in 0..m {
-                let _ = self.stack.pop();
-            }
+            // Consume and dispose pending nodes to keep both the mutation stack
+            // and host arena consistent after rejecting the operation.
+            let discarded = (0..m).filter_map(|_| self.stack.pop()).collect::<Vec<_>>();
+            self.discard_detached_hosts(discarded);
             return;
         }
         let new_hosts: Vec<HostId> = (0..m)
@@ -1125,13 +1229,20 @@ impl WriteMutations for ArkUIRenderer {
         let parent = self.hosts[target].parent;
         let Some(parent) = parent else {
             ohos_hilog_binding::warn("arkit_arkui: replace_node_with: no parent");
+            self.discard_detached_hosts(new_hosts);
             return;
         };
-        let logical_index = self.hosts[parent]
+        let Some(logical_index) = self.hosts[parent]
             .children
             .iter()
             .position(|&c| c == target)
-            .unwrap_or(0);
+        else {
+            ohos_hilog_binding::warn(
+                "arkit_arkui: replace_node_with target is not a child of its recorded parent",
+            );
+            self.discard_detached_hosts(new_hosts);
+            return;
+        };
 
         self.hosts[parent].children.remove(logical_index);
 
@@ -1144,7 +1255,6 @@ impl WriteMutations for ArkUIRenderer {
         }
         self.sync_native_children(parent);
         self.dispose_subtree(target);
-        self.element_to_host[id.0] = None;
     }
 
     fn replace_placeholder_with_nodes(&mut self, path: &'static [u8], m: usize) {
@@ -1163,18 +1273,24 @@ impl WriteMutations for ArkUIRenderer {
         let parent = self.hosts[placeholder].parent;
         let Some(parent) = parent else {
             ohos_hilog_binding::warn("arkit_arkui: replace_placeholder: no parent");
+            self.discard_detached_hosts(new_hosts);
             return;
         };
-        let logical_index = self.hosts[parent]
+        let Some(logical_index) = self.hosts[parent]
             .children
             .iter()
             .position(|&c| c == placeholder)
-            .unwrap_or(0);
+        else {
+            ohos_hilog_binding::warn(
+                "arkit_arkui: placeholder is not a child of its recorded parent",
+            );
+            self.discard_detached_hosts(new_hosts);
+            return;
+        };
 
         // Clear the placeholder (no native to dispose for a bare placeholder).
-        self.hosts[placeholder].children.clear();
-        self.hosts[placeholder].parent = None;
         self.hosts[parent].children.remove(logical_index);
+        self.dispose_subtree(placeholder);
 
         for (offset, &child) in new_hosts.iter().enumerate() {
             self.hosts[child].parent = Some(parent);
@@ -1195,13 +1311,20 @@ impl WriteMutations for ArkUIRenderer {
         let sibling = self.host_of(id);
         let Some(parent) = self.hosts[sibling].parent else {
             ohos_hilog_binding::warn("arkit_arkui: insert_nodes_after: no parent");
+            self.discard_detached_hosts(new_hosts);
             return;
         };
-        let logical_index = self.hosts[parent]
+        let Some(logical_index) = self.hosts[parent]
             .children
             .iter()
             .position(|&c| c == sibling)
-            .unwrap_or(0);
+        else {
+            ohos_hilog_binding::warn(
+                "arkit_arkui: insert_nodes_after sibling is not in its recorded parent",
+            );
+            self.discard_detached_hosts(new_hosts);
+            return;
+        };
         for (offset, &child) in new_hosts.iter().enumerate() {
             self.hosts[child].parent = Some(parent);
             self.hosts[parent]
@@ -1221,13 +1344,20 @@ impl WriteMutations for ArkUIRenderer {
         let sibling = self.host_of(id);
         let Some(parent) = self.hosts[sibling].parent else {
             ohos_hilog_binding::warn("arkit_arkui: insert_nodes_before: no parent");
+            self.discard_detached_hosts(new_hosts);
             return;
         };
-        let logical_index = self.hosts[parent]
+        let Some(logical_index) = self.hosts[parent]
             .children
             .iter()
             .position(|&c| c == sibling)
-            .unwrap_or(0);
+        else {
+            ohos_hilog_binding::warn(
+                "arkit_arkui: insert_nodes_before sibling is not in its recorded parent",
+            );
+            self.discard_detached_hosts(new_hosts);
+            return;
+        };
         for (offset, &child) in new_hosts.iter().enumerate() {
             self.hosts[child].parent = Some(parent);
             self.hosts[parent]
@@ -1264,15 +1394,18 @@ impl WriteMutations for ArkUIRenderer {
         }
 
         // Store in desired_attrs (the source of truth for replay).
-        self.hosts[host]
+        let mutation = self.hosts[host]
             .desired_attrs
             .borrow_mut()
             .set(tag, name, value);
 
         if let Some(native) = self.hosts[host].native.clone() {
             let desired_attrs = self.hosts[host].desired_attrs.borrow();
-            desired_attrs.apply_to(&mut native.borrow_mut(), tag);
-            desired_attrs.after_patch(&mut native.borrow_mut(), tag);
+            if !matches!(mutation, AttrMutation::Unchanged) {
+                let mut native = native.borrow_mut();
+                desired_attrs.apply_mutation(&mut native, tag, name, mutation);
+                desired_attrs.after_patch(&mut native, tag);
+            }
         }
         if name == "src" {
             self.clear_host_image_source(host);
@@ -1334,10 +1467,14 @@ impl WriteMutations for ArkUIRenderer {
             })
         {
             if let Some(registration) = register_event(&native, name, tag, sink, id) {
-                if let EventRegistration::Gesture(registration) = registration {
-                    self.remember_gesture_registration(host, registration);
-                }
-                self.remember_event_registration(host, name, id, native_wrapper);
+                let active = match registration {
+                    EventRegistration::Node(active) => active,
+                    EventRegistration::Gesture(registration) => {
+                        self.remember_gesture_registration(host, registration);
+                        Rc::new(std::cell::Cell::new(true))
+                    }
+                };
+                self.remember_event_registration(host, name, id, native_wrapper, active);
             }
         }
     }
@@ -1373,8 +1510,6 @@ impl WriteMutations for ArkUIRenderer {
         self.hosts[parent].children.remove(logical_index);
         self.sync_native_children(parent);
         self.dispose_subtree(host);
-        self.bind_element(id, 0); // invalidate; element_to_host[id] no longer valid
-        self.element_to_host[id.0] = None;
     }
 
     fn push_root(&mut self, id: ElementId) {
@@ -1408,6 +1543,10 @@ impl ArkUIRenderer {
 
     /// Unmount the root from the NodeContent slot.
     pub fn unmount(&mut self) -> ArkUIResult<()> {
+        // Gesture Drop calls into the mounted node, and node-event callbacks
+        // rely on active tokens. Tear both down before RootNode destroys the
+        // native subtree.
+        self.clear_subtree_native_listeners(0);
         self.root_node.unmount()
     }
 
@@ -1442,6 +1581,14 @@ impl ArkUIRenderer {
     }
 }
 
+impl Drop for ArkUIRenderer {
+    fn drop(&mut self) {
+        // Explicit `unmount` remains the error-reporting API; Drop provides
+        // the same ordering and best-effort cleanup for early-return paths.
+        let _ = self.unmount();
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Event registration + payload extraction
 // ---------------------------------------------------------------------------
@@ -1459,7 +1606,7 @@ fn register_event(
     sink: Rc<dyn EventSink>,
     id: ElementId,
 ) -> Option<EventRegistration> {
-    if matches!(normalize_event_name(name), "longpress" | "long_press") {
+    if classify_event_name(name) == Some(ArkEventKind::LongPress) {
         return log_arkui_result(
             "create_event_listener long_press",
             register_long_press(node, name, sink, id),
@@ -1491,11 +1638,16 @@ fn register_event(
         event_node.on_event(NodeEventType::OnClickEvent, |_| {});
     }
     let node_for_payload = node.clone();
+    let active = Rc::new(std::cell::Cell::new(true));
+    let callback_active = active.clone();
     event_node.on_event(event_type, move |event: &ArkNativeEvent| {
+        if !callback_active.get() {
+            return;
+        }
         let payload = extract_payload(event_type, event, Some(&node_for_payload));
         sink.dispatch(name, id, payload);
     });
-    Some(EventRegistration::Node)
+    Some(EventRegistration::Node(active))
 }
 
 fn register_long_press(
@@ -1561,7 +1713,7 @@ fn extract_payload(
     use NodeEventType::*;
     match event_type {
         // Checkbox / radio checked state: i32(0) != 0.
-        CheckboxEventOnChange | RadioEventOnChange => {
+        CheckboxEventOnChange | RadioEventOnChange | ToggleOnChange => {
             ArkEventPayload::Bool(event.i32_value(0).unwrap_or(0) != 0)
         }
         // Slider value: f32(0).
@@ -1590,6 +1742,10 @@ fn extract_payload(
             last: event.i32_value(1).unwrap_or(0),
             center: 0,
         }),
+        ScrollEventOnScroll => ArkEventPayload::ScrollOffset(ScrollOffsetPayload {
+            x: event.f32_value(0).unwrap_or_default(),
+            y: event.f32_value(1).unwrap_or_default(),
+        }),
         EventOnAreaChange => node
             .and_then(extract_layout_payload)
             .map(ArkEventPayload::Layout)
@@ -1598,8 +1754,8 @@ fn extract_payload(
         SwiperEventOnChange => ArkEventPayload::Int(event.i32_value(0).unwrap_or(0)),
         // Hover: i32(0) is the is-hovering boolean (1 = entered, 0 = exited).
         OnHover => ArkEventPayload::Bool(event.i32_value(0).unwrap_or(0) != 0),
-        OnClick | OnClickEvent | TouchEvent | OnDragStart | OnDragMove | OnDragEnd
-        | OnDragEnter | OnDragLeave => extract_pointer_payload(event)
+        OnClick | OnClickEvent | TouchEvent | OnHoverMove | OnDragStart | OnDragMove
+        | OnDragEnd | OnDragEnter | OnDragLeave => extract_pointer_payload(event)
             .map(ArkEventPayload::Pointer)
             .unwrap_or_default(),
         _ => ArkEventPayload::None,
@@ -1610,6 +1766,19 @@ fn extract_pointer_payload(event: &ArkNativeEvent) -> Option<PointerPayload> {
     use ohos_arkui_binding::arkui_input_binding::UIInputAction;
 
     let input = event.input_event()?;
+    let pointer_id = input.get_changed_pointer_id().map_or_else(
+        |_| input.pointer_id(0),
+        |id| i32::try_from(id).unwrap_or_default(),
+    );
+    let mut pressed_buttons = [0_i32; 8];
+    let pressed_count = input
+        .mouse_pressed_buttons(&mut pressed_buttons)
+        .unwrap_or_default();
+    let buttons = pressed_buttons[..pressed_count]
+        .iter()
+        .filter_map(|button| u32::try_from(*button).ok())
+        .filter(|button| *button < 64)
+        .fold(0_u64, |mask, button| mask | (1_u64 << button));
     Some(PointerPayload {
         action: match input.action {
             UIInputAction::Cancel => PointerAction::Cancel,
@@ -1617,6 +1786,10 @@ fn extract_pointer_payload(event: &ArkNativeEvent) -> Option<PointerPayload> {
             UIInputAction::Move => PointerAction::Move,
             UIInputAction::Up => PointerAction::Up,
         },
+        timestamp_nanos: u64::try_from(input.event_time()).unwrap_or_default(),
+        pointer_id,
+        buttons,
+        pressure: input.pointer_pressure(0),
         x: input.pointer_x(),
         y: input.pointer_y(),
         window_x: input.pointer_window_x(),
@@ -1643,22 +1816,6 @@ fn extract_layout_payload(node: &NodeRef) -> Option<LayoutPayload> {
     })
 }
 
-/// Normalize a dioxus event attribute name to its stripped form.
-///
-/// Dioxus core calls `create_event_listener(&attribute.name[2..], id)` — it
-/// strips the leading `"on"` from the attribute name before handing it to the
-/// renderer (`packages/core/src/diff/node.rs:533`). So the renderer receives
-/// `"click"`, `"change"`, `"submit"`, ... — NOT `"onclick"`. The runtime later
-/// matches listeners with `attr.name.get(2..) == Some(name)`, so the name
-/// passed to `handle_event` must also be the stripped form.
-///
-/// `on_press` / `on_click` strip to `_press` / `_click` (leading underscore
-/// from the separator); we strip that too.
-fn normalize_event_name(name: &str) -> &str {
-    let s = name.strip_prefix("on").unwrap_or(name);
-    s.strip_prefix('_').unwrap_or(s)
-}
-
 /// Map an rsx event name (+ the component tag, for kind-specific events) to the
 /// ArkUI [`NodeEventType`] that fires it.
 ///
@@ -1668,63 +1825,72 @@ fn normalize_event_name(name: &str) -> &str {
 /// accepted for robustness.
 fn event_type_for_name(name: &str, tag: &str) -> Option<NodeEventType> {
     use NodeEventType::*;
-    let n = normalize_event_name(name);
-    Some(match (n, tag) {
-        // Click is generic across components. ("press" covers on_press → _press
-        // → press after normalization.)
-        ("click" | "press", _) => OnClick,
+    let kind = classify_event_name(name)?;
+    Some(match (kind, tag) {
+        (ArkEventKind::Click, _) => OnClick,
 
         // Value change — component-specific.
-        ("change" | "input" | "toggle", "checkbox") => CheckboxEventOnChange,
-        ("change" | "input" | "toggle", "toggle") => {
-            // Toggle has no dedicated OnChange in the binding; legacy code used
-            // OnClick for toggle change. We keep that mapping.
-            OnClick
-        }
-        ("change" | "input" | "toggle", "radio") => RadioEventOnChange,
-        ("change" | "input" | "toggle", "slider") => SliderEventOnChange,
-        ("change" | "input" | "toggle", "textinput") => TextInputOnChange,
-        ("change" | "input" | "toggle", "textarea") => TextAreaOnChange,
-        ("change" | "input" | "toggle", "datepicker") => DatePickerEventOnDateChange,
-        ("change" | "input" | "toggle", "calendar" | "calendarpicker") => {
-            CalendarPickerEventOnChange
-        }
+        (ArkEventKind::Change, "checkbox") => CheckboxEventOnChange,
+        (ArkEventKind::Change, "toggle") => ToggleOnChange,
+        (ArkEventKind::Change, "radio") => RadioEventOnChange,
+        (ArkEventKind::Change, "slider") => SliderEventOnChange,
+        (ArkEventKind::Change, "textinput") => TextInputOnChange,
+        (ArkEventKind::Change, "textarea") => TextAreaOnChange,
+        (ArkEventKind::Change, "datepicker") => DatePickerEventOnDateChange,
+        (ArkEventKind::Change, "calendar" | "calendarpicker") => CalendarPickerEventOnChange,
 
         // Submit — text input/area.
-        ("submit", "textinput") => TextInputOnSubmit,
-        ("submit", "textarea") => TextAreaOnSubmit,
+        (ArkEventKind::Submit, "textinput") => TextInputOnSubmit,
+        (ArkEventKind::Submit, "textarea") => TextAreaOnSubmit,
 
         // Element-bound layout/area changes.
-        ("area" | "area_change" | "layout" | "layout_change", _) => EventOnAreaChange,
+        (ArkEventKind::AreaChange, _) => EventOnAreaChange,
 
-        // Scroll — list/water-flow scroll-index, scroll offset for Scroll.
-        ("scroll", "list") => ListOnScrollIndex,
-        ("scroll", "grid") => OnWillScroll,
-        ("scroll", "waterflow") => WaterFlowOnScrollIndex,
-        ("scroll", "scroll") => ScrollEventOnScroll,
+        // Grid scroll-index events were added after the workspace's API-20
+        // contract. Do not register the unrelated WaterFlow `OnWillScroll`
+        // event on a Grid: it succeeds inconsistently and carries a different
+        // payload shape.
+        (ArkEventKind::Scroll, "list") => ListOnScrollIndex,
+        (ArkEventKind::Scroll, "waterflow") => WaterFlowOnScrollIndex,
+        (ArkEventKind::Scroll, "scroll") => ScrollEventOnScroll,
 
         // Swiper change.
-        ("swiperchange" | "swiper_change" | "swiper", "swiper") => SwiperEventOnChange,
+        (ArkEventKind::SwiperChange, "swiper") => SwiperEventOnChange,
 
         // Refresh trigger.
-        ("refresh", "refresh") => RefreshOnRefresh,
+        (ArkEventKind::Refresh, "refresh") => RefreshOnRefresh,
 
-        // Hover (generic across components). `on_hover` carries a bool
-        // (is-hovering on enter/exit). (`OnHoverMove` needs the binding's
-        // `api-15` feature, not enabled here; `on_hover_move` falls back to
-        // the enter/exit hover event.)
-        ("hover" | "hover_move" | "hovermove", _) => OnHover,
+        (ArkEventKind::Hover, _) => OnHover,
+        (ArkEventKind::HoverMove, _) => OnHoverMove,
 
         // Drag lifecycle (generic across components).
-        ("dragstart" | "drag_start", _) => OnDragStart,
-        ("dragmove" | "drag_move", _) => OnDragMove,
-        ("dragend" | "drag_end", _) => OnDragEnd,
-        ("dragleave" | "drag_leave", _) => OnDragLeave,
-        ("dragenter" | "drag_enter", _) => OnDragEnter,
+        (ArkEventKind::DragStart, _) => OnDragStart,
+        (ArkEventKind::DragMove, _) => OnDragMove,
+        (ArkEventKind::DragEnd, _) => OnDragEnd,
+        (ArkEventKind::DragLeave, _) => OnDragLeave,
+        (ArkEventKind::DragEnter, _) => OnDragEnter,
 
         // Raw touch (generic across components).
-        ("touch", _) => TouchEvent,
+        (ArkEventKind::Touch, _) => TouchEvent,
 
         _ => return None,
     })
+}
+
+#[cfg(test)]
+mod event_tests {
+    use super::{event_type_for_name, NodeEventType};
+
+    #[test]
+    fn component_events_use_their_typed_native_event() {
+        assert_eq!(
+            event_type_for_name("change", "toggle"),
+            Some(NodeEventType::ToggleOnChange)
+        );
+        assert_eq!(
+            event_type_for_name("_hover_move", "column"),
+            Some(NodeEventType::OnHoverMove)
+        );
+        assert_eq!(event_type_for_name("scroll", "grid"), None);
+    }
 }

@@ -593,6 +593,8 @@ fn draw_label(
 fn begin_clip(canvas: &Canvas, plot: &crate::render::geometry::Plot) {
     canvas.save();
     let rect = Rect::new(plot.x, plot.y, plot.x + plot.width, plot.y + plot.height);
+    // SAFETY: canvas and rect are live for the synchronous clip call; the
+    // caller restores the saved canvas state after rendering the series.
     unsafe {
         ohos_native_drawing_sys::OH_Drawing_CanvasClipRect(
             canvas.as_ptr(),

@@ -250,7 +250,10 @@ impl WindowMetricsHandle {
         callback: impl Fn(WindowMetrics) + 'static,
     ) -> WindowMetricsSubscription {
         let id = self.0.next_subscriber_id.get();
-        self.0.next_subscriber_id.set(id.wrapping_add(1));
+        self.0.next_subscriber_id.set(
+            id.checked_add(1)
+                .expect("arkit_runtime: window subscriber id space exhausted"),
+        );
         self.0
             .subscribers
             .borrow_mut()

@@ -79,6 +79,14 @@ impl<T> AnimatePresence<T> {
         &self.entries
     }
 
+    pub fn set_mode(&mut self, mode: PresenceMode) {
+        self.mode = mode;
+        if mode != PresenceMode::Wait {
+            let waiting = std::mem::take(&mut self.waiting);
+            self.insert_new(waiting);
+        }
+    }
+
     pub fn phase(&self, key: &PresenceKey) -> Option<PresencePhase> {
         self.positions
             .get(key)
@@ -272,7 +280,10 @@ pub fn use_animate_presence<T: Clone + 'static>(
     let inner = use_hook(|| Rc::new(RefCell::new(AnimatePresence::new(mode))));
     let version = use_signal(|| 0_u64);
     let _ = version();
-    inner.borrow_mut().update(children);
+    let mut presence = inner.borrow_mut();
+    presence.set_mode(mode);
+    presence.update(children);
+    drop(presence);
     PresenceHandle { inner, version }
 }
 

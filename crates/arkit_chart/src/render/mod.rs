@@ -17,7 +17,7 @@ mod symbol;
 mod viewport;
 
 pub use engine::hit_test;
-pub(crate) use engine::{hit_test_with_hidden, nearest_axis_event};
+pub(crate) use engine::{hit_test_with_hidden, nearest_axis_event, nearest_axis_event_from_hits};
 pub(crate) use hit::HitRegion;
 pub(crate) use viewport::{
     drag_window_at, initial_windows, inside_zoom_at, ZoomDrag, ZoomHandle, ZoomWindow,

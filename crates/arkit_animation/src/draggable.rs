@@ -4,12 +4,14 @@ use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
 
 use arkit_animation_core::{
-    AnimationValue, Easing, Modifier, SpringSpec, TargetName, TimePoint, TimeSpan,
-    TimelinePosition, Vec2,
+    AnimationValue, Easing, Modifier, OutputSeek, PlaybackState, SpringSpec, TargetName, TimePoint,
+    TimeSpan, TimelinePosition, Vec2,
 };
 
+use crate::controls::TimelineParts;
+use crate::frame_driver::FrameSourceSubscription;
 use crate::properties::{TRANSLATE_X, TRANSLATE_Y};
-use crate::{Animation, AnimationControls, AnimationSelector, Timeline};
+use crate::{Animation, AnimationControls, AnimationSelector, AnimationSubscription, Timeline};
 use arkit_prelude::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -17,6 +19,16 @@ pub enum DragAxis {
     X,
     Y,
     Both,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub enum DragMapping {
+    /// Seek translate-x and translate-y independently so the target remains
+    /// under the pointer for unconstrained two-dimensional movement.
+    DirectPosition,
+    /// Map the selected axis (or the mean of both axes) to one timeline clock.
+    #[default]
+    TimelineProgress,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -155,6 +167,7 @@ impl AutoScroll {
 #[derive(Debug, Clone)]
 pub struct DraggableConfig {
     pub axis: DragAxis,
+    pub mapping: DragMapping,
     pub constraints: Option<DragConstraints>,
     pub threshold: f32,
     pub modifier: Modifier,
@@ -174,6 +187,7 @@ impl Default for DraggableConfig {
     fn default() -> Self {
         Self {
             axis: DragAxis::Both,
+            mapping: DragMapping::TimelineProgress,
             constraints: None,
             threshold: 3.0,
             modifier: Modifier::Identity,
@@ -217,6 +231,14 @@ pub struct DraggableCallbacks {
     pub snap: Option<Rc<dyn Fn(DragUpdate)>>,
     pub settle: Option<Rc<dyn Fn(DragUpdate)>>,
     pub resize: Option<Rc<dyn Fn()>>,
+    /// Applies auto-scroll velocity to the owning scroll container.
+    pub auto_scroll: Option<Rc<dyn Fn(Vec2)>>,
+}
+
+enum DragNotification {
+    Update(Rc<dyn Fn(DragUpdate)>, DragUpdate),
+    Simple(Rc<dyn Fn()>),
+    AutoScroll(Rc<dyn Fn(Vec2)>, Vec2),
 }
 
 pub struct Draggable {
@@ -229,40 +251,53 @@ pub struct Draggable {
     pointer_origin: Vec2,
     position: Vec2,
     tracker: VelocityTracker,
+    pending_drag: Option<DragUpdate>,
+    defer_to_frame: bool,
+    release_active: bool,
+    mapping_parts: TimelineParts,
+    output_x: Option<OutputSeek>,
+    output_y: Option<OutputSeek>,
+    notifications: Vec<DragNotification>,
+    release_from: Vec2,
+    release_to: Vec2,
 }
 
 #[derive(Clone)]
 pub struct DraggableHandle {
     inner: Rc<RefCell<Draggable>>,
+    _frame_source: Rc<FrameSourceSubscription>,
+    _settle_subscription: Rc<AnimationSubscription>,
 }
 
 impl DraggableHandle {
     pub fn grab(&self, at: TimePoint, pointer: Vec2) -> bool {
-        self.inner.borrow_mut().grab(at, pointer)
+        drive_draggable(&self.inner, |draggable| draggable.grab(at, pointer))
     }
 
     pub fn drag(&self, at: TimePoint, pointer: Vec2) -> Option<DragUpdate> {
-        self.inner.borrow_mut().drag(at, pointer)
+        drive_draggable(&self.inner, |draggable| draggable.drag(at, pointer))
     }
 
     pub fn release(&self) -> Option<DragUpdate> {
-        self.inner.borrow_mut().release()
+        drive_draggable(&self.inner, Draggable::release)
     }
 
     pub fn refresh(&self) {
-        self.inner.borrow().refresh();
+        drive_draggable(&self.inner, |draggable| {
+            draggable.refresh();
+        });
     }
 
     pub fn reset(&self) {
-        self.inner.borrow_mut().reset();
+        drive_draggable(&self.inner, |draggable| draggable.reset());
     }
 
     pub fn revert(&self) {
-        self.inner.borrow_mut().revert();
+        drive_draggable(&self.inner, |draggable| draggable.revert());
     }
 
     pub fn stop(&self) {
-        self.inner.borrow_mut().stop();
+        drive_draggable(&self.inner, |draggable| draggable.stop());
     }
 
     pub fn phase(&self) -> DragPhase {
@@ -277,18 +312,51 @@ pub fn use_draggable(
     config: DraggableConfig,
     callbacks: DraggableCallbacks,
 ) -> DraggableHandle {
-    use_hook(|| DraggableHandle {
-        inner: Rc::new(RefCell::new(
+    let driver = controls.inner.driver.clone();
+    let observed_controls = controls.clone();
+    let initial_target = target.clone();
+    let initial_config = config.clone();
+    let initial_callbacks = callbacks.clone();
+    let handle = use_hook(move || {
+        let inner = Rc::new(RefCell::new(
             Draggable::new(controls)
-                .target(target)
-                .config(config)
-                .callbacks(callbacks),
-        )),
-    })
+                .target(initial_target)
+                .config(initial_config)
+                .callbacks(initial_callbacks),
+        ));
+        inner.borrow_mut().defer_to_frame = true;
+        let frame_inner = Rc::downgrade(&inner);
+        let frame_source = Rc::new(driver.subscribe(Rc::new(move |_| {
+            if let Some(inner) = frame_inner.upgrade() {
+                drive_draggable(&inner, Draggable::flush_frame);
+            }
+        })));
+        let settle_inner = Rc::downgrade(&inner);
+        let settle_subscription = Rc::new(observed_controls.subscribe(move |snapshot| {
+            if snapshot.state == PlaybackState::Completed {
+                if let Some(inner) = settle_inner.upgrade() {
+                    drive_draggable(&inner, |draggable| draggable.settle());
+                }
+            }
+        }));
+        DraggableHandle {
+            inner,
+            _frame_source: frame_source,
+            _settle_subscription: settle_subscription,
+        }
+    });
+    {
+        let mut draggable = handle.inner.borrow_mut();
+        draggable.target = Some(target);
+        draggable.config = config;
+        draggable.callbacks = callbacks;
+    }
+    handle
 }
 
 impl Draggable {
     pub fn new(controls: AnimationControls) -> Self {
+        let mapping_parts = controls.inner.timeline_parts();
         Self {
             controls,
             target: None,
@@ -299,6 +367,15 @@ impl Draggable {
             pointer_origin: Vec2::default(),
             position: Vec2::default(),
             tracker: VelocityTracker::new(8),
+            pending_drag: None,
+            defer_to_frame: false,
+            release_active: false,
+            mapping_parts,
+            output_x: None,
+            output_y: None,
+            notifications: Vec::new(),
+            release_from: Vec2::default(),
+            release_to: Vec2::default(),
         }
     }
 
@@ -329,13 +406,18 @@ impl Draggable {
         if self.phase == DragPhase::Disabled {
             return false;
         }
+        if self.release_active {
+            self.position = self.sample_release_position();
+        }
+        self.restore_mapping_timeline();
         self.controls.pause();
         self.phase = DragPhase::Grabbed;
         self.origin = self.position;
         self.pointer_origin = pointer;
+        self.pending_drag = None;
         self.tracker.clear();
         self.tracker.push(at, pointer);
-        self.emit(self.callbacks.grab.as_ref());
+        self.emit(self.callbacks.grab.clone());
         true
     }
 
@@ -354,13 +436,38 @@ impl Draggable {
             return Some(self.snapshot());
         }
         self.phase = DragPhase::Dragging;
-        self.position = self.constrain(
+        self.position = self.constrain_drag(
             self.axis_point(Vec2::new(self.origin.x + delta.x, self.origin.y + delta.y)),
         );
-        self.map_position_to_animation();
         let update = self.snapshot();
-        invoke(&self.callbacks.drag, update);
-        invoke(&self.callbacks.update, update);
+        self.pending_drag = Some(update);
+        if self.defer_to_frame {
+            self.controls.inner.driver.request();
+        } else {
+            self.flush_frame();
+        }
+        Some(update)
+    }
+
+    pub fn flush_frame(&mut self) -> Option<DragUpdate> {
+        self.flush_pending_drag(true)
+    }
+
+    fn flush_pending_drag(&mut self, map_to_animation: bool) -> Option<DragUpdate> {
+        let update = self.pending_drag.take()?;
+        if map_to_animation {
+            self.map_position_to_animation();
+        }
+        self.emit_update(self.callbacks.drag.clone(), update);
+        self.emit_update(self.callbacks.update.clone(), update);
+        if update.auto_scroll_velocity != Vec2::default() {
+            if let Some(callback) = self.callbacks.auto_scroll.clone() {
+                self.notifications.push(DragNotification::AutoScroll(
+                    callback,
+                    update.auto_scroll_velocity,
+                ));
+            }
+        }
         Some(update)
     }
 
@@ -368,6 +475,11 @@ impl Draggable {
         if !matches!(self.phase, DragPhase::Grabbed | DragPhase::Dragging) {
             return None;
         }
+        // A release timeline starts at the latest logical position, so a raw
+        // move that arrived after the last frame only needs its callbacks. A
+        // stale seek must not be applied after the release plan replaces the
+        // mapping plan.
+        self.flush_pending_drag(false);
         let velocity = self.clamp_velocity(self.tracker.velocity());
         let projected = if self.config.inertia {
             Vec2::new(
@@ -385,9 +497,9 @@ impl Draggable {
             velocity,
             auto_scroll_velocity: Vec2::default(),
         };
-        invoke(&self.callbacks.release, release);
+        self.emit_update(self.callbacks.release.clone(), release);
         if target != self.position {
-            invoke(&self.callbacks.snap, release);
+            self.emit_update(self.callbacks.snap.clone(), release);
         }
         self.start_release_animation(target);
         self.position = target;
@@ -395,9 +507,12 @@ impl Draggable {
     }
 
     pub fn settle(&mut self) {
+        if self.phase != DragPhase::Settling {
+            return;
+        }
         self.phase = DragPhase::Idle;
-        self.controls.complete();
-        self.emit(self.callbacks.settle.as_ref());
+        self.restore_mapping_timeline();
+        self.emit(self.callbacks.settle.clone());
     }
 
     pub fn enable(&mut self) {
@@ -411,32 +526,38 @@ impl Draggable {
         self.phase = DragPhase::Disabled;
     }
 
-    pub fn refresh(&self) {
+    pub fn refresh(&mut self) {
         self.controls.refresh();
-        if let Some(callback) = &self.callbacks.resize {
-            callback();
+        if let Some(callback) = self.callbacks.resize.clone() {
+            self.notifications.push(DragNotification::Simple(callback));
         }
     }
 
     pub fn reset(&mut self) {
+        self.restore_mapping_timeline();
         self.controls.reset();
         self.position = Vec2::default();
         self.phase = DragPhase::Idle;
+        self.pending_drag = None;
     }
 
     pub fn revert(&mut self) {
+        self.restore_mapping_timeline();
         self.controls.revert();
         self.position = Vec2::default();
         self.phase = DragPhase::Idle;
+        self.pending_drag = None;
     }
 
     pub fn stop(&mut self) {
+        self.restore_mapping_timeline();
         self.controls.pause();
         self.phase = DragPhase::Idle;
+        self.pending_drag = None;
         self.tracker.clear();
     }
 
-    fn start_release_animation(&self, target_position: Vec2) {
+    fn start_release_animation(&mut self, target_position: Vec2) {
         let Some(target) = self.target.clone() else {
             self.controls.play();
             return;
@@ -470,13 +591,21 @@ impl Draggable {
             );
         self.controls
             .set_timeline(Timeline::new().add(animation, TimelinePosition::START));
+        self.release_from = self.position;
+        self.release_to = target_position;
+        self.release_active = true;
         self.controls.restart();
     }
 
-    fn map_position_to_animation(&self) {
+    fn map_position_to_animation(&mut self) {
         let Some(constraints) = self.config.constraints else {
             return;
         };
+        if self.config.mapping == DragMapping::DirectPosition
+            && self.map_position_to_outputs(constraints)
+        {
+            return;
+        }
         let extent_x = constraints.max.x - constraints.min.x;
         let extent_y = constraints.max.y - constraints.min.y;
         let progress = match self.config.axis {
@@ -493,6 +622,66 @@ impl Draggable {
         self.controls.seek(TimePoint::from_nanos(nanos));
     }
 
+    fn map_position_to_outputs(&mut self, constraints: DragConstraints) -> bool {
+        let Some(target) = self.target.as_ref() else {
+            return false;
+        };
+        if self.output_x.is_none() {
+            self.output_x = self.controls.inner.host.arkui().output_seek(
+                target,
+                TRANSLATE_X.name(),
+                TimePoint::ZERO,
+            );
+        }
+        if self.output_y.is_none() {
+            self.output_y = self.controls.inner.host.arkui().output_seek(
+                target,
+                TRANSLATE_Y.name(),
+                TimePoint::ZERO,
+            );
+        }
+        let duration = self.config.map_duration;
+        let position = |value: f32, min: f32, max: f32| {
+            let progress = normalized(value, min, max - min);
+            TimePoint::from_nanos((duration.as_nanos() as f64 * f64::from(progress)).round() as u64)
+        };
+        let mut x = self.output_x;
+        let mut y = self.output_y;
+        if let Some(output) = &mut x {
+            output.position = position(self.position.x, constraints.min.x, constraints.max.x);
+        }
+        if let Some(output) = &mut y {
+            output.position = position(self.position.y, constraints.min.y, constraints.max.y);
+        }
+        match self.config.axis {
+            DragAxis::X => x.is_some_and(|x| {
+                self.controls.inner.seek_outputs(x, None);
+                true
+            }),
+            DragAxis::Y => y.is_some_and(|y| {
+                self.controls.inner.seek_outputs(y, None);
+                true
+            }),
+            DragAxis::Both => match (x, y) {
+                (Some(x), Some(y)) => {
+                    self.controls.inner.seek_outputs(x, Some(y));
+                    true
+                }
+                _ => false,
+            },
+        }
+    }
+
+    fn restore_mapping_timeline(&mut self) {
+        if !self.release_active {
+            return;
+        }
+        self.controls
+            .inner
+            .replace_timeline_parts(&self.mapping_parts);
+        self.release_active = false;
+    }
+
     fn axis_point(&self, point: Vec2) -> Vec2 {
         match self.config.axis {
             DragAxis::X => Vec2::new(point.x, self.origin.y),
@@ -507,6 +696,33 @@ impl Draggable {
             .constraints
             .map_or(point, |bounds| bounds.clamp(point));
         Vec2::new(self.modify(point.x), self.modify(point.y))
+    }
+
+    fn constrain_drag(&self, point: Vec2) -> Vec2 {
+        let point = self.config.constraints.map_or(point, |bounds| {
+            let friction = self.config.container_friction.clamp(0.0, 1.0);
+            Vec2::new(
+                resist_axis(point.x, bounds.min.x, bounds.max.x, friction),
+                resist_axis(point.y, bounds.min.y, bounds.max.y, friction),
+            )
+        });
+        Vec2::new(self.modify(point.x), self.modify(point.y))
+    }
+
+    fn sample_release_position(&self) -> Vec2 {
+        let Some(snapshot) = self.controls.snapshot() else {
+            return self.position;
+        };
+        let duration = self.config.release_duration.as_nanos();
+        if duration == 0 {
+            return self.release_to;
+        }
+        let progress = snapshot.local_time.as_nanos() as f32 / duration as f32;
+        let eased = Easing::Spring(self.config.spring).sample(progress.clamp(0.0, 1.0));
+        Vec2::new(
+            self.release_from.x + (self.release_to.x - self.release_from.x) * eased,
+            self.release_from.y + (self.release_to.y - self.release_from.y) * eased,
+        )
     }
 
     fn modify(&self, value: f32) -> f32 {
@@ -544,16 +760,53 @@ impl Draggable {
         }
     }
 
-    fn emit(&self, callback: Option<&Rc<dyn Fn(DragUpdate)>>) {
+    fn emit(&mut self, callback: Option<Rc<dyn Fn(DragUpdate)>>) {
         if let Some(callback) = callback {
-            callback(self.snapshot());
+            let update = self.snapshot();
+            self.notifications
+                .push(DragNotification::Update(callback, update));
         }
+    }
+
+    fn emit_update(&mut self, callback: Option<Rc<dyn Fn(DragUpdate)>>, update: DragUpdate) {
+        if let Some(callback) = callback {
+            self.notifications
+                .push(DragNotification::Update(callback, update));
+        }
+    }
+
+    fn take_notifications(&mut self) -> Vec<DragNotification> {
+        std::mem::take(&mut self.notifications)
     }
 }
 
-fn invoke(callback: &Option<Rc<dyn Fn(DragUpdate)>>, update: DragUpdate) {
-    if let Some(callback) = callback {
-        callback(update);
+fn drive_draggable<R>(
+    inner: &Rc<RefCell<Draggable>>,
+    operation: impl FnOnce(&mut Draggable) -> R,
+) -> R {
+    let (result, notifications) = {
+        let mut draggable = inner.borrow_mut();
+        let result = operation(&mut draggable);
+        let notifications = draggable.take_notifications();
+        (result, notifications)
+    };
+    for notification in notifications {
+        match notification {
+            DragNotification::Update(callback, update) => callback(update),
+            DragNotification::Simple(callback) => callback(),
+            DragNotification::AutoScroll(callback, velocity) => callback(velocity),
+        }
+    }
+    result
+}
+
+fn resist_axis(value: f32, min: f32, max: f32, friction: f32) -> f32 {
+    if value < min {
+        min + (value - min) * friction
+    } else if value > max {
+        max + (value - max) * friction
+    } else {
+        value
     }
 }
 

@@ -1,5 +1,5 @@
 use std::cell::{Cell, RefCell};
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
 use arkit_animation_core::{AdapterTargetId, TargetName};
 use arkit_hooks::use_ark_node;
@@ -14,6 +14,7 @@ pub(crate) struct AnimationHostContext {
     pub host: Rc<AnimationHost>,
     pub driver: Rc<FrameDriver>,
     pub target_version: Signal<u64>,
+    pending_controls: Rc<RefCell<Vec<Weak<ControlsInner>>>>,
 }
 
 #[derive(Clone, Copy)]
@@ -30,12 +31,14 @@ impl AnimationTarget {
 #[track_caller]
 pub fn use_animation_host_provider() {
     crate::layout::use_layout_registry_provider();
+    let frame_node = use_ark_node();
     let context = use_context_provider(|| {
         let host = AnimationHost::new().expect("built-in animation adapters must register");
         AnimationHostContext {
-            driver: FrameDriver::new(host.clone()),
+            driver: FrameDriver::new(host.clone(), frame_node),
             host,
             target_version: Signal::new(0),
+            pending_controls: Rc::new(RefCell::new(Vec::new())),
         }
     });
     let metrics = arkit_hooks::use_window_metrics();
@@ -76,6 +79,7 @@ pub fn use_animation_target(name: impl Into<String>) -> AnimationTarget {
                 ready.set(true);
                 let mut version = register_context.target_version;
                 version += 1;
+                retry_pending_controls(&register_context);
             }
             Err(error) => {
                 ohos_hilog_binding::error(format!(
@@ -103,44 +107,61 @@ pub(crate) fn use_animation_context() -> AnimationHostContext {
 #[track_caller]
 pub fn use_animation(timeline: Timeline) -> AnimationControls {
     let context = use_animation_context();
-    let node = use_ark_node();
     let (source, policy, requirements, calls) = timeline.into_parts();
+    let pending_controls = context.pending_controls.clone();
     let inner = use_hook(|| {
-        ControlsInner::new(
+        let inner = ControlsInner::new(
             context.host.clone(),
             context.driver.clone(),
-            node,
             source,
             policy,
             requirements,
             calls,
-        )
+        );
+        pending_controls.borrow_mut().push(Rc::downgrade(&inner));
+        inner
     });
     let registration = inner.clone();
     let target_version = context.target_version;
     use_effect(move || {
         let _ = target_version();
-        if registration.instance.get().is_some() {
-            return;
-        }
-        match registration.host.insert_timeline_with_policy(
-            &registration.source.borrow(),
-            registration.policy.get(),
-            registration.requirements.get(),
-        ) {
-            Ok((instance, report)) => {
-                registration.instance.set(Some(instance));
-                registration.lowering_report.replace(Some(report));
-            }
-            Err(crate::AnimationHostError::Resolve(
-                arkit_animation_core::AnimationResolveError::EmptyTargetSelection,
-            )) => {}
-            Err(error) => {
-                ohos_hilog_binding::error(format!("animation insertion failed: {error}"));
-            }
-        }
+        try_register_controls(&registration);
     });
     AnimationControls { inner }
+}
+
+fn retry_pending_controls(context: &AnimationHostContext) {
+    let pending = {
+        let mut entries = context.pending_controls.borrow_mut();
+        entries.retain(|entry| entry.strong_count() > 0);
+        entries.iter().filter_map(Weak::upgrade).collect::<Vec<_>>()
+    };
+    for controls in pending {
+        try_register_controls(&controls);
+    }
+}
+
+fn try_register_controls(controls: &ControlsInner) {
+    if controls.instance.get().is_some() {
+        return;
+    }
+    match controls.host.insert_timeline_with_policy(
+        &controls.source.borrow(),
+        controls.policy.get(),
+        controls.requirements.get(),
+    ) {
+        Ok((instance, report)) => {
+            controls.instance.set(Some(instance));
+            controls.lowering_report.replace(Some(report));
+            controls.notify_observers();
+        }
+        Err(crate::AnimationHostError::Resolve(
+            arkit_animation_core::AnimationResolveError::EmptyTargetSelection,
+        )) => {}
+        Err(error) => {
+            ohos_hilog_binding::error(format!("animation insertion failed: {error}"));
+        }
+    }
 }
 
 #[track_caller]

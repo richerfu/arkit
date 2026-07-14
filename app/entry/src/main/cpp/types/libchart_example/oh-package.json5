@@ -1,6 +1,0 @@
-{
-  "name": "libchart_example.so",
-  "types": "./Index.d.ts",
-  "version": "1.0.0",
-  "description": "arkit chart example napi bindings"
-}

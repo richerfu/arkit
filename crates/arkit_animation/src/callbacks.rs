@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use arkit_animation_core::TimePoint;
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(crate) struct AnimationCallbacks {
     pub begin: Option<Rc<dyn Fn()>>,
     pub before_update: Option<Rc<dyn Fn(TimePoint)>>,

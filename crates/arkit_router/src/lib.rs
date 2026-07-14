@@ -12,13 +12,14 @@
 //! - [`RouteTransition`] / [`AnimatedOutlet`] — ArkUI-native route enter
 //!   transitions that compose with Dioxus `Router`/`Outlet`.
 
-// Re-export the dioxus-router crate root (it flattens its public API),
-// EXCEPT `Link`/`LinkProps` which we shadow with our ArkUI-native versions
-// below.
-pub use dioxus_router::*;
+// Keep the upstream crate available as an explicit namespace for advanced
+// APIs. The flattened facade is deliberately narrow so upstream additions do
+// not silently become Arkit's public API and `Link` remains ArkUI-native.
+pub use dioxus_router;
 pub use dioxus_router::{
-    GoBackButton, GoForwardButton, HistoryButtonProps, Outlet, Routable, Router, RouterConfig,
-    RouterProps,
+    navigator, root_router, router, try_router, use_navigator, use_outlet_context, use_route,
+    GenericRouterContext, NavigationTarget, Navigator, Outlet, OutletContext, ParseRouteError,
+    Routable, Router, RouterConfig, RouterContext, RouterProps,
 };
 
 use std::rc::Rc;
@@ -44,8 +45,12 @@ pub fn use_back_handler() -> impl Fn() -> bool {
             false
         }
     });
-    arkit_runtime::set_back_press_handler(Some(handler.clone()));
-    use_drop(|| arkit_runtime::set_back_press_handler(None));
+    let registered_handler = handler.clone();
+    let _registration = use_hook(|| {
+        Rc::new(arkit_runtime::register_back_press_handler(
+            registered_handler,
+        ))
+    });
     move || handler()
 }
 

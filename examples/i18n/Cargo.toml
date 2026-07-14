@@ -2,14 +2,17 @@
 name = "i18n_example"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
-arkit.workspace = true
-arkit_i18n.workspace = true
+framework = { workspace = true, features = ["i18n"] }
 napi-ohos.workspace = true
 napi-derive-ohos.workspace = true
 

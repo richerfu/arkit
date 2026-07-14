@@ -1,6 +1,6 @@
 //! Events emitted after the engine releases mutable runtime state.
 
-use crate::{AnimationRuntimeError, CallId, InstanceId, PlaybackState, TimePoint};
+use crate::{AnimationRuntimeError, CallId, InstanceKey, PlaybackState, TimePoint};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AnimationOutcome {
@@ -12,55 +12,60 @@ pub enum AnimationOutcome {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EngineEvent {
     Begin {
-        instance: InstanceId,
+        instance: InstanceKey,
     },
     BeforeUpdate {
-        instance: InstanceId,
+        instance: InstanceKey,
         at: TimePoint,
     },
     Update {
-        instance: InstanceId,
+        instance: InstanceKey,
         at: TimePoint,
         progress: f32,
     },
     Render {
-        instance: InstanceId,
+        instance: InstanceKey,
         at: TimePoint,
     },
     Loop {
-        instance: InstanceId,
+        instance: InstanceKey,
         completed_iterations: u32,
     },
     Pause {
-        instance: InstanceId,
+        instance: InstanceKey,
     },
     RefreshRequested {
-        instance: InstanceId,
+        instance: InstanceKey,
         at: TimePoint,
     },
     Call {
-        instance: InstanceId,
+        instance: InstanceKey,
         call: CallId,
     },
     StateChanged {
-        instance: InstanceId,
+        instance: InstanceKey,
         state: PlaybackState,
     },
     Complete {
-        instance: InstanceId,
+        instance: InstanceKey,
     },
     Cancel {
-        instance: InstanceId,
+        instance: InstanceKey,
     },
     Revert {
-        instance: InstanceId,
+        instance: InstanceKey,
     },
     Settled {
-        instance: InstanceId,
+        instance: InstanceKey,
         outcome: AnimationOutcome,
     },
+    /// The instance no longer exists in the engine. Consumers must invalidate
+    /// cached handles before the dense slot can be reused.
+    Removed {
+        instance: InstanceKey,
+    },
     Error {
-        instance: InstanceId,
+        instance: InstanceKey,
         error: AnimationRuntimeError,
     },
 }

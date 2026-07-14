@@ -1,6 +1,8 @@
 //! Commands queued for deterministic processing by the root animation engine.
 
-use crate::{InstanceId, PlaybackRate, TimePoint, TimeSpan};
+use crate::{
+    AdapterId, AdapterPropertyId, AdapterTargetId, InstanceKey, PlaybackRate, TimePoint, TimeSpan,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SeekMode {
@@ -8,34 +10,57 @@ pub enum SeekMode {
     FireCrossingEvents,
 }
 
+/// One adapter output sampled at an independent timeline position.
+///
+/// This keeps two-dimensional gesture mapping inside the root Engine without
+/// rebuilding a timeline or writing native properties from the input event.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct OutputSeek {
+    pub adapter: AdapterId,
+    pub target: AdapterTargetId,
+    pub property: AdapterPropertyId,
+    pub position: TimePoint,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EngineCommand {
-    Play(InstanceId),
-    Pause(InstanceId),
-    Resume(InstanceId),
-    Restart(InstanceId),
-    Reverse(InstanceId),
+    Play(InstanceKey),
+    Pause(InstanceKey),
+    Resume(InstanceKey),
+    Restart(InstanceKey),
+    Reverse(InstanceKey),
     SetAlternate {
-        instance: InstanceId,
+        instance: InstanceKey,
         enabled: bool,
     },
     Seek {
-        instance: InstanceId,
+        instance: InstanceKey,
         position: TimePoint,
         mode: SeekMode,
     },
-    Complete(InstanceId),
-    Cancel(InstanceId),
-    Reset(InstanceId),
-    Revert(InstanceId),
+    /// Advances a running instance from a platform-owned clock while keeping
+    /// sampling, crossing events, loops, and terminal state in the engine.
+    AdvanceExternal {
+        instance: InstanceKey,
+        position: TimePoint,
+    },
+    SeekOutputs {
+        instance: InstanceKey,
+        first: OutputSeek,
+        second: Option<OutputSeek>,
+    },
+    Complete(InstanceKey),
+    Cancel(InstanceKey),
+    Reset(InstanceKey),
+    Revert(InstanceKey),
     Stretch {
-        instance: InstanceId,
+        instance: InstanceKey,
         duration: TimeSpan,
     },
-    Refresh(InstanceId),
+    Refresh(InstanceKey),
     SetPlaybackRate {
-        instance: InstanceId,
+        instance: InstanceKey,
         rate: PlaybackRate,
     },
-    Remove(InstanceId),
+    Remove(InstanceKey),
 }

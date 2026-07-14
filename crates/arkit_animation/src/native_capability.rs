@@ -106,15 +106,22 @@ impl NativeCapability {
         seek: false,
         pause: true,
         resume: true,
-        reverse: true,
+        // ArkUI can reverse a running Animator, but cannot preserve every
+        // idle/paused/replay transition in the engine contract. Selection is
+        // therefore conservative; an undeclared running reverse can still use
+        // the native fast path and other states fall back atomically.
+        reverse: false,
         cancel: true,
         alternate: true,
         callbacks: true,
-        per_property_timing: false,
-        composition: false,
-        dynamic_modifier: false,
-        infinite: true,
-        layout_invalidation: false,
+        // The native Animator owns the root clock; compiled per-property
+        // sampling and writes remain in the engine, so these semantics are
+        // preserved without asking ArkUI Animator to represent each tween.
+        per_property_timing: true,
+        composition: true,
+        dynamic_modifier: true,
+        infinite: false,
+        layout_invalidation: true,
         custom_easing: true,
     };
 

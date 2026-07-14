@@ -1,6 +1,6 @@
 use arkit::prelude::*;
 
-use crate::{cubic_out, target, ActionButton, Metric, Section};
+use crate::{cubic_out, restart_forward, reverse_and_play, target, ActionButton, Metric, Section};
 
 const LAYOUT_TARGET: &str = "lab-layout-card";
 
@@ -130,13 +130,13 @@ fn PresenceBoard(mode: PresenceMode) -> Element {
         column {
             margin_top: 8.0,
             percent_width: 1.0,
-            height: 126.0,
-            padding: 10.0,
-            background_color: 0xfff8fafcu32,
-            border_radius: 12.0,
             flex {
                 percent_width: 1.0,
+                height: 126.0,
+                padding: 10.0,
                 flex_wrap: "wrap",
+                background_color: 0xfff8fafcu32,
+                border_radius: 12.0,
                 for entry in entries {
                     PresenceTile {
                         key: "{entry.key.as_str()}",
@@ -298,16 +298,6 @@ fn presence_timeline(name: &str, phase: PresencePhase, delay_ms: u32) -> Timelin
 fn LayoutDemo() -> Element {
     let mut expanded = use_signal(|| false);
     let controls = use_animation(layout_timeline(false));
-    let snapshot = use_animation_snapshot(&controls);
-    let status = snapshot()
-        .map(|value| {
-            format!(
-                "{:?} · {:.0}ms",
-                value.state,
-                value.elapsed.as_nanos() as f64 / 1_000_000.0
-            )
-        })
-        .unwrap_or_else(|| "readying".to_string());
     let is_expanded = expanded();
 
     rsx! {
@@ -336,17 +326,48 @@ fn LayoutDemo() -> Element {
                             let next = !expanded();
                             controls.set_timeline(layout_timeline(next));
                             expanded.set(next);
-                            controls.restart();
+                            restart_forward(&controls);
                         }
                     }
                 }
-                ActionButton { label: "Reverse", on_press: { let controls = controls.clone(); move |_| controls.reverse() } }
+                ActionButton {
+                    label: "Reverse + play",
+                    on_press: {
+                        let controls = controls.clone();
+                        move |_| reverse_and_play(&controls, point_ms(620))
+                    }
+                }
                 ActionButton { label: "Revert", on_press: { let controls = controls.clone(); move |_| controls.revert() } }
-                Metric { label: "Engine", value: status }
+                LayoutRuntimeMetric { controls: controls.clone() }
                 LayoutRegistryReadout {}
             }
         }
     }
+}
+
+fn point_ms(milliseconds: u64) -> TimePoint {
+    TimePoint::from_nanos(milliseconds * 1_000_000)
+}
+
+#[component]
+fn LayoutRuntimeMetric(controls: AnimationControls) -> Element {
+    let snapshot = use_animation_snapshot(&controls);
+    let status = snapshot()
+        .map(|value| {
+            format!(
+                "{:?} · {:.0}ms",
+                value.state,
+                value.elapsed.as_nanos() as f64 / 1_000_000.0
+            )
+        })
+        .unwrap_or_else(|| {
+            if controls.is_ready() {
+                "Ready".to_string()
+            } else {
+                "Resolving".to_string()
+            }
+        });
+    rsx! { Metric { label: "Engine", value: status } }
 }
 
 #[component]

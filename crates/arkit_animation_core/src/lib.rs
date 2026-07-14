@@ -29,7 +29,7 @@ mod timeline;
 mod tween;
 mod value;
 
-pub use command::{EngineCommand, SeekMode};
+pub use command::{EngineCommand, OutputSeek, SeekMode};
 pub use compiler::AnimationCompiler;
 pub use composition::Composition;
 pub use cursor::TrackCursor;
@@ -38,7 +38,8 @@ pub use easing::{
     SpringSpec,
 };
 pub use engine::{
-    AnimationBaselineSnapshot, AnimationEngine, AnimationInstanceSnapshot, EngineDiagnostics,
+    AnimationBaselineSnapshot, AnimationClockMode, AnimationEngine, AnimationInstanceSnapshot,
+    EngineDiagnostics,
 };
 pub use error::{
     AnimationCompileError, AnimationResolveError, AnimationRuntimeError, AnimationSampleError,
@@ -47,9 +48,9 @@ pub use error::{
 pub use event::{AnimationOutcome, EngineEvent};
 pub use frame::{FrameBatch, FrameId, PropertyUpdate};
 pub use id::{
-    AdapterId, AdapterPropertyId, AdapterTargetId, CallId, EngineOutputId, InstanceId, LabelId,
-    LayoutNodeId, OutputId, PropertyId, TargetId, TargetSetId, TimeDomainId, TimelineNodeId,
-    TrackId, TrackSegmentId, TweenId, ValueFunctionId,
+    AdapterId, AdapterPropertyId, AdapterTargetId, CallId, EngineOutputId, InstanceId, InstanceKey,
+    LabelId, LayoutNodeId, OutputId, PropertyId, TargetId, TargetSetId, TimeDomainId,
+    TimelineNodeId, TrackId, TrackSegmentId, TweenId, ValueFunctionId,
 };
 pub use modifier::{Modifier, ModifierFunction};
 pub use plan::{

@@ -1,7 +1,8 @@
 //! Dioxus host component for the native chart engine.
 
-use std::cell::{Cell, RefCell};
+use std::cell::{Cell, Ref, RefCell, RefMut};
 use std::collections::BTreeSet;
+use std::ops::Deref;
 use std::rc::Rc;
 
 use arkit_hooks::use_ark_node;
@@ -22,8 +23,8 @@ use crate::model::{
 use crate::render::{
     cartesian_plot_at, coordinate_contains_pixel, coordinate_from_pixel, coordinate_to_pixel,
     drag_window_at, draw_option_with_domain, draw_toolbox_zoom_selection, hit_test_with_hidden,
-    initial_windows, inside_zoom_at, nearest_axis_event, HitRegion, ZoomDrag, ZoomHandle,
-    ZoomWindow,
+    initial_windows, inside_zoom_at, nearest_axis_event, nearest_axis_event_from_hits, HitRegion,
+    ZoomDrag, ZoomHandle, ZoomWindow,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -198,7 +199,10 @@ impl ChartController {
     ) -> u64 {
         let (binding, pending) = {
             let mut state = self.inner.borrow_mut();
-            state.next_binding = state.next_binding.wrapping_add(1).max(1);
+            state.next_binding = state
+                .next_binding
+                .checked_add(1)
+                .expect("arkit_chart: controller binding id space exhausted");
             let binding = state.next_binding;
             state.binding = Some(ChartControllerBinding {
                 id: binding,
@@ -269,39 +273,79 @@ pub struct EChartsProps {
     pub on_event: Option<EventHandler<ChartRuntimeEvent>>,
 }
 
+struct SharedChartOption(RefCell<Rc<ChartOption>>);
+
+impl SharedChartOption {
+    fn new(option: ChartOption) -> Self {
+        Self(RefCell::new(Rc::new(option)))
+    }
+
+    fn borrow(&self) -> Ref<'_, ChartOption> {
+        Ref::map(self.0.borrow(), |option| option.as_ref())
+    }
+
+    fn borrow_mut(&self) -> RefMut<'_, ChartOption> {
+        RefMut::map(self.0.borrow_mut(), Rc::make_mut)
+    }
+
+    fn replace(&self, option: ChartOption) {
+        self.replace_shared(Rc::new(option));
+    }
+
+    fn replace_shared(&self, option: Rc<ChartOption>) {
+        *self.0.borrow_mut() = option;
+    }
+
+    fn snapshot(&self) -> Rc<ChartOption> {
+        self.0.borrow().clone()
+    }
+}
+
 #[derive(Clone)]
 struct ChartRenderState {
-    prop_option: Rc<RefCell<ChartOption>>,
-    source_option: Rc<RefCell<ChartOption>>,
-    option: Rc<RefCell<ChartOption>>,
-    selected: Rc<RefCell<Option<ChartEvent>>>,
-    action_tooltip: Rc<RefCell<Option<ChartEvent>>>,
-    highlighted: Rc<RefCell<Option<ChartEvent>>>,
-    draw_hits: Rc<RefCell<Vec<HitRegion>>>,
-    hidden_series: Rc<RefCell<BTreeSet<usize>>>,
-    selected_items: Rc<RefCell<BTreeSet<(usize, usize)>>>,
-    zoom_windows: Rc<RefCell<Vec<ZoomWindow>>>,
-    zoom_drag: Rc<RefCell<Option<ZoomDrag>>>,
-    map_drag: Rc<RefCell<Option<MapDrag>>>,
-    label_drag: Rc<RefCell<Option<LabelDrag>>>,
-    brush_drag: Rc<RefCell<Option<BrushDrag>>>,
-    toolbox_zoom_active: Rc<Cell<bool>>,
-    toolbox_zoom_drag: Rc<RefCell<Option<BrushDrag>>>,
-    toolbox_zoom_history: Rc<RefCell<Vec<Vec<ZoomWindow>>>>,
-    magic_override: Rc<Cell<MagicOverride>>,
-    magic_stack_override: Rc<Cell<Option<bool>>>,
-    data_view_visible: Rc<Cell<bool>>,
-    media_signature: Rc<RefCell<Vec<isize>>>,
-    media_timeline_index: Rc<Cell<usize>>,
-    media_size: Rc<Cell<(f32, f32)>>,
-    transition: Rc<RefCell<Option<ChartTransition>>>,
-    state_transition: Rc<RefCell<Option<ChartTransition>>>,
+    inner: Rc<ChartRenderStateInner>,
+}
+
+impl Deref for ChartRenderState {
+    type Target = ChartRenderStateInner;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+struct ChartRenderStateInner {
+    prop_option: RefCell<ChartOption>,
+    source_option: RefCell<ChartOption>,
+    option: SharedChartOption,
+    selected: RefCell<Option<ChartEvent>>,
+    action_tooltip: RefCell<Option<ChartEvent>>,
+    highlighted: RefCell<Option<ChartEvent>>,
+    draw_hits: RefCell<Vec<HitRegion>>,
+    hidden_series: RefCell<BTreeSet<usize>>,
+    selected_items: RefCell<BTreeSet<(usize, usize)>>,
+    zoom_windows: RefCell<Vec<ZoomWindow>>,
+    zoom_drag: RefCell<Option<ZoomDrag>>,
+    map_drag: RefCell<Option<MapDrag>>,
+    label_drag: RefCell<Option<LabelDrag>>,
+    brush_drag: RefCell<Option<BrushDrag>>,
+    toolbox_zoom_active: Cell<bool>,
+    toolbox_zoom_drag: RefCell<Option<BrushDrag>>,
+    toolbox_zoom_history: RefCell<Vec<Vec<ZoomWindow>>>,
+    magic_override: Cell<MagicOverride>,
+    magic_stack_override: Cell<Option<bool>>,
+    data_view_visible: Cell<bool>,
+    media_signature: RefCell<Vec<isize>>,
+    media_timeline_index: Cell<usize>,
+    media_size: Cell<(f32, f32)>,
+    transition: RefCell<Option<ChartTransition>>,
+    state_transition: RefCell<Option<ChartTransition>>,
     transition_driver: ChartTransitionDriver,
     state_transition_driver: ChartTransitionDriver,
-    state_key: Rc<RefCell<StateKey>>,
-    state_last_option: Rc<RefCell<Option<ChartOption>>>,
-    timeline_elapsed_ms: Rc<Cell<u64>>,
-    effect_elapsed_ms: Rc<Cell<u64>>,
+    state_key: RefCell<StateKey>,
+    state_target: RefCell<Option<Rc<ChartOption>>>,
+    timeline_elapsed_ms: Cell<u64>,
+    effect_elapsed_ms: Cell<u64>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -359,57 +403,62 @@ impl ChartRenderState {
         let zoom_windows = initial_windows(&option);
         let selected_items = initial_selected_items(&option);
         let hidden_series = initial_hidden_series(&option);
-        let transition = ChartTransition::initial(&option, transition_driver.clone());
+        let option = SharedChartOption::new(option);
+        let transition = ChartTransition::initial(option.snapshot(), transition_driver.clone());
+        let prop_option = option.borrow().clone();
+        let source_option = prop_option.clone();
         Self {
-            prop_option: Rc::new(RefCell::new(option.clone())),
-            source_option: Rc::new(RefCell::new(option.clone())),
-            option: Rc::new(RefCell::new(option)),
-            selected: Rc::new(RefCell::new(None)),
-            action_tooltip: Rc::new(RefCell::new(None)),
-            highlighted: Rc::new(RefCell::new(None)),
-            draw_hits: Rc::new(RefCell::new(Vec::new())),
-            hidden_series: Rc::new(RefCell::new(hidden_series)),
-            selected_items: Rc::new(RefCell::new(selected_items)),
-            zoom_windows: Rc::new(RefCell::new(zoom_windows.clone())),
-            zoom_drag: Rc::new(RefCell::new(None)),
-            map_drag: Rc::new(RefCell::new(None)),
-            label_drag: Rc::new(RefCell::new(None)),
-            brush_drag: Rc::new(RefCell::new(None)),
-            toolbox_zoom_active: Rc::new(Cell::new(false)),
-            toolbox_zoom_drag: Rc::new(RefCell::new(None)),
-            toolbox_zoom_history: Rc::new(RefCell::new(vec![zoom_windows.clone()])),
-            magic_override: Rc::new(Cell::new(MagicOverride::None)),
-            magic_stack_override: Rc::new(Cell::new(None)),
-            data_view_visible: Rc::new(Cell::new(false)),
-            media_signature: Rc::new(RefCell::new(Vec::new())),
-            media_timeline_index: Rc::new(Cell::new(usize::MAX)),
-            media_size: Rc::new(Cell::new((0.0, 0.0))),
-            transition: Rc::new(RefCell::new(transition)),
-            state_transition: Rc::new(RefCell::new(None)),
-            transition_driver,
-            state_transition_driver,
-            state_key: Rc::new(RefCell::new(StateKey::default())),
-            state_last_option: Rc::new(RefCell::new(None)),
-            timeline_elapsed_ms: Rc::new(Cell::new(0)),
-            effect_elapsed_ms: Rc::new(Cell::new(0)),
+            inner: Rc::new(ChartRenderStateInner {
+                prop_option: RefCell::new(prop_option),
+                source_option: RefCell::new(source_option),
+                option,
+                selected: RefCell::new(None),
+                action_tooltip: RefCell::new(None),
+                highlighted: RefCell::new(None),
+                draw_hits: RefCell::new(Vec::new()),
+                hidden_series: RefCell::new(hidden_series),
+                selected_items: RefCell::new(selected_items),
+                zoom_windows: RefCell::new(zoom_windows.clone()),
+                zoom_drag: RefCell::new(None),
+                map_drag: RefCell::new(None),
+                label_drag: RefCell::new(None),
+                brush_drag: RefCell::new(None),
+                toolbox_zoom_active: Cell::new(false),
+                toolbox_zoom_drag: RefCell::new(None),
+                toolbox_zoom_history: RefCell::new(vec![zoom_windows]),
+                magic_override: Cell::new(MagicOverride::None),
+                magic_stack_override: Cell::new(None),
+                data_view_visible: Cell::new(false),
+                media_signature: RefCell::new(Vec::new()),
+                media_timeline_index: Cell::new(usize::MAX),
+                media_size: Cell::new((0.0, 0.0)),
+                transition: RefCell::new(transition),
+                state_transition: RefCell::new(None),
+                transition_driver,
+                state_transition_driver,
+                state_key: RefCell::new(StateKey::default()),
+                state_target: RefCell::new(None),
+                timeline_elapsed_ms: Cell::new(0),
+                effect_elapsed_ms: Cell::new(0),
+            }),
         }
     }
 
-    fn animated_option(&self) -> ChartOption {
+    fn animated_option(&self) -> Rc<ChartOption> {
         let mut transition = self.transition.borrow_mut();
         let Some(active) = transition.as_ref() else {
-            return self.option.borrow().clone();
+            return self.option.snapshot();
         };
         let (snapshot, finished) = active.snapshot();
         if finished {
             transition.take();
-            self.option.borrow().clone()
+            self.option.snapshot()
         } else {
             snapshot
         }
     }
 
-    fn rendered_option(&self) -> ChartOption {
+    fn rendered_option(&self) -> Rc<ChartOption> {
         let base = self.animated_option();
         let selected = self.selected.borrow();
         let action_tooltip = self.action_tooltip.borrow();
@@ -425,21 +474,49 @@ impl ChartRenderState {
                 .map(|event| (event.series_index, event.data_index)),
             selected: selected_items.clone(),
         };
-        let mut target = base.clone();
-        crate::state::apply_states(&mut target, active, &selected_items);
+        let has_active_state = active.is_some() || !selected_items.is_empty();
+        let key_changed = *self.state_key.borrow() != key;
+        let main_transition_active = self.transition.borrow().is_some();
+
+        let make_target = || {
+            if !has_active_state {
+                return base.clone();
+            }
+            let mut target = (*base).clone();
+            crate::state::apply_states(&mut target, active, &selected_items);
+            Rc::new(target)
+        };
+
+        if key_changed {
+            let target = make_target();
+            let from = self
+                .state_transition
+                .borrow()
+                .as_ref()
+                .map(ChartTransition::current)
+                .or_else(|| self.state_target.borrow().clone())
+                .unwrap_or_else(|| base.clone());
+            self.state_transition.replace(ChartTransition::state(
+                from,
+                target.clone(),
+                self.state_transition_driver.clone(),
+            ));
+            self.state_target
+                .replace(has_active_state.then_some(target));
+            self.state_key.replace(key);
+        } else if has_active_state
+            && main_transition_active
+            && self.state_transition.borrow().is_none()
+        {
+            // Keep an already-active hover/selection state attached to a base
+            // series that is itself moving. This is the only overlap that
+            // requires rebuilding a state target during a frame.
+            self.state_target.replace(Some(make_target()));
+        }
         drop(selected_items);
         drop(highlighted);
         drop(action_tooltip);
         drop(selected);
-        if *self.state_key.borrow() != key {
-            let from = self.state_last_option.borrow().clone().unwrap_or(base);
-            self.state_transition.replace(ChartTransition::state(
-                &from,
-                &target,
-                self.state_transition_driver.clone(),
-            ));
-            self.state_key.replace(key);
-        }
         let state_snapshot = self
             .state_transition
             .borrow()
@@ -448,14 +525,19 @@ impl ChartRenderState {
         let rendered = if let Some((snapshot, finished)) = state_snapshot {
             if finished {
                 self.state_transition.borrow_mut().take();
-                target
+                self.state_target
+                    .borrow()
+                    .clone()
+                    .unwrap_or_else(|| base.clone())
             } else {
                 snapshot
             }
         } else {
-            target
+            self.state_target
+                .borrow()
+                .clone()
+                .unwrap_or_else(|| base.clone())
         };
-        self.state_last_option.replace(Some(rendered.clone()));
         rendered
     }
 
@@ -599,9 +681,13 @@ impl ChartRenderState {
                 });
             let initial_selected = initial_selected_items(&next);
             let initial_zoom = reset_zoom.then(|| initial_windows(&next));
-            let transition =
-                ChartTransition::update(&previous_visual, &next, self.transition_driver.clone());
-            self.option.replace(next);
+            let next = Rc::new(next);
+            let transition = ChartTransition::update(
+                previous_visual,
+                next.clone(),
+                self.transition_driver.clone(),
+            );
+            self.option.replace_shared(next);
             self.transition.replace(transition);
             self.selected.replace(None);
             let remap = |event: Option<ChartEvent>| {
@@ -683,10 +769,10 @@ impl ChartRenderState {
             return false;
         }
         append_data_to_option(&mut self.source_option.borrow_mut(), chunk);
-        let target = self.option.borrow().clone();
+        let target = self.option.snapshot();
         self.transition.replace(ChartTransition::update(
-            &previous_visual,
-            &target,
+            previous_visual,
+            target,
             self.transition_driver.clone(),
         ));
         true
@@ -719,7 +805,7 @@ impl ChartRenderState {
         self.transition.replace(None);
         self.state_transition.replace(None);
         self.state_key.replace(StateKey::default());
-        self.state_last_option.replace(None);
+        self.state_target.replace(None);
     }
 
     fn begin_brush(&self, x: f32, y: f32) -> bool {
@@ -977,9 +1063,13 @@ impl ChartRenderState {
         self.media_timeline_index.set(restore_timeline_index);
         let hidden_series = initial_hidden_series(&option);
         let previous_visual = self.animated_option();
-        let transition =
-            ChartTransition::update(&previous_visual, &option, self.transition_driver.clone());
-        self.option.replace(option);
+        let option = Rc::new(option);
+        let transition = ChartTransition::update(
+            previous_visual,
+            option.clone(),
+            self.transition_driver.clone(),
+        );
+        self.option.replace_shared(option);
         self.transition.replace(transition);
         self.zoom_windows.replace(windows.clone());
         self.toolbox_zoom_history.replace(vec![windows]);
@@ -1056,12 +1146,11 @@ impl ChartRenderState {
                 let previous_visual = self.animated_option();
                 let mut option = self.option.borrow_mut();
                 let changed = option.apply_timeline_index(*current_index);
-                let target = changed.then(|| option.clone());
                 drop(option);
-                if let Some(target) = target {
+                if changed {
                     self.transition.replace(ChartTransition::update(
-                        &previous_visual,
-                        &target,
+                        previous_visual,
+                        self.option.snapshot(),
                         self.transition_driver.clone(),
                     ));
                 }
@@ -1249,12 +1338,11 @@ impl ChartRenderState {
             _ => (hit.data_index < count).then_some(hit.data_index),
         };
         let changed = next.is_some_and(|index| option.apply_timeline_index(index));
-        let target = changed.then(|| option.clone());
         drop(option);
-        if let Some(target) = target {
+        if changed {
             self.transition.replace(ChartTransition::update(
-                &previous_visual,
-                &target,
+                previous_visual,
+                self.option.snapshot(),
                 self.transition_driver.clone(),
             ));
         }
@@ -1307,10 +1395,9 @@ impl ChartRenderState {
         let advanced = self.option.borrow_mut().advance_timeline();
         if advanced {
             self.selected.replace(None);
-            let target = self.option.borrow().clone();
             self.transition.replace(ChartTransition::update(
-                &previous_visual,
-                &target,
+                previous_visual,
+                self.option.snapshot(),
                 self.transition_driver.clone(),
             ));
         }
@@ -1386,14 +1473,42 @@ impl ChartRenderState {
     }
 
     fn cached_label_hit(&self, x: f32, y: f32) -> Option<ChartEvent> {
+        self.cached_hit_matching(x, y, |event| event.component_type == "label")
+    }
+
+    fn cached_hit(&self, x: f32, y: f32) -> Option<ChartEvent> {
+        self.cached_hit_matching(x, y, |_| true)
+    }
+
+    fn has_cached_hits(&self) -> bool {
+        !self.draw_hits.borrow().is_empty()
+    }
+
+    fn cached_hit_matching(
+        &self,
+        x: f32,
+        y: f32,
+        predicate: impl Fn(&ChartEvent) -> bool,
+    ) -> Option<ChartEvent> {
         self.draw_hits
             .borrow()
             .iter()
             .rev()
-            .filter(|hit| hit.event.component_type == "label")
+            .filter(|hit| predicate(&hit.event))
             .filter_map(|hit| hit.hit(x, y).map(|distance| (distance, hit.event.clone())))
             .min_by(|left, right| left.0.total_cmp(&right.0))
             .map(|(_, event)| event)
+    }
+
+    fn cached_nearest_axis_event(
+        &self,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+    ) -> Option<ChartEvent> {
+        let option = self.option.borrow();
+        nearest_axis_event_from_hits(&option, &self.draw_hits.borrow(), x, y, width, height)
     }
 
     fn begin_label_drag(&self, hit: &ChartEvent, x: f32, y: f32) -> bool {
@@ -1888,6 +2003,9 @@ pub fn ECharts(props: EChartsProps) -> Element {
                 let Some(raw_canvas) = draw_context.canvas() else {
                     return;
                 };
+                // SAFETY: ArkUI owns `raw_canvas` for exactly this synchronous
+                // custom-draw callback. `Canvas` is borrowed (never destroyed)
+                // and does not escape the callback.
                 let canvas = unsafe { Canvas::from_raw_borrowed(raw_canvas.as_ptr().cast()) };
                 let size = draw_context.size();
                 let pixel_ratio = pixel_ratio();
@@ -2032,15 +2150,24 @@ pub fn ECharts(props: EChartsProps) -> Element {
                     let Some(drag) = zoom_drag else {
                         if click_state.option.borrow().tooltip.trigger == "axis" {
                             let previous = click_state.selected.borrow().clone();
-                            let selected = nearest_axis_event(
-                                &click_state.option.borrow(),
+                            let selected = click_state.cached_nearest_axis_event(
                                 x,
                                 y,
                                 logical_size.0,
                                 logical_size.1,
-                                &click_state.hidden_series.borrow(),
-                                &click_state.zoom_windows.borrow(),
-                            );
+                            ).or_else(|| {
+                                (!click_state.has_cached_hits()).then(|| {
+                                    nearest_axis_event(
+                                        &click_state.option.borrow(),
+                                        x,
+                                        y,
+                                        logical_size.0,
+                                        logical_size.1,
+                                        &click_state.hidden_series.borrow(),
+                                        &click_state.zoom_windows.borrow(),
+                                    )
+                                }).flatten()
+                            });
                             click_state.selected.replace(selected.clone());
                             emit_pointer_transition(
                                 &click_state,
@@ -2051,15 +2178,23 @@ pub fn ECharts(props: EChartsProps) -> Element {
                             let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
                         } else {
                             let previous = click_state.selected.borrow().clone();
-                            let hovered = hit_test_with_hidden(
-                                &click_state.option.borrow(),
-                                x,
-                                y,
-                                logical_size.0,
-                                logical_size.1,
-                                &click_state.hidden_series.borrow(),
-                                &click_state.zoom_windows.borrow(),
-                            )
+                            let hovered = click_state
+                                .cached_hit(x, y)
+                                .or_else(|| {
+                                    (!click_state.has_cached_hits())
+                                        .then(|| {
+                                            hit_test_with_hidden(
+                                                &click_state.option.borrow(),
+                                                x,
+                                                y,
+                                                logical_size.0,
+                                                logical_size.1,
+                                                &click_state.hidden_series.borrow(),
+                                                &click_state.zoom_windows.borrow(),
+                                            )
+                                        })
+                                        .flatten()
+                                })
                             .filter(|event| {
                                 !matches!(
                                     event.component_type.as_str(),
@@ -2087,17 +2222,24 @@ pub fn ECharts(props: EChartsProps) -> Element {
                     let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
                     return;
                 }
-                let hit = click_state.cached_label_hit(x, y).or_else(|| {
-                    hit_test_with_hidden(
-                        &click_state.option.borrow(),
-                        x,
-                        y,
-                        logical_size.0,
-                        logical_size.1,
-                        &click_state.hidden_series.borrow(),
-                        &click_state.zoom_windows.borrow(),
-                    )
-                });
+                let hit = click_state
+                    .cached_label_hit(x, y)
+                    .or_else(|| click_state.cached_hit(x, y))
+                    .or_else(|| {
+                        (!click_state.has_cached_hits())
+                            .then(|| {
+                                hit_test_with_hidden(
+                                    &click_state.option.borrow(),
+                                    x,
+                                    y,
+                                    logical_size.0,
+                                    logical_size.1,
+                                    &click_state.hidden_series.borrow(),
+                                    &click_state.zoom_windows.borrow(),
+                                )
+                            })
+                            .flatten()
+                    });
                 if action == dioxus_elements::event::PointerAction::Down {
                     if let (Some(hit), Some(handler)) = (hit.as_ref(), click_events.get()) {
                         handler.call(click_state.runtime_event(

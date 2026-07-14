@@ -74,7 +74,7 @@ pub(crate) fn nearest_axis_event(
     zoom_windows: &[ZoomWindow],
 ) -> Option<ChartEvent> {
     let selected_items = BTreeSet::new();
-    render_option(
+    let hits = render_option(
         option,
         None,
         hidden_series,
@@ -83,31 +83,43 @@ pub(crate) fn nearest_axis_event(
         None,
         width,
         height,
-    )
-    .into_iter()
-    .map(|region| region.event)
-    .filter(|event| {
-        let Some(value) = option.series.get(event.series_index) else {
-            return false;
-        };
-        if !series::is_cartesian(value) {
-            return false;
-        }
-        let (x_axis_index, y_axis_index) = series::cartesian_axis_indices(value);
-        let grid_index = option
-            .x_axis
-            .get(x_axis_index)
-            .map(|axis| axis.grid_index)
-            .or_else(|| option.y_axis.get(y_axis_index).map(|axis| axis.grid_index))
-            .unwrap_or(0);
-        let plot = grid_plot(option, grid_index, width, height);
-        x >= plot.x && x <= plot.x + plot.width && y >= plot.y && y <= plot.y + plot.height
-    })
-    .min_by(|left, right| {
-        let left_distance = (left.x - x).abs() + (left.y - y).abs() * 0.05;
-        let right_distance = (right.x - x).abs() + (right.y - y).abs() * 0.05;
-        left_distance.total_cmp(&right_distance)
-    })
+    );
+    nearest_axis_event_from_hits(option, &hits, x, y, width, height)
+}
+
+pub(crate) fn nearest_axis_event_from_hits(
+    option: &ChartOption,
+    hits: &[HitRegion],
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+) -> Option<ChartEvent> {
+    hits.iter()
+        .map(|region| &region.event)
+        .filter(|event| {
+            let Some(value) = option.series.get(event.series_index) else {
+                return false;
+            };
+            if !series::is_cartesian(value) {
+                return false;
+            }
+            let (x_axis_index, y_axis_index) = series::cartesian_axis_indices(value);
+            let grid_index = option
+                .x_axis
+                .get(x_axis_index)
+                .map(|axis| axis.grid_index)
+                .or_else(|| option.y_axis.get(y_axis_index).map(|axis| axis.grid_index))
+                .unwrap_or(0);
+            let plot = grid_plot(option, grid_index, width, height);
+            x >= plot.x && x <= plot.x + plot.width && y >= plot.y && y <= plot.y + plot.height
+        })
+        .min_by(|left, right| {
+            let left_distance = (left.x - x).abs() + (left.y - y).abs() * 0.05;
+            let right_distance = (right.x - x).abs() + (right.y - y).abs() * 0.05;
+            left_distance.total_cmp(&right_distance)
+        })
+        .cloned()
 }
 
 #[allow(clippy::too_many_arguments)]

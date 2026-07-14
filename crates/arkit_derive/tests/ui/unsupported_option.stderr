@@ -1,0 +1,5 @@
+error: unsupported #[entry] option
+ --> tests/ui/unsupported_option.rs:1:23
+  |
+1 | #[arkit_derive::entry(unsafe_area)]
+  |                       ^^^^^^^^^^^

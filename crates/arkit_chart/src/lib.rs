@@ -15,7 +15,20 @@ mod render;
 mod state;
 
 pub use component::{ChartController, ECharts, EChartsProps};
-pub use model::*;
+pub use model::{
+    AnimationOptions, AnimationTiming, Axis, AxisLabelStyle, AxisLine, AxisOrientation,
+    AxisPointer, AxisTick, AxisType, BasicSeries, BrushArea, BrushOptions, ChartAction,
+    ChartActionKind, ChartActionTarget, ChartAppendData, ChartCoordinateFinder,
+    ChartCoordinatePoint, ChartEvent, ChartOption, ChartParseError, ChartRuntimeEvent,
+    ChartRuntimeEventBatchItem, ChartSelectedItems, CustomRenderContext, CustomSeries,
+    CustomSeriesRenderer, DataPoint, DataValue, DataZoom, Dataset, Diagnostic, GraphSeries, Grid,
+    ItemStyle, LabelLayoutCallback, LabelLayoutCallbackParams, LabelLayoutCallbackResult,
+    LabelLayoutOptions, LabelStyle, Legend, Length, LineSegment, LineStyle, LinesSeries, LinkData,
+    MapFeature, MapOptions, MapPolygon, MapSeries, MediaOptions, MediaQuery, MediaRule, NodeData,
+    RadarCoordinate, RadarIndicator, SankeySeries, Series, SeriesOptions, SeriesState,
+    SunburstNode, SunburstSeries, TextOptions, Timeline, Title, Tooltip, VisualMap, VisualPiece,
+    VisualStyle,
+};
 pub use registry::{register_map, register_map_str, unregister_map, MapRegistrationError};
 pub use render::hit_test;
 

@@ -23,6 +23,7 @@ const MUTED: u32 = 0xff64748bu32;
 const PRIMARY_DARK: u32 = 0xff312e81u32;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
 enum ShowcasePage {
     Timeline,
     Easing,
@@ -45,6 +46,7 @@ impl ShowcasePage {
 fn app() -> Element {
     let mut page = use_signal(|| ShowcasePage::Timeline);
     let selected = page();
+    let scroll_reset = format!("0,0,0,{}", selected as i32);
 
     rsx! {
         column {
@@ -89,12 +91,14 @@ fn app() -> Element {
                 }
             }
             column {
+                key: "{selected:?}",
                 percent_width: 1.0,
                 layout_weight: 1.0,
                 scroll {
                     percent_width: 1.0,
                     percent_height: 1.0,
                     scroll_bar: true,
+                    scroll_offset: "{scroll_reset}",
                     column {
                         percent_width: 1.0,
                         padding: 14.0,
@@ -203,4 +207,50 @@ pub(crate) fn target(name: &str) -> AnimationSelector {
 
 pub(crate) fn color(argb: u32) -> LinearRgba {
     LinearRgba::from_argb(argb)
+}
+
+/// Start or continue in the forward direction.
+pub(crate) fn play_forward(controls: &AnimationControls) {
+    if controls.direction() == Some(PlaybackDirection::Reverse) {
+        controls.reverse();
+    }
+    controls.play();
+}
+
+/// Start a new forward pass regardless of the previous terminal direction.
+pub(crate) fn restart_forward(controls: &AnimationControls) {
+    if controls.direction() == Some(PlaybackDirection::Reverse) {
+        controls.reverse();
+    }
+    controls.restart();
+}
+
+/// Reverse a running animation in place, or start a visible pass in the
+/// opposite direction when the instance is not currently running.
+///
+/// `AnimationControls::reverse` intentionally changes direction only. Demo
+/// controls use this helper so a button labelled as a playback action never
+/// becomes a silent no-op at an idle or terminal boundary.
+pub(crate) fn reverse_and_play(controls: &AnimationControls, end: TimePoint) {
+    let snapshot = controls.snapshot();
+    match snapshot.map(|value| value.state) {
+        Some(PlaybackState::Running) => controls.reverse(),
+        Some(PlaybackState::Paused) => {
+            controls.reverse();
+            controls.resume();
+        }
+        _ => {
+            let next_direction = snapshot
+                .map(|value| value.direction.reversed())
+                .unwrap_or(PlaybackDirection::Reverse);
+            controls.reset();
+            controls.seek(if next_direction == PlaybackDirection::Reverse {
+                end
+            } else {
+                TimePoint::ZERO
+            });
+            controls.reverse();
+            controls.play();
+        }
+    }
 }

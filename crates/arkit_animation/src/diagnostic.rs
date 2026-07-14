@@ -20,6 +20,7 @@ pub enum AnimationAdapterError {
     NativeWrite {
         target: AdapterTargetId,
         property: AdapterPropertyId,
+        reason: Box<str>,
     },
     NativeRead {
         target: AdapterTargetId,

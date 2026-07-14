@@ -7,7 +7,6 @@ use arkit_animation_core::{
     AnimatableValue, Composition, Easing, IterationCount, Modifier, Property, PropertyDescriptor,
     PropertyName, TargetName, TimeSpan, TimelinePosition,
 };
-use arkit_hooks::use_ark_node;
 use arkit_prelude::*;
 
 use crate::api::{Animation, Timeline};
@@ -26,6 +25,16 @@ pub struct Animatable<T: AnimatableValue> {
     _registration: Rc<AnimatableRegistration>,
     defaults: AnimatableDefaults,
 }
+
+impl<T: AnimatableValue> PartialEq for Animatable<T> {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.adapter, &other.adapter)
+            && self.target == other.target
+            && self.property == other.property
+    }
+}
+
+impl<T: AnimatableValue> Eq for Animatable<T> {}
 
 #[derive(Debug, Clone)]
 pub struct AnimatableDefaults {
@@ -168,7 +177,6 @@ pub fn use_animatable_with_defaults<T: AnimatableValue>(
     defaults: AnimatableDefaults,
 ) -> Animatable<T> {
     let context = use_animation_context();
-    let node = use_ark_node();
     use_hook(|| {
         let property = Property::<T>::owned("value");
         let descriptor = PropertyDescriptor::new(&property);
@@ -201,7 +209,6 @@ pub fn use_animatable_with_defaults<T: AnimatableValue>(
             inner: ControlsInner::new(
                 context.host.clone(),
                 context.driver.clone(),
-                node,
                 source.clone(),
                 crate::ExecutionPolicy::SampledOnly,
                 crate::CapabilityRequirements::default(),

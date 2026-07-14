@@ -41,8 +41,8 @@ pub use arkui_adapter::ArkUiAdapter;
 pub use controls::{AnimationControls, AnimationFinished, AnimationSubscription};
 pub use diagnostic::{AnimationAdapterError, AnimationBuildError};
 pub use draggable::{
-    use_draggable, AutoScroll, DragAxis, DragConstraints, DragPhase, DragSnap, DragUpdate,
-    Draggable, DraggableCallbacks, DraggableConfig, DraggableHandle, VelocityTracker,
+    use_draggable, AutoScroll, DragAxis, DragConstraints, DragMapping, DragPhase, DragSnap,
+    DragUpdate, Draggable, DraggableCallbacks, DraggableConfig, DraggableHandle, VelocityTracker,
 };
 pub use drawing_adapter::DrawingAdapter;
 pub use frame_driver::FrameDriver;
@@ -70,7 +70,12 @@ pub use presence::{
     use_animate_presence, AnimatePresence, ExitCancelPolicy, PresenceEntry, PresenceHandle,
     PresenceKey, PresenceMode, PresencePhase, PresenceStore,
 };
-pub use properties::*;
+pub use properties::{
+    ASPECT_RATIO, BACKGROUND_COLOR, BLUR, BORDER_COLOR, BORDER_RADIUS, BORDER_WIDTH, BRIGHTNESS,
+    CONTRAST, FONT_COLOR, FONT_SIZE, FOREGROUND_COLOR, GRAYSCALE, HEIGHT, INVERT, LETTER_SPACING,
+    LINE_HEIGHT, OPACITY, POSITION_X, POSITION_Y, ROTATION, SATURATION, SCALE_X, SCALE_Y, SEPIA,
+    TRANSLATE_X, TRANSLATE_Y, WIDTH,
+};
 pub use property_schema::PropertySchema;
 pub use resolver::AdapterResolutionSnapshot;
 pub use scope::{

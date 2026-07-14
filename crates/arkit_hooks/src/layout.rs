@@ -1,27 +1,14 @@
-//! Layout-observer hooks: [`use_layout_size`], [`use_layout_frame`], and
-//! [`use_layout_frame_node`].
-//!
-//! Each hook resolves the native ArkUI node backing the current dioxus element
-//! (via [`crate::use_ark_node`]) and registers an ArkUI `onAreaChange` listener
-//! on it. The callback is invoked with plain-data [`LayoutSize`] /
-//! [`LayoutFrame`] whenever the measured layout changes meaningfully (>= 0.5
-//! px). A change-dedup cache (keyed by native handle) suppresses noisy native
-//! callbacks when layout hasn't meaningfully changed.
-//!
-//! The node handle is a shared `Rc<RefCell<ArkUINode>>` (the **same** `Rc`
-//! mounted in the ArkUI tree and used as the event-dispatch user-data target).
-//! Registering `onAreaChange` on it makes ArkUI's dispatcher find the callback,
-//! so no polling fallback is needed — `onAreaChange` fires reliably once the
-//! node is laid out.
+//! Tokenized, multi-subscriber ArkUI layout observation.
 
-use std::collections::BTreeMap;
-use std::rc::Rc;
-use std::sync::{Mutex, OnceLock};
+use std::cell::{Cell, RefCell};
+use std::rc::{Rc, Weak};
 
 use arkit_prelude::{use_drop, use_effect, use_hook};
 use ohos_arkui_binding::api::node_custom_event::{IntOffset, IntSize};
 use ohos_arkui_binding::common::node::ArkUINode;
 use ohos_arkui_binding::component::attribute::{ArkUIAttributeBasic, ArkUIEvent};
+use rustc_hash::FxHashMap;
+use smallvec::SmallVec;
 
 use crate::node::{use_ark_node, HostNode};
 
@@ -38,8 +25,7 @@ impl LayoutSize {
     }
 }
 
-/// A measured frame (position + size) in physical pixels, relative to the
-/// window.
+/// A measured frame in physical pixels, relative to the window.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct LayoutFrame {
     pub x: f32,
@@ -54,87 +40,8 @@ impl LayoutFrame {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Change-dedup cache
-// ---------------------------------------------------------------------------
-
-static LAYOUT_SIZE_CACHE: OnceLock<Mutex<BTreeMap<usize, LayoutSize>>> = OnceLock::new();
-static LAYOUT_FRAME_CACHE: OnceLock<Mutex<BTreeMap<usize, LayoutFrame>>> = OnceLock::new();
-
 fn layout_observer_key(node: &ArkUINode) -> usize {
     node.raw_handle() as usize
-}
-
-fn emit_layout_size_if_changed(node: &ArkUINode, next: LayoutSize, on_change: &dyn Fn(LayoutSize)) {
-    let key = layout_observer_key(node);
-    if let Ok(mut cache) = LAYOUT_SIZE_CACHE
-        .get_or_init(|| Mutex::new(BTreeMap::new()))
-        .lock()
-    {
-        if cache
-            .get(&key)
-            .is_some_and(|prev| layout_size_close(*prev, next))
-        {
-            return;
-        }
-        cache.insert(key, next);
-    }
-    on_change(next);
-}
-
-fn emit_layout_frame_if_changed(
-    node: &ArkUINode,
-    next: LayoutFrame,
-    on_change: &dyn Fn(LayoutFrame),
-) {
-    let key = layout_observer_key(node);
-    if let Ok(mut cache) = LAYOUT_FRAME_CACHE
-        .get_or_init(|| Mutex::new(BTreeMap::new()))
-        .lock()
-    {
-        if cache
-            .get(&key)
-            .is_some_and(|prev| layout_frame_close(*prev, next))
-        {
-            return;
-        }
-        cache.insert(key, next);
-    }
-    on_change(next);
-}
-
-fn emit_layout_frame_node_if_changed(
-    node: &ArkUINode,
-    next: LayoutFrame,
-    on_change: &dyn Fn(ArkUINode, LayoutFrame),
-) {
-    let key = layout_observer_key(node);
-    if let Ok(mut cache) = LAYOUT_FRAME_CACHE
-        .get_or_init(|| Mutex::new(BTreeMap::new()))
-        .lock()
-    {
-        if cache
-            .get(&key)
-            .is_some_and(|prev| layout_frame_close(*prev, next))
-        {
-            return;
-        }
-        cache.insert(key, next);
-    }
-    on_change(node.clone(), next);
-}
-
-fn clear_layout_observer_cache(key: usize) {
-    if let Some(cache) = LAYOUT_SIZE_CACHE.get() {
-        if let Ok(mut cache) = cache.lock() {
-            cache.remove(&key);
-        }
-    }
-    if let Some(cache) = LAYOUT_FRAME_CACHE.get() {
-        if let Ok(mut cache) = cache.lock() {
-            cache.remove(&key);
-        }
-    }
 }
 
 fn layout_size_close(previous: LayoutSize, next: LayoutSize) -> bool {
@@ -155,10 +62,6 @@ fn layout_frame_close(previous: LayoutFrame, next: LayoutFrame) -> bool {
         && (previous.y - next.y).abs() < 0.5
 }
 
-// ---------------------------------------------------------------------------
-// Node reading helpers
-// ---------------------------------------------------------------------------
-
 fn read_layout_size(node: &ArkUINode) -> Option<LayoutSize> {
     let IntSize { width, height } = node.layout_size().ok()?;
     Some(LayoutSize {
@@ -167,8 +70,7 @@ fn read_layout_size(node: &ArkUINode) -> Option<LayoutSize> {
     })
 }
 
-fn read_layout_frame(node: &ArkUINode) -> Option<LayoutFrame> {
-    let size = read_layout_size(node)?;
+fn read_layout_frame(node: &ArkUINode, size: LayoutSize) -> Option<LayoutFrame> {
     let IntOffset { x, y } = node
         .position_with_translate_in_window()
         .or_else(|_| node.layout_position_in_window())
@@ -181,216 +83,372 @@ fn read_layout_frame(node: &ArkUINode) -> Option<LayoutFrame> {
     })
 }
 
-/// Register `onAreaChange` on a mounted node handle.
-///
-/// `node` is the shared `Rc` that ArkUI uses as the event-dispatch user-data
-/// target, so the callback registered here is the one ArkUI's dispatcher finds
-/// — `onAreaChange` fires reliably without any polling fallback.
+enum LayoutObserver {
+    Size {
+        callback: Rc<dyn Fn(LayoutSize)>,
+        last: Option<LayoutSize>,
+    },
+    Frame {
+        callback: Rc<dyn Fn(LayoutFrame)>,
+        last: Option<LayoutFrame>,
+    },
+    FrameNode {
+        callback: Rc<dyn Fn(ArkUINode, LayoutFrame)>,
+        last: Option<LayoutFrame>,
+    },
+}
+
+enum LayoutNotification {
+    Size(Rc<dyn Fn(LayoutSize)>, LayoutSize),
+    Frame(Rc<dyn Fn(LayoutFrame)>, LayoutFrame),
+    FrameNode(Rc<dyn Fn(ArkUINode, LayoutFrame)>, ArkUINode, LayoutFrame),
+}
+
+struct NodeObservers {
+    generation: u64,
+    node: Weak<RefCell<ArkUINode>>,
+    observers: FxHashMap<u64, LayoutObserver>,
+}
+
+#[derive(Default)]
+struct LayoutHub {
+    nodes: FxHashMap<usize, NodeObservers>,
+    next_generation: u64,
+    next_subscription: u64,
+}
+
+thread_local! {
+    static LAYOUT_HUB: RefCell<LayoutHub> = RefCell::new(LayoutHub::default());
+}
+
+struct LayoutSubscription {
+    node_key: usize,
+    generation: u64,
+    id: u64,
+}
+
+impl Drop for LayoutSubscription {
+    fn drop(&mut self) {
+        LAYOUT_HUB.with(|hub| {
+            let mut hub = hub.borrow_mut();
+            let Some(node) = hub.nodes.get_mut(&self.node_key) else {
+                return;
+            };
+            if node.generation == self.generation {
+                node.observers.remove(&self.id);
+            }
+        });
+    }
+}
+
+fn subscribe_layout(node: &HostNode, observer: LayoutObserver) -> LayoutSubscription {
+    let node_key = layout_observer_key(&node.borrow());
+    let (generation, id, install_listener) = LAYOUT_HUB.with(|hub| {
+        let mut hub = hub.borrow_mut();
+        // Native handles can be recycled. Remove entries whose mounted
+        // wrapper is gone before comparing raw keys or allocating a new
+        // generation.
+        hub.nodes.retain(|_, entry| entry.node.strong_count() != 0);
+        let same_node = hub.nodes.get(&node_key).is_some_and(|entry| {
+            entry
+                .node
+                .upgrade()
+                .is_some_and(|current| Rc::ptr_eq(&current, node))
+        });
+        let install_listener = !same_node;
+        if install_listener {
+            hub.next_generation = hub
+                .next_generation
+                .checked_add(1)
+                .expect("arkit_hooks: layout observer generation space exhausted");
+            let generation = hub.next_generation;
+            hub.nodes.insert(
+                node_key,
+                NodeObservers {
+                    generation,
+                    node: Rc::downgrade(node),
+                    observers: FxHashMap::default(),
+                },
+            );
+        }
+        hub.next_subscription = hub
+            .next_subscription
+            .checked_add(1)
+            .expect("arkit_hooks: layout subscription id space exhausted");
+        let id = hub.next_subscription;
+        let entry = hub
+            .nodes
+            .get_mut(&node_key)
+            .expect("layout hub entry must exist after insertion");
+        entry.observers.insert(id, observer);
+        (entry.generation, id, install_listener)
+    });
+
+    if install_listener {
+        register_on_area_change(node, move |node| {
+            dispatch_layout(node_key, generation, node);
+        });
+    }
+    dispatch_layout(node_key, generation, node);
+
+    LayoutSubscription {
+        node_key,
+        generation,
+        id,
+    }
+}
+
+fn dispatch_layout(node_key: usize, generation: u64, node: &HostNode) {
+    let Some((needs_frame, needs_node_value)) = LAYOUT_HUB.with(|hub| {
+        let hub = hub.borrow();
+        let entry = hub.nodes.get(&node_key)?;
+        if entry.generation != generation {
+            return None;
+        }
+        Some((
+            entry.observers.values().any(|observer| {
+                matches!(
+                    observer,
+                    LayoutObserver::Frame { .. } | LayoutObserver::FrameNode { .. }
+                )
+            }),
+            entry
+                .observers
+                .values()
+                .any(|observer| matches!(observer, LayoutObserver::FrameNode { .. })),
+        ))
+    }) else {
+        return;
+    };
+    let (size, frame, node_value) = {
+        let node = node.borrow();
+        let size = read_layout_size(&node);
+        let frame = needs_frame
+            .then(|| size.and_then(|size| read_layout_frame(&node, size)))
+            .flatten();
+        let node_value = needs_node_value.then(|| node.clone());
+        (size, frame, node_value)
+    };
+    let notifications = LAYOUT_HUB.with(|hub| {
+        let mut hub = hub.borrow_mut();
+        let Some(entry) = hub.nodes.get_mut(&node_key) else {
+            return SmallVec::new();
+        };
+        if entry.generation != generation {
+            return SmallVec::new();
+        }
+        // Most nodes have one or two layout consumers. Keep that dispatch
+        // entirely on the stack while preserving reentrant callback safety.
+        let mut notifications = SmallVec::<[LayoutNotification; 4]>::new();
+        for observer in entry.observers.values_mut() {
+            match observer {
+                LayoutObserver::Size { callback, last } => {
+                    if let Some(next) = size {
+                        if !last.is_some_and(|previous| layout_size_close(previous, next)) {
+                            *last = Some(next);
+                            notifications.push(LayoutNotification::Size(callback.clone(), next));
+                        }
+                    }
+                }
+                LayoutObserver::Frame { callback, last } => {
+                    if let Some(next) = frame {
+                        if !last.is_some_and(|previous| layout_frame_close(previous, next)) {
+                            *last = Some(next);
+                            notifications.push(LayoutNotification::Frame(callback.clone(), next));
+                        }
+                    }
+                }
+                LayoutObserver::FrameNode { callback, last } => {
+                    if let Some(next) = frame {
+                        if !last.is_some_and(|previous| layout_frame_close(previous, next)) {
+                            *last = Some(next);
+                            if let Some(node_value) = node_value.as_ref() {
+                                notifications.push(LayoutNotification::FrameNode(
+                                    callback.clone(),
+                                    node_value.clone(),
+                                    next,
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        notifications
+    });
+
+    // Application callbacks are invoked after the hub borrow is released so
+    // callbacks may mount/unmount other observers without RefCell reentrancy.
+    for notification in notifications {
+        match notification {
+            LayoutNotification::Size(callback, value) => callback(value),
+            LayoutNotification::Frame(callback, value) => callback(value),
+            LayoutNotification::FrameNode(callback, node, value) => callback(node, value),
+        }
+    }
+}
+
 fn register_on_area_change(node: &HostNode, on_change: impl Fn(&HostNode) + 'static) {
-    let node_for_cb = node.clone();
-    // Borrow the shared node for the duration of event registration. The
-    // callback is stored on the node's `event_handle` (inside the `RefCell`),
-    // so registration must hold the borrow. ArkUI keeps the node alive via its
-    // user-data `Rc`, so the `event_handle` outlives this borrow.
+    let weak_node = Rc::downgrade(node);
     let mut borrowed = node.borrow_mut();
     EventNode {
         node: &mut borrowed,
     }
     .on_area_change(move |_| {
-        on_change(&node_for_cb);
+        if let Some(node) = weak_node.upgrade() {
+            on_change(&node);
+        }
     });
-    drop(borrowed);
 }
-
-// ---------------------------------------------------------------------------
-// Event-registration wrapper (mirrors arkit_arkui's EventNode)
-// ---------------------------------------------------------------------------
 
 struct EventNode<'a> {
     node: &'a mut ArkUINode,
 }
+
 impl ArkUIAttributeBasic for EventNode<'_> {
     fn raw(&self) -> &ArkUINode {
         self.node
     }
+
     fn borrow_mut(&mut self) -> &mut ArkUINode {
         self.node
     }
 }
+
 impl ArkUIEvent for EventNode<'_> {}
 
-/// Observer hook state: the on_change callback and the last node we registered
-/// against (for node-change rebinding and cache cleanup on unmount).
-struct LayoutObserverState<F: ?Sized> {
-    on_change: Rc<F>,
-    registered_key: Rc<std::cell::Cell<Option<usize>>>,
+struct LayoutHookState<C: ?Sized> {
+    callback: Rc<RefCell<Rc<C>>>,
+    subscription: Rc<RefCell<Option<LayoutSubscription>>>,
+    node_key: Rc<Cell<Option<usize>>>,
 }
 
-impl<F: ?Sized> Clone for LayoutObserverState<F> {
+impl<C: ?Sized> Clone for LayoutHookState<C> {
     fn clone(&self) -> Self {
         Self {
-            on_change: self.on_change.clone(),
-            registered_key: self.registered_key.clone(),
+            callback: self.callback.clone(),
+            subscription: self.subscription.clone(),
+            node_key: self.node_key.clone(),
         }
     }
 }
 
-/// Observe the [`LayoutSize`] of the current element.
-///
-/// Registers ArkUI `onAreaChange` on the backing node (resolved via
-/// [`use_ark_node`]) and invokes `on_change` whenever the measured size
-/// changes meaningfully (>= 0.5 px). The dedup cache is cleaned up on unmount.
 #[track_caller]
 pub fn use_layout_size(on_change: impl Fn(LayoutSize) + 'static) {
     let node_ref = use_ark_node();
     let signal = node_ref.signal();
-
-    let state = use_hook(|| LayoutObserverState::<dyn Fn(LayoutSize)> {
-        on_change: Rc::new(on_change) as Rc<dyn Fn(LayoutSize)>,
-        registered_key: Rc::new(std::cell::Cell::new(None)),
+    let next = Rc::new(on_change) as Rc<dyn Fn(LayoutSize)>;
+    let initial = next.clone();
+    let state = use_hook(move || LayoutHookState::<dyn Fn(LayoutSize)> {
+        callback: Rc::new(RefCell::new(initial)),
+        subscription: Rc::new(RefCell::new(None)),
+        node_key: Rc::new(Cell::new(None)),
     });
+    *state.callback.borrow_mut() = next;
 
     let effect_state = state.clone();
     use_effect(move || {
-        let Some(node) = (signal)() else {
+        let Some(node) = signal() else {
+            effect_state.subscription.borrow_mut().take();
+            effect_state.node_key.set(None);
             return;
         };
-        let key = layout_observer_key(unsafe { &*node.as_ptr() });
-        if effect_state.registered_key.get() == Some(key) {
+        let key = layout_observer_key(&node.borrow());
+        if effect_state.node_key.get() == Some(key) {
             return;
         }
-        if let Some(previous_key) = effect_state.registered_key.replace(Some(key)) {
-            clear_layout_observer_cache(previous_key);
-        }
-
-        // Emit the current size immediately.
-        {
-            let n = node.borrow();
-            if let Some(size) = read_layout_size(&n) {
-                emit_layout_size_if_changed(&n, size, &*effect_state.on_change);
-            }
-        }
-
-        let on_change_cb = effect_state.on_change.clone();
-        register_on_area_change(&node, move |node| {
-            let n = node.borrow();
-            if let Some(size) = read_layout_size(&n) {
-                emit_layout_size_if_changed(&n, size, &*on_change_cb);
-            }
-        });
+        let callback = effect_state.callback.clone();
+        let observer = LayoutObserver::Size {
+            callback: Rc::new(move |value| callback.borrow().clone()(value)),
+            last: None,
+        };
+        let subscription = subscribe_layout(&node, observer);
+        effect_state.subscription.replace(Some(subscription));
+        effect_state.node_key.set(Some(key));
     });
 
-    let cleanup_key = state.registered_key.clone();
+    let cleanup = state.subscription.clone();
     use_drop(move || {
-        if let Some(key) = cleanup_key.get() {
-            clear_layout_observer_cache(key);
-        }
+        cleanup.borrow_mut().take();
     });
 }
 
-/// Observe the [`LayoutFrame`] (window-relative position + size) of the current
-/// element.
-///
-/// Same registration model as [`use_layout_size`], driven by `onAreaChange`.
 #[track_caller]
 pub fn use_layout_frame(on_change: impl Fn(LayoutFrame) + 'static) {
     let node_ref = use_ark_node();
     let signal = node_ref.signal();
-
-    let state = use_hook(|| LayoutObserverState::<dyn Fn(LayoutFrame)> {
-        on_change: Rc::new(on_change) as Rc<dyn Fn(LayoutFrame)>,
-        registered_key: Rc::new(std::cell::Cell::new(None)),
+    let next = Rc::new(on_change) as Rc<dyn Fn(LayoutFrame)>;
+    let initial = next.clone();
+    let state = use_hook(move || LayoutHookState::<dyn Fn(LayoutFrame)> {
+        callback: Rc::new(RefCell::new(initial)),
+        subscription: Rc::new(RefCell::new(None)),
+        node_key: Rc::new(Cell::new(None)),
     });
+    *state.callback.borrow_mut() = next;
 
     let effect_state = state.clone();
     use_effect(move || {
-        let Some(node) = (signal)() else {
+        let Some(node) = signal() else {
+            effect_state.subscription.borrow_mut().take();
+            effect_state.node_key.set(None);
             return;
         };
-        let key = layout_observer_key(unsafe { &*node.as_ptr() });
-        if effect_state.registered_key.get() == Some(key) {
+        let key = layout_observer_key(&node.borrow());
+        if effect_state.node_key.get() == Some(key) {
             return;
         }
-        if let Some(previous_key) = effect_state.registered_key.replace(Some(key)) {
-            clear_layout_observer_cache(previous_key);
-        }
-
-        {
-            let n = node.borrow();
-            if let Some(frame) = read_layout_frame(&n) {
-                emit_layout_frame_if_changed(&n, frame, &*effect_state.on_change);
-            }
-        }
-
-        let on_change_cb = effect_state.on_change.clone();
-        register_on_area_change(&node, move |node| {
-            let n = node.borrow();
-            if let Some(frame) = read_layout_frame(&n) {
-                emit_layout_frame_if_changed(&n, frame, &*on_change_cb);
-            }
-        });
+        let callback = effect_state.callback.clone();
+        let observer = LayoutObserver::Frame {
+            callback: Rc::new(move |value| callback.borrow().clone()(value)),
+            last: None,
+        };
+        let subscription = subscribe_layout(&node, observer);
+        effect_state.subscription.replace(Some(subscription));
+        effect_state.node_key.set(Some(key));
     });
 
-    let cleanup_key = state.registered_key.clone();
+    let cleanup = state.subscription.clone();
     use_drop(move || {
-        if let Some(key) = cleanup_key.get() {
-            clear_layout_observer_cache(key);
-        }
+        cleanup.borrow_mut().take();
     });
 }
 
-/// Observe the [`LayoutFrame`] of the current element, passing the backing
-/// [`ArkUINode`] to the callback.
-///
-/// Use this (instead of [`use_layout_frame`] + a separate [`use_ark_node`])
-/// when the callback needs to imperatively mutate the host node — e.g. to
-/// attach native children sized to the measured frame. `use_ark_node` is
-/// idempotent per scope, so mixing this with a direct `use_ark_node()` call is
-/// safe, but this variant avoids the extra resolver round-trip and guarantees
-/// the node and frame come from the same measurement.
 #[track_caller]
 pub fn use_layout_frame_node(on_change: impl Fn(ArkUINode, LayoutFrame) + 'static) {
     let node_ref = use_ark_node();
     let signal = node_ref.signal();
-
-    let state = use_hook(|| LayoutObserverState::<dyn Fn(ArkUINode, LayoutFrame)> {
-        on_change: Rc::new(on_change) as Rc<dyn Fn(ArkUINode, LayoutFrame)>,
-        registered_key: Rc::new(std::cell::Cell::new(None)),
+    let next = Rc::new(on_change) as Rc<dyn Fn(ArkUINode, LayoutFrame)>;
+    let initial = next.clone();
+    let state = use_hook(move || LayoutHookState::<dyn Fn(ArkUINode, LayoutFrame)> {
+        callback: Rc::new(RefCell::new(initial)),
+        subscription: Rc::new(RefCell::new(None)),
+        node_key: Rc::new(Cell::new(None)),
     });
+    *state.callback.borrow_mut() = next;
 
     let effect_state = state.clone();
     use_effect(move || {
-        let Some(node) = (signal)() else {
+        let Some(node) = signal() else {
+            effect_state.subscription.borrow_mut().take();
+            effect_state.node_key.set(None);
             return;
         };
-        let key = layout_observer_key(unsafe { &*node.as_ptr() });
-        if effect_state.registered_key.get() == Some(key) {
+        let key = layout_observer_key(&node.borrow());
+        if effect_state.node_key.get() == Some(key) {
             return;
         }
-        if let Some(previous_key) = effect_state.registered_key.replace(Some(key)) {
-            clear_layout_observer_cache(previous_key);
-        }
-
-        {
-            let n = node.borrow();
-            if let Some(frame) = read_layout_frame(&n) {
-                emit_layout_frame_node_if_changed(&n, frame, &*effect_state.on_change);
-            }
-        }
-
-        let on_change_cb = effect_state.on_change.clone();
-        register_on_area_change(&node, move |node| {
-            let n = node.borrow();
-            if let Some(frame) = read_layout_frame(&n) {
-                emit_layout_frame_node_if_changed(&n, frame, &*on_change_cb);
-            }
-        });
+        let callback = effect_state.callback.clone();
+        let observer = LayoutObserver::FrameNode {
+            callback: Rc::new(move |node, value| callback.borrow().clone()(node, value)),
+            last: None,
+        };
+        let subscription = subscribe_layout(&node, observer);
+        effect_state.subscription.replace(Some(subscription));
+        effect_state.node_key.set(Some(key));
     });
 
-    let cleanup_key = state.registered_key.clone();
+    let cleanup = state.subscription.clone();
     use_drop(move || {
-        if let Some(key) = cleanup_key.get() {
-            clear_layout_observer_cache(key);
-        }
+        cleanup.borrow_mut().take();
     });
 }

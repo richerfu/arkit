@@ -4,18 +4,24 @@ use std::pin::Pin;
 use std::rc::{Rc, Weak};
 use std::task::{Context, Poll, Waker};
 
-use arkit_animation_core::{
-    AnimationInstanceSnapshot, AnimationOutcome, EngineCommand, EngineEvent, InstanceId,
-    PlaybackDirection, PlaybackRate, SeekMode, TimePoint, TimeSpan,
-};
-use arkit_hooks::ArkNodeRef;
-
 use crate::api::Timeline;
 use crate::callbacks::AnimationCallbacks;
 use crate::{AnimationHost, FrameDriver};
 use crate::{CapabilityRequirements, ExecutionPolicy, LoweringReport};
+use arkit_animation_core::{
+    AnimationInstanceSnapshot, AnimationOutcome, EngineCommand, EngineEvent, InstanceKey,
+    OutputSeek, PlaybackDirection, PlaybackRate, SeekMode, TimePoint, TimeSpan,
+};
 
 type SnapshotObserver = Rc<dyn Fn(AnimationInstanceSnapshot)>;
+
+#[derive(Clone)]
+pub(crate) struct TimelineParts {
+    source: arkit_animation_core::TimelineSource,
+    policy: ExecutionPolicy,
+    requirements: CapabilityRequirements,
+    calls: Vec<Rc<dyn Fn()>>,
+}
 
 #[derive(Default)]
 struct FinishedState {
@@ -49,8 +55,7 @@ impl Future for AnimationFinished {
 pub(crate) struct ControlsInner {
     pub host: Rc<AnimationHost>,
     pub driver: Rc<FrameDriver>,
-    pub node: ArkNodeRef,
-    pub instance: Cell<Option<InstanceId>>,
+    pub instance: Cell<Option<InstanceKey>>,
     pub listener: Cell<Option<usize>>,
     callbacks: RefCell<AnimationCallbacks>,
     finished: Rc<RefCell<FinishedState>>,
@@ -66,7 +71,6 @@ impl ControlsInner {
     pub fn new(
         host: Rc<AnimationHost>,
         driver: Rc<FrameDriver>,
-        node: ArkNodeRef,
         source: arkit_animation_core::TimelineSource,
         policy: ExecutionPolicy,
         requirements: CapabilityRequirements,
@@ -75,7 +79,6 @@ impl ControlsInner {
         let inner = Rc::new(Self {
             host,
             driver,
-            node,
             instance: Cell::new(None),
             listener: Cell::new(None),
             callbacks: RefCell::new(AnimationCallbacks::default()),
@@ -115,12 +118,23 @@ impl ControlsInner {
             | EngineEvent::Cancel { instance }
             | EngineEvent::Revert { instance }
             | EngineEvent::Settled { instance, .. }
+            | EngineEvent::Removed { instance }
             | EngineEvent::Error { instance, .. } => instance,
         };
         if event_instance != instance {
             return;
         }
-        let callbacks = self.callbacks.borrow();
+        if matches!(event, EngineEvent::Removed { .. }) {
+            if let Some(report) = self.host.lowering_report(instance) {
+                self.lowering_report.replace(Some(report));
+            }
+            self.instance.set(None);
+            return;
+        }
+        // User callbacks may mutate their own registrations. Clone the cheap
+        // `Rc` callback table and release the `RefCell` borrow before invoking
+        // any application code.
+        let callbacks = self.callbacks.borrow().clone();
         match event {
             EngineEvent::Begin { .. } => invoke(&callbacks.begin),
             EngineEvent::BeforeUpdate { at, .. } => {
@@ -146,7 +160,6 @@ impl ControlsInner {
             EngineEvent::Cancel { .. } => invoke(&callbacks.cancel),
             EngineEvent::Pause { .. } => invoke(&callbacks.pause),
             EngineEvent::Settled { outcome, .. } => {
-                drop(callbacks);
                 let mut finished = self.finished.borrow_mut();
                 finished.outcome = Some(outcome);
                 for waiter in finished.waiters.drain(..) {
@@ -154,14 +167,19 @@ impl ControlsInner {
                 }
             }
             EngineEvent::Call { call, .. } => {
-                drop(callbacks);
-                if let Some(callback) = self.calls.borrow().get(call.index()).cloned() {
+                let callback = self.calls.borrow().get(call.index()).cloned();
+                if let Some(callback) = callback {
                     callback();
                 }
             }
             EngineEvent::RefreshRequested { .. } => {
-                drop(callbacks);
-                if let Err(error) = self.host.refresh_timeline(instance, &self.source.borrow()) {
+                let source = self.source.borrow().clone();
+                if let Err(error) = self.host.refresh_timeline(
+                    instance,
+                    &source,
+                    self.policy.get(),
+                    self.requirements.get(),
+                ) {
                     ohos_hilog_binding::error(format!("animation refresh failed: {error}"));
                 }
             }
@@ -178,17 +196,57 @@ impl ControlsInner {
         }
     }
 
-    fn command(&self, command: impl FnOnce(InstanceId) -> EngineCommand) {
+    pub(crate) fn command(&self, command: impl FnOnce(InstanceKey) -> EngineCommand) {
         let Some(instance) = self.instance.get() else {
             return;
         };
         self.host.enqueue(command(instance));
-        if let Some(node) = self.node.peek() {
-            self.driver.request(&node);
+        self.driver.request();
+    }
+
+    pub(crate) fn timeline_parts(&self) -> TimelineParts {
+        TimelineParts {
+            source: self.source.borrow().clone(),
+            policy: self.policy.get(),
+            requirements: self.requirements.get(),
+            calls: self.calls.borrow().clone(),
         }
     }
 
-    fn notify_observers(&self) {
+    pub(crate) fn replace_timeline_parts(&self, parts: &TimelineParts) {
+        if let Some(instance) = self.instance.get() {
+            if let Err(error) = self.host.refresh_timeline(
+                instance,
+                &parts.source,
+                parts.policy,
+                parts.requirements,
+            ) {
+                ohos_hilog_binding::error(format!(
+                    "animation timeline replacement failed: {error}"
+                ));
+                return;
+            }
+        }
+        *self.source.borrow_mut() = parts.source.clone();
+        self.policy.set(parts.policy);
+        self.requirements.set(parts.requirements);
+        self.calls.replace(parts.calls.clone());
+        if let Some(instance) = self.instance.get() {
+            if let Some(report) = self.host.lowering_report(instance) {
+                self.lowering_report.replace(Some(report));
+            }
+        }
+    }
+
+    pub(crate) fn seek_outputs(&self, first: OutputSeek, second: Option<OutputSeek>) {
+        self.command(|instance| EngineCommand::SeekOutputs {
+            instance,
+            first,
+            second,
+        });
+    }
+
+    pub(crate) fn notify_observers(&self) {
         let Some(snapshot) = self
             .instance
             .get()
@@ -196,7 +254,8 @@ impl ControlsInner {
         else {
             return;
         };
-        for observer in self.observers.borrow().iter().flatten() {
+        let observers = self.observers.borrow().clone();
+        for observer in observers.iter().flatten() {
             observer(snapshot);
         }
     }
@@ -209,6 +268,7 @@ impl Drop for ControlsInner {
         }
         if let Some(instance) = self.instance.take() {
             self.host.enqueue(EngineCommand::Remove(instance));
+            self.driver.request();
         }
     }
 }
@@ -223,6 +283,14 @@ fn invoke(callback: &Option<Rc<dyn Fn()>>) {
 pub struct AnimationControls {
     pub(crate) inner: Rc<ControlsInner>,
 }
+
+impl PartialEq for AnimationControls {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.inner, &other.inner)
+    }
+}
+
+impl Eq for AnimationControls {}
 
 pub struct AnimationSubscription {
     controls: Weak<ControlsInner>,
@@ -327,25 +395,20 @@ impl AnimationControls {
 
     pub fn set_timeline(&self, timeline: Timeline) {
         let (source, policy, requirements, calls) = timeline.into_parts();
-        *self.inner.source.borrow_mut() = source;
-        self.inner.policy.set(policy);
-        self.inner.requirements.set(requirements);
-        self.inner.calls.replace(calls);
-        if let Some(instance) = self.inner.instance.get() {
-            if let Err(error) = self
-                .inner
-                .host
-                .refresh_timeline(instance, &self.inner.source.borrow())
-            {
-                ohos_hilog_binding::error(format!(
-                    "animation timeline replacement failed: {error}"
-                ));
-            }
-        }
+        self.inner.replace_timeline_parts(&TimelineParts {
+            source,
+            policy,
+            requirements,
+            calls,
+        });
     }
 
     pub fn lowering_report(&self) -> Option<LoweringReport> {
-        self.inner.lowering_report.borrow().clone()
+        self.inner
+            .instance
+            .get()
+            .and_then(|instance| self.inner.host.lowering_report(instance))
+            .or_else(|| self.inner.lowering_report.borrow().clone())
     }
 
     pub fn subscribe(

@@ -1,6 +1,8 @@
 //! Native chart export: render into a CPU bitmap, convert to PixelMap, and encode.
 
 use std::collections::BTreeSet;
+use std::error::Error;
+use std::fmt;
 use std::os::fd::AsRawFd;
 use std::path::{Path, PathBuf};
 
@@ -18,6 +20,60 @@ use ohos_native_drawing_sys::{
 use crate::model::{ChartEvent, ChartOption};
 use crate::render::{draw_option, ZoomWindow};
 
+const MAX_EXPORT_EDGE: u32 = 8_192;
+const MAX_EXPORT_BYTES: usize = 256 * 1024 * 1024;
+
+#[derive(Debug)]
+pub(crate) enum ChartExportError {
+    InvalidDimensions {
+        width: f32,
+        height: f32,
+    },
+    DimensionsTooLarge {
+        width: u32,
+        height: u32,
+    },
+    BufferSizeOverflow,
+    Native(&'static str),
+    Image(String),
+    Io {
+        operation: &'static str,
+        path: PathBuf,
+        source: std::io::Error,
+    },
+}
+
+impl fmt::Display for ChartExportError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidDimensions { width, height } => {
+                write!(formatter, "invalid chart dimensions {width}x{height}")
+            }
+            Self::DimensionsTooLarge { width, height } => write!(
+                formatter,
+                "export dimensions {width}x{height} exceed the supported limit"
+            ),
+            Self::BufferSizeOverflow => formatter.write_str("export pixel buffer is too large"),
+            Self::Native(message) => formatter.write_str(message),
+            Self::Image(message) => formatter.write_str(message),
+            Self::Io {
+                operation,
+                path,
+                source,
+            } => write!(formatter, "{operation} {}: {source}", path.display()),
+        }
+    }
+}
+
+impl Error for ChartExportError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Io { source, .. } => Some(source),
+            _ => None,
+        }
+    }
+}
+
 pub(crate) struct ExportContext<'a> {
     pub(crate) option: &'a ChartOption,
     pub(crate) selected: Option<&'a ChartEvent>,
@@ -29,7 +85,17 @@ pub(crate) struct ExportContext<'a> {
     pub(crate) device_pixel_ratio: f32,
 }
 
-pub(crate) fn save_chart_image(context: ExportContext<'_>) -> Result<PathBuf, String> {
+pub(crate) fn save_chart_image(context: ExportContext<'_>) -> Result<PathBuf, ChartExportError> {
+    if !context.width.is_finite()
+        || !context.height.is_finite()
+        || context.width <= 0.0
+        || context.height <= 0.0
+    {
+        return Err(ChartExportError::InvalidDimensions {
+            width: context.width,
+            height: context.height,
+        });
+    }
     let feature = context
         .option
         .extra
@@ -49,15 +115,31 @@ pub(crate) fn save_chart_image(context: ExportContext<'_>) -> Result<PathBuf, St
     } else {
         image_type
     };
-    let pixel_ratio = feature
+    let requested_pixel_ratio = feature
         .and_then(|feature| feature.get("pixelRatio"))
         .and_then(serde_json::Value::as_f64)
         .map(|value| value as f32)
-        .unwrap_or(context.device_pixel_ratio)
-        .clamp(0.5, 4.0);
+        .unwrap_or(context.device_pixel_ratio);
+    let pixel_ratio = if requested_pixel_ratio.is_finite() {
+        requested_pixel_ratio.clamp(0.5, 4.0)
+    } else {
+        1.0
+    };
     let width = (context.width.max(1.0) * pixel_ratio).round() as u32;
     let height = (context.height.max(1.0) * pixel_ratio).round() as u32;
-    let byte_len = width as usize * height as usize * 4;
+    if width > MAX_EXPORT_EDGE || height > MAX_EXPORT_EDGE {
+        return Err(ChartExportError::DimensionsTooLarge { width, height });
+    }
+    let byte_len = usize::try_from(width)
+        .ok()
+        .and_then(|width| {
+            usize::try_from(height)
+                .ok()
+                .and_then(|height| width.checked_mul(height))
+        })
+        .and_then(|pixels| pixels.checked_mul(4))
+        .filter(|bytes| *bytes <= MAX_EXPORT_BYTES)
+        .ok_or(ChartExportError::BufferSizeOverflow)?;
     let mut option = context.option.clone();
     let excludes_toolbox = feature
         .and_then(|feature| feature.get("excludeComponents"))
@@ -78,6 +160,8 @@ pub(crate) fn save_chart_image(context: ExportContext<'_>) -> Result<PathBuf, St
     let bitmap = NativeBitmap::new(width, height)?;
     {
         let canvas = Canvas::new();
+        // SAFETY: both handles are live for this scope; `bitmap` outlives the
+        // borrowed canvas binding and is not accessed concurrently.
         unsafe { OH_Drawing_CanvasBind(canvas.as_ptr(), bitmap.raw) };
         canvas.save();
         canvas.scale(pixel_ratio, pixel_ratio);
@@ -105,18 +189,29 @@ pub(crate) fn save_chart_image(context: ExportContext<'_>) -> Result<PathBuf, St
         .set_src_pixel_format(PixelFormat::Bgra8888)
         .map_err(image_error)?;
     initialization
-        .set_row_stride((width * 4) as i32)
+        .set_row_stride(
+            width
+                .checked_mul(4)
+                .and_then(|value| i32::try_from(value).ok())
+                .ok_or(ChartExportError::BufferSizeOverflow)?,
+        )
         .map_err(image_error)?;
     initialization.set_alpha_type(2).map_err(image_error)?;
     let pixelmap = PixelMap::create(&mut pixels, &mut initialization).map_err(image_error)?;
 
     let path = export_path(context.option, feature, extension);
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|error| format!("create export directory: {error}"))?;
+        std::fs::create_dir_all(parent).map_err(|source| ChartExportError::Io {
+            operation: "create export directory",
+            path: parent.to_path_buf(),
+            source,
+        })?;
     }
-    let file = std::fs::File::create(&path)
-        .map_err(|error| format!("create {}: {error}", path.display()))?;
+    let file = std::fs::File::create(&path).map_err(|source| ChartExportError::Io {
+        operation: "create export file",
+        path: path.clone(),
+        source,
+    })?;
     let mut packing = PackingOptions::new().map_err(image_error)?;
     let mut mime = ImageString::from_str(if extension == "png" {
         "image/png"
@@ -174,8 +269,8 @@ fn sanitize_filename(value: &str) -> String {
     }
 }
 
-fn image_error(error: impl std::fmt::Display) -> String {
-    error.to_string()
+fn image_error(error: impl std::fmt::Display) -> ChartExportError {
+    ChartExportError::Image(error.to_string())
 }
 
 struct NativeBitmap {
@@ -183,30 +278,43 @@ struct NativeBitmap {
 }
 
 impl NativeBitmap {
-    fn new(width: u32, height: u32) -> Result<Self, String> {
+    fn new(width: u32, height: u32) -> Result<Self, ChartExportError> {
+        // SAFETY: creates a fresh native bitmap handle with no aliases.
         let raw = unsafe { OH_Drawing_BitmapCreate() };
         if raw.is_null() {
-            return Err(String::from("OH_Drawing_BitmapCreate returned null"));
+            return Err(ChartExportError::Native(
+                "OH_Drawing_BitmapCreate returned null",
+            ));
         }
         let format = OH_Drawing_BitmapFormat {
             colorFormat: OH_Drawing_ColorFormat_COLOR_FORMAT_BGRA_8888,
             alphaFormat: OH_Drawing_AlphaFormat_ALPHA_FORMAT_PREMUL,
         };
+        // SAFETY: `raw` is the live handle created above and `format` remains
+        // valid for the duration of the synchronous build call.
         unsafe { OH_Drawing_BitmapBuild(raw, width, height, &format) };
         Ok(Self { raw })
     }
 
-    fn copy_pixels(&self, byte_len: usize) -> Result<Vec<u8>, String> {
+    fn copy_pixels(&self, byte_len: usize) -> Result<Vec<u8>, ChartExportError> {
+        // SAFETY: the bitmap is live and fully built before its pixel pointer
+        // is queried.
         let pixels = unsafe { OH_Drawing_BitmapGetPixels(self.raw) }.cast::<u8>();
         if pixels.is_null() {
-            return Err(String::from("OH_Drawing_BitmapGetPixels returned null"));
+            return Err(ChartExportError::Native(
+                "OH_Drawing_BitmapGetPixels returned null",
+            ));
         }
+        // SAFETY: `byte_len` was checked from the exact bitmap dimensions and
+        // BGRA8888 format (four bytes per pixel); the returned pointer remains
+        // valid until `self` is dropped after this copy.
         Ok(unsafe { std::slice::from_raw_parts(pixels, byte_len) }.to_vec())
     }
 }
 
 impl Drop for NativeBitmap {
     fn drop(&mut self) {
+        // SAFETY: `raw` is owned by this guard and destroyed exactly once.
         unsafe { OH_Drawing_BitmapDestroy(self.raw) };
     }
 }

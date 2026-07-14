@@ -100,6 +100,7 @@ pub struct SpringSpec {
     initial_velocity: f32,
     rest_speed: f32,
     rest_displacement: f32,
+    natural_duration_seconds: f32,
 }
 
 impl SpringSpec {
@@ -128,17 +129,24 @@ impl SpringSpec {
         {
             return Err(EasingError::InvalidSpring);
         }
-        Ok(Self {
+        let mut spring = Self {
             mass,
             stiffness,
             damping,
             initial_velocity,
             rest_speed,
             rest_displacement,
-        })
+            natural_duration_seconds: 0.0,
+        };
+        spring.natural_duration_seconds = spring.compute_natural_duration_seconds();
+        Ok(spring)
     }
 
     pub fn natural_duration_seconds(self) -> f32 {
+        self.natural_duration_seconds
+    }
+
+    fn compute_natural_duration_seconds(self) -> f32 {
         const STEP_SECONDS: f32 = 1.0 / 120.0;
         const MAX_SECONDS: f32 = 60.0;
         const REQUIRED_SETTLED_SAMPLES: u8 = 8;
@@ -210,14 +218,17 @@ impl SpringSpec {
 
 impl Default for SpringSpec {
     fn default() -> Self {
-        Self {
+        let mut spring = Self {
             mass: 1.0,
             stiffness: 100.0,
             damping: 10.0,
             initial_velocity: 0.0,
             rest_speed: 0.01,
             rest_displacement: 0.005,
-        }
+            natural_duration_seconds: 0.0,
+        };
+        spring.natural_duration_seconds = spring.compute_natural_duration_seconds();
+        spring
     }
 }
 

@@ -1,9 +1,13 @@
 use arkit::prelude::*;
 
-use crate::{color, cubic_out, target, ActionButton, Metric, Section};
+use crate::{
+    color, cubic_out, play_forward, restart_forward, reverse_and_play, target, ActionButton,
+    Metric, Section,
+};
 
 const CARD_TARGET: &str = "lab-timeline-card";
 const BADGE_TARGET: &str = "lab-timeline-badge";
+const TIMELINE_DURATION_MS: u64 = 2_360;
 
 #[component]
 pub(crate) fn TimelineLab() -> Element {
@@ -13,8 +17,10 @@ pub(crate) fn TimelineLab() -> Element {
     let complete_count = use_signal(|| 0_u32);
     let cancel_count = use_signal(|| 0_u32);
     let call_count = use_signal(|| 0_u32);
+    let command = use_signal(|| "none".to_string());
+    let alternate = use_signal(|| true);
+    let duration_ms = use_signal(|| TIMELINE_DURATION_MS);
     let controls = use_animation(demo_timeline(call_count));
-    let snapshot = use_animation_snapshot(&controls);
 
     controls.on_begin(move || {
         let mut begin_count = begin_count;
@@ -44,34 +50,6 @@ pub(crate) fn TimelineLab() -> Element {
         cancel_count += 1;
         event.set("cancel".to_string());
     });
-    controls.on_render(move || {
-        let mut event = event;
-        event.set("render committed".to_string());
-    });
-
-    let state = snapshot()
-        .map(|value| format!("{:?}", value.state))
-        .unwrap_or_else(|| "resolving".to_string());
-    let direction = snapshot()
-        .map(|value| format!("{:?}", value.direction))
-        .unwrap_or_else(|| "-".to_string());
-    let elapsed = snapshot()
-        .map(|value| format!("{:.0} ms", time_point_millis(value.elapsed)))
-        .unwrap_or_else(|| "0 ms".to_string());
-    let report = controls.lowering_report();
-    let backend = report
-        .as_ref()
-        .map(|value| format!("{:?}", value.selected))
-        .unwrap_or_else(|| "pending".to_string());
-    let plan = report
-        .map(|value| {
-            format!(
-                "{} targets · {} properties · {} tweens",
-                value.target_count, value.property_count, value.tween_count
-            )
-        })
-        .unwrap_or_else(|| "waiting for targets".to_string());
-
     rsx! {
         Section {
             title: "Multi-target timeline",
@@ -93,11 +71,29 @@ pub(crate) fn TimelineLab() -> Element {
                 margin_top: 12.0,
                 percent_width: 1.0,
                 flex_wrap: "wrap",
-                ActionButton { label: "Play", on_press: { let controls = controls.clone(); move |_| controls.play() } }
+                ActionButton {
+                    label: "Play forward",
+                    on_press: {
+                        let controls = controls.clone();
+                        move |_| play_forward(&controls)
+                    }
+                }
                 ActionButton { label: "Pause", on_press: { let controls = controls.clone(); move |_| controls.pause() } }
                 ActionButton { label: "Resume", on_press: { let controls = controls.clone(); move |_| controls.resume() } }
-                ActionButton { label: "Restart", on_press: { let controls = controls.clone(); move |_| controls.restart() } }
-                ActionButton { label: "Reverse", on_press: { let controls = controls.clone(); move |_| controls.reverse() } }
+                ActionButton {
+                    label: "Restart forward",
+                    on_press: {
+                        let controls = controls.clone();
+                        move |_| restart_forward(&controls)
+                    }
+                }
+                ActionButton {
+                    label: "Reverse + play",
+                    on_press: {
+                        let controls = controls.clone();
+                        move |_| reverse_and_play(&controls, point_ms(duration_ms()))
+                    }
+                }
                 ActionButton { label: "Complete", on_press: { let controls = controls.clone(); move |_| controls.complete() } }
                 ActionButton { label: "Cancel", on_press: { let controls = controls.clone(); move |_| controls.cancel() } }
                 ActionButton { label: "Reset", on_press: { let controls = controls.clone(); move |_| controls.reset() } }
@@ -112,31 +108,85 @@ pub(crate) fn TimelineLab() -> Element {
                 percent_width: 1.0,
                 flex_wrap: "wrap",
                 ActionButton { label: "Seek 0%", on_press: { let controls = controls.clone(); move |_| controls.seek(TimePoint::ZERO) } }
-                ActionButton { label: "Seek 50%", on_press: { let controls = controls.clone(); move |_| controls.seek(point_ms(760)) } }
+                ActionButton {
+                    label: "Seek 50%",
+                    on_press: {
+                        let controls = controls.clone();
+                        move |_| controls.seek(point_ms(duration_ms() / 2))
+                    }
+                }
                 ActionButton { label: "Seek + events", on_press: { let controls = controls.clone(); move |_| controls.seek_with_events(point_ms(1_260)) } }
-                ActionButton { label: "Stretch 3s", on_press: { let controls = controls.clone(); move |_| controls.stretch(TimeSpan::from_millis(3_000)) } }
-                ActionButton { label: "Rate 0.5x", on_press: { let controls = controls.clone(); move |_| controls.set_playback_rate(PlaybackRate::new(0.5).expect("constant rate")) } }
-                ActionButton { label: "Rate 1.5x", on_press: { let controls = controls.clone(); move |_| controls.set_playback_rate(PlaybackRate::new(1.5).expect("constant rate")) } }
-                ActionButton { label: "Alternate", on_press: { let controls = controls.clone(); move |_| controls.set_alternate(true) } }
-                ActionButton { label: "Refresh", on_press: { let controls = controls.clone(); move |_| controls.refresh() } }
+                ActionButton {
+                    label: "Stretch 3s",
+                    on_press: {
+                        let controls = controls.clone();
+                        move |_| {
+                            controls.stretch(TimeSpan::from_millis(3_000));
+                            let mut duration_ms = duration_ms;
+                            duration_ms.set(3_000);
+                            let mut command = command;
+                            command.set("duration = 3s".to_string());
+                        }
+                    }
+                }
+                ActionButton {
+                    label: "Rate 0.5x",
+                    on_press: {
+                        let controls = controls.clone();
+                        move |_| {
+                            controls.set_playback_rate(PlaybackRate::new(0.5).expect("constant rate"));
+                            let mut command = command;
+                            command.set("playback rate = 0.5x".to_string());
+                        }
+                    }
+                }
+                ActionButton {
+                    label: "Rate 1.5x",
+                    on_press: {
+                        let controls = controls.clone();
+                        move |_| {
+                            controls.set_playback_rate(PlaybackRate::new(1.5).expect("constant rate"));
+                            let mut command = command;
+                            command.set("playback rate = 1.5x".to_string());
+                        }
+                    }
+                }
+                ActionButton {
+                    label: "Alternate",
+                    active: alternate(),
+                    on_press: {
+                        let controls = controls.clone();
+                        move |_| {
+                            let enabled = !alternate();
+                            controls.set_alternate(enabled);
+                            let mut alternate = alternate;
+                            alternate.set(enabled);
+                            let mut command = command;
+                            command.set(format!("alternate = {enabled}"));
+                        }
+                    }
+                }
+                ActionButton {
+                    label: "Refresh",
+                    on_press: {
+                        let controls = controls.clone();
+                        move |_| {
+                            controls.refresh();
+                            let mut command = command;
+                            command.set("targets refreshed".to_string());
+                        }
+                    }
+                }
             }
             flex {
                 margin_top: 6.0,
                 percent_width: 1.0,
                 flex_wrap: "wrap",
-                Metric { label: "State", value: state }
-                Metric { label: "Direction", value: direction }
-                Metric { label: "Elapsed", value: elapsed }
-                Metric { label: "Backend", value: backend }
-                Metric { label: "Ready", value: controls.is_ready().to_string() }
-                Metric { label: "Last event", value: event() }
+                TimelineRuntimeMetrics { controls: controls.clone(), last_event: event() }
+                TimelineResolutionMetrics { controls: controls.clone() }
+                Metric { label: "Command", value: command() }
             }
-            text {
-                margin_top: 4.0,
-                font_size: 11.0,
-                font_color: 0xff475569u32,
-                "{plan}"
-            }
+            TimelinePlanReadout { controls: controls.clone() }
         }
 
         Section {
@@ -152,6 +202,75 @@ pub(crate) fn TimelineLab() -> Element {
                 Metric { label: "Call node", value: call_count().to_string() }
             }
         }
+    }
+}
+
+#[component]
+fn TimelineResolutionMetrics(controls: AnimationControls) -> Element {
+    let snapshot = use_animation_snapshot(&controls);
+    let _ = snapshot();
+    let backend = controls
+        .lowering_report()
+        .map(|value| format!("{:?}", value.selected))
+        .unwrap_or_else(|| "Pending".to_string());
+    rsx! {
+        Metric { label: "Backend", value: backend }
+        Metric { label: "Ready", value: controls.is_ready().to_string() }
+    }
+}
+
+#[component]
+fn TimelinePlanReadout(controls: AnimationControls) -> Element {
+    let snapshot = use_animation_snapshot(&controls);
+    let _ = snapshot();
+    let plan = controls
+        .lowering_report()
+        .map(|value| {
+            format!(
+                "{} targets · {} properties · {} tweens",
+                value.target_count, value.property_count, value.tween_count
+            )
+        })
+        .unwrap_or_else(|| "Waiting for targets".to_string());
+    rsx! {
+        text {
+            margin_top: 4.0,
+            font_size: 11.0,
+            font_color: 0xff475569u32,
+            "{plan}"
+        }
+    }
+}
+
+#[component]
+fn TimelineRuntimeMetrics(controls: AnimationControls, last_event: String) -> Element {
+    let snapshot = use_animation_snapshot(&controls);
+    let render_count = use_signal(|| 0_u64);
+    controls.on_render(move || {
+        let mut render_count = render_count;
+        render_count += 1;
+    });
+    let state = snapshot()
+        .map(|value| format!("{:?}", value.state))
+        .unwrap_or_else(|| {
+            if controls.is_ready() {
+                "Ready".to_string()
+            } else {
+                "Resolving".to_string()
+            }
+        });
+    let direction = snapshot()
+        .map(|value| format!("{:?}", value.direction))
+        .unwrap_or_else(|| "-".to_string());
+    let elapsed = snapshot()
+        .map(|value| format!("{:.0} ms", time_point_millis(value.elapsed)))
+        .unwrap_or_else(|| "0 ms".to_string());
+    rsx! {
+        Metric { label: "State", value: state }
+        Metric { label: "Direction", value: direction }
+        Metric { label: "Elapsed", value: elapsed }
+        Metric { label: "Render commits", value: render_count().to_string() }
+        Metric { label: "Last event", value: last_event }
     }
 }
 
@@ -193,7 +312,7 @@ fn TimelineBadge() -> Element {
 fn demo_timeline(marker: Signal<u32>) -> Timeline {
     let duration = TimeSpan::from_millis(1_100);
     let card = Animation::new(target(CARD_TARGET))
-        .tween(&TRANSLATE_X, Length::vp(-72.0), Length::vp(72.0), duration)
+        .tween(&TRANSLATE_X, Length::vp(-48.0), Length::vp(48.0), duration)
         .configure_last(
             cubic_out(),
             Composition::Replace,

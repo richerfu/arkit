@@ -7,6 +7,9 @@ use crate::{color, cubic_out, target, ActionButton, Metric, Section};
 
 const DRAG_TARGET: &str = "lab-drag-target";
 const SCROLL_TARGET: &str = "lab-scroll-target";
+const DRAG_MAX_X_VP: f32 = 184.0;
+const DRAG_MAX_Y_VP: f32 = 110.0;
+const SCROLL_TRAVEL_VP: f32 = 168.0;
 
 #[component]
 pub(crate) fn InteractionLab() -> Element {
@@ -21,22 +24,34 @@ pub(crate) fn InteractionLab() -> Element {
 fn DragDemo() -> Element {
     let status = use_signal(|| "Idle".to_string());
     let controls = use_animation(drag_mapping_timeline());
+    let drag_samples = use_hook(|| Rc::new(Cell::new(0_u32)));
+    let grab_samples = drag_samples.clone();
+    let move_samples = drag_samples.clone();
+    let release_samples = drag_samples.clone();
     let callbacks = DraggableCallbacks {
         grab: Some(Rc::new(move |update| {
+            grab_samples.set(0);
             let mut status = status;
             status.set(format_drag("Grab", update))
         })),
-        drag: Some(Rc::new(move |update| {
-            let mut status = status;
-            status.set(format_drag("Drag", update))
+        drag: Some(Rc::new(move |_| {
+            move_samples.set(move_samples.get().saturating_add(1));
         })),
         release: Some(Rc::new(move |update| {
             let mut status = status;
-            status.set(format_drag("Release", update))
+            status.set(format!(
+                "{} · {} frame samples",
+                format_drag("Release", update),
+                release_samples.get()
+            ))
         })),
         snap: Some(Rc::new(move |update| {
             let mut status = status;
-            status.set(format_drag("Snap", update))
+            status.set(format_drag("Snap queued", update))
+        })),
+        settle: Some(Rc::new(move |update| {
+            let mut status = status;
+            status.set(format_drag("Settled", update))
         })),
         ..DraggableCallbacks::default()
     };
@@ -45,15 +60,19 @@ fn DragDemo() -> Element {
         TargetName::owned(DRAG_TARGET),
         DraggableConfig {
             axis: DragAxis::Both,
+            mapping: DragMapping::DirectPosition,
             constraints: Some(DragConstraints::new(
                 Vec2::new(0.0, 0.0),
-                Vec2::new(220.0, 110.0),
+                Vec2::new(DRAG_MAX_X_VP, DRAG_MAX_Y_VP),
             )),
-            snap: DragSnap::Grid(Vec2::new(55.0, 55.0)),
+            snap: DragSnap::Grid(Vec2::new(46.0, 55.0)),
             release_duration: TimeSpan::from_millis(520),
             map_duration: TimeSpan::from_millis(1_000),
             auto_scroll: Some(AutoScroll {
-                viewport: DragConstraints::new(Vec2::new(0.0, 0.0), Vec2::new(220.0, 110.0)),
+                viewport: DragConstraints::new(
+                    Vec2::new(0.0, 0.0),
+                    Vec2::new(DRAG_MAX_X_VP, DRAG_MAX_Y_VP),
+                ),
                 threshold: 24.0,
                 max_speed: 320.0,
             }),
@@ -68,17 +87,19 @@ fn DragDemo() -> Element {
     rsx! {
         Section {
             title: "Draggable + inertia + snap",
-            description: "Touch samples feed deterministic velocity, constrained seek mapping, auto-scroll hints and a spring release timeline owned by the root Engine.",
+            description: "Touch input is coalesced once per root frame. X/Y outputs follow the pointer independently, then deterministic velocity, bounds, grid snap and spring release stay on the same Engine.",
             column {
                 percent_width: 1.0,
                 height: 210.0,
+                align_items: "start",
+                justify_content: "start",
                 padding: 12.0,
                 background_color: 0xffe2e8f0u32,
                 border_radius: 14.0,
                 clip: false,
                 DragTarget {
                     on_pointer: move |pointer: dioxus_elements::event::PointerPayload| {
-                        let at = next_time(&touch_clock);
+                        let at = pointer_time(pointer, &touch_clock);
                         let point = if pointer.has_window_position() {
                             Vec2::new(pointer.window_x, pointer.window_y)
                         } else {
@@ -105,14 +126,44 @@ fn DragDemo() -> Element {
                         move |_| {
                             drag.grab(point_ms(0), Vec2::new(0.0, 0.0));
                             drag.drag(point_ms(90), Vec2::new(132.0, 68.0));
-                            drag.drag(point_ms(170), Vec2::new(184.0, 96.0));
+                            drag.drag(point_ms(170), Vec2::new(176.0, 96.0));
                             drag.release();
                         }
                     }
                 }
-                ActionButton { label: "Reset", on_press: { let drag = drag.clone(); move |_| drag.reset() } }
-                ActionButton { label: "Stop", on_press: { let drag = drag.clone(); move |_| drag.stop() } }
-                ActionButton { label: "Refresh bounds", on_press: { let drag = drag.clone(); move |_| drag.refresh() } }
+                ActionButton {
+                    label: "Reset",
+                    on_press: {
+                        let drag = drag.clone();
+                        move |_| {
+                            drag.reset();
+                            let mut status = status;
+                            status.set("Reset to origin".to_string());
+                        }
+                    }
+                }
+                ActionButton {
+                    label: "Stop",
+                    on_press: {
+                        let drag = drag.clone();
+                        move |_| {
+                            drag.stop();
+                            let mut status = status;
+                            status.set("Stopped".to_string());
+                        }
+                    }
+                }
+                ActionButton {
+                    label: "Refresh bounds",
+                    on_press: {
+                        let drag = drag.clone();
+                        move |_| {
+                            drag.refresh();
+                            let mut status = status;
+                            status.set("Bounds refreshed".to_string());
+                        }
+                    }
+                }
                 Metric { label: "Drag update", value: status() }
             }
         }
@@ -147,19 +198,13 @@ fn drag_mapping_timeline() -> Timeline {
             .tween(
                 &TRANSLATE_X,
                 Length::vp(0.0),
-                Length::vp(220.0),
+                Length::vp(DRAG_MAX_X_VP),
                 TimeSpan::from_millis(1_000),
             )
             .tween(
                 &TRANSLATE_Y,
                 Length::vp(0.0),
-                Length::vp(110.0),
-                TimeSpan::from_millis(1_000),
-            )
-            .tween(
-                &ROTATION,
-                Angle::degrees(0.0),
-                Angle::degrees(16.0),
+                Length::vp(DRAG_MAX_Y_VP),
                 TimeSpan::from_millis(1_000),
             ),
         TimelinePosition::START,
@@ -170,7 +215,7 @@ fn drag_mapping_timeline() -> Timeline {
 fn ScrollDemo() -> Element {
     let offset = use_signal(|| 0.0_f32);
     let status = use_signal(|| "outside · stationary".to_string());
-    let clock = use_signal(|| 0_u64);
+    let clock = use_hook(|| Rc::new(Cell::new(0_u64)));
     let controls = use_animation(scroll_timeline());
     let observer = use_scroll_observer(
         controls.clone(),
@@ -190,6 +235,8 @@ fn ScrollDemo() -> Element {
                 status.set("leave".to_string());
             })),
             update: Some(Rc::new(move |sample| {
+                let mut offset = offset;
+                offset.set(sample.offset);
                 let mut status = status;
                 status.set(format!(
                     "{:?} · {:.0}% · v={:.0}",
@@ -209,6 +256,7 @@ fn ScrollDemo() -> Element {
             column {
                 percent_width: 1.0,
                 height: 150.0,
+                align_items: "start",
                 justify_content: "center",
                 padding: 12.0,
                 background_color: 0xffe2e8f0u32,
@@ -228,8 +276,9 @@ fn ScrollDemo() -> Element {
                 block_color: 0xff312e81u32,
                 on_change: {
                     let observer = observer.clone();
+                    let clock = clock.clone();
                     move |event| {
-                        drive_scroll(&observer, offset, clock, event.data().float_value);
+                        drive_scroll(&observer, &clock, event.data().float_value);
                     }
                 }
             }
@@ -242,7 +291,8 @@ fn ScrollDemo() -> Element {
                         label,
                         on_press: {
                             let observer = observer.clone();
-                            move |_| drive_scroll(&observer, offset, clock, value)
+                            let clock = clock.clone();
+                            move |_| drive_scroll(&observer, &clock, value)
                         },
                     }
                 }
@@ -254,6 +304,8 @@ fn ScrollDemo() -> Element {
                             observer.revert();
                             let mut offset = offset;
                             offset.set(0.0);
+                            let mut status = status;
+                            status.set("reverted · outside".to_string());
                         }
                     }
                 }
@@ -289,7 +341,12 @@ fn scroll_timeline() -> Timeline {
     let duration = TimeSpan::from_millis(1_000);
     Timeline::new().add(
         Animation::new(target(SCROLL_TARGET))
-            .tween(&TRANSLATE_X, Length::vp(0.0), Length::vp(200.0), duration)
+            .tween(
+                &TRANSLATE_X,
+                Length::vp(0.0),
+                Length::vp(SCROLL_TRAVEL_VP),
+                duration,
+            )
             .tween(
                 &ROTATION,
                 Angle::degrees(-12.0),
@@ -308,17 +365,10 @@ fn scroll_timeline() -> Timeline {
     )
 }
 
-fn drive_scroll(
-    observer: &Rc<ScrollObserver>,
-    mut offset: Signal<f32>,
-    mut clock: Signal<u64>,
-    value: f32,
-) {
-    let at = clock().saturating_add(16_000_000);
+fn drive_scroll(observer: &Rc<ScrollObserver>, clock: &Rc<Cell<u64>>, value: f32) {
+    let at = clock.get().saturating_add(16_000_000);
     clock.set(at);
     observer.update_at(TimePoint::from_nanos(at), value);
-    observer.flush_frame();
-    offset.set(value);
 }
 
 #[component]
@@ -331,9 +381,6 @@ fn AnimatableDemo() -> Element {
             ..AnimatableDefaults::default()
         },
     );
-    let snapshot = use_animation_snapshot(value.controls());
-    let _ = snapshot();
-    let current = value.get().clamp(0.0, 1.0);
     let to_one = value.clone();
     let retarget = value.clone();
     let repeat = value.clone();
@@ -345,19 +392,7 @@ fn AnimatableDemo() -> Element {
         Section {
             title: "Animatable<T> drawing value",
             description: "A typed f32 value uses DrawingAdapter and the root clock for retargeting and repeating invalidation; no ArkUI property or async timer is required.",
-            column {
-                percent_width: 1.0,
-                height: 28.0,
-                background_color: 0xffe2e8f0u32,
-                border_radius: 14.0,
-                clip: true,
-                column {
-                    percent_width: current,
-                    percent_height: 1.0,
-                    background_color: 0xff4f46e5u32,
-                    border_radius: 14.0,
-                }
-            }
+            AnimatableBar { value: value.clone() }
             flex {
                 margin_top: 12.0,
                 percent_width: 1.0,
@@ -368,9 +403,31 @@ fn AnimatableDemo() -> Element {
                 ActionButton { label: "Pause", on_press: move |_| pause.controls().pause() }
                 ActionButton { label: "Set 0.65", on_press: move |_| set.set(0.65) }
                 ActionButton { label: "Revert", on_press: move |_| revert.revert() }
-                Metric { label: "Value", value: format!("{current:.3}") }
             }
         }
+    }
+}
+
+#[component]
+fn AnimatableBar(value: Animatable<f32>) -> Element {
+    let snapshot = use_animation_snapshot(value.controls());
+    let _ = snapshot();
+    let current = value.get().clamp(0.0, 1.0);
+    rsx! {
+        column {
+            percent_width: 1.0,
+            height: 28.0,
+            background_color: 0xffe2e8f0u32,
+            border_radius: 14.0,
+            clip: true,
+            column {
+                percent_width: current,
+                percent_height: 1.0,
+                background_color: 0xff4f46e5u32,
+                border_radius: 14.0,
+            }
+        }
+        Metric { label: "Value", value: format!("{current:.3}") }
     }
 }
 
@@ -378,6 +435,18 @@ fn next_time(clock: &Rc<Cell<u64>>) -> TimePoint {
     let next = clock.get().saturating_add(16_000_000);
     clock.set(next);
     TimePoint::from_nanos(next)
+}
+
+fn pointer_time(
+    pointer: dioxus_elements::event::PointerPayload,
+    clock: &Rc<Cell<u64>>,
+) -> TimePoint {
+    if pointer.timestamp_nanos > clock.get() {
+        clock.set(pointer.timestamp_nanos);
+        TimePoint::from_nanos(pointer.timestamp_nanos)
+    } else {
+        next_time(clock)
+    }
 }
 
 fn point_ms(milliseconds: u64) -> TimePoint {

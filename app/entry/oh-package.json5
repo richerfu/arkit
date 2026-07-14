@@ -6,7 +6,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "libchart_example.so": "file:./src/main/cpp/types/libchart_example",
+    "libanimation.so": "file:./src/main/cpp/types/libanimation",
     "@ohos-rs/ability": "0.4.0-beta.7"
   }
 }

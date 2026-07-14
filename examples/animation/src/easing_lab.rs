@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use arkit::prelude::*;
 
-use crate::{cubic_out, target, ActionButton, Metric, Section};
+use crate::{cubic_out, restart_forward, reverse_and_play, target, ActionButton, Metric, Section};
 
 const LANES: [(&str, &str, u32); 6] = [
     ("lab-ease-cubic", "Cubic out", 0xff4f46e5u32),
@@ -13,6 +13,8 @@ const LANES: [(&str, &str, u32); 6] = [
     ("lab-ease-linear", "Linear points", 0xffea580cu32),
     ("lab-ease-irregular", "Seeded irregular", 0xffdb2777u32),
 ];
+const EASING_DURATION_MS: u64 = 1_200;
+const LANE_TRAVEL_VP: f32 = 164.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum StaggerMode {
@@ -25,10 +27,6 @@ enum StaggerMode {
 #[component]
 pub(crate) fn EasingLab() -> Element {
     let controls = use_animation(easing_timeline());
-    let snapshot = use_animation_snapshot(&controls);
-    let state = snapshot()
-        .map(|value| format!("{:?}", value.state))
-        .unwrap_or_else(|| "readying".to_string());
 
     rsx! {
         Section {
@@ -47,15 +45,42 @@ pub(crate) fn EasingLab() -> Element {
                 margin_top: 12.0,
                 percent_width: 1.0,
                 flex_wrap: "wrap",
-                ActionButton { label: "Run all", on_press: { let controls = controls.clone(); move |_| controls.restart() } }
+                ActionButton {
+                    label: "Run all",
+                    on_press: {
+                        let controls = controls.clone();
+                        move |_| restart_forward(&controls)
+                    }
+                }
                 ActionButton { label: "Pause", on_press: { let controls = controls.clone(); move |_| controls.pause() } }
                 ActionButton { label: "Resume", on_press: { let controls = controls.clone(); move |_| controls.resume() } }
-                ActionButton { label: "Reverse", on_press: { let controls = controls.clone(); move |_| controls.reverse() } }
-                Metric { label: "State", value: state }
+                ActionButton {
+                    label: "Reverse + play",
+                    on_press: {
+                        let controls = controls.clone();
+                        move |_| reverse_and_play(&controls, point_ms(EASING_DURATION_MS))
+                    }
+                }
+                AnimationStateMetric { controls: controls.clone() }
             }
         }
         StaggerDemo {}
     }
+}
+
+#[component]
+fn AnimationStateMetric(controls: AnimationControls) -> Element {
+    let snapshot = use_animation_snapshot(&controls);
+    let state = snapshot()
+        .map(|value| format!("{:?}", value.state))
+        .unwrap_or_else(|| {
+            if controls.is_ready() {
+                "Ready".to_string()
+            } else {
+                "Resolving".to_string()
+            }
+        });
+    rsx! { Metric { label: "State", value: state } }
 }
 
 #[component]
@@ -65,10 +90,11 @@ fn EasingLane(name: &'static str, label: &'static str, tint: u32) -> Element {
             margin_bottom: 7.0,
             percent_width: 1.0,
             align_items: "center",
-            text { width: 106.0, font_size: 11.0, font_color: 0xff475569u32, "{label}" }
+            text { width: 90.0, font_size: 11.0, font_color: 0xff475569u32, "{label}" }
             column {
-                width: 220.0,
+                layout_weight: 1.0,
                 height: 28.0,
+                align_items: "start",
                 justify_content: "center",
                 background_color: 0xffe2e8f0u32,
                 border_radius: 14.0,
@@ -125,8 +151,10 @@ fn easing_timeline() -> Timeline {
                     .tween(
                         &TRANSLATE_X,
                         Length::vp(0.0),
-                        Length::vp(188.0),
-                        TimeSpan::from_millis(1_200),
+                        // Keep headroom for overshooting spring/Bézier eases;
+                        // their intermediate value may legitimately exceed 1.
+                        Length::vp(LANE_TRAVEL_VP),
+                        TimeSpan::from_millis(EASING_DURATION_MS),
                     )
                     .configure_last(
                         easing,
@@ -155,13 +183,15 @@ fn StaggerDemo() -> Element {
         Section {
             title: "Grid stagger distribution",
             description: "A 4×3 target grid demonstrates center/radial distance, axis distribution, reverse direction and seeded jitter. Delays are deterministic typed TimeSpan values.",
-            flex {
-                percent_width: 1.0,
+            column {
                 width: 280.0,
-                flex_wrap: "wrap",
-                justify_content: "center",
-                for index in 0..12 {
-                    StaggerDot { index }
+                align_items: "center",
+                for row_index in 0..3 {
+                    row {
+                        for column_index in 0..4 {
+                            StaggerDot { index: row_index * 4 + column_index }
+                        }
+                    }
                 }
             }
             flex {
@@ -182,12 +212,18 @@ fn StaggerDemo() -> Element {
                             move |_| {
                                 mode.set(candidate);
                                 controls.set_timeline(stagger_timeline(candidate));
-                                controls.restart();
+                                restart_forward(&controls);
                             }
                         }
                     }
                 }
-                ActionButton { label: "Replay", on_press: { let controls = controls.clone(); move |_| controls.restart() } }
+                ActionButton {
+                    label: "Replay",
+                    on_press: {
+                        let controls = controls.clone();
+                        move |_| restart_forward(&controls)
+                    }
+                }
             }
             text {
                 margin_top: 6.0,
@@ -197,6 +233,10 @@ fn StaggerDemo() -> Element {
             }
         }
     }
+}
+
+fn point_ms(milliseconds: u64) -> TimePoint {
+    TimePoint::from_nanos(milliseconds * 1_000_000)
 }
 
 #[component]

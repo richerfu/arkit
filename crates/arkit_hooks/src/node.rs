@@ -23,11 +23,11 @@
 //! root renders [`OverlayRoot`] to mount that content as a full-screen stack.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::Rc;
 
 use arkit_prelude::*;
 use ohos_arkui_binding::common::node::ArkUINode;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::layout::LayoutFrame;
 
@@ -47,11 +47,19 @@ pub struct ArkHost {
 struct ArkHostInner {
     /// ScopeId → the signal slot allocated by `use_ark_node`. The integration
     /// writes the resolved node into the signal via `resolve_scope`.
-    pending: HashMap<ScopeId, Signal<Option<HostNode>>>,
+    bindings: FxHashMap<ScopeId, Signal<Option<HostNode>>>,
+    /// Scopes whose component rendered since the last successful resolution.
+    /// Keeping this separate from `bindings` avoids traversing every hooked
+    /// scope after unrelated renders elsewhere in the tree.
+    dirty_scopes: FxHashSet<ScopeId>,
     /// The active overlay content, rendered as a full-screen stack subtree at
     /// the app root by [`use_ark_host_provider`]. `None` = no overlay open.
     /// Driven by [`crate::use_overlay`].
     overlay_content: Option<Signal<Option<Element>>>,
+    /// Tokenized overlay stack. A stale component may remove only its own
+    /// entry; the previously visible entry is restored automatically.
+    overlay_entries: Vec<(u64, Element)>,
+    next_overlay_token: u64,
     /// Measured frame of the app-level overlay root. Trigger layout frames are
     /// window-relative, while overlay children are laid out inside this root, so
     /// floating placement must subtract this origin before converting to vp.
@@ -62,8 +70,11 @@ impl Default for ArkHost {
     fn default() -> Self {
         Self {
             inner: Rc::new(RefCell::new(ArkHostInner {
-                pending: HashMap::new(),
+                bindings: FxHashMap::default(),
+                dirty_scopes: FxHashSet::default(),
                 overlay_content: None,
+                overlay_entries: Vec::new(),
+                next_overlay_token: 0,
                 overlay_frame: None,
             })),
         }
@@ -88,13 +99,16 @@ impl ArkHost {
         scope: ScopeId,
         slot: Signal<Option<HostNode>>,
     ) -> Signal<Option<HostNode>> {
-        *self.inner.borrow_mut().pending.entry(scope).or_insert(slot)
+        let mut inner = self.inner.borrow_mut();
+        let registered = *inner.bindings.entry(scope).or_insert(slot);
+        inner.dirty_scopes.insert(scope);
+        registered
     }
 
     /// Snapshot of all scopes awaiting node resolution (called by the runtime
     /// after each render).
     pub fn pending_scopes(&self) -> Vec<ScopeId> {
-        self.inner.borrow().pending.keys().copied().collect()
+        self.inner.borrow().dirty_scopes.iter().copied().collect()
     }
 
     /// Resolve a scope's backing node. Called by the renderer/runtime
@@ -103,17 +117,31 @@ impl ArkHost {
     /// observer hooks).
     pub fn resolve_scope(&self, scope: ScopeId, node: HostNode) {
         // Signal is Copy; clone it out of the borrow so we can take `&mut`.
-        let slot = self.inner.borrow().pending.get(&scope).copied();
+        let slot = self.inner.borrow().bindings.get(&scope).copied();
         if let Some(mut slot) = slot {
-            slot.set(Some(node));
+            if let Ok(mut value) = slot.try_write() {
+                let unchanged = value
+                    .as_ref()
+                    .is_some_and(|current| Rc::ptr_eq(current, &node));
+                if !unchanged {
+                    *value = Some(node);
+                }
+                self.inner.borrow_mut().dirty_scopes.remove(&scope);
+            }
         }
     }
 
     /// Clear a scope's slot (called automatically on unmount via `use_drop`).
     pub(crate) fn revoke_scope(&self, scope: ScopeId) {
-        let slot = self.inner.borrow_mut().pending.remove(&scope);
+        let slot = {
+            let mut inner = self.inner.borrow_mut();
+            inner.dirty_scopes.remove(&scope);
+            inner.bindings.remove(&scope)
+        };
         if let Some(mut slot) = slot {
-            slot.set(None);
+            if let Ok(mut value) = slot.try_write() {
+                *value = None;
+            }
         }
     }
 
@@ -128,6 +156,48 @@ impl ArkHost {
         let sig = Signal::new(None);
         inner.overlay_content = Some(sig);
         sig
+    }
+
+    pub(crate) fn allocate_overlay_token(&self) -> u64 {
+        let mut inner = self.inner.borrow_mut();
+        inner.next_overlay_token = inner
+            .next_overlay_token
+            .checked_add(1)
+            .expect("arkit_hooks: overlay token space exhausted");
+        inner.next_overlay_token
+    }
+
+    pub(crate) fn set_overlay(&self, token: u64, element: Element) {
+        let mut signal = self.overlay_content();
+        let current = {
+            let mut inner = self.inner.borrow_mut();
+            inner.overlay_entries.retain(|(owner, _)| *owner != token);
+            inner.overlay_entries.push((token, element));
+            inner
+                .overlay_entries
+                .last()
+                .map(|(_, element)| element.clone())
+        };
+        signal.set(current);
+    }
+
+    pub(crate) fn dismiss_overlay(&self, token: u64) -> bool {
+        let mut signal = self.overlay_content();
+        let (removed, current) = {
+            let mut inner = self.inner.borrow_mut();
+            let before = inner.overlay_entries.len();
+            inner.overlay_entries.retain(|(owner, _)| *owner != token);
+            let removed = before != inner.overlay_entries.len();
+            let current = inner
+                .overlay_entries
+                .last()
+                .map(|(_, element)| element.clone());
+            (removed, current)
+        };
+        if removed {
+            signal.set(current);
+        }
+        removed
     }
 
     pub(crate) fn overlay_frame(&self) -> Signal<LayoutFrame> {
@@ -186,8 +256,12 @@ pub fn use_ark_host_provider() -> ArkHost {
     let host = use_context_provider(ArkHost::new);
     // Register the host with the runtime so post-render passes can resolve
     // `use_ark_node` lookups and install the overlay portal root.
-    arkit_runtime::set_scope_resolver(Some(std::rc::Rc::new(host.clone())));
-    use_drop(|| arkit_runtime::set_scope_resolver(None));
+    let resolver_host = host.clone();
+    let _resolver_registration = use_hook(|| {
+        Rc::new(arkit_runtime::register_scope_resolver(Rc::new(
+            resolver_host,
+        )))
+    });
     host
 }
 
@@ -255,12 +329,12 @@ impl ArkNodeRef {
     /// Read the node, subscribing the current scope to changes. Returns
     /// `None` until the renderer has resolved the scope.
     pub fn get(&self) -> Option<HostNode> {
-        (self.signal)()
+        self.signal.try_read().ok().and_then(|value| value.clone())
     }
 
     /// Read the node without subscribing.
     pub fn peek(&self) -> Option<HostNode> {
-        self.signal.peek().clone()
+        self.signal.try_peek().ok().and_then(|value| value.clone())
     }
 
     /// Access the underlying signal (crate-internal, for the layout hooks).

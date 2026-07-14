@@ -90,7 +90,10 @@ do_start() {
 
 case "$ACTION" in
   sync) sync_shell ;;
-  build) do_build ;;
+  build)
+    sync_shell
+    do_build
+    ;;
   install) do_install ;;
   start) do_start ;;
   log) hdc hilog | grep -iE "arkit|ArkUI|dioxus|error|fatal" ;;

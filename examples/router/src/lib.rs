@@ -2,10 +2,13 @@
 //! switching. Navigation via arkit's ArkUI-native `<Link>` (renders as styled
 //! clickable text, not a button or HTML anchor).
 
+use arkit::dioxus_core::VNode;
 use arkit::entry;
 use arkit::prelude::*;
+// The upstream derive emits `::dioxus_router` paths. Bind that name through
+// Arkit's supported router namespace instead of adding an internal crate edge.
+use arkit::router::dioxus_router;
 use arkit::router::{Link, Routable, RouteTransition, Router};
-use dioxus_core::VNode;
 
 #[derive(Routable, Clone, PartialEq, Debug)]
 enum Route {

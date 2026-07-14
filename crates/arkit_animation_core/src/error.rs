@@ -314,14 +314,21 @@ impl Error for AnimationResolveError {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AnimationRuntimeError {
-    UnknownInstance(crate::InstanceId),
-    InfiniteAnimationCannotComplete(crate::InstanceId),
+    UnknownInstance(crate::InstanceKey),
+    InstanceGenerationExhausted(crate::InstanceId),
+    InfiniteAnimationCannotComplete(crate::InstanceKey),
     BaselineCountMismatch {
         expected: usize,
         actual: usize,
     },
     BaselineKindMismatch(crate::OutputId),
     GlobalPropertyContractMismatch {
+        adapter: crate::AdapterId,
+        target: crate::AdapterTargetId,
+        property: crate::AdapterPropertyId,
+    },
+    UnknownOutput {
+        instance: crate::InstanceKey,
         adapter: crate::AdapterId,
         target: crate::AdapterTargetId,
         property: crate::AdapterPropertyId,
@@ -343,6 +350,10 @@ impl Display for AnimationRuntimeError {
             Self::UnknownInstance(instance) => {
                 write!(formatter, "unknown animation instance {instance:?}")
             }
+            Self::InstanceGenerationExhausted(instance) => write!(
+                formatter,
+                "animation instance slot {instance:?} exhausted its generation counter"
+            ),
             Self::InfiniteAnimationCannotComplete(instance) => write!(
                 formatter,
                 "infinite animation instance {instance:?} cannot be completed"
@@ -364,6 +375,15 @@ impl Display for AnimationRuntimeError {
             } => write!(
                 formatter,
                 "global property contract mismatch for {adapter:?}/{target:?}/{property:?}"
+            ),
+            Self::UnknownOutput {
+                instance,
+                adapter,
+                target,
+                property,
+            } => write!(
+                formatter,
+                "animation instance {instance:?} has no output for {adapter:?}/{target:?}/{property:?}"
             ),
             Self::TrackSamplingFailed(track) => {
                 write!(formatter, "failed to sample track {track:?}")

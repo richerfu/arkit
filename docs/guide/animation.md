@@ -222,9 +222,9 @@ let sample = observer.flush_frame();
 | `NativePreferred` | 优先 native，所有 fallback 写入 report |
 | `NativeOnly` | 任一能力或运行环境不满足时返回 typed error |
 
-lowerer 会检查 seek、pause/resume、reverse、cancel、alternate、callbacks、per-property timing、composition、dynamic modifier、infinite iteration、layout invalidation、custom easing 和 property support。`controls.lowering_report()` 返回选中 backend、每个 native backend 的拒绝原因、target/property/tween 数和估算的每帧工作量。
+lowerer 会检查 seek、pause/resume、reverse、cancel、alternate、callbacks、per-property timing、composition、dynamic modifier、infinite iteration、layout invalidation、custom easing 和 property support。`controls.lowering_report()` 返回选中 backend、每个 native backend 的拒绝原因、target/property/tween 数和估算的每帧工作量。构建后发生的控制能力降级也会原子更新同一份 report，不会只增加计数而留下过期的 backend 结论。
 
-当前 `#[entry]` root 没有来自 ETS 的 `ArkUIContext` 注入通道，因此普通 hook 路径会执行语义等价的 sampled backend，并在 `LoweringReport` 中记录 `BackendUnavailable`；`NativeOnly` 会报错，不会静默降级。`ArkUiImplicitInstance`、`ArkUiKeyframeInstance` 和 `ArkUiAnimatorInstance` 是真实 ArkUI handle 的所有权封装，供持有 `ArkUIContext` 的平台集成层使用。
+root host 从已挂载节点通过 `OH_ArkUI_GetContextByNode` 获取 `ArkUIContext`。当 capability 完整匹配时，`ArkUiAnimator` 持有 native root clock，进度回调驱动同一个已编译 Engine 做多属性采样和批量写入；它不是第二套动画状态机。native handle 创建失败、热替换需要保持当前位置，或运行时 control 无法保持语义时，`Auto`/`NativePreferred` 会一次性切到 internal sampled clock，并记录具体原因；`NativeOnly` 返回 typed error。ArkUI 对“非运行态 reverse / reverse 后 replay”的行为无法覆盖完整 controls 契约，因此这两种状态不会伪装成 native 成功。
 
 debug build 可通过 `AnimationHost::performance_counters()` 读取 frame、dirty write、adapter failure、target miss、fallback、compute/apply 时间与 Engine 内部计数。计数器属于诊断接口，不是单独的 benchmark 页面。
 

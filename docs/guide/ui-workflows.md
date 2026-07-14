@@ -32,7 +32,7 @@ rsx! {
 
 原生 callback 不同步执行组件 handler。payload 会先进入 runtime event queue，再由 OpenHarmony UI loop 调用 Dioxus handler 并渲染更新，因此 handler 可以安全地修改 signal 或切换大块 subtree。
 
-`arkit_shadcn` 提供 theme context 与业务组件：
+启用 `shadcn` feature 后，`arkit::shadcn` 提供 theme context 与业务组件：
 
 ```rust
 rsx! {

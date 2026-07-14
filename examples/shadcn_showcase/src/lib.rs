@@ -4,7 +4,8 @@ use arkit::dioxus_core::EventHandler;
 use arkit::dioxus_signals::WritableExt;
 use arkit::entry;
 use arkit::prelude::*;
-use arkit_shadcn::components::{
+use arkit::shadcn as arkit_shadcn;
+use arkit::shadcn::components::{
     Accordion, AccordionItemSpec, Alert, AlertDescription, AlertDialog, AlertList, AlertTitle,
     AlertVariant, AspectRatio, Avatar, AvatarFallback, Badge, BadgeVariant, Button, ButtonSize,
     ButtonVariant, Card, CardContent, CardFooter, CardHeader, Checkbox, Collapsible, ContextMenu,
@@ -12,8 +13,8 @@ use arkit_shadcn::components::{
     MenubarMenuSpec, Popover, Progress, RadioGroup, Select, Separator, Skeleton, Switch, Table,
     Tabs, Text, TextVariant, Textarea, Toggle, ToggleGroup, Tooltip,
 };
-use arkit_shadcn::icon::icon_placeholder;
-use arkit_shadcn::theme::{
+use arkit::shadcn::icon::icon_placeholder;
+use arkit::shadcn::theme::{
     spacing, typography, use_theme_provider, ColorTokens, RadiusTokens, Theme, ThemeMode,
     ThemePreset,
 };

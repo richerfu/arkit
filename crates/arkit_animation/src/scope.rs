@@ -1,5 +1,5 @@
 use std::cell::{Cell, RefCell};
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
 use arkit_animation_core::{PlaybackSettings, ScopeMethodName, WindowMetrics};
 use arkit_prelude::*;
@@ -58,8 +58,8 @@ type ScopeMethod = Rc<dyn Fn()>;
 type EventCleanup = Box<dyn FnOnce()>;
 
 struct AnimationScopeInner {
-    defaults: AnimationScopeDefaults,
-    controls: RefCell<Vec<AnimationControls>>,
+    defaults: RefCell<AnimationScopeDefaults>,
+    controls: RefCell<Vec<Weak<crate::controls::ControlsInner>>>,
     methods: RefCell<FxHashMap<ScopeMethodName, ScopeMethod>>,
     event_cleanups: RefCell<Vec<EventCleanup>>,
     disposed: Cell<bool>,
@@ -71,8 +71,14 @@ impl Drop for AnimationScopeInner {
         for cleanup in self.event_cleanups.get_mut().drain(..).rev() {
             cleanup();
         }
-        for controls in self.controls.get_mut() {
-            match self.defaults.cleanup {
+        for inner in self
+            .controls
+            .get_mut()
+            .drain(..)
+            .filter_map(|weak| weak.upgrade())
+        {
+            let controls = AnimationControls { inner };
+            match self.defaults.get_mut().cleanup {
                 ScopeCleanupPolicy::Cancel => controls.cancel(),
                 ScopeCleanupPolicy::Revert => controls.revert(),
             }
@@ -90,7 +96,7 @@ impl AnimationScope {
     pub fn new(defaults: AnimationScopeDefaults) -> Self {
         Self {
             inner: Rc::new(AnimationScopeInner {
-                defaults,
+                defaults: RefCell::new(defaults),
                 controls: RefCell::new(Vec::new()),
                 methods: RefCell::new(FxHashMap::default()),
                 event_cleanups: RefCell::new(Vec::new()),
@@ -99,8 +105,12 @@ impl AnimationScope {
         }
     }
 
-    pub fn defaults(&self) -> &AnimationScopeDefaults {
-        &self.inner.defaults
+    pub fn defaults(&self) -> AnimationScopeDefaults {
+        self.inner.defaults.borrow().clone()
+    }
+
+    pub fn set_defaults(&self, defaults: AnimationScopeDefaults) {
+        *self.inner.defaults.borrow_mut() = defaults;
     }
 
     pub fn is_disposed(&self) -> bool {
@@ -113,11 +123,8 @@ impl AnimationScope {
         }
         let identity = controls.identity();
         let mut owned = self.inner.controls.borrow_mut();
-        if !owned
-            .iter()
-            .any(|candidate| candidate.identity() == identity)
-        {
-            owned.push(controls);
+        if !owned.iter().any(|candidate| candidate.as_ptr() == identity) {
+            owned.push(Rc::downgrade(&controls.inner));
         }
     }
 
@@ -150,27 +157,50 @@ impl AnimationScope {
     }
 
     pub fn refresh(&self) {
-        for controls in self.inner.controls.borrow().iter() {
+        for controls in self.live_controls() {
             controls.refresh();
         }
     }
 
     pub fn revert(&self) {
-        for controls in self.inner.controls.borrow().iter() {
+        for controls in self.live_controls() {
             controls.revert();
         }
+    }
+
+    fn live_controls(&self) -> Vec<AnimationControls> {
+        let mut owned = self.inner.controls.borrow_mut();
+        let mut live = Vec::with_capacity(owned.len());
+        owned.retain(|weak| {
+            let Some(inner) = weak.upgrade() else {
+                return false;
+            };
+            live.push(AnimationControls { inner });
+            true
+        });
+        live
     }
 }
 
 #[track_caller]
 pub fn use_animation_scope(defaults: AnimationScopeDefaults) -> AnimationScope {
-    use_hook(|| AnimationScope::new(defaults))
+    let initial = defaults.clone();
+    let scope = use_hook(|| AnimationScope::new(initial));
+    scope.set_defaults(defaults);
+    scope
 }
 
 #[track_caller]
 pub fn use_scoped_animation(scope: &AnimationScope, timeline: Timeline) -> AnimationControls {
-    let controls = use_animation(timeline.settings(scope.defaults().playback.clone()));
+    let defaults = scope.defaults();
+    let controls = use_animation(timeline.settings(defaults.playback));
     scope.register(controls.clone());
+    let cleanup = defaults.cleanup;
+    let cleanup_controls = controls.clone();
+    use_drop(move || match cleanup {
+        ScopeCleanupPolicy::Cancel => cleanup_controls.cancel(),
+        ScopeCleanupPolicy::Revert => cleanup_controls.revert(),
+    });
     controls
 }
 

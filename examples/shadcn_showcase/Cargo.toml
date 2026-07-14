@@ -2,14 +2,17 @@
 name = "shadcn_showcase"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
-arkit.workspace = true
-arkit_shadcn.workspace = true
+arkit = { workspace = true, features = ["shadcn"] }
 napi-ohos.workspace = true
 napi-derive-ohos.workspace = true
 

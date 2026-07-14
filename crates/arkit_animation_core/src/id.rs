@@ -52,6 +52,31 @@ oxc_index::define_index_type! {
     pub struct InstanceId = u32;
 }
 
+/// Stable external handle for an animation instance.
+///
+/// `InstanceId` is a dense storage slot and is intentionally reused. Commands,
+/// events, and snapshot lookups therefore carry a generation so delayed work
+/// for a retired instance cannot affect a newer occupant of the same slot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct InstanceKey {
+    slot: InstanceId,
+    generation: u64,
+}
+
+impl InstanceKey {
+    pub const fn from_parts(slot: InstanceId, generation: u64) -> Self {
+        Self { slot, generation }
+    }
+
+    pub const fn slot(self) -> InstanceId {
+        self.slot
+    }
+
+    pub const fn generation(self) -> u64 {
+        self.generation
+    }
+}
+
 oxc_index::define_index_type! {
     pub struct AdapterId = u32;
 }

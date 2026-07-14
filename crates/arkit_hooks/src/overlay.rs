@@ -55,16 +55,21 @@ impl Default for ModalOverlaySpec {
 /// overlay-content signal; this struct only tracks whether content is open.
 struct OverlayState {
     host: ArkHost,
+    token: u64,
     window_metrics: Option<arkit_runtime::WindowMetricsHandle>,
     open: bool,
+    mounted: bool,
 }
 
 impl OverlayState {
     fn new(host: ArkHost, window_metrics: Option<arkit_runtime::WindowMetricsHandle>) -> Self {
+        let token = host.allocate_overlay_token();
         Self {
             host,
+            token,
             window_metrics,
             open: false,
+            mounted: true,
         }
     }
 }
@@ -115,8 +120,14 @@ impl OverlayApi {
 
     /// Dismiss the active overlay (clears the overlay-content signal).
     pub fn dismiss(&self) {
-        let mut sig = self.inner.borrow().host.overlay_content();
-        sig.set(None);
+        let (host, token, mounted) = {
+            let state = self.inner.borrow();
+            (state.host.clone(), state.token, state.mounted)
+        };
+        if !mounted {
+            return;
+        }
+        host.dismiss_overlay(token);
         let mut state = self.inner.borrow_mut();
         state.open = false;
     }
@@ -154,10 +165,29 @@ impl OverlayApi {
     }
 
     fn set_element(&self, element: Element) {
-        let mut sig = self.inner.borrow().host.overlay_content();
-        sig.set(Some(element));
+        let (host, token, mounted) = {
+            let state = self.inner.borrow();
+            (state.host.clone(), state.token, state.mounted)
+        };
+        if !mounted {
+            return;
+        }
+        host.set_overlay(token, element);
         let mut state = self.inner.borrow_mut();
         state.open = true;
+    }
+
+    fn dispose(&self) {
+        let (host, token, mounted) = {
+            let state = self.inner.borrow();
+            (state.host.clone(), state.token, state.mounted)
+        };
+        if mounted {
+            host.dismiss_overlay(token);
+        }
+        let mut state = self.inner.borrow_mut();
+        state.open = false;
+        state.mounted = false;
     }
 }
 
@@ -308,10 +338,13 @@ fn ModalOverlayLayer(props: ModalOverlayLayerProps) -> Element {
 pub fn use_overlay() -> OverlayApi {
     let host = use_ark_host();
     let window_metrics = dioxus_core::try_consume_context::<arkit_runtime::WindowMetricsHandle>();
-    use_hook(|| {
+    let overlay = use_hook(|| {
         let state = OverlayState::new(host.clone(), window_metrics.clone());
         OverlayApi {
             inner: Rc::new(RefCell::new(state)),
         }
-    })
+    });
+    let cleanup = overlay.clone();
+    use_drop(move || cleanup.dispose());
+    overlay
 }

@@ -1,6 +1,8 @@
 use arkit::prelude::*;
 
-use crate::{color, cubic_out, target, ActionButton, Metric, Section};
+use crate::{
+    color, cubic_out, restart_forward, reverse_and_play, target, ActionButton, Metric, Section,
+};
 
 const SCOPE_A: &str = "lab-scope-a";
 const PROPERTY_TARGET: &str = "lab-property-card";
@@ -39,28 +41,16 @@ fn ScopeDemo() -> Element {
 #[component]
 fn ScopedTarget() -> Element {
     let scope = use_context::<AnimationScope>();
-    let target = use_animation_target(SCOPE_A);
     let controls = use_scoped_animation(&scope, scope_timeline());
-    let snapshot = use_animation_snapshot(&controls);
     let scope_event = use_signal(|| "idle".to_string());
     let play_controls = controls.clone();
     scope.method(ScopeMethodName::owned("play"), move || {
-        play_controls.restart();
+        restart_forward(&play_controls);
     });
     let reverse_controls = controls.clone();
     scope.method(ScopeMethodName::owned("reverse"), move || {
-        reverse_controls.reverse();
-        reverse_controls.resume();
+        reverse_and_play(&reverse_controls, point_ms(900));
     });
-    let state = snapshot()
-        .map(|value| format!("{:?}", value.state))
-        .unwrap_or_else(|| {
-            if target.is_ready() && controls.is_ready() {
-                "Ready".to_string()
-            } else {
-                "Resolving".to_string()
-            }
-        });
     rsx! {
         column {
             percent_width: 1.0,
@@ -71,16 +61,7 @@ fn ScopedTarget() -> Element {
                 justify_content: "center",
                 background_color: 0xffe2e8f0u32,
                 border_radius: 14.0,
-                column {
-                    width: 110.0,
-                    height: 88.0,
-                    align_items: "center",
-                    justify_content: "center",
-                    background_color: 0xff4f46e5u32,
-                    border_radius: 22.0,
-                    text { font_size: 22.0, font_weight: 700, font_color: 0xffffffffu32, "Scope" }
-                    text { margin_top: 3.0, font_size: 9.0, font_color: 0xffe0e7ffu32, "{state}" }
-                }
+                ScopeVisual { controls: controls.clone() }
             }
             flex {
                 margin_top: 12.0,
@@ -108,10 +89,57 @@ fn ScopedTarget() -> Element {
                         }
                     }
                 }
-                ActionButton { label: "Scope refresh", on_press: { let scope = scope.clone(); move |_| scope.refresh() } }
-                ActionButton { label: "Scope revert", on_press: { let scope = scope.clone(); move |_| scope.revert() } }
+                ActionButton {
+                    label: "Scope refresh",
+                    on_press: {
+                        let scope = scope.clone();
+                        move |_| {
+                            scope.refresh();
+                            let mut scope_event = scope_event;
+                            scope_event.set("scope refreshed".to_string());
+                        }
+                    }
+                }
+                ActionButton {
+                    label: "Scope revert",
+                    on_press: {
+                        let scope = scope.clone();
+                        move |_| {
+                            scope.revert();
+                            let mut scope_event = scope_event;
+                            scope_event.set("scope reverted".to_string());
+                        }
+                    }
+                }
                 Metric { label: "Method", value: scope_event() }
             }
+        }
+    }
+}
+
+#[component]
+fn ScopeVisual(controls: AnimationControls) -> Element {
+    let target = use_animation_target(SCOPE_A);
+    let snapshot = use_animation_snapshot(&controls);
+    let state = snapshot()
+        .map(|value| format!("{:?}", value.state))
+        .unwrap_or_else(|| {
+            if target.is_ready() && controls.is_ready() {
+                "Ready".to_string()
+            } else {
+                "Resolving".to_string()
+            }
+        });
+    rsx! {
+        column {
+            width: 110.0,
+            height: 88.0,
+            align_items: "center",
+            justify_content: "center",
+            background_color: 0xff4f46e5u32,
+            border_radius: 22.0,
+            text { font_size: 22.0, font_weight: 700, font_color: 0xffffffffu32, "Scope" }
+            text { margin_top: 3.0, font_size: 9.0, font_color: 0xffe0e7ffu32, "{state}" }
         }
     }
 }
@@ -151,13 +179,29 @@ fn PropertyDemo() -> Element {
                 margin_top: 12.0,
                 percent_width: 1.0,
                 flex_wrap: "wrap",
-                ActionButton { label: "Animate schema", on_press: { let controls = controls.clone(); move |_| controls.restart() } }
-                ActionButton { label: "Reverse", on_press: { let controls = controls.clone(); move |_| controls.reverse() } }
+                ActionButton {
+                    label: "Animate schema",
+                    on_press: {
+                        let controls = controls.clone();
+                        move |_| restart_forward(&controls)
+                    }
+                }
+                ActionButton {
+                    label: "Reverse + play",
+                    on_press: {
+                        let controls = controls.clone();
+                        move |_| reverse_and_play(&controls, point_ms(1_100))
+                    }
+                }
                 ActionButton { label: "Reset", on_press: { let controls = controls.clone(); move |_| controls.reset() } }
                 ActionButton { label: "Revert baseline", on_press: { let controls = controls.clone(); move |_| controls.revert() } }
             }
         }
     }
+}
+
+fn point_ms(milliseconds: u64) -> TimePoint {
+    TimePoint::from_nanos(milliseconds * 1_000_000)
 }
 
 #[component]
@@ -173,7 +217,8 @@ fn PropertyCard() -> Element {
             border_width: 2.0,
             border_color: 0xffffffffu32,
             border_radius: 12.0,
-            opacity: 1.0,
+            // Leave headroom for the additive opacity contribution below.
+            opacity: 0.7,
             text { font_size: 12.0, font_weight: 700, font_color: 0xffffffffu32, "Paint + layout" }
         }
     }

@@ -13,7 +13,11 @@ use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
 /// A chainable builder over an [`ArkUINode`]. Consumes itself to produce the
 /// node via [`build`](Self::build).
 pub struct NodeBuilder {
-    node: ArkUINode,
+    // The binding requires explicit native disposal and `ArkUINode` has no
+    // `Drop` implementation. Keeping the in-progress node optional lets the
+    // builder clean up every early-error path while transferring ownership
+    // exactly once from `build`.
+    node: Option<ArkUINode>,
 }
 
 impl NodeBuilder {
@@ -21,13 +25,13 @@ impl NodeBuilder {
     /// `"column"`).
     pub fn new(tag: &str) -> ArkUIResult<Self> {
         Ok(Self {
-            node: crate::create_node_by_tag(tag)?,
+            node: Some(crate::create_node_by_tag(tag)?),
         })
     }
 
     /// Wrap an existing node.
     pub fn from_node(node: ArkUINode) -> Self {
-        Self { node }
+        Self { node: Some(node) }
     }
 
     /// Set an attribute by its canonical [`ArkUINodeAttributeType`] with any
@@ -37,13 +41,19 @@ impl NodeBuilder {
         attr: ArkUINodeAttributeType,
         value: impl Into<ArkUINodeAttributeItem>,
     ) -> ArkUIResult<Self> {
-        self.node.set_attribute(attr, value.into())?;
+        self.node
+            .as_ref()
+            .expect("NodeBuilder owns a node until build")
+            .set_attribute(attr, value.into())?;
         Ok(self)
     }
 
     /// Append a child node.
     pub fn child(mut self, child: ArkUINode) -> ArkUIResult<Self> {
-        self.node.add_child(child)?;
+        self.node
+            .as_mut()
+            .expect("NodeBuilder owns a node until build")
+            .add_child(child)?;
         Ok(self)
     }
 
@@ -110,7 +120,17 @@ impl NodeBuilder {
     }
 
     /// Build the node.
-    pub fn build(self) -> ArkUINode {
+    pub fn build(mut self) -> ArkUINode {
         self.node
+            .take()
+            .expect("NodeBuilder ownership was already transferred")
+    }
+}
+
+impl Drop for NodeBuilder {
+    fn drop(&mut self) {
+        if let Some(mut node) = self.node.take() {
+            let _ = node.dispose();
+        }
     }
 }

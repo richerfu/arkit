@@ -7,7 +7,10 @@
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::collections::VecDeque;
 use std::rc::Rc;
+use std::rc::Weak;
+use std::sync::Arc;
 
 use ohos_arkui_binding::api::attribute_option::DrawableDescriptor;
 use ohos_arkui_binding::common::error::ArkUIResult;
@@ -21,8 +24,8 @@ use ohos_arkui_binding::image_native_binding::{DecodingOptions, ImageSource, Pix
 /// updates.
 #[derive(Clone)]
 pub struct ArkImageSource {
-    key: String,
-    svg: Rc<str>,
+    key: Arc<str>,
+    svg: Arc<str>,
     width: u32,
     height: u32,
 }
@@ -30,6 +33,9 @@ pub struct ArkImageSource {
 impl PartialEq for ArkImageSource {
     fn eq(&self, other: &Self) -> bool {
         self.key == other.key
+            && self.svg == other.svg
+            && self.width == other.width
+            && self.height == other.height
     }
 }
 
@@ -48,8 +54,18 @@ impl ArkImageSource {
     /// (icon-name, size, color, stroke-width) combination for caching.
     pub fn svg(key: impl Into<String>, svg: impl Into<String>, width: u32, height: u32) -> Self {
         Self {
+            key: Arc::from(key.into()),
+            svg: Arc::from(svg.into()),
+            width,
+            height,
+        }
+    }
+
+    /// Create a source from already-shared SVG storage.
+    pub fn svg_shared(key: impl Into<Arc<str>>, svg: Arc<str>, width: u32, height: u32) -> Self {
+        Self {
             key: key.into(),
-            svg: Rc::from(svg.into().as_str()),
+            svg,
             width,
             height,
         }
@@ -59,13 +75,17 @@ impl ArkImageSource {
     /// Cached per `key` in a thread-local.
     pub fn resolve(&self) -> ArkUIResult<Rc<RetainedImage>> {
         RETAINED_CACHE.with(|cache| {
-            if let Some(existing) = cache.borrow().get(&self.key).cloned() {
+            let key = ImageCacheKey {
+                key: self.key.clone(),
+                svg: self.svg.clone(),
+                width: self.width,
+                height: self.height,
+            };
+            if let Some(existing) = cache.borrow_mut().get(&key) {
                 return Ok(existing);
             }
             let retained = Rc::new(RetainedImage::decode(&self.svg, self.width, self.height)?);
-            cache
-                .borrow_mut()
-                .insert(self.key.clone(), retained.clone());
+            cache.borrow_mut().insert(key, &retained);
             Ok(retained)
         })
     }
@@ -129,7 +149,51 @@ impl RetainedImage {
     }
 }
 
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct ImageCacheKey {
+    key: Arc<str>,
+    svg: Arc<str>,
+    width: u32,
+    height: u32,
+}
+
+const RETAINED_CACHE_CAPACITY: usize = 128;
+
+#[derive(Default)]
+struct RetainedImageCache {
+    entries: BTreeMap<ImageCacheKey, Weak<RetainedImage>>,
+    order: VecDeque<ImageCacheKey>,
+}
+
+impl RetainedImageCache {
+    fn get(&mut self, key: &ImageCacheKey) -> Option<Rc<RetainedImage>> {
+        let image = self.entries.get(key)?.upgrade();
+        if image.is_some() {
+            self.touch(key);
+        } else {
+            self.entries.remove(key);
+            self.order.retain(|candidate| candidate != key);
+        }
+        image
+    }
+
+    fn insert(&mut self, key: ImageCacheKey, image: &Rc<RetainedImage>) {
+        self.entries.insert(key.clone(), Rc::downgrade(image));
+        self.touch(&key);
+        while self.order.len() > RETAINED_CACHE_CAPACITY {
+            if let Some(evicted) = self.order.pop_front() {
+                self.entries.remove(&evicted);
+            }
+        }
+    }
+
+    fn touch(&mut self, key: &ImageCacheKey) {
+        self.order.retain(|candidate| candidate != key);
+        self.order.push_back(key.clone());
+    }
+}
+
 thread_local! {
-    static RETAINED_CACHE: RefCell<BTreeMap<String, Rc<RetainedImage>>> =
-        const { RefCell::new(BTreeMap::new()) };
+    static RETAINED_CACHE: RefCell<RetainedImageCache> =
+        RefCell::new(RetainedImageCache::default());
 }

@@ -12,9 +12,17 @@ pub(crate) fn write(
     value: &AnimationValue,
 ) -> Result<(), AnimationAdapterError> {
     let item = match (property_name, value) {
+        ("opacity", AnimationValue::Scalar(value)) => {
+            // The Engine intentionally permits arithmetic composition to
+            // overshoot. ArkUI's opacity attribute does not: its native domain
+            // is closed over [0, 1], matching the final rendering semantics of
+            // CSS opacity. Lower at the adapter boundary so a valid additive
+            // animation cannot reject an otherwise atomic frame.
+            ArkUINodeAttributeItem::from(value.clamp(0.0, 1.0))
+        }
         (
-            "opacity" | "scale_x" | "scale_y" | "brightness" | "saturation" | "grayscale"
-            | "invert" | "sepia" | "contrast" | "aspect_ratio",
+            "scale_x" | "scale_y" | "brightness" | "saturation" | "grayscale" | "invert" | "sepia"
+            | "contrast" | "aspect_ratio",
             AnimationValue::Scalar(value),
         ) => ArkUINodeAttributeItem::from(*value),
         ("translate_x", AnimationValue::Length(value)) if value.unit() == LengthUnit::Vp => {
@@ -108,8 +116,88 @@ pub(crate) fn write(
         .node
         .borrow()
         .set_attribute(attribute, item)
-        .map_err(|_| AnimationAdapterError::NativeWrite {
+        .map_err(|error| AnimationAdapterError::NativeWrite {
             target: binding.id,
             property,
+            reason: error.to_string().into_boxed_str(),
+        })
+}
+
+pub(crate) fn write_compound_pair(
+    binding: &mut AnimationTargetBinding,
+    first_property: AdapterPropertyId,
+    first_name: &str,
+    first_value: &AnimationValue,
+    second_property: AdapterPropertyId,
+    second_name: &str,
+    second_value: &AnimationValue,
+) -> Result<(), AnimationAdapterError> {
+    let attribute = match (first_name, second_name) {
+        ("translate_x", "translate_y") => {
+            let (AnimationValue::Length(x), AnimationValue::Length(y)) =
+                (first_value, second_value)
+            else {
+                return Err(AnimationAdapterError::UnsupportedValue {
+                    property: first_property,
+                });
+            };
+            if x.unit() != LengthUnit::Vp || y.unit() != LengthUnit::Vp {
+                return Err(AnimationAdapterError::UnsupportedValue {
+                    property: first_property,
+                });
+            }
+            binding.visual.translate[0] = x.value();
+            binding.visual.translate[1] = y.value();
+            ArkUINodeAttributeType::Translate
+        }
+        ("scale_x", "scale_y") => {
+            let (AnimationValue::Scalar(x), AnimationValue::Scalar(y)) =
+                (first_value, second_value)
+            else {
+                return Err(AnimationAdapterError::UnsupportedValue {
+                    property: first_property,
+                });
+            };
+            binding.visual.scale[0] = *x;
+            binding.visual.scale[1] = *y;
+            ArkUINodeAttributeType::Scale
+        }
+        ("position_x", "position_y") => {
+            let (AnimationValue::Length(x), AnimationValue::Length(y)) =
+                (first_value, second_value)
+            else {
+                return Err(AnimationAdapterError::UnsupportedValue {
+                    property: first_property,
+                });
+            };
+            if x.unit() != LengthUnit::Vp || y.unit() != LengthUnit::Vp {
+                return Err(AnimationAdapterError::UnsupportedValue {
+                    property: first_property,
+                });
+            }
+            binding.visual.position[0] = x.value();
+            binding.visual.position[1] = y.value();
+            ArkUINodeAttributeType::Position
+        }
+        _ => {
+            return Err(AnimationAdapterError::UnsupportedValue {
+                property: second_property,
+            });
+        }
+    };
+    let item = match attribute {
+        ArkUINodeAttributeType::Translate => binding.visual.translate.to_vec().into(),
+        ArkUINodeAttributeType::Scale => binding.visual.scale.to_vec().into(),
+        ArkUINodeAttributeType::Position => binding.visual.position.to_vec().into(),
+        _ => unreachable!("compound writer only emits transform or position attributes"),
+    };
+    binding
+        .node
+        .borrow()
+        .set_attribute(attribute, item)
+        .map_err(|error| AnimationAdapterError::NativeWrite {
+            target: binding.id,
+            property: first_property,
+            reason: error.to_string().into_boxed_str(),
         })
 }

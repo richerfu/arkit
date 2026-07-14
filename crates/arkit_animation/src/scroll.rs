@@ -3,7 +3,8 @@ use std::rc::Rc;
 
 use arkit_animation_core::{Easing, TimePoint, TimeSpan};
 
-use crate::AnimationControls;
+use crate::frame_driver::FrameSourceSubscription;
+use crate::{AnimationControls, FrameDriver};
 use arkit_prelude::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -114,64 +115,68 @@ struct PendingScroll {
 
 pub struct ScrollObserver {
     controls: AnimationControls,
-    axis: ScrollAxis,
+    axis: Cell<ScrollAxis>,
     range: Cell<ScrollRange>,
-    duration: TimeSpan,
-    sync: ScrollSync,
-    callbacks: ScrollCallbacks,
-    repeat: bool,
-    once: bool,
+    duration: Cell<TimeSpan>,
+    sync: RefCell<ScrollSync>,
+    callbacks: RefCell<ScrollCallbacks>,
+    repeat: Cell<bool>,
+    once: Cell<bool>,
     consumed: Cell<bool>,
     pending: Cell<Option<PendingScroll>>,
     last: RefCell<Option<ScrollSample>>,
     smoothed_progress: Cell<f32>,
+    driver: RefCell<Option<Rc<FrameDriver>>>,
+    frame_source: RefCell<Option<FrameSourceSubscription>>,
 }
 
 impl ScrollObserver {
     pub fn new(controls: AnimationControls, range: ScrollRange, duration: TimeSpan) -> Self {
         Self {
             controls,
-            axis: ScrollAxis::Vertical,
+            axis: Cell::new(ScrollAxis::Vertical),
             range: Cell::new(range),
-            duration,
-            sync: ScrollSync::Progress,
-            callbacks: ScrollCallbacks::default(),
-            repeat: true,
-            once: false,
+            duration: Cell::new(duration),
+            sync: RefCell::new(ScrollSync::Progress),
+            callbacks: RefCell::new(ScrollCallbacks::default()),
+            repeat: Cell::new(true),
+            once: Cell::new(false),
             consumed: Cell::new(false),
             pending: Cell::new(None),
             last: RefCell::new(None),
             smoothed_progress: Cell::new(0.0),
+            driver: RefCell::new(None),
+            frame_source: RefCell::new(None),
         }
     }
 
-    pub fn axis(mut self, axis: ScrollAxis) -> Self {
-        self.axis = axis;
+    pub fn axis(self, axis: ScrollAxis) -> Self {
+        self.axis.set(axis);
         self
     }
 
-    pub fn sync(mut self, sync: ScrollSync) -> Self {
-        self.sync = sync;
+    pub fn sync(self, sync: ScrollSync) -> Self {
+        *self.sync.borrow_mut() = sync;
         self
     }
 
-    pub fn callbacks(mut self, callbacks: ScrollCallbacks) -> Self {
-        self.callbacks = callbacks;
+    pub fn callbacks(self, callbacks: ScrollCallbacks) -> Self {
+        *self.callbacks.borrow_mut() = callbacks;
         self
     }
 
-    pub fn repeat(mut self, repeat: bool) -> Self {
-        self.repeat = repeat;
+    pub fn repeat(self, repeat: bool) -> Self {
+        self.repeat.set(repeat);
         self
     }
 
-    pub fn once(mut self, once: bool) -> Self {
-        self.once = once;
+    pub fn once(self, once: bool) -> Self {
+        self.once.set(once);
         self
     }
 
     pub fn axis_kind(&self) -> ScrollAxis {
-        self.axis
+        self.axis.get()
     }
 
     /// Stores only the latest event. Call [`Self::flush_frame`] from the root
@@ -179,6 +184,9 @@ impl ScrollObserver {
     pub fn update_at(&self, at: TimePoint, offset: f32) {
         if !self.consumed.get() {
             self.pending.set(Some(PendingScroll { at, offset }));
+            if let Some(driver) = self.driver.borrow().as_ref() {
+                driver.request();
+            }
         }
     }
 
@@ -223,7 +231,7 @@ impl ScrollObserver {
         self.dispatch(previous, sample);
         self.drive(sample);
         *self.last.borrow_mut() = Some(sample);
-        if self.once && in_view {
+        if self.once.get() && in_view {
             self.consumed.set(true);
         }
         Some(sample)
@@ -247,8 +255,19 @@ impl ScrollObserver {
         self.last.borrow().is_some_and(|sample| sample.in_view)
     }
 
+    fn attach_driver(self: &Rc<Self>, driver: Rc<FrameDriver>) {
+        let weak = Rc::downgrade(self);
+        let subscription = driver.subscribe(Rc::new(move |_| {
+            if let Some(observer) = weak.upgrade() {
+                observer.flush_frame();
+            }
+        }));
+        *self.driver.borrow_mut() = Some(driver);
+        *self.frame_source.borrow_mut() = Some(subscription);
+    }
+
     fn synchronized_progress(&self, raw: f32) -> f32 {
-        match &self.sync {
+        match &*self.sync.borrow() {
             ScrollSync::Method | ScrollSync::Progress => raw,
             ScrollSync::Eased(easing) => easing.sample(raw),
             ScrollSync::Smooth { factor, easing } => {
@@ -262,37 +281,51 @@ impl ScrollObserver {
     }
 
     fn drive(&self, sample: ScrollSample) {
-        match self.sync {
+        match &*self.sync.borrow() {
             ScrollSync::Method => {
                 if sample.in_view {
                     self.controls.play();
-                } else if self.repeat {
+                } else if self.repeat.get() {
                     self.controls.reverse();
                 } else {
                     self.controls.pause();
                 }
             }
             _ => {
-                let nanos =
-                    (self.duration.as_nanos() as f64 * f64::from(sample.progress)).round() as u64;
+                let nanos = (self.duration.get().as_nanos() as f64 * f64::from(sample.progress))
+                    .round() as u64;
                 self.controls.seek(TimePoint::from_nanos(nanos));
             }
         }
     }
 
     fn dispatch(&self, previous: Option<ScrollSample>, sample: ScrollSample) {
+        let callbacks = self.callbacks.borrow().clone();
         if previous.is_none_or(|previous| !previous.in_view) && sample.in_view {
-            invoke(&self.callbacks.enter, sample);
+            invoke(&callbacks.enter, sample);
         }
         if previous.is_some_and(|previous| previous.in_view) && !sample.in_view {
-            invoke(&self.callbacks.leave, sample);
+            invoke(&callbacks.leave, sample);
         }
         match sample.direction {
-            ScrollDirection::Forward => invoke(&self.callbacks.forward, sample),
-            ScrollDirection::Backward => invoke(&self.callbacks.backward, sample),
+            ScrollDirection::Forward => invoke(&callbacks.forward, sample),
+            ScrollDirection::Backward => invoke(&callbacks.backward, sample),
             ScrollDirection::Stationary => {}
         }
-        invoke(&self.callbacks.update, sample);
+        invoke(&callbacks.update, sample);
+    }
+
+    fn update_configuration(
+        &self,
+        range: ScrollRange,
+        duration: TimeSpan,
+        sync: ScrollSync,
+        callbacks: ScrollCallbacks,
+    ) {
+        self.range.set(range);
+        self.duration.set(duration);
+        *self.sync.borrow_mut() = sync;
+        *self.callbacks.borrow_mut() = callbacks;
     }
 }
 
@@ -304,13 +337,20 @@ pub fn use_scroll_observer(
     sync: ScrollSync,
     callbacks: ScrollCallbacks,
 ) -> Rc<ScrollObserver> {
-    use_hook(|| {
-        Rc::new(
+    let driver = controls.inner.driver.clone();
+    let initial_sync = sync.clone();
+    let initial_callbacks = callbacks.clone();
+    let observer = use_hook(|| {
+        let observer = Rc::new(
             ScrollObserver::new(controls, range, duration)
-                .sync(sync)
-                .callbacks(callbacks),
-        )
-    })
+                .sync(initial_sync)
+                .callbacks(initial_callbacks),
+        );
+        observer.attach_driver(driver);
+        observer
+    });
+    observer.update_configuration(range, duration, sync, callbacks);
+    observer
 }
 
 fn invoke(callback: &Option<Rc<dyn Fn(ScrollSample)>>, sample: ScrollSample) {

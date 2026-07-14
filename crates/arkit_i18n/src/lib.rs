@@ -3,7 +3,7 @@
 //! The compile-time `i18n!` macro (from [`arkit_i18n_macros`]) generates a
 //! `Locale` enum, message-constructor functions, and a `pub static CATALOG`.
 //! This crate provides the runtime translation machinery plus a dioxus context
-//! layer so locale state lives in a `Signal<String>` shared across the tree.
+//! layer so locale state lives in a cheap, shared `Signal<Rc<str>>`.
 //!
 //! ```ignore
 //! arkit_i18n::i18n! {
@@ -24,16 +24,22 @@
 extern crate self as arkit_i18n;
 
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
+use std::rc::Rc;
 
 use dioxus_hooks::{use_context, use_context_provider, use_signal};
 use dioxus_signals::{Signal, WritableExt};
+use fluent_bundle::{FluentArgs, FluentBundle, FluentResource, FluentValue};
+use rustc_hash::FxHashMap;
+use smallvec::SmallVec;
+use unic_langid::LanguageIdentifier;
 
 pub use arkit_i18n_macros::i18n;
 
 // ---------------------------------------------------------------------------
-// Runtime translation machinery (preserved from legacy)
+// Runtime translation machinery
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, PartialEq)]
@@ -146,14 +152,14 @@ impl I18nArg {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypedMessage {
     key: &'static str,
-    args: Vec<I18nArg>,
+    args: SmallVec<[I18nArg; 2]>,
 }
 
 impl TypedMessage {
     pub fn new(key: &'static str) -> Self {
         Self {
             key,
-            args: Vec::new(),
+            args: SmallVec::new(),
         }
     }
 
@@ -172,29 +178,47 @@ impl TypedMessage {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Message {
-    pub key: &'static str,
-    pub pattern: &'static str,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LocaleCatalog {
     pub id: &'static str,
-    pub messages: &'static [Message],
+    pub source: &'static str,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Catalog {
     pub fallback: &'static str,
+    /// Locale catalogs sorted by `id`. The `i18n!` macro guarantees this
+    /// invariant so runtime lookup remains allocation-free.
     pub locales: &'static [LocaleCatalog],
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum I18nError {
     MissingLocale(String),
-    MissingMessage { locale: String, key: &'static str },
-    MissingArgument { key: &'static str, argument: String },
-    UnterminatedArgument { key: &'static str },
+    MissingMessage {
+        locale: String,
+        key: &'static str,
+    },
+    MissingValue {
+        locale: String,
+        key: &'static str,
+    },
+    InvalidLocale {
+        locale: String,
+        reason: Box<str>,
+    },
+    InvalidResource {
+        locale: String,
+        reason: Box<str>,
+    },
+    BundleResource {
+        locale: String,
+        reason: Box<str>,
+    },
+    Formatting {
+        locale: String,
+        key: &'static str,
+        errors: Box<[Box<str>]>,
+    },
 }
 
 impl Display for I18nError {
@@ -204,14 +228,35 @@ impl Display for I18nError {
             Self::MissingMessage { locale, key } => {
                 write!(f, "missing i18n message `{key}` for locale `{locale}`")
             }
-            Self::MissingArgument { key, argument } => {
+            Self::MissingValue { locale, key } => {
+                write!(f, "i18n message `{key}` for locale `{locale}` has no value")
+            }
+            Self::InvalidLocale { locale, reason } => {
+                write!(f, "invalid i18n locale `{locale}`: {reason}")
+            }
+            Self::InvalidResource { locale, reason } => {
+                write!(f, "invalid Fluent resource for `{locale}`: {reason}")
+            }
+            Self::BundleResource { locale, reason } => {
                 write!(
                     f,
-                    "missing i18n argument `{{${argument}}}` for message `{key}`"
+                    "failed to install Fluent resource for `{locale}`: {reason}"
                 )
             }
-            Self::UnterminatedArgument { key } => {
-                write!(f, "unterminated i18n argument in message `{key}`")
+            Self::Formatting {
+                locale,
+                key,
+                errors,
+            } => {
+                write!(
+                    f,
+                    "failed to format Fluent message `{key}` for `{locale}`: {}",
+                    errors
+                        .iter()
+                        .map(AsRef::as_ref)
+                        .collect::<Vec<&str>>()
+                        .join("; ")
+                )
             }
         }
     }
@@ -220,7 +265,8 @@ impl Display for I18nError {
 impl Error for I18nError {}
 
 pub fn translate(catalog: &'static Catalog, locale: &str, message: TypedMessage) -> String {
-    try_translate(catalog, locale, message.clone()).unwrap_or_else(|_| message.key().to_string())
+    let key = message.key();
+    try_translate(catalog, locale, message).unwrap_or_else(|_| key.to_string())
 }
 
 pub fn try_translate(
@@ -228,82 +274,181 @@ pub fn try_translate(
     locale: &str,
     message: TypedMessage,
 ) -> Result<String, I18nError> {
-    let locale_catalog = find_locale(catalog, locale)
+    let (locale_index, locale_catalog) = find_locale(catalog, locale)
         .or_else(|| find_locale(catalog, catalog.fallback))
         .ok_or_else(|| I18nError::MissingLocale(locale.to_string()))?;
-    let pattern = find_message(locale_catalog, message.key())
-        .or_else(|| {
-            find_locale(catalog, catalog.fallback)
-                .and_then(|fallback| find_message(fallback, message.key()))
-        })
-        .ok_or_else(|| I18nError::MissingMessage {
-            locale: locale_catalog.id.to_string(),
-            key: message.key(),
-        })?;
-
-    render_pattern(message.key(), pattern, message.args())
+    match format_message(catalog, locale_index, locale_catalog, &message) {
+        Err(I18nError::MissingMessage { .. }) if locale_catalog.id != catalog.fallback => {
+            let (fallback_index, fallback) = find_locale(catalog, catalog.fallback)
+                .ok_or_else(|| I18nError::MissingLocale(catalog.fallback.to_string()))?;
+            format_message(catalog, fallback_index, fallback, &message)
+        }
+        result => result,
+    }
 }
 
-fn find_locale(catalog: &'static Catalog, locale: &str) -> Option<&'static LocaleCatalog> {
+fn find_locale(catalog: &'static Catalog, locale: &str) -> Option<(usize, &'static LocaleCatalog)> {
     catalog
         .locales
-        .iter()
-        .find(|candidate| candidate.id == locale)
+        .binary_search_by(|candidate| candidate.id.cmp(locale))
+        .ok()
+        .map(|index| (index, &catalog.locales[index]))
 }
 
-fn find_message(locale: &'static LocaleCatalog, key: &str) -> Option<&'static str> {
-    locale
-        .messages
-        .iter()
-        .find(|message| message.key == key)
-        .map(|message| message.pattern)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct BundleKey {
+    catalog: usize,
+    locale: usize,
 }
 
-fn render_pattern(key: &'static str, pattern: &str, args: &[I18nArg]) -> Result<String, I18nError> {
-    let mut output = String::with_capacity(pattern.len());
-    let mut rest = pattern;
+type RuntimeBundle = FluentBundle<FluentResource>;
 
-    while let Some(start) = rest.find("{$") {
-        output.push_str(&rest[..start]);
-        let name_start = start + 2;
-        let Some(relative_end) = rest[name_start..].find('}') else {
-            return Err(I18nError::UnterminatedArgument { key });
-        };
-        let name_end = name_start + relative_end;
-        let name = &rest[name_start..name_end];
-        let arg = args.iter().find(|arg| arg.name() == name).ok_or_else(|| {
-            I18nError::MissingArgument {
-                key,
-                argument: name.to_string(),
-            }
-        })?;
-        output.push_str(&arg.value().to_string());
-        rest = &rest[name_end + 1..];
+thread_local! {
+    static BUNDLE_CACHE: RefCell<FxHashMap<BundleKey, Rc<RuntimeBundle>>> =
+        RefCell::new(FxHashMap::default());
+}
+
+fn format_message(
+    catalog: &'static Catalog,
+    locale_index: usize,
+    locale: &'static LocaleCatalog,
+    message: &TypedMessage,
+) -> Result<String, I18nError> {
+    let bundle = cached_bundle(catalog, locale_index, locale)?;
+    let (message_id, attribute) = message
+        .key()
+        .split_once('.')
+        .map_or((message.key(), None), |(message, attribute)| {
+            (message, Some(attribute))
+        });
+    let fluent_message =
+        bundle
+            .get_message(message_id)
+            .ok_or_else(|| I18nError::MissingMessage {
+                locale: locale.id.to_string(),
+                key: message.key(),
+            })?;
+    let pattern = match attribute {
+        Some(attribute) => fluent_message
+            .get_attribute(attribute)
+            .map(|attribute| attribute.value()),
+        None => fluent_message.value(),
     }
+    .ok_or_else(|| I18nError::MissingValue {
+        locale: locale.id.to_string(),
+        key: message.key(),
+    })?;
+    let mut args = FluentArgs::new();
+    for arg in message.args() {
+        args.set(arg.name(), fluent_value(arg.value()));
+    }
+    let mut errors = Vec::new();
+    let output = bundle
+        .format_pattern(pattern, Some(&args), &mut errors)
+        .into_owned();
+    if errors.is_empty() {
+        Ok(output)
+    } else {
+        Err(I18nError::Formatting {
+            locale: locale.id.to_string(),
+            key: message.key(),
+            errors: errors
+                .into_iter()
+                .map(|error| error.to_string().into_boxed_str())
+                .collect(),
+        })
+    }
+}
 
-    output.push_str(rest);
-    Ok(output)
+fn cached_bundle(
+    catalog: &'static Catalog,
+    locale_index: usize,
+    locale: &'static LocaleCatalog,
+) -> Result<Rc<RuntimeBundle>, I18nError> {
+    let key = BundleKey {
+        catalog: std::ptr::from_ref(catalog).addr(),
+        locale: locale_index,
+    };
+    if let Some(bundle) = BUNDLE_CACHE.with_borrow(|cache| cache.get(&key).cloned()) {
+        return Ok(bundle);
+    }
+    let language =
+        locale
+            .id
+            .parse::<LanguageIdentifier>()
+            .map_err(|error| I18nError::InvalidLocale {
+                locale: locale.id.to_string(),
+                reason: error.to_string().into_boxed_str(),
+            })?;
+    let resource = FluentResource::try_new(locale.source.to_string()).map_err(|(_, errors)| {
+        I18nError::InvalidResource {
+            locale: locale.id.to_string(),
+            reason: errors
+                .into_iter()
+                .map(|error| format!("{error:?}"))
+                .collect::<Vec<_>>()
+                .join("; ")
+                .into_boxed_str(),
+        }
+    })?;
+    let mut bundle = RuntimeBundle::new(vec![language]);
+    // Preserve Arkit's historical plain-string output. Fluent's optional
+    // FSI/PDI isolation is useful for rich bidi-aware renderers, while ArkUI
+    // text callers expect exact display strings from this API.
+    bundle.set_use_isolating(false);
+    bundle
+        .add_resource(resource)
+        .map_err(|errors| I18nError::BundleResource {
+            locale: locale.id.to_string(),
+            reason: errors
+                .into_iter()
+                .map(|error| error.to_string())
+                .collect::<Vec<_>>()
+                .join("; ")
+                .into_boxed_str(),
+        })?;
+    let bundle = Rc::new(bundle);
+    BUNDLE_CACHE.with_borrow_mut(|cache| {
+        cache.insert(key, bundle.clone());
+    });
+    Ok(bundle)
+}
+
+fn fluent_value(value: &I18nValue) -> FluentValue<'_> {
+    match value {
+        I18nValue::String(value) => value.into(),
+        I18nValue::I64(value) => value.into(),
+        I18nValue::U64(value) => value.into(),
+        I18nValue::F64(value) => value.into(),
+        I18nValue::Bool(value) => {
+            if *value {
+                "true".into()
+            } else {
+                "false".into()
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
 // dioxus context layer
 // ---------------------------------------------------------------------------
 
-/// A shared i18n context backed by a `Signal<String>` (the active locale id) and
-/// a `&'static Catalog` (the compile-time-generated translation table).
+/// A shared i18n context backed by an active-locale signal and a static,
+/// compile-time-generated translation catalog.
 ///
 /// Clone/Copy: the underlying `Signal` is `Copy` and shares state, so a context
 /// obtained from [`use_context`] mutates the same shared locale.
 #[derive(Clone, Copy)]
 pub struct I18nContext {
-    locale: Signal<String>,
+    locale: Signal<Rc<str>>,
     catalog: &'static Catalog,
 }
 
 impl I18nContext {
     /// The active locale id (e.g. `"zh-CN"`).
     pub fn locale_id(&self) -> String {
-        (self.locale)()
+        (self.locale)().to_string()
     }
 
     /// The static catalog backing this context.
@@ -315,19 +460,19 @@ impl I18nContext {
     /// this takes `&self` and is safe to call from `Fn` event handlers.
     pub fn set_locale_id(&self, id: impl Into<String>) {
         let mut signal = self.locale;
-        signal.set(id.into());
+        signal.set(Rc::from(id.into()));
     }
 
     /// Translate a typed message using the active locale (with fallback).
     pub fn tr(&self, message: TypedMessage) -> String {
         let locale = (self.locale)();
-        translate(self.catalog, &locale, message)
+        translate(self.catalog, locale.as_ref(), message)
     }
 
     /// Translate a typed message, returning the raw error on failure.
     pub fn try_tr(&self, message: TypedMessage) -> Result<String, I18nError> {
         let locale = (self.locale)();
-        try_translate(self.catalog, &locale, message)
+        try_translate(self.catalog, locale.as_ref(), message)
     }
 }
 
@@ -337,7 +482,7 @@ impl I18nContext {
 /// `initial` is the starting locale id (e.g. `tr::FALLBACK_LOCALE.id()`).
 #[must_use]
 pub fn use_i18n_provider(catalog: &'static Catalog, initial: impl Into<String>) -> I18nContext {
-    let locale = use_signal(move || initial.into());
+    let locale = use_signal(move || Rc::from(initial.into()));
     use_context_provider(move || I18nContext { locale, catalog })
 }
 
@@ -371,23 +516,11 @@ mod tests {
         locales: &[
             LocaleCatalog {
                 id: "en-US",
-                messages: &[
-                    Message {
-                        key: "hello",
-                        pattern: "Hello, {$name}!",
-                    },
-                    Message {
-                        key: "count",
-                        pattern: "{$count} items",
-                    },
-                ],
+                source: "hello = Hello, { $name }!\ncount = { $count } items\nitems = { $count ->\n    [one] One item\n   *[other] { $count } items\n}",
             },
             LocaleCatalog {
                 id: "zh-CN",
-                messages: &[Message {
-                    key: "hello",
-                    pattern: "你好，{$name}！",
-                }],
+                source: "hello = 你好，{ $name }！",
             },
         ],
     };
@@ -415,15 +548,29 @@ mod tests {
     }
 
     #[test]
-    fn reports_missing_argument() {
+    fn reports_fluent_formatting_errors() {
         let error = try_translate(&CATALOG, "en-US", TypedMessage::new("hello")).unwrap_err();
 
+        assert!(matches!(error, I18nError::Formatting { key: "hello", .. }));
+    }
+
+    #[test]
+    fn evaluates_fluent_select_expressions() {
         assert_eq!(
-            error,
-            I18nError::MissingArgument {
-                key: "hello",
-                argument: "name".to_string()
-            }
+            translate(
+                &CATALOG,
+                "en-US",
+                TypedMessage::new("items").with_arg("count", 1),
+            ),
+            "One item"
+        );
+        assert_eq!(
+            translate(
+                &CATALOG,
+                "en-US",
+                TypedMessage::new("items").with_arg("count", 3),
+            ),
+            "3 items"
         );
     }
 }

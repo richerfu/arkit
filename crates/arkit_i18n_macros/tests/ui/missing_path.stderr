@@ -1,0 +1,5 @@
+error: missing `path`
+ --> tests/ui/missing_path.rs:2:13
+  |
+2 |     pub mod tr {
+  |             ^^

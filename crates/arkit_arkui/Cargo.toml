@@ -2,10 +2,15 @@
 name = "arkit_arkui"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
+
+[lints]
+workspace = true
 
 [dependencies]
 arkit_elements.workspace = true
 dioxus-core.workspace = true
 ohos-arkui-binding.workspace = true
 ohos-hilog-binding.workspace = true
+rustc-hash.workspace = true

@@ -67,6 +67,8 @@ struct EmbeddedWebViewState {
     webview: Option<Webview>,
     node: Option<ArkUINode>,
     frame: Option<WebViewFrame>,
+    current_url: Option<String>,
+    current_html: Option<String>,
 }
 
 /// Imperative handle for a WebView mounted as an ArkUI native child.
@@ -107,15 +109,66 @@ impl EmbeddedWebViewController {
         if init.id.is_empty() {
             init.id = self.id();
         }
+        if init.id.is_empty() {
+            return Err(Error::from_reason("embedded webview id must not be empty"));
+        }
+        if self.inner.borrow().webview.is_some() && init.id != self.inner.borrow().id {
+            return Err(Error::from_reason(format!(
+                "embedded webview id cannot change after mount ({} -> {})",
+                self.inner.borrow().id,
+                init.id
+            )));
+        }
+
+        let requested_url = init.url.clone();
+        let requested_html = init.html.clone();
 
         if self.inner.borrow().webview.is_none() {
             let mount = create_embedded_webview(init)?;
-            self.inner.borrow_mut().id = mount.id.clone();
-            attach_embedded_node(host, &mount.node)?;
-            self.inner.borrow_mut().node = Some(mount.node);
-            self.inner.borrow_mut().webview = Some(mount.webview);
+            if let Err(error) = attach_embedded_node(host, &mount.node) {
+                // The ArkTS manager owns the external content node. Disposing
+                // its controller releases that entry after a failed attach.
+                if let Err(dispose_error) = mount.webview.dispose() {
+                    ohos_hilog_binding::error(format!(
+                        "embedded webview cleanup after attach failure failed: {dispose_error}"
+                    ));
+                }
+                return Err(error);
+            }
+            let mut state = self.inner.borrow_mut();
+            state.id = mount.id;
+            state.node = Some(mount.node);
+            state.webview = Some(mount.webview);
+            state.current_url = requested_url;
+            state.current_html = requested_html;
         } else if let Some(node) = self.inner.borrow().node.clone() {
             attach_embedded_node(host, &node)?;
+
+            let (webview, previous_url, previous_html) = {
+                let state = self.inner.borrow();
+                (
+                    state.webview.clone(),
+                    state.current_url.clone(),
+                    state.current_html.clone(),
+                )
+            };
+            if let Some(webview) = webview {
+                if let Some(html) = requested_html.as_deref() {
+                    if requested_html != previous_html {
+                        webview.load_html(html)?;
+                    }
+                    let mut state = self.inner.borrow_mut();
+                    state.current_url = requested_url;
+                    state.current_html = requested_html;
+                } else if let Some(url) = requested_url.as_deref() {
+                    if previous_html.is_some() || requested_url != previous_url {
+                        webview.load_url(url)?;
+                    }
+                    let mut state = self.inner.borrow_mut();
+                    state.current_url = requested_url;
+                    state.current_html = None;
+                }
+            }
         }
 
         if let Some(frame) = frame {
@@ -163,7 +216,19 @@ impl EmbeddedWebViewController {
     }
 
     pub fn load_url(&self, url: &str) -> Result<()> {
-        self.with_webview(|webview| webview.load_url(url))
+        self.with_webview(|webview| webview.load_url(url))?;
+        let mut state = self.inner.borrow_mut();
+        state.current_url = Some(url.to_owned());
+        state.current_html = None;
+        Ok(())
+    }
+
+    pub fn load_html(&self, html: &str) -> Result<()> {
+        self.with_webview(|webview| webview.load_html(html))?;
+        let mut state = self.inner.borrow_mut();
+        state.current_url = None;
+        state.current_html = Some(html.to_owned());
+        Ok(())
     }
 
     pub fn set_zoom(&self, zoom: f64) -> Result<()> {
@@ -175,12 +240,34 @@ impl EmbeddedWebViewController {
     }
 
     pub fn dispose(&self) {
-        if let Some(webview) = self.inner.borrow_mut().webview.take() {
-            let _ = webview.dispose();
+        if let Err(error) = self.try_dispose() {
+            ohos_hilog_binding::error(format!("embedded webview dispose failed: {error}"));
+        }
+    }
+
+    /// Dispose the ArkTS-owned WebView and clear the mounted snapshot only
+    /// after native cleanup succeeds. Callers that need teardown diagnostics
+    /// can use this instead of the best-effort [`dispose`](Self::dispose).
+    pub fn try_dispose(&self) -> Result<()> {
+        let webview = self.inner.borrow().webview.clone();
+        if let Some(webview) = webview {
+            webview.dispose()?;
         }
         let mut state = self.inner.borrow_mut();
+        state.webview = None;
         state.node = None;
         state.frame = None;
+        state.current_url = None;
+        state.current_html = None;
+        Ok(())
+    }
+}
+
+impl Drop for EmbeddedWebViewController {
+    fn drop(&mut self) {
+        if Rc::strong_count(&self.inner) == 1 {
+            self.dispose();
+        }
     }
 }
 
@@ -191,6 +278,9 @@ struct EmbeddedWebViewMount {
 }
 
 fn create_embedded_webview(init: EmbeddedWebViewInit) -> Result<EmbeddedWebViewMount> {
+    // SAFETY: embedded WebViews are created from the registered UI-loop
+    // effect. `set_helper` installs this thread-local N-API reference during
+    // entry rendering; the borrow below verifies that installation before use.
     let helper = unsafe { get_helper() };
     let helper_borrow = helper.borrow();
     let helper_ref = helper_borrow
@@ -209,10 +299,12 @@ fn create_embedded_webview(init: EmbeddedWebViewInit) -> Result<EmbeddedWebViewM
             "createEmbeddedWebview",
         )?;
 
-    let on_navigation_request = init.on_navigation_request.as_ref().and_then(|handler| {
-        let handler = handler.clone();
-        env_ref
-            .create_function_from_closure("arkit_on_navigation_request", move |ctx| {
+    let on_navigation_request = init
+        .on_navigation_request
+        .as_ref()
+        .map(|handler| {
+            let handler = handler.clone();
+            env_ref.create_function_from_closure("arkit_on_navigation_request", move |ctx| {
                 let url = ctx.try_get::<String>(0)?;
                 let url = match url {
                     Either::A(value) => value,
@@ -220,13 +312,15 @@ fn create_embedded_webview(init: EmbeddedWebViewInit) -> Result<EmbeddedWebViewM
                 };
                 Ok(handler(url))
             })
-            .ok()
-    });
+        })
+        .transpose()?;
 
-    let on_title_change = init.on_title_change.as_ref().and_then(|handler| {
-        let handler = handler.clone();
-        env_ref
-            .create_function_from_closure("arkit_on_title_change", move |ctx| {
+    let on_title_change = init
+        .on_title_change
+        .as_ref()
+        .map(|handler| {
+            let handler = handler.clone();
+            env_ref.create_function_from_closure("arkit_on_title_change", move |ctx| {
                 let title = ctx.try_get::<String>(0)?;
                 let title = match title {
                     Either::A(value) => value,
@@ -235,8 +329,8 @@ fn create_embedded_webview(init: EmbeddedWebViewInit) -> Result<EmbeddedWebViewM
                 handler(title);
                 Ok(())
             })
-            .ok()
-    });
+        })
+        .transpose()?;
 
     let embedded_webview = create_webview.call(WebViewInitData {
         url: init.url,

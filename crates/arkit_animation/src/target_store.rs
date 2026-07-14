@@ -93,4 +93,8 @@ impl TargetStore {
             .get_mut(id.index())
             .and_then(Option::as_mut)
     }
+
+    pub fn id_for_name(&self, name: &TargetName) -> Option<AdapterTargetId> {
+        self.names.get(name).copied()
+    }
 }

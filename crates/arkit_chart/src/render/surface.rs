@@ -1,9 +1,117 @@
 //! Minimal native-canvas drawing atoms used to compose series renderers.
 
+use std::borrow::Cow;
+use std::cell::RefCell;
+use std::collections::VecDeque;
+use std::sync::Arc;
+
 use ohos_drawing_binding::{
-    Brush, Canvas, FontCollection, Path, Pen, Point, Rect, TextStyle, TypographyBuilder,
-    TypographyStyle,
+    Brush, Canvas, FontCollection, Path, Pen, Point, Rect, TextStyle, Typography,
+    TypographyBuilder, TypographyStyle,
 };
+use rustc_hash::FxHashMap;
+
+const TEXT_CACHE_CAPACITY: usize = 256;
+
+thread_local! {
+    static TEXT_CACHE: RefCell<TextCache> = RefCell::new(TextCache::new());
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct TextStyleKey {
+    size_bits: u64,
+    color: u32,
+    weight: i32,
+}
+
+struct TextPaint<'a> {
+    text: &'a str,
+    x: f64,
+    y: f64,
+    size: f64,
+    color: u32,
+    weight: i32,
+}
+
+struct TextCache {
+    fonts: FontCollection,
+    entries: FxHashMap<TextStyleKey, FxHashMap<Arc<str>, Typography>>,
+    order: VecDeque<(TextStyleKey, Arc<str>)>,
+    len: usize,
+}
+
+impl TextCache {
+    fn new() -> Self {
+        Self {
+            fonts: FontCollection::global_instance().unwrap_or_default(),
+            entries: FxHashMap::default(),
+            order: VecDeque::with_capacity(TEXT_CACHE_CAPACITY),
+            len: 0,
+        }
+    }
+
+    fn paint(&mut self, canvas: &Canvas, paint: TextPaint<'_>) {
+        let text = if paint.text.contains('\0') {
+            Cow::Owned(paint.text.replace('\0', "\u{fffd}"))
+        } else {
+            Cow::Borrowed(paint.text)
+        };
+        let style = TextStyleKey {
+            size_bits: paint.size.to_bits(),
+            color: paint.color,
+            weight: paint.weight,
+        };
+        if let Some(typography) = self
+            .entries
+            .get_mut(&style)
+            .and_then(|entries| entries.get_mut(text.as_ref()))
+        {
+            typography.paint(canvas, paint.x, paint.y);
+            return;
+        }
+
+        if self.len == TEXT_CACHE_CAPACITY {
+            if let Some((retired_style, retired_text)) = self.order.pop_front() {
+                let mut removed = false;
+                let remove_bucket = if let Some(entries) = self.entries.get_mut(&retired_style) {
+                    removed = entries.remove(retired_text.as_ref()).is_some();
+                    entries.is_empty()
+                } else {
+                    false
+                };
+                if remove_bucket {
+                    drop(self.entries.remove(&retired_style));
+                }
+                if removed {
+                    self.len -= 1;
+                }
+            }
+        }
+
+        let text: Arc<str> = Arc::from(text.into_owned());
+        let mut typography_style = TypographyStyle::new();
+        let mut text_style = TextStyle::new();
+        text_style.set_color(paint.color);
+        text_style.set_font_size(paint.size);
+        text_style.set_font_weight(paint.weight);
+        let mut builder = TypographyBuilder::new(&mut typography_style, &mut self.fonts);
+        builder.push_text_style(&mut text_style);
+        builder.add_text(&text);
+        builder.pop_text_style();
+        let mut typography = builder.build();
+        // Chart labels are single-line drawing atoms. A large finite width
+        // avoids the old 260px wrap/clipping bug without passing infinity into
+        // the native typography engine.
+        typography.layout(1_000_000.0);
+        typography.paint(canvas, paint.x, paint.y);
+        self.entries
+            .entry(style)
+            .or_default()
+            .insert(text.clone(), typography);
+        self.order.push_back((style, text));
+        self.len += 1;
+    }
+}
 
 pub(super) fn fill_rect(canvas: &Canvas, x: f32, y: f32, width: f32, height: f32, color: u32) {
     let mut brush = Brush::new();
@@ -48,6 +156,8 @@ pub(super) fn fill_oval(canvas: &Canvas, x: f32, y: f32, width: f32, height: f32
     brush.set_color(color);
     let rect = Rect::new(x, y, x + width.max(0.0), y + height.max(0.0));
     canvas.attach_brush(&brush);
+    // SAFETY: canvas and rect are live for this synchronous draw call; the
+    // attached brush is detached before any owner is dropped.
     unsafe {
         ohos_native_drawing_sys::OH_Drawing_CanvasDrawOval(canvas.as_ptr(), rect.as_ptr());
     }
@@ -181,6 +291,8 @@ pub(super) fn stroke_oval(
     pen.set_width(stroke_width);
     let rect = Rect::new(x, y, x + width.max(0.0), y + height.max(0.0));
     canvas.attach_pen(&pen);
+    // SAFETY: canvas and rect are live for this synchronous draw call; the
+    // attached pen is detached before any owner is dropped.
     unsafe {
         ohos_native_drawing_sys::OH_Drawing_CanvasDrawOval(canvas.as_ptr(), rect.as_ptr());
     }
@@ -220,6 +332,8 @@ pub(super) fn stroke_path_style(canvas: &Canvas, path: &Path, color: u32, width:
         _ => None,
     }
     .and_then(|mut intervals| {
+        // SAFETY: the native constructor consumes the interval values during
+        // this call; both entries remain initialized for its duration.
         let effect = unsafe {
             ohos_native_drawing_sys::OH_Drawing_CreateDashPathEffect(
                 intervals.as_mut_ptr(),
@@ -230,12 +344,16 @@ pub(super) fn stroke_path_style(canvas: &Canvas, path: &Path, color: u32, width:
         (!effect.is_null()).then_some(effect)
     });
     if let Some(effect) = effect {
+        // SAFETY: `pen` and the non-null effect are live. The effect remains
+        // owned here until drawing is complete and the pen is detached.
         unsafe { ohos_native_drawing_sys::OH_Drawing_PenSetPathEffect(pen.as_ptr(), effect) };
     }
     canvas.attach_pen(&pen);
     canvas.draw_path(path);
     canvas.detach_pen();
     if let Some(effect) = effect {
+        // SAFETY: the pen no longer references the effect and this scope owns
+        // the only native effect handle.
         unsafe { ohos_native_drawing_sys::OH_Drawing_PathEffectDestroy(effect) };
     }
 }
@@ -341,6 +459,7 @@ pub(super) fn stroke_arc_with_cap(
     pen.set_color(color);
     pen.set_width(width);
     if round_cap {
+        // SAFETY: `pen` is a live uniquely configured native pen handle.
         unsafe {
             ohos_native_drawing_sys::OH_Drawing_PenSetCap(
                 pen.as_ptr(),
@@ -365,19 +484,19 @@ pub(super) fn draw_text(
     if text.is_empty() {
         return;
     }
-    let mut font_collection = FontCollection::global_instance().unwrap_or_default();
-    let mut typography_style = TypographyStyle::new();
-    let mut text_style = TextStyle::new();
-    text_style.set_color(color);
-    text_style.set_font_size(size);
-    text_style.set_font_weight(weight);
-    let mut builder = TypographyBuilder::new(&mut typography_style, &mut font_collection);
-    builder.push_text_style(&mut text_style);
-    builder.add_text(text);
-    builder.pop_text_style();
-    let mut typography = builder.build();
-    typography.layout(260.0);
-    typography.paint(canvas, x as f64, (y - size as f32) as f64);
+    TEXT_CACHE.with_borrow_mut(|cache| {
+        cache.paint(
+            canvas,
+            TextPaint {
+                text,
+                x: x as f64,
+                y: (y - size as f32) as f64,
+                size,
+                color,
+                weight,
+            },
+        );
+    });
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -398,6 +517,8 @@ pub(super) fn draw_rotated_text(
         return;
     }
     canvas.save();
+    // SAFETY: `canvas` remains live and the transform is balanced by restore
+    // before returning.
     unsafe {
         ohos_native_drawing_sys::OH_Drawing_CanvasRotate(
             canvas.as_ptr(),
