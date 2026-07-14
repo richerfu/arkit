@@ -12,8 +12,8 @@ use arkit::shadcn::components::{
     Calendar, Card, CardContent, CardFooter, CardHeader, Carousel, CarouselControlsPlacement,
     CarouselIndicatorVariant, CarouselStyle, Checkbox, Collapsible, ContextMenu, DatePicker,
     Dialog, DialogFooter, DialogHeader, DropdownMenu, HoverCard, Input, Label, MenuEntry, Menubar,
-    MenubarMenuSpec, Popover, Progress, RadioGroup, Select, Separator, Skeleton, Switch, Table,
-    Tabs, Text, TextVariant, Textarea, Toggle, ToggleGroup, Tooltip,
+    MenubarMenuSpec, Popover, Progress, RadioGroup, Select, Separator, Skeleton, Spinner, Switch,
+    Table, Tabs, Text, TextVariant, Textarea, Toggle, ToggleGroup, Tooltip,
 };
 use arkit::shadcn::icon::icon_placeholder;
 use arkit::shadcn::theme::{
@@ -157,6 +157,10 @@ const COMPONENTS: &[ComponentSpec] = &[
     ComponentSpec {
         slug: "skeleton",
         name: "Skeleton",
+    },
+    ComponentSpec {
+        slug: "spinner",
+        name: "Spinner",
     },
     ComponentSpec {
         slug: "switch",
@@ -1684,6 +1688,50 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         Skeleton { width: 250.0, height: 16.0 }
                         v_gap { height: spacing::SM }
                         Skeleton { width: 200.0, height: 16.0 }
+                    }
+                }
+            }
+        },
+        "spinner" => rsx! {
+            fixed_width {
+                width: 320.0,
+                column {
+                    percent_width: 1.0,
+                    align_items: "center",
+                    text {
+                        content: "Sizes".to_string(),
+                        font_size: typography::SM,
+                        font_weight: 500_i32,
+                        font_color: theme.colors.foreground,
+                        line_height: 20.0,
+                    }
+                    v_gap { height: spacing::LG }
+                    row {
+                        align_items: "center",
+                        justify_content: "center",
+                        Spinner {}
+                        h_gap { width: spacing::XXL }
+                        Spinner {
+                            size: 24.0,
+                            color: Some(theme.colors.primary),
+                            icon: Some("refresh-cw".to_string()),
+                        }
+                        h_gap { width: spacing::XXL }
+                        Spinner { size: 32.0, color: Some(theme.colors.destructive) }
+                    }
+                    v_gap { height: spacing::XXL }
+                    Button {
+                        disabled: Some(true),
+                        onclick: move |_| {},
+                        Spinner { color: Some(theme.colors.primary_foreground) }
+                        h_gap { width: spacing::SM }
+                        text {
+                            content: "Please wait".to_string(),
+                            font_size: typography::MD,
+                            font_weight: 500_i32,
+                            font_color: theme.colors.primary_foreground,
+                            line_height: 20.0,
+                        }
                     }
                 }
             }

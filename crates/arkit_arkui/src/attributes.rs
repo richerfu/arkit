@@ -348,7 +348,10 @@ impl DesiredAttrs {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_scroll_offset;
+    use dioxus_core::AttributeValue;
+    use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
+
+    use super::{encode_attr, parse_scroll_offset, EncodedAttrValue};
 
     #[test]
     fn scroll_offset_preserves_float_offsets_and_integer_options() {
@@ -363,6 +366,30 @@ mod tests {
         assert_eq!(parse_scroll_offset("0"), None);
         assert_eq!(parse_scroll_offset("0,0,0,1,0,0,0,1"), None);
         assert_eq!(parse_scroll_offset("0,0,fast"), None);
+    }
+
+    #[test]
+    fn loading_progress_attributes_use_native_types() {
+        let color = encode_attr(
+            "loadingprogress",
+            "loading_progress_color",
+            &AttributeValue::Int(i64::from(0xFF00_7DFF_u32)),
+        )
+        .expect("loading color is supported");
+        assert_eq!(color.ty, ArkUINodeAttributeType::LoadingProgressColor);
+        assert_eq!(color.value, EncodedAttrValue::U32(0xFF00_7DFF));
+
+        let enabled = encode_attr(
+            "loadingprogress",
+            "loading_progress_enable_loading",
+            &AttributeValue::Bool(false),
+        )
+        .expect("loading state is supported");
+        assert_eq!(
+            enabled.ty,
+            ArkUINodeAttributeType::LoadingProgressEnableLoading
+        );
+        assert_eq!(enabled.value, EncodedAttrValue::Bool(false));
     }
 }
 
@@ -466,6 +493,7 @@ fn attr_group(name: &str) -> AttrGroup {
         | "enabled"
         | "foreground_color"
         | "progress_color"
+        | "loading_progress_color"
         | "color_blend"
         | "checkbox_select_color"
         | "block_color"
@@ -1067,6 +1095,11 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
             ArkUINodeAttributeType::ProgressType,
             EncodedAttrValue::I32(as_i32(value)?),
         ),
+        "loading_progress_enable_loading" if tag == "loadingprogress" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::LoadingProgressEnableLoading,
+            EncodedAttrValue::Bool(as_bool(value)?),
+        ),
         _ => return None,
     };
 
@@ -1116,6 +1149,9 @@ fn color_attr(name: &str, tag: &str) -> Option<ArkUINodeAttributeType> {
         "border_color" => ArkUINodeAttributeType::BorderColor,
         "foreground_color" => ArkUINodeAttributeType::ForegroundColor,
         "progress_color" => ArkUINodeAttributeType::ProgressColor,
+        "loading_progress_color" if tag == "loadingprogress" => {
+            ArkUINodeAttributeType::LoadingProgressColor
+        }
         "color_blend" => ArkUINodeAttributeType::ColorBlend,
         "placeholder_color" => match tag {
             "textinput" => ArkUINodeAttributeType::TextInputPlaceholderColor,

@@ -180,6 +180,25 @@ Completed for `Carousel`:
   share the Swiper's vertical center, and pressing next changes `First` to
   `Second` without rendering an index indicator.
 
+### 2026-07-14 Spinner Verification
+
+Completed for `Spinner`:
+
+- Added ArkUI `LoadingProgress` as a first-class renderer element with native
+  color and loading-state attributes; continuous animation stays on the
+  platform instead of using a Rust timer or frame loop.
+- Added a theme-aware `Spinner` wrapper with a 16vp default size, configurable
+  size/color, and a `spinning` state that pauses animation without changing
+  layout. Callers can supply a Lucide icon name and stroke width; custom icons
+  rotate through the shared Arkit animation host.
+- Added showcase examples for 16/24/32vp indicators, custom semantic colors,
+  and a disabled button loading state.
+- Verified on a 1320×2856 device: the native 16vp and 32vp indicators are
+  `[450,1398][506,1454]` and `[758,1370][870,1482]`; the custom `refresh-cw`
+  icon occupies the centered 24vp slot, and the button indicator is
+  `[473,1622][529,1678]`. Consecutive screenshots show both native indicators
+  and the custom icon at different rotation positions.
+
 ## Component Checklist
 
 Status values:
@@ -220,6 +239,7 @@ Status values:
 | Select | `select.rs` | pending | Compare trigger, menu width, selected check alignment. |
 | Separator | `separator.rs` | done | Verified horizontal/vertical thickness and spacing on device; demo content now shares the RNR left edge while the fixed-width example remains centered. |
 | Skeleton | `skeleton.rs` | pending | Compare dimensions and radius. |
+| Spinner | `spinner.rs` | done | Native LoadingProgress and a custom rotating Lucide icon verified at 16/24/32vp with semantic colors and a disabled-button loading state. |
 | Switch | `switch.rs` | pending | Compare track/thumb size, checked colors, disabled state. |
 | Table | `table.rs` | pending | Compare row height, separators, header weight. |
 | Tabs | `tabs.rs` | in_progress | Runtime event reentrancy crash fixed; compare tab list width, active indicator, and content padding. |

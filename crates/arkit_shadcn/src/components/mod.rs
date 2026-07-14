@@ -52,6 +52,7 @@ mod sheet;
 mod sidebar;
 mod skeleton;
 mod slider;
+mod spinner;
 mod surfaces;
 mod switch;
 mod table;
@@ -125,6 +126,7 @@ pub use sheet::{Sheet, SheetProps};
 pub use sidebar::{Sidebar, SidebarItem, SidebarItemProps, SidebarProps};
 pub use skeleton::{Skeleton, SkeletonProps};
 pub use slider::{Slider, SliderProps};
+pub use spinner::{Spinner, SpinnerProps};
 pub use surfaces::{
     Sonner, SonnerProps, Toast, ToastDestructive, ToastDestructiveProps, ToastProps,
 };
