@@ -59,7 +59,7 @@ cd examples/chart && ohrs build --arch aarch
 - dynamic native fallback 与 hot timeline replacement 会更新 controls 查询到的 `LoweringReport`，不会留下过期 backend。
 - layout observer 先合并订阅需求，每次 dispatch 最多查询一次 size、仅在需要 frame 时查询 position，并用 inline `SmallVec` 暂存常见通知，回调执行前释放 hub borrow。
 - renderer 的结构同步支持真实 reorder；native remove/insert 失败会中止本轮同步，不会把 logical host 误绑定到目标 index 上已有的 sibling。renderer teardown 会先注销 listener token 和 gesture，再释放 native subtree，`Drop` 兜底覆盖提前返回路径。
-- NodeBuilder、VirtualList adapter 与 Embedded WebView 的失败路径会显式释放 native owner；adapter reset 或 WebView attach 失败不会把 handle 从 Rust state 中丢失后泄漏。
+- NodeBuilder、VirtualNodeAdapter 与 Embedded WebView 的失败路径会显式释放 native owner；adapter reset 或 WebView attach 失败不会把 handle 从 Rust state 中丢失后泄漏。
 - overlay scope unmount 会按 checked token 主动 dismiss 并使遗留 handle 失效，因此 dismiss closure 反向持有 `OverlayApi` 时也不会形成永久引用环。
 - Easing lane 明确使用 start cross-axis alignment，并为 spring/Bézier overshoot 预留轨道余量；目标不会再从默认中心出发或越过卡片边界，避免状态已完成但视觉上像未执行。
 - renderer 暴露了类型正确的 `scroll_offset` 混合参数编码（vp 浮点 offset + 整数 duration/curve/options）；Demo 的 Tab 变化使用 0ms offset 归零，避免不同页面复用同一个原生 Scroll 偏移。

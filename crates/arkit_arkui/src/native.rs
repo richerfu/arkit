@@ -8,8 +8,8 @@ use ohos_arkui_binding::common::error::ArkUIResult;
 use ohos_arkui_binding::common::node::ArkUINode;
 use ohos_arkui_binding::component::built_in_component::{
     CalendarPicker, Checkbox, Column, Custom, DatePicker, Flex, FlowItem, Grid, GridItem, Image,
-    List, ListItem, Progress, Radio, Refresh, Row, Scroll, Slider, Stack, Swiper, Text, TextArea,
-    TextInput, Toggle, WaterFlow,
+    List, ListItem, LoadingProgress, Progress, Radio, Refresh, Row, Scroll, Slider, Stack, Swiper,
+    Text, TextArea, TextInput, Toggle, WaterFlow,
 };
 
 /// The canonical set of ArkUI built-in component kinds the renderer supports.
@@ -30,6 +30,7 @@ pub enum NodeKind {
     Image,
     List,
     ListItem,
+    LoadingProgress,
     Progress,
     Radio,
     Refresh,
@@ -65,6 +66,7 @@ pub fn create_node(kind: NodeKind) -> ArkUIResult<ArkUINode> {
         NodeKind::Image => Image::new()?.into(),
         NodeKind::List => List::new()?.into(),
         NodeKind::ListItem => ListItem::new()?.into(),
+        NodeKind::LoadingProgress => LoadingProgress::new()?.into(),
         NodeKind::Progress => Progress::new()?.into(),
         NodeKind::Radio => Radio::new()?.into(),
         NodeKind::Refresh => Refresh::new()?.into(),
@@ -100,6 +102,7 @@ pub fn kind_from_tag(tag: &str) -> Option<NodeKind> {
         "image" | "Image" => NodeKind::Image,
         "list" | "List" => NodeKind::List,
         "listitem" | "ListItem" => NodeKind::ListItem,
+        "loadingprogress" | "LoadingProgress" => NodeKind::LoadingProgress,
         "progress" | "Progress" => NodeKind::Progress,
         "radio" | "Radio" => NodeKind::Radio,
         "refresh" | "Refresh" => NodeKind::Refresh,
@@ -151,6 +154,7 @@ pub fn canonical_tag(tag: &str) -> &'static str {
         "image" | "Image" => "image",
         "list" | "List" => "list",
         "listitem" | "ListItem" => "listitem",
+        "loadingprogress" | "LoadingProgress" => "loadingprogress",
         "progress" | "Progress" => "progress",
         "radio" | "Radio" => "radio",
         "refresh" | "Refresh" => "refresh",
@@ -178,5 +182,19 @@ pub fn parse_color(s: &str) -> Result<u32, ()> {
             .map_err(|_| ()),
         8 => u32::from_str_radix(s, 16).map_err(|_| ()),
         _ => Err(()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{canonical_tag, kind_from_tag, NodeKind};
+
+    #[test]
+    fn loading_progress_tag_maps_to_native_kind() {
+        assert_eq!(
+            kind_from_tag("LoadingProgress"),
+            Some(NodeKind::LoadingProgress)
+        );
+        assert_eq!(canonical_tag("LoadingProgress"), "loadingprogress");
     }
 }

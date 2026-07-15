@@ -20,16 +20,17 @@ pub use arkit_runtime::{
 // --- Renderer + native node primitives ---
 pub use arkit_arkui::{
     canonical_tag, create_node, create_node_by_tag, kind_from_tag, ArkUIRenderer, EventSink,
-    NodeBuilder, NodeKind, VirtualKind, VirtualListAdapter,
+    NodeBuilder, NodeKind, VirtualKind, VirtualListAdapter, VirtualNodeAdapter,
 };
 
 // --- Hooks (escape hatches: overlay / layout / virtual range / ark node) ---
 pub use arkit_hooks as hooks;
 pub use arkit_hooks::{
     use_ark_host_provider, use_ark_node, use_layout_frame, use_layout_frame_node, use_layout_size,
-    use_overlay, use_safe_area, use_safe_area_policy, use_virtual_list, use_virtual_range,
-    use_window_metrics, ArkHost, ArkNodeRef, LayoutFrame, LayoutSize, OverlayRoot, OverlayViewport,
-    SafeArea, SafeAreaEdges, SafeAreaProps, VirtualListHandle, VirtualVisibleRange,
+    use_overlay, use_safe_area, use_safe_area_policy, use_virtual_list, use_virtual_node_adapter,
+    use_virtual_range, use_virtual_water_flow, use_window_metrics, ArkHost, ArkNodeRef,
+    LayoutFrame, LayoutSize, OverlayRoot, OverlayViewport, SafeArea, SafeAreaEdges, SafeAreaProps,
+    VirtualListHandle, VirtualNodeAdapterHandle, VirtualVisibleRange,
 };
 
 // --- i18n ---
@@ -222,18 +223,19 @@ pub mod prelude {
     // without re-entering the current render or native callback.
     pub use crate::queue_ui_loop;
 
-    // Native node primitives + virtual-list builder.
+    // Native node primitives + virtual container builder.
     pub use crate::{
         canonical_tag, create_node, create_node_by_tag, kind_from_tag, NodeBuilder, NodeKind,
-        VirtualKind, VirtualListAdapter,
+        VirtualKind, VirtualListAdapter, VirtualNodeAdapter,
     };
 
     // Escape-hatch hooks.
     pub use crate::{
         use_ark_host_provider, use_ark_node, use_layout_frame, use_layout_frame_node,
         use_layout_size, use_overlay, use_safe_area, use_safe_area_policy, use_virtual_list,
-        use_virtual_range, use_window_metrics, ArkHost, ArkNodeRef, LayoutFrame, LayoutSize,
-        OverlayRoot, OverlayViewport, SafeArea, SafeAreaEdges, SafeAreaProps, VirtualListHandle,
+        use_virtual_node_adapter, use_virtual_range, use_virtual_water_flow, use_window_metrics,
+        ArkHost, ArkNodeRef, LayoutFrame, LayoutSize, OverlayRoot, OverlayViewport, SafeArea,
+        SafeAreaEdges, SafeAreaProps, VirtualListHandle, VirtualNodeAdapterHandle,
         VirtualVisibleRange,
     };
 

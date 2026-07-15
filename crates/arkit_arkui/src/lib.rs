@@ -56,7 +56,7 @@ pub mod image;
 pub use image::{ArkImageSource, RetainedImage};
 
 pub mod virtual_adapter;
-pub use virtual_adapter::{RenderItem, VirtualKind, VirtualListAdapter};
+pub use virtual_adapter::{RenderItem, VirtualKind, VirtualListAdapter, VirtualNodeAdapter};
 
 pub mod node_builder;
 pub use node_builder::NodeBuilder;
@@ -1712,6 +1712,8 @@ fn extract_payload(
 ) -> ArkEventPayload {
     use NodeEventType::*;
     match event_type {
+        OnFocus => ArkEventPayload::Bool(true),
+        OnBlur => ArkEventPayload::Bool(false),
         // Checkbox / radio checked state: i32(0) != 0.
         CheckboxEventOnChange | RadioEventOnChange | ToggleOnChange => {
             ArkEventPayload::Bool(event.i32_value(0).unwrap_or(0) != 0)
@@ -1751,7 +1753,9 @@ fn extract_payload(
             .map(ArkEventPayload::Layout)
             .unwrap_or_default(),
         // Swiper change: new index i32(0).
-        SwiperEventOnChange => ArkEventPayload::Int(event.i32_value(0).unwrap_or(0)),
+        SwiperEventOnChange | SwiperEventOnAnimationEnd => {
+            ArkEventPayload::Int(event.i32_value(0).unwrap_or(0))
+        }
         // Hover: i32(0) is the is-hovering boolean (1 = entered, 0 = exited).
         OnHover => ArkEventPayload::Bool(event.i32_value(0).unwrap_or(0) != 0),
         OnClick | OnClickEvent | TouchEvent | OnHoverMove | OnDragStart | OnDragMove
@@ -1846,6 +1850,9 @@ fn event_type_for_name(name: &str, tag: &str) -> Option<NodeEventType> {
         // Element-bound layout/area changes.
         (ArkEventKind::AreaChange, _) => EventOnAreaChange,
 
+        (ArkEventKind::Focus, _) => OnFocus,
+        (ArkEventKind::Blur, _) => OnBlur,
+
         // Grid scroll-index events were added after the workspace's API-20
         // contract. Do not register the unrelated WaterFlow `OnWillScroll`
         // event on a Grid: it succeeds inconsistently and carries a different
@@ -1854,8 +1861,10 @@ fn event_type_for_name(name: &str, tag: &str) -> Option<NodeEventType> {
         (ArkEventKind::Scroll, "waterflow") => WaterFlowOnScrollIndex,
         (ArkEventKind::Scroll, "scroll") => ScrollEventOnScroll,
 
-        // Swiper change.
-        (ArkEventKind::SwiperChange, "swiper") => SwiperEventOnChange,
+        // Swiper change. Animation-end is used as the stable selection
+        // boundary: unlike the early change callback, it fires after the
+        // native viewport has committed its new index.
+        (ArkEventKind::SwiperChange, "swiper") => SwiperEventOnAnimationEnd,
 
         // Refresh trigger.
         (ArkEventKind::Refresh, "refresh") => RefreshOnRefresh,
@@ -1892,5 +1901,17 @@ mod event_tests {
             Some(NodeEventType::OnHoverMove)
         );
         assert_eq!(event_type_for_name("scroll", "grid"), None);
+        assert_eq!(
+            event_type_for_name("_swiper_change", "swiper"),
+            Some(NodeEventType::SwiperEventOnAnimationEnd)
+        );
+        assert_eq!(
+            event_type_for_name("focus", "textinput"),
+            Some(NodeEventType::OnFocus)
+        );
+        assert_eq!(
+            event_type_for_name("_blur", "textinput"),
+            Some(NodeEventType::OnBlur)
+        );
     }
 }

@@ -38,23 +38,28 @@ pub fn Checkbox(props: CheckboxProps) -> Element {
     let disabled = props.disabled.unwrap_or(false);
     let on_change = props.on_change;
     let label = props.label.clone();
+    let toggle = EventHandler::new(move |_: ()| {
+        if disabled {
+            return;
+        }
+        let next = !current;
+        if !controlled {
+            internal.set(next);
+        }
+        if let Some(handler) = on_change {
+            handler.call(next);
+        }
+    });
+    let toggle_from_label = toggle;
 
     rsx! {
         row {
             align_items: "center",
             justify_content: "start",
             opacity: if disabled { 0.5 } else { 1.0 },
-            onclick: move |_| {
-                if disabled {
-                    return;
-                }
-                let next = !current;
-                if !controlled {
-                    internal.set(next);
-                }
-                if let Some(handler) = on_change {
-                    handler.call(next);
-                }
+            onclick: move |event| {
+                event.stop_propagation();
+                toggle.call(());
             },
             stack {
                 width: CHECKBOX_SIZE,
@@ -77,6 +82,10 @@ pub fn Checkbox(props: CheckboxProps) -> Element {
             if let Some(text) = label.as_ref() {
                 row {
                     margin_left: spacing::SM,
+                    onclick: move |event| {
+                        event.stop_propagation();
+                        toggle_from_label.call(());
+                    },
                     text {
                         content: text.clone(),
                         font_size: typography::SM,

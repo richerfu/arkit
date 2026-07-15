@@ -186,24 +186,36 @@ define_element! {
 }
 
 define_element! {
+    /// Indeterminate loading indicator (ArkUI `LoadingProgress`).
+    loadingprogress => "LoadingProgress" {
+        loading_progress_color, loading_progress_enable_loading,
+        background_color, padding, margin, margin_top, margin_bottom, margin_left,
+        margin_right, percent_width, percent_height, width, height, opacity,
+        border_radius, border_width, border_color, visibility, enabled, clip,
+        hit_test_behavior, aspect_ratio, position, z_index,
+    }
+}
+
+define_element! {
     /// Scroll container (ArkUI `Scroll`).
     scroll => "Scroll" {
         scroll_bar, scroll_enabled, scroll_edge_effect, scroll_offset, background_color, padding, margin,
         margin_top, margin_bottom, margin_left, margin_right,
         percent_width, percent_height, width, height, opacity, border_radius,
         border_width, border_color, visibility, enabled, clip, hit_test_behavior,
-        aspect_ratio, position, z_index,
+        alignment, aspect_ratio, position, z_index,
     }
 }
 
 define_element! {
     /// Swiper container (ArkUI `Swiper`).
     swiper => "Swiper" {
-        swiper_index, swiper_loop, swiper_cached_count, swiper_display_count,
-        swiper_vertical, swiper_interval, swiper_duration, background_color, padding,
-        margin, margin_top, margin_bottom, margin_left, margin_right,
+        swiper_index, swiper_swipe_to_index, swiper_loop, swiper_auto_play, swiper_show_indicator,
+        swiper_disable_swipe, swiper_cached_count, swiper_display_count,
+        swiper_vertical, swiper_interval, swiper_duration, swiper_curve, swiper_item_space,
+        background_color, padding, margin, margin_top, margin_bottom, margin_left, margin_right,
         percent_width, percent_height, width, height, opacity, border_radius,
-        border_width, border_color, visibility, enabled, clip, hit_test_behavior,
+        border_width, border_color, border_style, shadow, visibility, enabled, clip, hit_test_behavior,
         aspect_ratio, position, z_index,
     }
 }
@@ -307,7 +319,8 @@ define_element! {
 define_element! {
     /// Text input (ArkUI `TextInput`).
     textinput => "TextInput" {
-        value, placeholder, placeholder_color, caret_color, font_size, font_color,
+        value, placeholder, placeholder_color, caret_color, input_type, input_filter, max_length,
+        font_size, font_color,
         font_weight, font_family, font_style, line_height, text_align, background_color, padding,
         padding_top, padding_right, padding_bottom, padding_left, margin, margin_top, margin_bottom,
         margin_left, margin_right, percent_width,
@@ -349,6 +362,7 @@ pub mod completions {
         radio {},
         slider {},
         progress {},
+        loadingprogress {},
         scroll {},
         swiper {},
         grid {},

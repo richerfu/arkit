@@ -1,9 +1,10 @@
-//! ArkUI `NodeAdapter`-backed virtual list/grid support.
+//! ArkUI `NodeAdapter`-backed virtual container support.
 //!
-//! A [`VirtualListAdapter`] drives an ArkUI `NodeAdapter` so that only visible
+//! A [`VirtualNodeAdapter`] drives an ArkUI `NodeAdapter` so that only visible
 //! items are created (lazy, data-driven), instead of instantiating every child
-//! up front. The adapter is attached to a `list`/`grid`/`waterflow` host node
-//! via `set_*_node_adapter`.
+//! up front. The adapter supports `ListNodeAdapter`, `GridNodeAdapter`, and
+//! `WaterFlowNodeAdapter`; [`VirtualKind`] selects the matching host attribute
+//! and item wrapper.
 //!
 //! `render_item` is a callback invoked on-demand by ArkUI for each visible
 //! index; it receives the index and must return a fresh [`ArkUINode`] for that
@@ -63,14 +64,14 @@ struct AdapterState {
     attached_host: Option<ArkUINode>,
 }
 
-/// A virtual list/grid adapter attached to a host `list`/`grid`/`waterflow`
-/// node. Clone shares the underlying adapter state.
+/// A virtual adapter attached to a `list`, `grid`, or `waterflow` host node.
+/// Clone shares the underlying adapter state.
 #[derive(Clone)]
-pub struct VirtualListAdapter {
+pub struct VirtualNodeAdapter {
     state: Rc<RefCell<AdapterState>>,
 }
 
-impl VirtualListAdapter {
+impl VirtualNodeAdapter {
     /// Create a new adapter. Call [`attach`](Self::attach) to bind it to a host
     /// node.
     pub fn new(kind: VirtualKind, total_count: u32, render_item: RenderItem) -> Self {
@@ -158,6 +159,9 @@ impl VirtualListAdapter {
     /// Update the total item count and notify the adapter to reload.
     pub fn set_total_count(&self, total: u32) -> ArkUIResult<()> {
         let mut state = self.state.borrow_mut();
+        if state.total_count == total {
+            return Ok(());
+        }
         state.total_count = total;
         if let Some(adapter) = state.adapter.as_mut() {
             adapter.set_total_node_count(total)?;
@@ -167,7 +171,7 @@ impl VirtualListAdapter {
     }
 }
 
-impl Drop for VirtualListAdapter {
+impl Drop for VirtualNodeAdapter {
     fn drop(&mut self) {
         // Only dispose when the last reference drops.
         if Rc::strong_count(&self.state) == 1 {
@@ -175,6 +179,12 @@ impl Drop for VirtualListAdapter {
         }
     }
 }
+
+/// Backwards-compatible name for [`VirtualNodeAdapter`].
+///
+/// New code should use the container-neutral name because the adapter also
+/// owns Grid and WaterFlow virtualization.
+pub type VirtualListAdapter = VirtualNodeAdapter;
 
 fn handle_adapter_event(state: &Weak<RefCell<AdapterState>>, event: &mut NodeAdapterEvent) {
     let Some(state) = state.upgrade() else {

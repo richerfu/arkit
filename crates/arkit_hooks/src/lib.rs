@@ -1,8 +1,8 @@
 //! Hook-based escape-hatch APIs for the dioxus 0.7 ArkUI framework.
 //!
-//! This crate replaces the old command-oriented overlay/observer/virtual-list
-//! machinery with dioxus hooks. The hooks here are the bridge between dioxus
-//! components and the raw ArkUI native nodes owned by [`arkit_arkui`]'s
+//! This crate replaces the old command-oriented overlay/observer/virtual
+//! container machinery with dioxus hooks. The hooks here are the bridge between
+//! dioxus components and the raw ArkUI native nodes owned by [`arkit_arkui`]'s
 //! renderer.
 //!
 //! ## Modules
@@ -16,7 +16,7 @@
 //!   is rendered declaratively as a full-screen stack subtree at the app root
 //!   via the host's overlay-content signal + `OverlayRoot`.
 //! - [`virtual_range`]: `use_virtual_range` — the visible-item-range signal
-//!   consumed by `VirtualList`/`VirtualGrid`/`VirtualWaterFlow`.
+//!   consumed by List/Grid/WaterFlow integrations.
 
 mod layout;
 mod node;
@@ -36,5 +36,8 @@ pub use overlay::{use_overlay, ModalOverlaySpec, ModalPresentation, OverlayApi, 
 pub use safe_area::{
     use_safe_area, use_safe_area_policy, use_window_metrics, SafeArea, SafeAreaEdges, SafeAreaProps,
 };
-pub use virtual_list::{use_virtual_list, VirtualListHandle};
+pub use virtual_list::{
+    use_virtual_list, use_virtual_node_adapter, use_virtual_water_flow, VirtualListHandle,
+    VirtualNodeAdapterHandle,
+};
 pub use virtual_range::{use_virtual_range, VirtualVisibleRange};

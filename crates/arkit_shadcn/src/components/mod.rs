@@ -1,5 +1,5 @@
-//! Shadcn component registry — 50 components migrated from the original Elm
-//! builder API to dioxus 0.7 `#[component]` + `rsx!`.
+//! Shadcn component registry — migrated components plus Arkit mobile
+//! extensions, implemented with dioxus 0.7 `#[component]` + `rsx!`.
 //!
 //! Each component preserves its original styling logic (colors/radii/spacing/
 //! typography/shadow) but renders via dioxus elements instead of the old
@@ -14,6 +14,8 @@ mod alert_dialog;
 mod aspect_ratio;
 mod avatar;
 mod badge;
+mod bottom_navigation;
+mod bottom_sheet;
 mod breadcrumb;
 mod button;
 mod calendar;
@@ -50,6 +52,7 @@ mod sheet;
 mod sidebar;
 mod skeleton;
 mod slider;
+mod spinner;
 mod surfaces;
 mod switch;
 mod table;
@@ -69,6 +72,10 @@ pub use alert_dialog::{AlertDialog, AlertDialogProps};
 pub use aspect_ratio::{AspectRatio, AspectRatioProps};
 pub use avatar::{Avatar, AvatarFallback, AvatarFallbackProps, AvatarProps};
 pub use badge::{Badge, BadgeProps, BadgeVariant};
+pub use bottom_navigation::{BottomNavigation, BottomNavigationItem, BottomNavigationProps};
+pub use bottom_sheet::{
+    BottomSheet, BottomSheetProps, BottomSheetTextInput, BottomSheetTextInputProps,
+};
 pub use breadcrumb::{Breadcrumb, BreadcrumbItem, BreadcrumbItemProps, BreadcrumbProps};
 pub use button::{Button, ButtonProps, ButtonSize, ButtonVariant};
 pub use calendar::{Calendar, CalendarProps};
@@ -76,7 +83,10 @@ pub use card::{
     Card, CardContent, CardContentProps, CardDescription, CardDescriptionProps, CardFooter,
     CardFooterProps, CardHeader, CardHeaderProps, CardProps, CardTitle, CardTitleProps,
 };
-pub use carousel::{Carousel, CarouselProps};
+pub use carousel::{
+    Carousel, CarouselControlsPlacement, CarouselIndicatorVariant, CarouselProps, CarouselStyle,
+    CarouselTransitionCurve,
+};
 pub use chart::{Chart, ChartCard, ChartCardProps, ChartProps};
 pub use checkbox::{Checkbox, CheckboxProps};
 pub use collapsible::{Collapsible, CollapsibleProps};
@@ -90,10 +100,16 @@ pub use dialog::{
 pub use drawer::{Drawer, DrawerProps};
 pub use dropdown_menu::{DropdownMenu, DropdownMenuEntry, DropdownMenuProps};
 pub use floating_layer::{FloatingAlign, FloatingLayer, FloatingLayerProps, FloatingSide};
-pub use form::{Form, FormItem, FormItemProps, FormProps};
+pub use form::{
+    Field, FieldContent, FieldContentProps, FieldDescription, FieldDescriptionProps, FieldError,
+    FieldErrorProps, FieldGroup, FieldGroupProps, FieldLabel, FieldLabelProps, FieldLegend,
+    FieldLegendProps, FieldLegendVariant, FieldOrientation, FieldProps, FieldSeparator,
+    FieldSeparatorProps, FieldSet, FieldSetProps, FieldTitle, FieldTitleProps, Form, FormItem,
+    FormItemProps, FormProps,
+};
 pub use hover_card::{HoverCard, HoverCardProps};
 pub use input::{Input, InputProps};
-pub use input_otp::{InputOtp, InputOtpProps};
+pub use input_otp::{InputOtp, InputOtpMode, InputOtpProps, InputOtpSeparator, InputOtpStyle};
 pub use label::{Label, LabelProps};
 pub use menu_common::{
     menu_action_entry, menu_checkbox_entry, menu_label_entry, menu_radio_entry,
@@ -115,9 +131,14 @@ pub use separator::{Separator, SeparatorProps};
 pub use sheet::{Sheet, SheetProps};
 pub use sidebar::{Sidebar, SidebarItem, SidebarItemProps, SidebarProps};
 pub use skeleton::{Skeleton, SkeletonProps};
-pub use slider::{Slider, SliderProps};
+pub use slider::{
+    MultiSlider, MultiSliderProps, RangeSlider, RangeSliderProps, Slider, SliderOrientation,
+    SliderProps, SliderStyle,
+};
+pub use spinner::{Spinner, SpinnerProps};
 pub use surfaces::{
-    Sonner, SonnerProps, Toast, ToastDestructive, ToastDestructiveProps, ToastProps,
+    Sonner, SonnerPosition, SonnerProps, SonnerStyle, SonnerToast, Toast, ToastDestructive,
+    ToastDestructiveProps, ToastProps, ToastStyle, ToastSwipeDirection, ToastVariant,
 };
 pub use switch::{Switch, SwitchProps};
 pub use table::{Table, TableProps};

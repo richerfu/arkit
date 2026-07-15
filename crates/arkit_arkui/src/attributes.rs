@@ -35,6 +35,7 @@ enum EncodedAttrValue {
     U32(u32),
     String(String),
     VecF32(Vec<f32>),
+    VecI32(Vec<i32>),
     ScrollOffset { x: f32, y: f32, options: Vec<i32> },
     FlexOptionPart(usize, i32),
     Shadow(i32),
@@ -49,6 +50,7 @@ impl EncodedAttrValue {
             Self::U32(v) => (*v).into(),
             Self::String(v) => v.clone().into(),
             Self::VecF32(v) => v.clone().into(),
+            Self::VecI32(v) => v.clone().into(),
             Self::ScrollOffset { x, y, options } => {
                 let mut values = Vec::with_capacity(2 + options.len());
                 values.push(ArkUINodeAttributeNumber::Float(*x));
@@ -346,7 +348,10 @@ impl DesiredAttrs {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_scroll_offset;
+    use dioxus_core::AttributeValue;
+    use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
+
+    use super::{encode_attr, parse_scroll_offset, EncodedAttrValue};
 
     #[test]
     fn scroll_offset_preserves_float_offsets_and_integer_options() {
@@ -361,6 +366,55 @@ mod tests {
         assert_eq!(parse_scroll_offset("0"), None);
         assert_eq!(parse_scroll_offset("0,0,0,1,0,0,0,1"), None);
         assert_eq!(parse_scroll_offset("0,0,fast"), None);
+    }
+
+    #[test]
+    fn loading_progress_attributes_use_native_types() {
+        let color = encode_attr(
+            "loadingprogress",
+            "loading_progress_color",
+            &AttributeValue::Int(i64::from(0xFF00_7DFF_u32)),
+        )
+        .expect("loading color is supported");
+        assert_eq!(color.ty, ArkUINodeAttributeType::LoadingProgressColor);
+        assert_eq!(color.value, EncodedAttrValue::U32(0xFF00_7DFF));
+
+        let enabled = encode_attr(
+            "loadingprogress",
+            "loading_progress_enable_loading",
+            &AttributeValue::Bool(false),
+        )
+        .expect("loading state is supported");
+        assert_eq!(
+            enabled.ty,
+            ArkUINodeAttributeType::LoadingProgressEnableLoading
+        );
+        assert_eq!(enabled.value, EncodedAttrValue::Bool(false));
+    }
+
+    #[test]
+    fn text_input_otp_attributes_use_native_types() {
+        let input_type = encode_attr("textinput", "input_type", &AttributeValue::Int(14))
+            .expect("one-time-code input type is supported");
+        assert_eq!(input_type.ty, ArkUINodeAttributeType::TextInputType);
+        assert_eq!(input_type.value, EncodedAttrValue::I32(14));
+
+        let input_filter = encode_attr(
+            "textinput",
+            "input_filter",
+            &AttributeValue::Text("[0-9]".into()),
+        )
+        .expect("text input filter is supported");
+        assert_eq!(
+            input_filter.ty,
+            ArkUINodeAttributeType::TextInputInputFilter
+        );
+        assert_eq!(input_filter.value, EncodedAttrValue::String("[0-9]".into()));
+
+        let max_length = encode_attr("textinput", "max_length", &AttributeValue::Int(6))
+            .expect("text input max length is supported");
+        assert_eq!(max_length.ty, ArkUINodeAttributeType::TextInputMaxLength);
+        assert_eq!(max_length.value, EncodedAttrValue::I32(6));
     }
 }
 
@@ -464,6 +518,7 @@ fn attr_group(name: &str) -> AttrGroup {
         | "enabled"
         | "foreground_color"
         | "progress_color"
+        | "loading_progress_color"
         | "color_blend"
         | "checkbox_select_color"
         | "block_color"
@@ -611,6 +666,21 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
             };
             EncodedAttr::new(name, ty, EncodedAttrValue::String(as_string(value)?))
         }
+        "input_type" if tag == "textinput" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::TextInputType,
+            EncodedAttrValue::I32(as_i32(value)?),
+        ),
+        "input_filter" if tag == "textinput" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::TextInputInputFilter,
+            EncodedAttrValue::String(as_string(value)?),
+        ),
+        "max_length" if tag == "textinput" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::TextInputMaxLength,
+            EncodedAttrValue::I32(as_i32(value)?),
+        ),
         "padding" => {
             let v = as_f32(value)?;
             EncodedAttr::new(
@@ -868,9 +938,29 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
             ArkUINodeAttributeType::SwiperIndex,
             EncodedAttrValue::I32(as_i32(value)?),
         ),
+        "swiper_swipe_to_index" if tag == "swiper" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::SwiperSwipeToIndex,
+            EncodedAttrValue::VecI32(vec![as_i32(value)?, 1]),
+        ),
         "swiper_loop" if tag == "swiper" => EncodedAttr::new(
             name,
             ArkUINodeAttributeType::SwiperLoop,
+            EncodedAttrValue::Bool(as_bool(value)?),
+        ),
+        "swiper_auto_play" if tag == "swiper" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::SwiperAutoPlay,
+            EncodedAttrValue::Bool(as_bool(value)?),
+        ),
+        "swiper_show_indicator" if tag == "swiper" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::SwiperShowIndicator,
+            EncodedAttrValue::Bool(as_bool(value)?),
+        ),
+        "swiper_disable_swipe" if tag == "swiper" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::SwiperDisableSwipe,
             EncodedAttrValue::Bool(as_bool(value)?),
         ),
         "swiper_cached_count" if tag == "swiper" => EncodedAttr::new(
@@ -897,6 +987,16 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
             name,
             ArkUINodeAttributeType::SwiperDuration,
             EncodedAttrValue::I32(as_i32(value)?),
+        ),
+        "swiper_curve" if tag == "swiper" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::SwiperCurve,
+            EncodedAttrValue::I32(as_i32(value)?),
+        ),
+        "swiper_item_space" if tag == "swiper" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::SwiperItemSpace,
+            EncodedAttrValue::F32(as_f32(value)?),
         ),
         "grid_column_template" if tag == "grid" => EncodedAttr::new(
             name,
@@ -1035,6 +1135,11 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
             ArkUINodeAttributeType::ProgressType,
             EncodedAttrValue::I32(as_i32(value)?),
         ),
+        "loading_progress_enable_loading" if tag == "loadingprogress" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::LoadingProgressEnableLoading,
+            EncodedAttrValue::Bool(as_bool(value)?),
+        ),
         _ => return None,
     };
 
@@ -1084,6 +1189,9 @@ fn color_attr(name: &str, tag: &str) -> Option<ArkUINodeAttributeType> {
         "border_color" => ArkUINodeAttributeType::BorderColor,
         "foreground_color" => ArkUINodeAttributeType::ForegroundColor,
         "progress_color" => ArkUINodeAttributeType::ProgressColor,
+        "loading_progress_color" if tag == "loadingprogress" => {
+            ArkUINodeAttributeType::LoadingProgressColor
+        }
         "color_blend" => ArkUINodeAttributeType::ColorBlend,
         "placeholder_color" => match tag {
             "textinput" => ArkUINodeAttributeType::TextInputPlaceholderColor,

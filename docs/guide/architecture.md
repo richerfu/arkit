@@ -87,7 +87,9 @@ System、Cutout 与 NavigationIndicator 合并为 visual safe area；SystemGestu
 
 业务 UI 默认写 `rsx!`。只有 ArkUI 无法声明式表达的能力才使用 `arkit_hooks` 获取 native node，例如布局观测、NodeAdapter 虚拟化、动画、原生图表或嵌入 WebView。`arkit_chart` 把 Custom canvas escape hatch 封装在 `ECharts` 组件内，业务代码只传受控 props。
 
-ArkUI binding 的 node/adapter wrapper 没有隐式 `Drop`，所以 escape hatch 必须显式转移和释放 native ownership。`NodeBuilder` 在 `build` 前持有 RAII cleanup guard；VirtualList adapter 的 attach/detach/reload 失败路径仍会释放 adapter 与已挂载 item；Embedded WebView 在 native node attach 失败时立即 dispose ArkTS controller，并且只在内容切换成功后提交 URL/HTML snapshot。错误返回不能遗留不可达 native handle。
+NodeAdapter 统一由 `use_virtual_node_adapter(VirtualKind, ...)` 接入：List、Grid、WaterFlow 分别绑定 `ListNodeAdapter`、`GridNodeAdapter`、`WaterFlowNodeAdapter`，并生成对应的 ListItem、GridItem、FlowItem wrapper。瀑布流也可直接使用 `use_virtual_water_flow(...)`，列模板、行列间距与缓存数继续在声明式 `waterflow` 节点上配置；item renderer 只负责返回按需创建的变高内容节点。
+
+ArkUI binding 的 node/adapter wrapper 没有隐式 `Drop`，所以 escape hatch 必须显式转移和释放 native ownership。`NodeBuilder` 在 `build` 前持有 RAII cleanup guard；VirtualNodeAdapter 的 attach/detach/reload 失败路径仍会释放 adapter 与已挂载 item；Embedded WebView 在 native node attach 失败时立即 dispose ArkTS controller，并且只在内容切换成功后提交 URL/HTML snapshot。错误返回不能遗留不可达 native handle。
 
 ## 热路径与缓存
 

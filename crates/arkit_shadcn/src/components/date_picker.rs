@@ -1,39 +1,127 @@
-//! DatePicker — shadcn-style date picker.
+//! Date Picker — an outline trigger backed by a bottom-sheet calendar.
 //!
-//! Migrated from the original Elm builder API to dioxus 0.7 `#[component]` +
-//! `rsx!`. Wraps the native ArkUI `DatePicker` in an input surface
-//! (`background` fill, 1px `input` border, `md` radius, `[0, 12, 0, 12]`
-//! padding), matching the legacy `input_surface(date_picker)`. The surface is
-//! applied to a wrapping row because the native `DatePicker` element does not
-//! expose per-side padding.
+//! React Native Reusables presents date selection as a compact outline button
+//! with a calendar icon. Pressing it opens the shared month calendar in a
+//! bottom sheet; pressing the selected day again clears the value. This keeps
+//! the mobile interaction model instead of exposing ArkUI's inline wheel
+//! picker, which is a different component.
 
-use super::ARKUI_BORDER_STYLE_SOLID;
-use crate::theme::*;
+use super::{BottomSheet, Button, ButtonSize, ButtonVariant, Calendar};
+use crate::icon::icon_placeholder;
+use crate::theme::{spacing, typography, use_theme};
 use arkit_prelude::*;
+
+const DATE_PICKER_CONTENT_INSET: f32 = spacing::SM;
 
 /// Props for [`DatePicker`].
 #[derive(Props, Clone, PartialEq)]
 pub struct DatePickerProps {
+    /// Controlled selected date in `YYYY-MM-DD` form. When omitted, the picker
+    /// owns its selection and starts from `default_selected`.
     pub selected: Option<String>,
+    pub default_selected: Option<String>,
+    pub placeholder: Option<String>,
+    /// Controlled sheet state.
+    pub open: Option<bool>,
+    #[props(default)]
+    pub default_open: bool,
+    #[props(default)]
+    pub disabled: bool,
+    #[props(default)]
+    pub on_change: EventHandler<Option<String>>,
+    #[props(default)]
+    pub on_open_change: EventHandler<bool>,
 }
 
-/// A native date picker on an input surface.
+/// A mobile date picker matching the RNR outline-trigger/bottom-sheet flow.
 #[component]
 pub fn DatePicker(props: DatePickerProps) -> Element {
     let theme = use_theme();
+    let mut internal_selected = use_signal(|| props.default_selected.clone());
+    let mut internal_open = use_signal(|| props.default_open);
+    let open_controlled = props.open.is_some();
+    let selected = props
+        .selected
+        .clone()
+        .or_else(|| internal_selected.read().clone());
+    let open = props.open.unwrap_or_else(|| *internal_open.read());
+    let placeholder = props
+        .placeholder
+        .clone()
+        .unwrap_or_else(|| "Pick a date".to_string());
+    let label = selected.clone().unwrap_or(placeholder);
+    let initial_month = selected
+        .as_deref()
+        .and_then(|date| date.get(..7))
+        .map(ToOwned::to_owned);
+    let disabled = props.disabled;
+    let on_change = props.on_change;
+    let on_open_change = props.on_open_change;
+
+    let set_open = EventHandler::new(move |next: bool| {
+        if !open_controlled {
+            internal_open.set(next);
+        }
+        on_open_change.call(next);
+    });
+
+    let selected_for_press = selected.clone();
+    let select_date = EventHandler::new(move |date: String| {
+        let next = if selected_for_press.as_deref() == Some(date.as_str()) {
+            None
+        } else {
+            Some(date)
+        };
+        // Keep the local mirror current even while externally controlled. If
+        // a controller clears `selected` after a user press, falling back to
+        // local state still reflects the same interaction rather than reviving
+        // an older date.
+        internal_selected.set(next.clone());
+        on_change.call(next);
+    });
+
     rsx! {
-        row {
-            background_color: theme.colors.background,
-            border_style: ARKUI_BORDER_STYLE_SOLID,
-            border_width: 1.0,
-            border_color: theme.colors.input,
-            border_radius: theme.radii.md,
-            padding_top: 0.0,
-            padding_right: 12.0,
-            padding_bottom: 0.0,
-            padding_left: 12.0,
-            datepicker {
-                datepicker_selected: if let Some(s) = props.selected { s },
+        Button {
+            variant: ButtonVariant::Outline,
+            disabled: Some(disabled),
+            onclick: move |_| set_open.call(true),
+            row {
+                align_items: "center",
+                justify_content: "center",
+                {icon_placeholder("calendar", 21.0, theme.colors.foreground)}
+                row { width: spacing::MD }
+                text {
+                    content: label,
+                    font_size: typography::MD,
+                    font_weight: 500_i32,
+                    font_color: theme.colors.foreground,
+                    line_height: 20.0,
+                }
+            }
+        }
+        BottomSheet {
+            title: String::new(),
+            open: Some(open),
+            default_open: Some(false),
+            show_header: Some(false),
+            on_close: move |_| set_open.call(false),
+            column {
+                percent_width: 1.0,
+                padding_right: DATE_PICKER_CONTENT_INSET,
+                padding_left: DATE_PICKER_CONTENT_INSET,
+                Calendar {
+                    selected: selected.clone(),
+                    initial_month,
+                    embedded: true,
+                    on_day_press: move |date| select_date.call(date),
+                }
+                row { height: spacing::LG }
+                Button {
+                    size: ButtonSize::Sm,
+                    percent_width: Some(1.0),
+                    onclick: move |_| set_open.call(false),
+                    "Close"
+                }
             }
         }
     }
