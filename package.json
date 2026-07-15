@@ -1,14 +1,23 @@
 {
-  "name": "arkit-docs",
+  "name": "arkit-workspace",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@10.22.0",
   "scripts": {
-    "docs:dev": "vitepress dev docs",
-    "docs:build": "vitepress build docs",
-    "docs:preview": "vitepress preview docs"
+    "check": "pnpm run format:check && pnpm run lint && pnpm run website:typecheck",
+    "format": "oxfmt website/src website/index.html website/docs/index.html website/components/index.html website/charts/index.html website/vite.config.ts website/package.json package.json pnpm-workspace.yaml prek.toml .github/workflows/website.yml .oxfmtrc.json .oxlintrc.json",
+    "format:check": "oxfmt --check website/src website/index.html website/docs/index.html website/components/index.html website/charts/index.html website/vite.config.ts website/package.json package.json pnpm-workspace.yaml prek.toml .github/workflows/website.yml .oxfmtrc.json .oxlintrc.json",
+    "lint": "oxlint website/src website/vite.config.ts",
+    "lint:fix": "oxlint --fix website/src website/vite.config.ts",
+    "prek:check": "prek run --all-files",
+    "prek:install": "prek install",
+    "website:build": "pnpm --filter arkit-website run build",
+    "website:dev": "pnpm --filter arkit-website run dev",
+    "website:preview": "pnpm --filter arkit-website run preview",
+    "website:typecheck": "pnpm --filter arkit-website exec tsc --noEmit"
   },
   "devDependencies": {
-    "vitepress": "^1.6.4"
-  }
+    "oxfmt": "0.59.0",
+    "oxlint": "1.74.0"
+  },
+  "packageManager": "pnpm@10.24.0"
 }

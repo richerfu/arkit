@@ -1,0 +1,29 @@
+---
+title: Select
+---
+
+# Select
+
+Select 从中等规模的字符串列表中选择一个值，支持选择值和打开状态分别受控。
+
+```rust
+let mut fruit = use_signal(String::new);
+
+Select {
+    options: vec!["Apple".into(), "Pear".into()],
+    selected: fruit(),
+    on_select: move |next| fruit.set(next),
+}
+```
+
+| 属性               | 类型                           | 默认值   | 说明           |
+| ------------------ | ------------------------------ | -------- | -------------- |
+| `options`          | `Vec<String>`                  | 必填     | 候选项         |
+| `selected`         | `Option<String>`               | `None`   | 受控选中值     |
+| `default_selected` | `String`                       | 空字符串 | 非受控初始值   |
+| `open`             | `Option<bool>`                 | `None`   | 受控打开状态   |
+| `default_open`     | `bool`                         | `false`  | 非受控初始状态 |
+| `on_open_change`   | `Option<EventHandler<bool>>`   | `None`   | 打开状态变化   |
+| `on_select`        | `Option<EventHandler<String>>` | `None`   | 选中回调       |
+
+当前 option 字符串同时承担值和标签。业务对象应使用稳定 id，并在进入组件前映射显示文案；需要搜索时改用 Combobox。
