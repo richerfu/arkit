@@ -27,7 +27,7 @@ interaction verification.
 
 Completed against the React Native Reusables iOS showcase behavior:
 
-- Home list now matches the iOS structure: no outer card wrapper, 48vp search input, 56vp rows, light separators, only first/last row corners, chevrons pinned to the right edge.
+- Home list now matches the iOS structure: no outer card wrapper, 48vp search input, 56vp rows, light separators, only first/last row corners, chevrons pinned to the right edge. Filtered results remain top-aligned even when only one item matches.
 - Button shared sizing now follows native RN Reusables defaults: default 48vp, large 56vp, small 36vp, icon button 40vp, normal button skin with shadcn radius/colors.
 - Card shell/header/content/footer now matches RN Reusables padding and left alignment. Header/content no longer depend on ArkUI Column child alignment because current projection keeps Column children centered unless they are carried by full-width rows.
 - Dialog close button is overlayed instead of participating in content layout.
@@ -39,6 +39,8 @@ components still need component-by-component audit and interaction verification.
 
 Renderer fixes landed in this pass:
 
+- Scroll exposes ArkUI content alignment so short children can explicitly use
+  `TopStart` without constraining long, scrollable content to one viewport.
 - Native Text is initialized with `TextAlign.START`, matching Dioxus/RN default text semantics. Explicit `text_align` still overrides it.
 - Mounted ArkUI wrappers now replay desired attributes after `insert_child` rebinds the native wrapper. This prevents first-render-only style loss when ArkUI returns a different mounted wrapper than the detached node originally styled by Dioxus mutations.
 - Enum token parsing now tolerates static string tokens with quote wrappers, keeping static and dynamic `align_items` / `justify_content` / flex attrs consistent.
@@ -229,7 +231,9 @@ Completed for `InputOtp`:
   natively before `maxLength`, and numeric mode opens the mobile number keyboard.
 - Added 48vp joined slots, configurable grouping/separator and style tokens,
   masked values, invalid and disabled states, completion callbacks, and an
-  explicit one-time-code keyboard profile.
+  explicit one-time-code keyboard profile. The visual caret can be disabled
+  per field; when enabled it runs a one-second opacity keyframe loop while the
+  active empty slot is focused.
 - Added a full verification-page demo with a controlled six-digit flow, wrong
   and successful verification states, resend, an ungrouped four-character
   alphanumeric code, and a disabled example.
@@ -237,7 +241,32 @@ Completed for `InputOtp`:
   `[56,780][1162,948]`; pasting `12a3-4567` produces `123456`, enables Verify,
   and emits completion. `123456` shows the invalid state, `246810` shows success,
   focus moves cleanly to the alphanumeric field, and `b-9x` filters the dash
-  before the native four-character limit.
+  before the native four-character limit. The alphanumeric demo keeps focus and
+  input behavior while `show_caret: false` suppresses its visual caret.
+
+### 2026-07-15 Slider Verification
+
+Completed for `Slider`, `RangeSlider`, and `MultiSlider`:
+
+- Replaced the controlled native-value feedback loop with one pointer-driven
+  track implementation. The component owns live values for the duration of an
+  active drag, then reconciles with controlled props when the gesture ends, so
+  the thumb no longer snaps between native and Rust values while moving.
+- Added single-value, two-ended range, and arbitrary multi-thumb APIs. All
+  variants share min/max clamping, step snapping, nearest-thumb selection,
+  non-crossing neighbors, reversed and vertical orientation, 44vp mobile touch
+  targets, disabled opacity/input blocking, step markers, and style overrides.
+- Touch-down bounds are checked before a drag is captured. Page scroll gestures
+  outside the slider no longer update every visible slider, and the full sound
+  settings demo remains vertically scrollable to its channel and system-limit
+  controls.
+- Verified on a 1320×2856 device: media drag changed only `68%` to `29%`;
+  dragging the range's left and right thumbs produced `36–95%`; dragging the
+  middle multi-thumb produced `18 · 60 · 84`. The disabled root is
+  `[56,2267][1264,2421]`; pressing a different track position leaves its thumb
+  at `[459,2316][515,2372]` and its value at `35%`. Disabled colors are blended
+  into opaque surface colors instead of applying group opacity, so the selected
+  track cannot bleed through the thumb center.
 
 ## Component Checklist
 
@@ -271,7 +300,7 @@ Status values:
 | Hover Card | `hover_card.rs` | in_progress | Center anchor and start-aligned content restored; needs final placement/hover interaction acceptance. |
 | Icon | `icon.rs` | in_progress | Recheck image clarity, tile sizing, star sizing. |
 | Input | `input.rs` | in_progress | Recheck height, border, placeholder/value alignment. |
-| Input OTP | `input_otp.rs` | done | Single native input, grouped mobile slots, numeric/alphanumeric filtering, paste, completion, focus, validation, disabled state, and style overrides verified on device. |
+| Input OTP | `input_otp.rs` | done | Single native input, grouped mobile slots, numeric/alphanumeric filtering, paste, completion, focus, optional blinking caret, validation, disabled state, and style overrides verified on device. |
 | Label | `label.rs` | pending | Compare text size, disabled/required examples if present. |
 | Menubar | `menubar.rs` | in_progress | Root placement and live controlled selection refresh implemented; recheck active-menu switching and submenu expansion. |
 | Popover | `popover.rs` | in_progress | Default center align updated; needs trigger anchoring screenshot and outside-dismiss verification. |
@@ -280,6 +309,7 @@ Status values:
 | Select | `select.rs` | pending | Compare trigger, menu width, selected check alignment. |
 | Separator | `separator.rs` | done | Verified horizontal/vertical thickness and spacing on device; demo content now shares the RNR left edge while the fixed-width example remains centered. |
 | Skeleton | `skeleton.rs` | pending | Compare dimensions and radius. |
+| Slider | `slider.rs` | done | Pointer-driven live drag state removes controlled-value flicker; disabled colors are composited opaquely to prevent track bleed-through; single, range, multi-thumb, stepped, vertical, reversed, and style APIs verified on device. |
 | Sonner | `surfaces.rs` | done | Root overlay, safe-area bottom placement, semantic/loading variants, timer, Undo callback, close target, and swipe dismissal verified on device. |
 | Spinner | `spinner.rs` | done | Native LoadingProgress and a custom rotating Lucide icon verified at 16/24/32vp with semantic colors and a disabled-button loading state. |
 | Switch | `switch.rs` | pending | Compare track/thumb size, checked colors, disabled state. |

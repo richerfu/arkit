@@ -203,7 +203,7 @@ define_element! {
         margin_top, margin_bottom, margin_left, margin_right,
         percent_width, percent_height, width, height, opacity, border_radius,
         border_width, border_color, visibility, enabled, clip, hit_test_behavior,
-        aspect_ratio, position, z_index,
+        alignment, aspect_ratio, position, z_index,
     }
 }
 

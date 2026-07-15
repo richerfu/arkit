@@ -125,7 +125,10 @@ pub use separator::{Separator, SeparatorProps};
 pub use sheet::{Sheet, SheetProps};
 pub use sidebar::{Sidebar, SidebarItem, SidebarItemProps, SidebarProps};
 pub use skeleton::{Skeleton, SkeletonProps};
-pub use slider::{Slider, SliderProps};
+pub use slider::{
+    MultiSlider, MultiSliderProps, RangeSlider, RangeSliderProps, Slider, SliderOrientation,
+    SliderProps, SliderStyle,
+};
 pub use spinner::{Spinner, SpinnerProps};
 pub use surfaces::{
     Sonner, SonnerPosition, SonnerProps, SonnerStyle, SonnerToast, Toast, ToastDestructive,

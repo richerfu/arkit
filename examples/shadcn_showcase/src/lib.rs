@@ -12,9 +12,10 @@ use arkit::shadcn::components::{
     Calendar, Card, CardContent, CardFooter, CardHeader, Carousel, CarouselControlsPlacement,
     CarouselIndicatorVariant, CarouselStyle, Checkbox, Collapsible, ContextMenu, DatePicker,
     Dialog, DialogFooter, DialogHeader, DropdownMenu, HoverCard, Input, InputOtp, InputOtpMode,
-    InputOtpSeparator, Label, MenuEntry, Menubar, MenubarMenuSpec, Popover, Progress, RadioGroup,
-    Select, Separator, Skeleton, Sonner, SonnerToast, Spinner, Switch, Table, Tabs, Text,
-    TextVariant, Textarea, Toggle, ToggleGroup, Tooltip,
+    InputOtpSeparator, Label, MenuEntry, Menubar, MenubarMenuSpec, MultiSlider, Popover, Progress,
+    RadioGroup, RangeSlider, Select, Separator, Skeleton, Slider, SliderOrientation, SliderStyle,
+    Sonner, SonnerToast, Spinner, Switch, Table, Tabs, Text, TextVariant, Textarea, Toggle,
+    ToggleGroup, Tooltip,
 };
 use arkit::shadcn::icon::icon_placeholder;
 use arkit::shadcn::theme::{
@@ -162,6 +163,10 @@ const COMPONENTS: &[ComponentSpec] = &[
     ComponentSpec {
         slug: "skeleton",
         name: "Skeleton",
+    },
+    ComponentSpec {
+        slug: "slider",
+        name: "Slider",
     },
     ComponentSpec {
         slug: "sonner",
@@ -373,11 +378,13 @@ fn HomeView(
             scroll {
                 percent_width: 1.0,
                 percent_height: 1.0,
+                alignment: 0_i32,
                 background_color: theme.colors.background,
             column {
                 percent_width: 1.0,
                 background_color: theme.colors.background,
                 align_items: "center",
+                justify_content: "start",
                 padding_top: spacing::LG,
                 padding_right: spacing::LG,
                 padding_bottom: spacing::XXL,
@@ -385,6 +392,8 @@ fn HomeView(
                 column {
                     percent_width: 1.0,
                     max_width_constraint: 512.0,
+                    align_items: "start",
+                    justify_content: "start",
                     Input {
                         placeholder: Some("Search UI...".to_string()),
                         value: Some(query),
@@ -402,6 +411,8 @@ fn HomeView(
                     } else {
                         column {
                             percent_width: 1.0,
+                            align_items: "start",
+                            justify_content: "start",
                             for (index, item) in items.iter().enumerate() {
                                 ComponentListItem {
                                     spec: *item,
@@ -775,6 +786,12 @@ fn demo_canvas_policy(slug: &str) -> DemoCanvasPolicy {
             fill_height: true,
             padding: [spacing::LG, spacing::LG, spacing::LG, spacing::LG],
         },
+        "slider" => DemoCanvasPolicy {
+            center_x: false,
+            center_y: false,
+            fill_height: false,
+            padding: [spacing::XXL, spacing::LG, spacing::XXL, spacing::LG],
+        },
         "sonner" => DemoCanvasPolicy {
             center_x: false,
             center_y: false,
@@ -834,6 +851,13 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let mut otp_invalid = use_signal(|| false);
     let mut otp_status = use_signal(|| "Enter the six-digit code.".to_string());
     let mut invite_code = use_signal(|| "A7".to_string());
+    let mut playback_position = use_signal(|| 92.0_f32);
+    let mut media_volume = use_signal(|| 68.0_f32);
+    let mut notification_strength = use_signal(|| 6.0_f32);
+    let mut listening_range = use_signal(|| [24.0_f32, 78.0_f32]);
+    let mut equalizer_points = use_signal(|| vec![18.0_f32, 50.0_f32, 84.0_f32]);
+    let mut left_channel = use_signal(|| 76.0_f32);
+    let mut right_channel = use_signal(|| 58.0_f32);
     let sonner_toasts = use_signal(Vec::<SonnerToast>::new);
     let sonner_next_id = use_signal(|| 1_u64);
     let sonner_status = use_signal(|| "Tap a type to show a toast.".to_string());
@@ -1670,6 +1694,12 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         font_color: theme.colors.foreground,
                         line_height: 20.0,
                     }
+                    text {
+                        content: "Visual caret hidden".to_string(),
+                        font_size: typography::XS,
+                        font_color: theme.colors.muted_foreground,
+                        line_height: 18.0,
+                    }
                     v_gap { height: spacing::SM }
                     InputOtp {
                         value: invite_code(),
@@ -1677,6 +1707,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         mode: InputOtpMode::Alphanumeric,
                         group_size: 0,
                         separator: InputOtpSeparator::None,
+                        show_caret: false,
                         on_change: move |value: String| invite_code.set(value),
                     }
                     v_gap { height: spacing::XXL }
@@ -1832,6 +1863,356 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         Skeleton { width: 250.0, height: 16.0 }
                         v_gap { height: spacing::SM }
                         Skeleton { width: 200.0, height: 16.0 }
+                    }
+                }
+            }
+        },
+        "slider" => rsx! {
+            fixed_width {
+                width: 420.0,
+                column {
+                    percent_width: 1.0,
+                    height: 1064.0,
+                    align_items: "start",
+                    text {
+                        percent_width: 1.0,
+                        content: "Sound & haptics".to_string(),
+                        font_size: typography::XXL,
+                        font_weight: 700_i32,
+                        font_color: theme.colors.foreground,
+                        line_height: 32.0,
+                    }
+                    v_gap { height: spacing::SM }
+                    text {
+                        percent_width: 1.0,
+                        content: "Tune playback, output levels, and channel balance.".to_string(),
+                        font_size: typography::SM,
+                        font_color: theme.colors.muted_foreground,
+                        line_height: 20.0,
+                    }
+                    v_gap { height: spacing::XXL }
+
+                    column {
+                        percent_width: 1.0,
+                        align_items: "start",
+                        padding: spacing::LG,
+                        background_color: theme.colors.card,
+                        border_style: 0_i32,
+                        border_width: 1.0,
+                        border_color: theme.colors.border,
+                        border_radius: theme.radii.xl,
+                        row {
+                            percent_width: 1.0,
+                            align_items: "center",
+                            justify_content: "start",
+                            row {
+                                width: 48.0,
+                                height: 48.0,
+                                align_items: "center",
+                                justify_content: "center",
+                                background_color: theme.colors.primary,
+                                border_radius: theme.radii.lg,
+                                {icon_placeholder("music-2", 22.0, theme.colors.primary_foreground)}
+                            }
+                            h_gap { width: spacing::MD }
+                            column {
+                                layout_weight: 1.0,
+                                align_items: "start",
+                                text {
+                                    content: "Midnight Drive".to_string(),
+                                    font_size: typography::MD,
+                                    font_weight: 600_i32,
+                                    font_color: theme.colors.card_foreground,
+                                    line_height: 22.0,
+                                }
+                                text {
+                                    content: "Neon Avenue".to_string(),
+                                    font_size: typography::SM,
+                                    font_color: theme.colors.muted_foreground,
+                                    line_height: 20.0,
+                                }
+                            }
+                            {icon_placeholder("volume-2", 20.0, theme.colors.muted_foreground)}
+                        }
+                        v_gap { height: spacing::LG }
+                        Slider {
+                            value: playback_position(),
+                            min: Some(0.0),
+                            max: Some(240.0),
+                            step: Some(1.0),
+                            on_change: move |value| playback_position.set(value),
+                        }
+                        row {
+                            percent_width: 1.0,
+                            align_items: "center",
+                            justify_content: "space_between",
+                            text {
+                                content: format_media_time(playback_position()),
+                                font_size: typography::XS,
+                                font_color: theme.colors.muted_foreground,
+                                line_height: 18.0,
+                            }
+                            text {
+                                content: "4:00".to_string(),
+                                font_size: typography::XS,
+                                font_color: theme.colors.muted_foreground,
+                                line_height: 18.0,
+                            }
+                        }
+                    }
+
+                    v_gap { height: spacing::XXL }
+                    row {
+                        percent_width: 1.0,
+                        align_items: "center",
+                        justify_content: "space_between",
+                        text {
+                            content: "Media volume".to_string(),
+                            font_size: typography::SM,
+                            font_weight: 500_i32,
+                            font_color: theme.colors.foreground,
+                            line_height: 20.0,
+                        }
+                        text {
+                            content: format!("{:.0}%", media_volume()),
+                            font_size: typography::SM,
+                            font_weight: 600_i32,
+                            font_color: theme.colors.foreground,
+                            line_height: 20.0,
+                        }
+                    }
+                    Slider {
+                        value: media_volume(),
+                        min: Some(0.0),
+                        max: Some(100.0),
+                        on_change: move |value| media_volume.set(value),
+                    }
+
+                    v_gap { height: spacing::XL }
+                    row {
+                        percent_width: 1.0,
+                        align_items: "center",
+                        justify_content: "space_between",
+                        column {
+                            align_items: "start",
+                            text {
+                                content: "Safe listening range".to_string(),
+                                font_size: typography::SM,
+                                font_weight: 500_i32,
+                                font_color: theme.colors.foreground,
+                                line_height: 20.0,
+                            }
+                            text {
+                                content: "Drag either edge to set the comfort zone.".to_string(),
+                                font_size: typography::XS,
+                                font_color: theme.colors.muted_foreground,
+                                line_height: 18.0,
+                            }
+                        }
+                        text {
+                            content: format!(
+                                "{:.0}–{:.0}%",
+                                listening_range()[0],
+                                listening_range()[1],
+                            ),
+                            font_size: typography::SM,
+                            font_weight: 600_i32,
+                            font_color: theme.colors.foreground,
+                            line_height: 20.0,
+                        }
+                    }
+                    RangeSlider {
+                        value: listening_range(),
+                        min: Some(0.0),
+                        max: Some(100.0),
+                        step: Some(1.0),
+                        on_change: move |value| listening_range.set(value),
+                    }
+
+                    v_gap { height: spacing::XL }
+                    row {
+                        percent_width: 1.0,
+                        align_items: "center",
+                        justify_content: "space_between",
+                        column {
+                            align_items: "start",
+                            text {
+                                content: "Equalizer crossover points".to_string(),
+                                font_size: typography::SM,
+                                font_weight: 500_i32,
+                                font_color: theme.colors.foreground,
+                                line_height: 20.0,
+                            }
+                            text {
+                                content: "Three thumbs split low, mid, and high bands.".to_string(),
+                                font_size: typography::XS,
+                                font_color: theme.colors.muted_foreground,
+                                line_height: 18.0,
+                            }
+                        }
+                        text {
+                            content: equalizer_points()
+                                .iter()
+                                .map(|value| format!("{value:.0}"))
+                                .collect::<Vec<_>>()
+                                .join(" · "),
+                            font_size: typography::SM,
+                            font_weight: 600_i32,
+                            font_color: theme.colors.foreground,
+                            line_height: 20.0,
+                        }
+                    }
+                    MultiSlider {
+                        values: equalizer_points(),
+                        min: Some(0.0),
+                        max: Some(100.0),
+                        step: Some(1.0),
+                        on_change: move |values| equalizer_points.set(values),
+                    }
+
+                    v_gap { height: spacing::XL }
+                    row {
+                        percent_width: 1.0,
+                        align_items: "center",
+                        justify_content: "space_between",
+                        text {
+                            content: "Notification strength".to_string(),
+                            font_size: typography::SM,
+                            font_weight: 500_i32,
+                            font_color: theme.colors.foreground,
+                            line_height: 20.0,
+                        }
+                        text {
+                            content: format!("{:.0} / 10", notification_strength()),
+                            font_size: typography::SM,
+                            font_weight: 600_i32,
+                            font_color: theme.colors.foreground,
+                            line_height: 20.0,
+                        }
+                    }
+                    Slider {
+                        value: notification_strength(),
+                        min: Some(0.0),
+                        max: Some(10.0),
+                        step: Some(1.0),
+                        show_steps: true,
+                        on_change: move |value| notification_strength.set(value),
+                    }
+
+                    v_gap { height: spacing::XXL }
+                    text {
+                        content: "Channel balance".to_string(),
+                        font_size: typography::SM,
+                        font_weight: 500_i32,
+                        font_color: theme.colors.foreground,
+                        line_height: 20.0,
+                    }
+                    text {
+                        percent_width: 1.0,
+                        content: "Vertical controls keep minimum at the bottom.".to_string(),
+                        font_size: typography::XS,
+                        font_color: theme.colors.muted_foreground,
+                        line_height: 18.0,
+                    }
+                    v_gap { height: spacing::MD }
+                    row {
+                        percent_width: 1.0,
+                        height: 220.0,
+                        align_items: "center",
+                        justify_content: "center",
+                        column {
+                            width: 120.0,
+                            align_items: "center",
+                            Slider {
+                                value: left_channel(),
+                                min: Some(0.0),
+                                max: Some(100.0),
+                                orientation: SliderOrientation::Vertical,
+                                reversed: true,
+                                height: Some(160.0),
+                                style: SliderStyle {
+                                    thumb_color: Some(theme.colors.chart_1),
+                                    thumb_border_color: Some(theme.colors.chart_1),
+                                    selected_color: Some(theme.colors.chart_1),
+                                    track_color: Some(arkit_shadcn::theme::with_alpha(theme.colors.chart_1, 0x33)),
+                                    ..SliderStyle::default()
+                                },
+                                on_change: move |value| left_channel.set(value),
+                            }
+                            v_gap { height: spacing::SM }
+                            text {
+                                content: format!("Left · {:.0}%", left_channel()),
+                                font_size: typography::XS,
+                                font_weight: 500_i32,
+                                font_color: theme.colors.foreground,
+                                line_height: 18.0,
+                            }
+                        }
+                        h_gap { width: spacing::XXL }
+                        column {
+                            width: 120.0,
+                            align_items: "center",
+                            Slider {
+                                value: right_channel(),
+                                min: Some(0.0),
+                                max: Some(100.0),
+                                orientation: SliderOrientation::Vertical,
+                                reversed: true,
+                                height: Some(160.0),
+                                style: SliderStyle {
+                                    thumb_color: Some(theme.colors.chart_2),
+                                    thumb_border_color: Some(theme.colors.chart_2),
+                                    selected_color: Some(theme.colors.chart_2),
+                                    track_color: Some(arkit_shadcn::theme::with_alpha(theme.colors.chart_2, 0x33)),
+                                    ..SliderStyle::default()
+                                },
+                                on_change: move |value| right_channel.set(value),
+                            }
+                            v_gap { height: spacing::SM }
+                            text {
+                                content: format!("Right · {:.0}%", right_channel()),
+                                font_size: typography::XS,
+                                font_weight: 500_i32,
+                                font_color: theme.colors.foreground,
+                                line_height: 18.0,
+                            }
+                        }
+                    }
+
+                    v_gap { height: spacing::XL }
+                    row {
+                        percent_width: 1.0,
+                        align_items: "center",
+                        justify_content: "space_between",
+                        column {
+                            layout_weight: 1.0,
+                            align_items: "start",
+                            text {
+                                content: "System limit".to_string(),
+                                font_size: typography::SM,
+                                font_weight: 500_i32,
+                                font_color: theme.colors.foreground,
+                                line_height: 20.0,
+                            }
+                            text {
+                                content: "Managed by your device administrator.".to_string(),
+                                font_size: typography::XS,
+                                font_color: theme.colors.muted_foreground,
+                                line_height: 18.0,
+                            }
+                        }
+                        text {
+                            content: "35%".to_string(),
+                            font_size: typography::SM,
+                            font_color: theme.colors.muted_foreground,
+                            line_height: 20.0,
+                        }
+                    }
+                    Slider {
+                        value: 35.0,
+                        min: Some(0.0),
+                        max: Some(100.0),
+                        disabled: true,
                     }
                 }
             }
@@ -2684,6 +3065,15 @@ fn menubar_menus(
             ],
         ),
     ]
+}
+
+fn format_media_time(seconds: f32) -> String {
+    let total_seconds = if seconds.is_finite() {
+        seconds.max(0.0).round() as u32
+    } else {
+        0
+    };
+    format!("{}:{:02}", total_seconds / 60, total_seconds % 60)
 }
 
 fn component_title(slug: &str) -> String {

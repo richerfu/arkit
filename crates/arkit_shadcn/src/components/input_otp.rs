@@ -5,8 +5,14 @@
 //! visible slots are a presentation layer over that input, matching shadcn's
 //! grouped-slot composition without splitting input state across native nodes.
 
+use std::cell::Cell;
+
 use crate::icon::icon_placeholder;
 use crate::theme::*;
+use arkit_animation::{
+    Animation, AnimationSelector, ExecutionPolicy, IterationCount, PropertyKeyframe, TargetName,
+    TimeSpan, Timeline, TimelinePosition, OPACITY,
+};
 use arkit_prelude::*;
 
 use super::ARKUI_BORDER_STYLE_SOLID;
@@ -17,6 +23,11 @@ const DEFAULT_SEPARATOR_WIDTH: f32 = 28.0;
 const NATIVE_INPUT_TYPE_NORMAL: i32 = 0;
 const NATIVE_INPUT_TYPE_NUMBER: i32 = 2;
 const NATIVE_INPUT_TYPE_ONE_TIME_CODE: i32 = 14;
+const CARET_BLINK_DURATION_MS: u64 = 1_000;
+
+thread_local! {
+    static NEXT_INPUT_OTP_CARET_TARGET: Cell<u64> = const { Cell::new(0) };
+}
 
 /// Accepted character set and native keyboard profile.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -115,6 +126,9 @@ pub struct InputOtpProps {
     /// Replaces entered characters with bullets, useful for PIN entry.
     #[props(default)]
     pub masked: bool,
+    /// Shows the animated visual caret in the active empty slot.
+    #[props(default = true)]
+    pub show_caret: bool,
     #[props(default)]
     pub style: InputOtpStyle,
     #[props(default)]
@@ -180,6 +194,13 @@ pub fn InputOtp(props: InputOtpProps) -> Element {
 
         let character = characters.get(index).copied();
         let is_active = index == active_index && focused() && !props.disabled;
+        let show_caret = should_show_caret(
+            index == active_index,
+            focused(),
+            props.disabled,
+            props.show_caret,
+            character.is_some(),
+        );
         let left_radius = if starts_group { radius } else { 0.0 };
         let right_radius = if ends_group { radius } else { 0.0 };
         let slot_radius = format!("{left_radius},{right_radius},{left_radius},{right_radius}");
@@ -221,13 +242,10 @@ pub fn InputOtp(props: InputOtpProps) -> Element {
                         text_align: 1_i32,
                         hit_test_behavior: 2_i32,
                     }
-                } else if is_active {
-                    row {
-                        width: 1.5,
-                        height: 24.0,
-                        border_radius: theme.radii.full,
-                        background_color: caret,
-                        hit_test_behavior: 2_i32,
+                } else if show_caret {
+                    InputOtpCaret {
+                        color: caret,
+                        radius: theme.radii.full,
                     }
                 }
             }
@@ -294,6 +312,73 @@ pub fn InputOtp(props: InputOtpProps) -> Element {
             }
         }
     }
+}
+
+#[component]
+fn InputOtpCaret(color: u32, radius: f32) -> Element {
+    let target_name = use_hook(next_input_otp_caret_target_name);
+    let target = arkit_animation::use_animation_target(target_name.clone());
+    let controls = arkit_animation::use_animation(input_otp_caret_timeline(&target_name));
+    let animation = controls.clone();
+
+    use_effect(move || {
+        if target.is_ready() && animation.is_ready() {
+            animation.play();
+        }
+    });
+
+    rsx! {
+        row {
+            width: 1.5,
+            height: 24.0,
+            opacity: 1.0_f32,
+            border_radius: radius,
+            background_color: color,
+            hit_test_behavior: 2_i32,
+        }
+    }
+}
+
+fn next_input_otp_caret_target_name() -> String {
+    NEXT_INPUT_OTP_CARET_TARGET.with(|next| {
+        let id = next.get();
+        next.set(
+            id.checked_add(1)
+                .expect("input OTP caret target id space exhausted"),
+        );
+        format!("arkit-shadcn-input-otp-caret-{id}")
+    })
+}
+
+fn input_otp_caret_timeline(target_name: &str) -> Timeline {
+    let blink = Animation::new(AnimationSelector::Target(TargetName::owned(target_name)))
+        .keyframes(
+            &OPACITY,
+            [
+                PropertyKeyframe::new(0.0, 1.0),
+                PropertyKeyframe::new(0.45, 1.0),
+                PropertyKeyframe::new(0.55, 0.0),
+                PropertyKeyframe::new(0.95, 0.0),
+                PropertyKeyframe::new(1.0, 1.0),
+            ],
+            TimeSpan::from_millis(CARET_BLINK_DURATION_MS),
+        )
+        .expect("constant caret opacity keyframes are valid");
+
+    Timeline::new()
+        .add(blink, TimelinePosition::START)
+        .iterations(IterationCount::Infinite)
+        .execution_policy(ExecutionPolicy::Auto)
+}
+
+fn should_show_caret(
+    active: bool,
+    focused: bool,
+    disabled: bool,
+    show_caret: bool,
+    occupied: bool,
+) -> bool {
+    active && focused && !disabled && show_caret && !occupied
 }
 
 fn sanitize_otp(value: &str, digits: usize, mode: InputOtpMode) -> String {
@@ -368,5 +453,14 @@ mod tests {
         );
         assert_eq!(InputOtpMode::OneTimeCode.native_input_type(), 14);
         assert_eq!(InputOtpSeparator::default(), InputOtpSeparator::Dash);
+    }
+
+    #[test]
+    fn caret_can_be_hidden_and_never_overlays_an_entered_character() {
+        assert!(should_show_caret(true, true, false, true, false));
+        assert!(!should_show_caret(true, true, false, false, false));
+        assert!(!should_show_caret(true, true, false, true, true));
+        assert!(!should_show_caret(true, false, false, true, false));
+        assert!(!should_show_caret(true, true, true, true, false));
     }
 }
