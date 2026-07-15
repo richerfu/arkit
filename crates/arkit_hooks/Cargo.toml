@@ -1,5 +1,6 @@
 [package]
 name = "arkit_hooks"
+description = "Dioxus hooks for native ArkUI nodes, layouts, overlays, and virtualization"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

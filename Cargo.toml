@@ -30,7 +30,7 @@ exclude = ["app"]
 resolver = "2"
 
 [workspace.package]
-version = "0.1.0"
+version = "0.0.1-beta.0"
 edition = "2021"
 # The resolved N-API 1.2 toolchain crates require Rust 1.88. Keep the declared
 # MSRV aligned with the actual graph instead of advertising an unbuildable 1.85.

@@ -10,7 +10,7 @@ title: 组件库介绍
 
 ```toml
 [dependencies]
-arkit = { path = "../../crates/arkit", features = ["shadcn"] }
+arkit = { version = "*", features = ["shadcn"] }
 ```
 
 ```rust

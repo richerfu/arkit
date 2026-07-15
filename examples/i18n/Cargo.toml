@@ -1,5 +1,7 @@
 [package]
 name = "i18n_example"
+description = "Type-safe internationalization example for Arkit"
+publish = false
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

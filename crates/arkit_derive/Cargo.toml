@@ -1,5 +1,6 @@
 [package]
 name = "arkit_derive"
+description = "Procedural macros for Arkit application entry points"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

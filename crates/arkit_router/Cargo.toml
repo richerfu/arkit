@@ -1,5 +1,6 @@
 [package]
 name = "arkit_router"
+description = "ArkUI-native routing components and transitions for Arkit applications"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

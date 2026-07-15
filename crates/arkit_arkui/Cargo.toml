@@ -1,5 +1,6 @@
 [package]
 name = "arkit_arkui"
+description = "Dioxus renderer for native OpenHarmony ArkUI nodes"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

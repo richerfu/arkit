@@ -1,5 +1,6 @@
 [package]
 name = "arkit_runtime"
+description = "Dioxus VirtualDom runtime host for OpenHarmony ArkUI"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

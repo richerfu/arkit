@@ -1,5 +1,6 @@
 [package]
 name = "arkit_chart"
+description = "Native ECharts-compatible chart components for the Arkit Dioxus renderer"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

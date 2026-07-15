@@ -1,5 +1,6 @@
 [package]
 name = "arkit_i18n_macros"
+description = "Compile-time Fluent catalog generation for Arkit internationalization"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

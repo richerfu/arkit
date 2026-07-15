@@ -1,5 +1,7 @@
 [package]
 name = "counter"
+description = "Basic signal-driven counter example for Arkit"
+publish = false
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
