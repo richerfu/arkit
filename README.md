@@ -37,7 +37,7 @@ The complete runnable version is in [examples/counter](examples/counter/src/lib.
 - `arkit_runtime`: owns the Dioxus `VirtualDom`, connects the scheduler to the OpenHarmony event loop, queues native events before Dioxus dispatch, and hosts embedded WebView state.
 - `arkit_arkui`: owns the HostTree projection, declarative attribute encoding, native node-event/gesture bridge, ArkUI node creation, image resources, and virtual adapters.
 - `arkit_elements`: the ArkUI `dioxus_elements` registry used by `rsx!`.
-- `arkit_hooks`: Dioxus hooks for native-node access, layout, overlays, and virtual lists.
+- `arkit_hooks`: Dioxus hooks for native-node access, layout, overlays, and virtual List/Grid/WaterFlow containers.
 - `arkit_animation_core`: platform-independent resolve/compile/sample/state engine; it has no ArkUI dependency.
 - `arkit_animation`: root-owned frame driver, ArkUI/Drawing adapters, native lowering, layout/presence/drag/scroll integration.
 - `arkit_chart`: ECharts-compatible typed/JSON options rendered by an ArkUI native canvas and updated through Dioxus props.
@@ -67,7 +67,7 @@ For example: `arkit = { path = "crates/arkit", features = ["animation", "i18n"] 
 - `examples/chart`: native ECharts-compatible chart types and signal-driven realtime updates.
 - `examples/router`: typed `dioxus-router` routes and ArkUI links.
 - `examples/i18n`: reactive locale context.
-- `examples/complex_cases`: ArkUI NodeAdapter virtualization.
+- `examples/complex_cases`: ArkUI NodeAdapter virtualization for List, Grid, and variable-height WaterFlow.
 - `examples/shadcn_showcase`: component and theme showcase.
 - `examples/webview`: embedded WebView controlled from Dioxus.
 

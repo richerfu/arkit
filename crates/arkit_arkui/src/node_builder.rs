@@ -1,8 +1,8 @@
 //! A small ergonomic builder for imperatively constructing [`ArkUINode`]s.
 //!
-//! Used by virtual-list `render_item` callbacks (which run outside the dioxus
-//! render cycle and must return a raw `ArkUINode`), so demos don't touch the
-//! binding crate directly.
+//! Used by virtual List/Grid/WaterFlow `render_item` callbacks (which run
+//! outside the dioxus render cycle and must return a raw `ArkUINode`), so demos
+//! don't touch the binding crate directly.
 
 use ohos_arkui_binding::common::attribute::ArkUINodeAttributeItem;
 use ohos_arkui_binding::common::error::ArkUIResult;
@@ -70,6 +70,11 @@ impl NodeBuilder {
     /// Convenience: fixed height (vp).
     pub fn height(self, v: f32) -> ArkUIResult<Self> {
         self.attr(ArkUINodeAttributeType::Height, v)
+    }
+
+    /// Convenience: fixed width (vp).
+    pub fn width(self, v: f32) -> ArkUIResult<Self> {
+        self.attr(ArkUINodeAttributeType::Width, v)
     }
 
     /// Convenience: background color (hex string or ARGB int).

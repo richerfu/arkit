@@ -6,10 +6,16 @@
 | `async_task` | `use_resource`、Tokio、scheduler wake |
 | `animation` | Animation v2 完整交互展厅：Timeline、Easing、Presence/Layout、Drag/Scroll、Scope/Typed Properties |
 | `chart` | ECharts-like typed/JSON option、多图表、signal 实时更新、点击命中 |
-| `complex_cases` | ArkUI NodeAdapter 虚拟列表/网格 |
+| `complex_cases` | ArkUI NodeAdapter 虚拟列表/网格/瀑布流 |
 | `router` | Routable enum、Router、ArkUI Link、route transition |
 | `i18n` | locale context、类型安全翻译 |
 | `shadcn_showcase` | Dioxus 组件、theme signal、overlay、native gesture |
 | `webview` | layout/native-node hook 与嵌入 WebView |
 
 所有示例都是 workspace member。OpenHarmony 验证必须进入对应示例目录执行 `ohrs build --arch aarch`；host `cargo check` 只能作为辅助诊断，不能替代目标平台构建。
+
+`complex_cases` 的 WaterFlow 页使用 `use_virtual_water_flow` 绑定
+`WaterFlowNodeAdapter`，以 `repeat(auto-fill, 104vp)` 和五档 item 高度验证真实瀑布流。
+在 1320×2856 真机首屏，10000 条数据只挂载 16 个 FlowItem；上滑后可见范围由
+`#00000..#00015` 更新为 `#00010..#00025`，行列间距均为 12vp，item 内容边界与
+FlowItem 完全一致。
