@@ -1,5 +1,6 @@
 [package]
 name = "arkit_i18n"
+description = "Type-safe Fluent internationalization runtime for Arkit applications"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

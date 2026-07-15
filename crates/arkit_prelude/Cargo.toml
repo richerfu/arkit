@@ -1,5 +1,6 @@
 [package]
 name = "arkit_prelude"
+description = "Shared Dioxus and ArkUI prelude for the Arkit crate ecosystem"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -1,5 +1,7 @@
 [package]
 name = "animation"
+description = "Interactive showcase for the Arkit animation engine"
+publish = false
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

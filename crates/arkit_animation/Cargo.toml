@@ -1,5 +1,6 @@
 [package]
 name = "arkit_animation"
+description = "Animation engine and ArkUI rendering adapters for Arkit"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

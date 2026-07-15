@@ -1,5 +1,6 @@
 [package]
 name = "arkit_animation_core"
+description = "Platform-independent animation model and execution engine for Arkit"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

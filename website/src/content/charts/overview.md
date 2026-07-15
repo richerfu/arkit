@@ -10,7 +10,7 @@ title: 图表总览
 
 ```toml
 [dependencies]
-arkit = { path = "../../crates/arkit", features = ["chart"] }
+arkit = { version = "*", features = ["chart"] }
 ```
 
 ```rust

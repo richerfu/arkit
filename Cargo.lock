@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "animation"
-version = "0.1.0"
+version = "0.0.1-beta.0"
 dependencies = [
  "arkit",
  "napi-build-ohos",
@@ -20,7 +20,7 @@ checksum = "2a4385e2e34eb35d6b3efe798b9eb88096925d87726c0798709bf56d9ed84af3"
 
 [[package]]
 name = "arkit"
-version = "0.1.0"
+version = "0.0.1-beta.0"
 dependencies = [
  "arkit_animation",
  "arkit_arkui",
@@ -41,7 +41,7 @@ dependencies = [
 
 [[package]]
 name = "arkit_animation"
-version = "0.1.0"
+version = "0.0.1-beta.0"
 dependencies = [
  "arkit_animation_core",
  "arkit_hooks",
@@ -55,7 +55,7 @@ dependencies = [
 
 [[package]]
 name = "arkit_animation_core"
-version = "0.1.0"
+version = "0.0.1-beta.0"
 dependencies = [
  "oxc_index",
  "rustc-hash",
@@ -64,7 +64,7 @@ dependencies = [
 
 [[package]]
 name = "arkit_arkui"
-version = "0.1.0"
+version = "0.0.1-beta.0"
 dependencies = [
  "arkit_elements",
  "dioxus-core",
@@ -75,7 +75,7 @@ dependencies = [
 
 [[package]]
 name = "arkit_chart"
-version = "0.1.0"
+version = "0.0.1-beta.0"
 dependencies = [
  "arkit_animation",
  "arkit_hooks",
@@ -91,7 +91,7 @@ dependencies = [
 
 [[package]]
 name = "arkit_derive"
-version = "0.1.0"
+version = "0.0.1-beta.0"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -102,14 +102,14 @@ dependencies = [
 
 [[package]]
 name = "arkit_elements"
-version = "0.1.0"
+version = "0.0.1-beta.0"
 dependencies = [
  "dioxus-core",
 ]
 
 [[package]]
 name = "arkit_hooks"
-version = "0.1.0"
+version = "0.0.1-beta.0"
 dependencies = [
  "arkit_arkui",
  "arkit_prelude",
@@ -121,7 +121,7 @@ dependencies = [
 
 [[package]]
 name = "arkit_i18n"
-version = "0.1.0"
+version = "0.0.1-beta.0"
 dependencies = [
  "arkit_i18n_macros",
  "dioxus-core",
@@ -135,7 +135,7 @@ dependencies = [
 
 [[package]]
 name = "arkit_i18n_macros"
-version = "0.1.0"
+version = "0.0.1-beta.0"
 dependencies = [
  "fluent-syntax",
  "proc-macro-crate",
@@ -148,7 +148,7 @@ dependencies = [
 
 [[package]]
 name = "arkit_icon"
-version = "0.1.0"
+version = "0.0.1-beta.0"
 dependencies = [
  "arkit_arkui",
  "arkit_prelude",
@@ -159,7 +159,7 @@ dependencies = [
 
 [[package]]
 name = "arkit_prelude"
-version = "0.1.0"
+version = "0.0.1-beta.0"
 dependencies = [
  "arkit_elements",
  "dioxus-core",
@@ -170,7 +170,7 @@ dependencies = [
 
 [[package]]
 name = "arkit_router"
-version = "0.1.0"
+version = "0.0.1-beta.0"
 dependencies = [
  "arkit_animation",
  "arkit_prelude",
@@ -180,7 +180,7 @@ dependencies = [
 
 [[package]]
 name = "arkit_runtime"
-version = "0.1.0"
+version = "0.0.1-beta.0"
 dependencies = [
  "arkit_arkui",
  "arkit_elements",
@@ -194,7 +194,7 @@ dependencies = [
 
 [[package]]
 name = "arkit_shadcn"
-version = "0.1.0"
+version = "0.0.1-beta.0"
 dependencies = [
  "arkit_animation",
  "arkit_hooks",
@@ -218,7 +218,7 @@ dependencies = [
 
 [[package]]
 name = "async_task"
-version = "0.1.0"
+version = "0.0.1-beta.0"
 dependencies = [
  "arkit",
  "napi-build-ohos",
@@ -283,7 +283,7 @@ checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
 name = "chart_example"
-version = "0.1.0"
+version = "0.0.1-beta.0"
 dependencies = [
  "arkit",
  "napi-build-ohos",
@@ -294,7 +294,7 @@ dependencies = [
 
 [[package]]
 name = "complex_cases"
-version = "0.1.0"
+version = "0.0.1-beta.0"
 dependencies = [
  "arkit",
  "napi-build-ohos",
@@ -358,7 +358,7 @@ dependencies = [
 
 [[package]]
 name = "counter"
-version = "0.1.0"
+version = "0.0.1-beta.0"
 dependencies = [
  "arkit",
  "napi-build-ohos",
@@ -929,7 +929,7 @@ dependencies = [
 
 [[package]]
 name = "i18n_example"
-version = "0.1.0"
+version = "0.0.1-beta.0"
 dependencies = [
  "arkit",
  "napi-build-ohos",
@@ -1730,7 +1730,7 @@ dependencies = [
 
 [[package]]
 name = "router_example"
-version = "0.1.0"
+version = "0.0.1-beta.0"
 dependencies = [
  "arkit",
  "dioxus",
@@ -1902,7 +1902,7 @@ dependencies = [
 
 [[package]]
 name = "shadcn_showcase"
-version = "0.1.0"
+version = "0.0.1-beta.0"
 dependencies = [
  "arkit",
  "napi-build-ohos",
@@ -2320,7 +2320,7 @@ dependencies = [
 
 [[package]]
 name = "webview_example"
-version = "0.1.0"
+version = "0.0.1-beta.0"
 dependencies = [
  "arkit",
  "napi-build-ohos",

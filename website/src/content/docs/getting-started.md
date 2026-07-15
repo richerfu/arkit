@@ -30,7 +30,7 @@ rust-version = "1.88"
 crate-type = ["cdylib"]
 
 [dependencies]
-arkit = { path = "../../crates/arkit" }
+arkit = { version = "*" }
 napi-ohos = "1.1"
 napi-derive-ohos = "1.1"
 
@@ -38,11 +38,11 @@ napi-derive-ohos = "1.1"
 napi-build-ohos = "1.1"
 ```
 
-仓库内 example 使用 workspace dependencies；外部项目把 path/version 调整为实际发布来源。领域能力通过 `arkit` feature 启用：
+仓库内 example 使用 workspace dependencies；外部项目直接依赖已发布版本。领域能力通过 `arkit` feature 启用：
 
 ```toml
 arkit = {
-  path = "../../crates/arkit",
+  version = "*",
   features = ["animation", "router", "i18n", "icon"]
 }
 ```

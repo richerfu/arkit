@@ -1,5 +1,7 @@
 [package]
 name = "complex_cases"
+description = "Virtualized List, Grid, and WaterFlow examples for Arkit"
+publish = false
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
