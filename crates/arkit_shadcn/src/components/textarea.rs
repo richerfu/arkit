@@ -17,6 +17,12 @@ pub struct TextareaProps {
     pub value: Option<String>,
     pub height: Option<f32>,
     pub percent_width: Option<f32>,
+    /// Uses the destructive border treatment for validation failures.
+    #[props(default)]
+    pub invalid: bool,
+    /// Prevents editing while preserving the field's dimensions.
+    #[props(default)]
+    pub disabled: bool,
     pub on_change: Option<EventHandler<String>>,
 }
 
@@ -37,17 +43,21 @@ pub fn Textarea(props: TextareaProps) -> Element {
             height: props.height.unwrap_or(64.0),
             border_style: ARKUI_BORDER_STYLE_SOLID,
             border_width: 1.0,
-            border_color: theme.colors.input,
+            border_color: if props.invalid { theme.colors.destructive } else { theme.colors.input },
             border_radius: theme.radii.md,
             background_color: 0x00000000,
+            opacity: if props.disabled { 0.5 } else { 1.0 },
+            enabled: !props.disabled,
             padding_top: spacing::SM,
             padding_right: spacing::MD,
             padding_bottom: spacing::SM,
             padding_left: spacing::MD,
             percent_width: if let Some(w) = props.percent_width { w },
             on_change: move |evt| {
-                if let Some(handler) = on_change {
-                    handler.call(evt.data().string_value.clone());
+                if !props.disabled {
+                    if let Some(handler) = on_change {
+                        handler.call(evt.data().string_value.clone());
+                    }
                 }
             },
         }

@@ -11,11 +11,12 @@ use arkit::shadcn::components::{
     BottomNavigationItem, BottomSheet, BottomSheetTextInput, Button, ButtonSize, ButtonVariant,
     Calendar, Card, CardContent, CardFooter, CardHeader, Carousel, CarouselControlsPlacement,
     CarouselIndicatorVariant, CarouselStyle, Checkbox, Collapsible, ContextMenu, DatePicker,
-    Dialog, DialogFooter, DialogHeader, DropdownMenu, HoverCard, Input, InputOtp, InputOtpMode,
-    InputOtpSeparator, Label, MenuEntry, Menubar, MenubarMenuSpec, MultiSlider, Popover, Progress,
-    RadioGroup, RangeSlider, Select, Separator, Skeleton, Slider, SliderOrientation, SliderStyle,
-    Sonner, SonnerToast, Spinner, Switch, Table, Tabs, Text, TextVariant, Textarea, Toggle,
-    ToggleGroup, Tooltip,
+    Dialog, DialogFooter, DialogHeader, DropdownMenu, Field, FieldContent, FieldDescription,
+    FieldError, FieldGroup, FieldOrientation, FieldSeparator, FieldSet, FieldTitle, Form, FormItem,
+    HoverCard, Input, InputOtp, InputOtpMode, InputOtpSeparator, Label, MenuEntry, Menubar,
+    MenubarMenuSpec, MultiSlider, Popover, Progress, RadioGroup, RangeSlider, Select, Separator,
+    Skeleton, Slider, SliderOrientation, SliderStyle, Sonner, SonnerToast, Spinner, Switch, Table,
+    Tabs, Text, TextVariant, Textarea, Toggle, ToggleGroup, Tooltip,
 };
 use arkit::shadcn::icon::icon_placeholder;
 use arkit::shadcn::theme::{
@@ -115,6 +116,10 @@ const COMPONENTS: &[ComponentSpec] = &[
     ComponentSpec {
         slug: "dropdown-menu",
         name: "Dropdown Menu",
+    },
+    ComponentSpec {
+        slug: "form",
+        name: "Form",
     },
     ComponentSpec {
         slug: "hover-card",
@@ -792,6 +797,12 @@ fn demo_canvas_policy(slug: &str) -> DemoCanvasPolicy {
             fill_height: false,
             padding: [spacing::XXL, spacing::LG, spacing::XXL, spacing::LG],
         },
+        "form" => DemoCanvasPolicy {
+            center_x: false,
+            center_y: false,
+            fill_height: false,
+            padding: [spacing::XXL, spacing::LG, spacing::XXL, spacing::LG],
+        },
         "sonner" => DemoCanvasPolicy {
             center_x: false,
             center_y: false,
@@ -840,6 +851,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let mut select_open = use_signal(|| false);
     let mut selected_fruit = use_signal(|| "Apple".to_string());
     let mut accordion_value = use_signal(|| Some("item-1".to_string()));
+    let mut upload_progress = use_signal(|| 13.0_f32);
     let mut radio_choice = use_signal(|| "Default".to_string());
     let mut checkbox_first = use_signal(|| false);
     let mut checkbox_second = use_signal(|| false);
@@ -851,6 +863,13 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let mut otp_invalid = use_signal(|| false);
     let mut otp_status = use_signal(|| "Enter the six-digit code.".to_string());
     let mut invite_code = use_signal(|| "A7".to_string());
+    let mut form_name = use_signal(|| "Avery Stone".to_string());
+    let mut form_email = use_signal(String::new);
+    let mut form_bio = use_signal(|| "Product designer and weekend cyclist.".to_string());
+    let mut form_product_updates = use_signal(|| true);
+    let mut form_terms_accepted = use_signal(|| false);
+    let mut form_attempted = use_signal(|| false);
+    let mut form_status = use_signal(|| None::<bool>);
     let mut playback_position = use_signal(|| 92.0_f32);
     let mut media_volume = use_signal(|| 68.0_f32);
     let mut notification_strength = use_signal(|| 6.0_f32);
@@ -864,6 +883,9 @@ fn ComponentDemo(slug: &'static str) -> Element {
 
     let theme = arkit_shadcn::theme::use_theme();
     let on_page = EventHandler::new(move |value: i32| page.set(value.max(1)));
+    let form_name_invalid = form_attempted() && form_name().trim().chars().count() < 2;
+    let form_email_invalid = form_attempted() && !is_valid_email(form_email().as_str());
+    let form_terms_invalid = form_attempted() && !form_terms_accepted();
 
     match slug {
         "accordion" => rsx! {
@@ -1339,49 +1361,36 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         align_items: "center",
                         justify_content: "start",
                         Checkbox {
-                            label: None,
+                            label: Some("Accept terms and conditions".to_string()),
                             checked: Some(checkbox_first()),
                             on_change: Some(EventHandler::new(move |value| checkbox_first.set(value))),
                         }
-                        h_gap { width: 12.0 }
-                        Label { content: "Accept terms and conditions".to_string() }
                     }
                     v_gap { height: spacing::XXL }
-                    row {
+                    column {
                         align_self: "start",
                         align_items: "start",
-                        justify_content: "start",
                         Checkbox {
-                            label: None,
+                            label: Some("Accept terms and conditions".to_string()),
                             checked: Some(checkbox_second()),
                             on_change: Some(EventHandler::new(move |value| checkbox_second.set(value))),
                         }
-                        h_gap { width: 12.0 }
-                        column {
-                            layout_weight: 1.0,
-                            align_items: "start",
-                            Label { content: "Accept terms and conditions".to_string() }
-                            v_gap { height: spacing::SM }
+                        row {
+                            margin_top: spacing::SM,
+                            margin_left: spacing::XXL,
                             Text { content: "By clicking this checkbox, you agree to the terms and conditions.".to_string(), variant: TextVariant::Muted }
                         }
                     }
                     v_gap { height: spacing::XXL }
                     row {
                         align_self: "start",
-                        align_items: "start",
+                        align_items: "center",
                         justify_content: "start",
                         Checkbox {
-                            label: None,
+                            label: Some("Enable notifications".to_string()),
                             checked: Some(false),
                             default_checked: Some(false),
                             disabled: Some(true),
-                        }
-                        h_gap { width: 12.0 }
-                        text {
-                            content: "Enable notifications".to_string(),
-                            font_size: typography::SM,
-                            font_color: theme.colors.foreground,
-                            opacity: 0.5,
                         }
                     }
                     v_gap { height: spacing::XXL }
@@ -1518,6 +1527,184 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     width: Some(288.0),
                     items: dropdown_menu_items(),
                     Button { variant: ButtonVariant::Outline, onclick: move |_| {}, "Open" }
+                }
+            }
+        },
+        "form" => rsx! {
+            fixed_width {
+                width: 440.0,
+                column {
+                    percent_width: 1.0,
+                    height: 1110.0,
+                    align_items: "start",
+                    text {
+                        content: "Account settings".to_string(),
+                        percent_width: 1.0,
+                        font_size: typography::XXL,
+                        font_weight: 700_i32,
+                        font_color: theme.colors.foreground,
+                        line_height: 32.0,
+                        text_align: 0_i32,
+                    }
+                    v_gap { height: spacing::SM }
+                    text {
+                        content: "Update your public profile and communication preferences.".to_string(),
+                        percent_width: 1.0,
+                        font_size: typography::SM,
+                        font_color: theme.colors.muted_foreground,
+                        line_height: 20.0,
+                        text_align: 0_i32,
+                    }
+                    v_gap { height: spacing::XXL }
+                    Form {
+                        submit_label: "Save changes".to_string(),
+                        on_submit: move |_| {
+                            form_attempted.set(true);
+                            let valid = form_name().trim().chars().count() >= 2
+                                && is_valid_email(form_email().as_str())
+                                && form_terms_accepted();
+                            form_status.set(Some(valid));
+                        },
+                        FieldSet {
+                            arkit_shadcn::components::FieldLegend {
+                                content: "Profile".to_string(),
+                            }
+                            FieldDescription {
+                                content: "This information is visible to people you collaborate with.".to_string(),
+                                inset: false,
+                            }
+                            v_gap { height: spacing::XL }
+                            FieldGroup {
+                                FormItem {
+                                    label: "Display name".to_string(),
+                                    required: true,
+                                    description: Some("Use the name your teammates know you by.".to_string()),
+                                    error: if form_name_invalid { Some("Enter at least two characters.".to_string()) } else { None },
+                                    Input {
+                                        value: Some(form_name()),
+                                        placeholder: Some("Your name".to_string()),
+                                        percent_width: Some(1.0),
+                                        invalid: form_name_invalid,
+                                        on_change: move |value| {
+                                            form_name.set(value);
+                                            form_status.set(None);
+                                        },
+                                    }
+                                }
+                                FormItem {
+                                    label: "Email address".to_string(),
+                                    required: true,
+                                    description: Some("We only use this for account and security updates.".to_string()),
+                                    error: if form_email_invalid { Some("Enter a valid email address.".to_string()) } else { None },
+                                    Input {
+                                        value: Some(form_email()),
+                                        placeholder: Some("name@example.com".to_string()),
+                                        percent_width: Some(1.0),
+                                        invalid: form_email_invalid,
+                                        on_change: move |value| {
+                                            form_email.set(value);
+                                            form_status.set(None);
+                                        },
+                                    }
+                                }
+                                FormItem {
+                                    label: "Bio".to_string(),
+                                    description: Some("Keep it short. You can change this anytime.".to_string()),
+                                    Textarea {
+                                        value: Some(form_bio()),
+                                        placeholder: Some("Tell people a little about yourself.".to_string()),
+                                        height: Some(96.0),
+                                        percent_width: Some(1.0),
+                                        on_change: move |value| {
+                                            form_bio.set(value);
+                                            form_status.set(None);
+                                        },
+                                    }
+                                }
+                            }
+                        }
+                        FieldSeparator { label: Some("Preferences".to_string()) }
+                        Field {
+                            orientation: FieldOrientation::Horizontal,
+                            FieldContent {
+                                FieldTitle { content: "Product updates".to_string() }
+                                FieldDescription {
+                                    content: "Receive occasional release notes and feature tips.".to_string(),
+                                }
+                            }
+                            Switch {
+                                checked: Some(form_product_updates()),
+                                on_change: move |value| {
+                                    form_product_updates.set(value);
+                                    form_status.set(None);
+                                },
+                            }
+                        }
+                        Field {
+                            invalid: form_terms_invalid,
+                            Checkbox {
+                                label: Some("Terms and privacy".to_string()),
+                                checked: Some(form_terms_accepted()),
+                                checked_color: if form_terms_invalid { Some(theme.colors.destructive) } else { None },
+                                on_change: move |value| {
+                                    form_terms_accepted.set(value);
+                                    form_status.set(None);
+                                },
+                            }
+                            row {
+                                percent_width: 1.0,
+                                margin_top: spacing::XS,
+                                padding_left: spacing::XXL,
+                                FieldDescription {
+                                    content: "I agree to the terms of service and privacy policy.".to_string(),
+                                    inset: false,
+                                }
+                            }
+                        }
+                        if form_terms_invalid {
+                            FieldError { message: Some("Accept the terms before saving.".to_string()) }
+                            v_gap { height: spacing::LG }
+                        }
+                        if let Some(success) = form_status() {
+                            row {
+                                percent_width: 1.0,
+                                align_items: "center",
+                                justify_content: "start",
+                                margin_bottom: spacing::LG,
+                                padding_top: spacing::MD,
+                                padding_right: spacing::MD,
+                                padding_bottom: spacing::MD,
+                                padding_left: spacing::MD,
+                                background_color: arkit_shadcn::theme::with_alpha(
+                                    if success { theme.colors.chart_2 } else { theme.colors.destructive },
+                                    0x18,
+                                ),
+                                border_radius: theme.radii.md,
+                                {icon_placeholder(
+                                    if success { "circle-check" } else { "circle-alert" },
+                                    18.0,
+                                    if success { theme.colors.chart_2 } else { theme.colors.destructive },
+                                )}
+                                h_gap { width: spacing::SM }
+                                row {
+                                    layout_weight: 1.0,
+                                    text {
+                                        content: if success {
+                                            "Your account settings were saved.".to_string()
+                                        } else {
+                                            "Review the highlighted fields and try again.".to_string()
+                                        },
+                                        percent_width: 1.0,
+                                        font_size: typography::XS,
+                                        font_weight: 500_i32,
+                                        font_color: if success { theme.colors.chart_2 } else { theme.colors.destructive },
+                                        line_height: 18.0,
+                                        text_align: 0_i32,
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         },
@@ -1800,8 +1987,112 @@ fn ComponentDemo(slug: &'static str) -> Element {
         },
         "progress" => rsx! {
             fixed_width {
-                width: 288.0,
-                Progress { value: 66.0, total: Some(100.0) }
+                width: 420.0,
+                column {
+                    percent_width: 1.0,
+                    align_items: "start",
+                    padding_top: spacing::XL,
+                    padding_right: spacing::XL,
+                    padding_bottom: spacing::XL,
+                    padding_left: spacing::XL,
+                    background_color: theme.colors.card,
+                    border_width: 1.0,
+                    border_color: theme.colors.border,
+                    border_radius: theme.radii.xl,
+                    row {
+                        percent_width: 1.0,
+                        align_items: "center",
+                        justify_content: "start",
+                        row {
+                            width: 44.0,
+                            height: 44.0,
+                            align_items: "center",
+                            justify_content: "center",
+                            background_color: theme.colors.secondary,
+                            border_radius: theme.radii.lg,
+                            {icon_placeholder("file-up", 20.0, theme.colors.secondary_foreground)}
+                        }
+                        h_gap { width: spacing::MD }
+                        column {
+                            layout_weight: 1.0,
+                            align_items: "start",
+                            text {
+                                content: if upload_progress() >= 100.0 { "Upload complete".to_string() } else { "Uploading assets".to_string() },
+                                font_size: typography::MD,
+                                font_weight: 600_i32,
+                                font_color: theme.colors.card_foreground,
+                                line_height: 22.0,
+                            }
+                            text {
+                                content: "design-system.fig · 100 MB".to_string(),
+                                font_size: typography::XS,
+                                font_color: theme.colors.muted_foreground,
+                                line_height: 18.0,
+                            }
+                        }
+                    }
+                    v_gap { height: spacing::XL }
+                    row {
+                        percent_width: 1.0,
+                        align_items: "center",
+                        justify_content: "space_between",
+                        text {
+                            content: "Upload progress".to_string(),
+                            font_size: typography::SM,
+                            font_weight: 500_i32,
+                            font_color: theme.colors.foreground,
+                            line_height: 20.0,
+                        }
+                        text {
+                            content: format!("{:.0}%", upload_progress()),
+                            font_size: typography::SM,
+                            font_weight: 500_i32,
+                            font_color: theme.colors.foreground,
+                            line_height: 20.0,
+                        }
+                    }
+                    v_gap { height: spacing::SM }
+                    Progress {
+                        value: upload_progress(),
+                        total: Some(100.0),
+                    }
+                    v_gap { height: spacing::SM }
+                    text {
+                        content: format!("{:.0} MB of 100 MB", upload_progress()),
+                        percent_width: 1.0,
+                        font_size: typography::XS,
+                        font_color: theme.colors.muted_foreground,
+                        line_height: 18.0,
+                        text_align: 0_i32,
+                    }
+                    v_gap { height: spacing::XL }
+                    row {
+                        percent_width: 1.0,
+                        align_items: "center",
+                        justify_content: "end",
+                        Button {
+                            variant: ButtonVariant::Ghost,
+                            size: ButtonSize::Sm,
+                            onclick: move |_| upload_progress.set(13.0),
+                            "Restart"
+                        }
+                        h_gap { width: spacing::SM }
+                        Button {
+                            variant: ButtonVariant::Outline,
+                            size: ButtonSize::Sm,
+                            onclick: move |_| {
+                                upload_progress.set(if upload_progress() < 66.0 {
+                                    66.0
+                                } else if upload_progress() < 100.0 {
+                                    100.0
+                                } else {
+                                    13.0
+                                });
+                            },
+                            if upload_progress() >= 100.0 { "Upload again" } else { "Continue" }
+                        }
+                    }
+                }
             }
         },
         "radio-group" => rsx! {
@@ -3074,6 +3365,22 @@ fn format_media_time(seconds: f32) -> String {
         0
     };
     format!("{}:{:02}", total_seconds / 60, total_seconds % 60)
+}
+
+fn is_valid_email(value: &str) -> bool {
+    let value = value.trim();
+    if value.contains(char::is_whitespace) {
+        return false;
+    }
+
+    let Some((local, domain)) = value.split_once('@') else {
+        return false;
+    };
+    let Some((domain_name, suffix)) = domain.rsplit_once('.') else {
+        return false;
+    };
+
+    !local.is_empty() && !domain_name.is_empty() && !suffix.is_empty()
 }
 
 fn component_title(slug: &str) -> String {

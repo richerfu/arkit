@@ -268,6 +268,83 @@ Completed for `Slider`, `RangeSlider`, and `MultiSlider`:
   into opaque surface colors instead of applying group opacity, so the selected
   track cannot bleed through the thumb center.
 
+### 2026-07-15 Form Verification
+
+Completed for `Form`, `FormItem`, and the `Field*` composition family:
+
+- Kept the original Arkit `Form { submit_label, on_submit }` call shape and
+  card surface, while adding an empty-submit-label compositional mode, optional
+  surface removal, a full-width submit action, and a disabled submit state.
+- Added the current shadcn field composition primitives: `Field`,
+  `FieldContent`, `FieldDescription`, `FieldError`, `FieldGroup`, `FieldLabel`,
+  `FieldLegend`, `FieldSeparator`, `FieldSet`, and `FieldTitle`. Vertical layout
+  is the mobile default; horizontal layout supports setting rows with a title,
+  description, and trailing control.
+- `FormItem` remains source-compatible with the previous label-and-control API
+  and now composes required labels, descriptions, and validation messages.
+  `Input` and `Textarea` gained explicit invalid and disabled states so the
+  field border and editability match the form state instead of relying on a
+  visual-only wrapper.
+- `Checkbox` owns its label interaction instead of depending on an external
+  sibling label or ArkUI child-to-parent event propagation. Indicator and label
+  presses share the same controlled/uncontrolled toggle path, while propagation
+  stops at the checkbox so a clickable parent card cannot toggle it twice.
+- Replaced the missing centered placeholder with a scrollable account-settings
+  page using controlled name, email, bio, product-update, and terms fields.
+  Submit performs validation, renders inline and summary errors, then renders a
+  success confirmation after the fields are corrected.
+- Verified on a 1320×2856 device: the account heading is
+  `[56,388][1264,500]`; display-name and email inputs are
+  `[143,1238][1178,1407]` and `[143,1659][1178,1828]`. Empty-email submission
+  renders `Enter a valid email address.`, the terms error, and the destructive
+  summary. Entering `avery@example.com`, checking terms, and submitting renders
+  `Your account settings were saved.` at `[276,1651][1135,1714]`.
+
+### 2026-07-15 Checkbox Interaction Verification
+
+Completed for `Checkbox`:
+
+- The optional `label` now uses the same controlled/uncontrolled toggle path as
+  the indicator. The component handles label presses directly instead of
+  requiring an external sibling `Label`, so both regions select and deselect.
+- Checkbox presses stop propagation after toggling. This keeps an indicator
+  inside a clickable card from also activating the parent and immediately
+  reversing the state a second time.
+- Updated the showcase's standard, supporting-description, and disabled cases
+  to use the component-owned label API. The Form terms field now uses the same
+  shared behavior instead of a Form-only click workaround.
+- Verified on a 1320×2856 device: the first checkbox root is
+  `[56,1040][788,1097]` and its label target is `[140,1040][788,1097]`.
+  Pressing the label changes the indicator from `#FFFFFF` to `#09090B`, and a
+  second label press changes it back. Indicator presses toggle once, the
+  disabled label remains unchecked, and the card checkbox changes from blue to
+  unchecked with one indicator press rather than bubbling into a second card
+  toggle.
+
+### 2026-07-15 Progress Verification
+
+Completed for `Progress`:
+
+- Replaced ArkUI's platform-skinned progress node with an explicit shadcn
+  track and indicator. The default track is 8vp high, fully rounded and clipped,
+  uses `primary/20`, and contains a solid primary indicator with a square
+  moving edge, matching the current shadcn structure.
+- Controlled value changes now transition from the indicator's current value
+  with the same 150ms `cubic-bezier(0.4, 0, 0.2, 1)` timing used by shadcn's
+  `transition-all`. Rapid updates retarget from the live animation value;
+  callers can disable animation or override its duration.
+- Added height, radius, track-color, and indicator-color overrides without
+  changing the existing `value`/`total` API. Values are clamped to the valid
+  range, and invalid values or totals render an empty indicator.
+- Replaced the isolated bar demo with a controlled mobile file-upload card.
+  Continue advances through 13%, 66%, and 100%; Restart exercises the reverse
+  transition back to 13%.
+- Verified on a 1320×2856 device: the track is
+  `[129,1493][1191,1521]` with `#3309090B`, and the 13% indicator is
+  `[129,1493][267,1521]` with `#FF09090B`. Continue expands it to
+  `[129,1493][829,1521]` at 66%, then `[129,1493][1190,1521]` at 100%;
+  Restart returns both the label and indicator to 13%.
+
 ## Component Checklist
 
 Status values:
@@ -291,12 +368,13 @@ Status values:
 | Calendar | `calendar.tsx` | done | Verified full month layout, previous/next navigation, today accent, blue single selection, orange multi-selection, and deselection on device. |
 | Card | `card.rs` | done | Verified on device: shell radius/border, p-6 header/content/footer, left-aligned title/description/content/footer. |
 | Carousel | `carousel.rs` | done | Native Swiper verified with bidirectional swipe/control state, large mobile touch targets, custom styles, indicator variants, and animated page selection. |
-| Checkbox | `checkbox.rs` | in_progress | Recheck label alignment, card checkbox layout, checked state. |
+| Checkbox | `checkbox.rs` | done | Component-owned label, indicator/label selection and deselection, disabled label, and nested clickable-card propagation verified on device. |
 | Collapsible | `collapsible.rs` | pending | Compare fixed width, row spacing, chevron and content indentation. |
 | Context Menu | `context_menu.rs` | in_progress | Native long-press bridge implemented; verify short tap does nothing and 500ms hold opens exactly once. |
 | Date Picker | `date-picker.tsx` | done | Verified outline trigger, headerless bottom sheet, calendar selection/deselection, live label refresh, Close dismissal, and selected-value persistence on device. |
 | Dialog | `dialog.rs` | in_progress | Header size/alignment, overlay inset, and flex-col-reverse footer updated; needs device overlay screenshot and dismiss verification. |
 | Dropdown Menu | `dropdown_menu.rs` | in_progress | Controlled entry refresh implemented; recheck popup placement, submenu expansion, shortcut alignment. |
+| Form | `form.rs` | done | Field composition family, legacy FormItem compatibility, mobile vertical/horizontal layouts, inline validation, disabled inputs, and controlled submit success/error flows verified on device. |
 | Hover Card | `hover_card.rs` | in_progress | Center anchor and start-aligned content restored; needs final placement/hover interaction acceptance. |
 | Icon | `icon.rs` | in_progress | Recheck image clarity, tile sizing, star sizing. |
 | Input | `input.rs` | in_progress | Recheck height, border, placeholder/value alignment. |
@@ -304,7 +382,7 @@ Status values:
 | Label | `label.rs` | pending | Compare text size, disabled/required examples if present. |
 | Menubar | `menubar.rs` | in_progress | Root placement and live controlled selection refresh implemented; recheck active-menu switching and submenu expansion. |
 | Popover | `popover.rs` | in_progress | Default center align updated; needs trigger anchoring screenshot and outside-dismiss verification. |
-| Progress | `progress.rs` | pending | Compare track height, fill color, radius. |
+| Progress | `progress.rs` | done | Explicit shadcn track/indicator, controlled 150ms transition, clamping, style overrides, and mobile upload flow verified on device. |
 | Radio Group | `radio_group.rs` | in_progress | Recheck option spacing, dot size, label alignment. |
 | Select | `select.rs` | pending | Compare trigger, menu width, selected check alignment. |
 | Separator | `separator.rs` | done | Verified horizontal/vertical thickness and spacing on device; demo content now shares the RNR left edge while the fixed-width example remains centered. |
