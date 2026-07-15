@@ -1,0 +1,51 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": {
+    "correctness": "error",
+    "perf": "warn",
+    "suspicious": "warn"
+  },
+  "plugins": ["import", "jsx-a11y", "react", "typescript", "unicorn"],
+  "ignorePatterns": [
+    "**/.void/**",
+    "**/dist/**",
+    "**/node_modules/**",
+    "**/target/**",
+    "app/**",
+    "crates/**",
+    "examples/**"
+  ],
+  "options": {
+    "denyWarnings": true,
+    "reportUnusedDisableDirectives": "error"
+  },
+  "rules": {
+    "react/react-in-jsx-scope": "off"
+  },
+  "settings": {
+    "react": {
+      "version": "19.2.1"
+    }
+  },
+  "overrides": [
+    {
+      "files": ["website/src/**/*.{ts,tsx}"],
+      "env": {
+        "browser": true
+      }
+    },
+    {
+      "files": ["website/src/main.tsx"],
+      "rules": {
+        "import/no-unassigned-import": "off",
+        "react/no-array-index-key": "off"
+      }
+    },
+    {
+      "files": ["website/vite.config.ts"],
+      "env": {
+        "node": true
+      }
+    }
+  ]
+}

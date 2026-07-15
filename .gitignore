@@ -3,8 +3,8 @@
 
 dist
 node_modules
-docs/.vitepress/dist
-docs/.vitepress/cache
+website/.void
+website/dist
 
 **/target
 

@@ -81,6 +81,22 @@ cargo check --workspace --all-targets --all-features
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```
 
+网站代码使用 Oxfmt、Oxlint 和 TypeScript 做静态检查：
+
+```sh
+pnpm run format
+pnpm run check
+```
+
+仓库使用 prek 执行提交前检查。首次克隆后安装 Git hook：
+
+```sh
+prek install
+```
+
+需要检查整个仓库时运行 `pnpm run prek:check`。提交时会检查基础文件卫生、网站格式、
+网站 lint 与类型，以及 Rust 格式；完整的 Rust/鸿蒙构建仍按上面的验证命令和平台构建流程执行。
+
 OpenHarmony validation must use the project toolchain from the example directory:
 
 ```sh
@@ -92,9 +108,13 @@ ohrs build --arch aarch
 
 `openharmony-ability` is pinned to commit `edc4e49d0d431035c6c001fc5e583abf62a998e3`, whose ArkUI, XComponent, Display, and resource-manager dependency ranges match this workspace. Keep the lockfile on one binding/sys generation; no local Cargo patch adapters are required.
 
-Documentation uses VitePress:
+Documentation lives in the standalone website workspace:
+
+- `文档`: getting started, component/RSX development model, state, hooks, native capabilities, i18n, routing, animation, and icons.
+- `组件`: theme, forms, content, navigation, overlays, menus, and feedback components.
+- `图表`: options/data, all 22 native series, styling, interaction, realtime updates, animation, and export.
 
 ```sh
 pnpm install
-pnpm run docs:dev
+pnpm run website:dev
 ```
