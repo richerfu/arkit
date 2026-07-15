@@ -103,7 +103,7 @@ pub use floating_layer::{FloatingAlign, FloatingLayer, FloatingLayerProps, Float
 pub use form::{Form, FormItem, FormItemProps, FormProps};
 pub use hover_card::{HoverCard, HoverCardProps};
 pub use input::{Input, InputProps};
-pub use input_otp::{InputOtp, InputOtpProps};
+pub use input_otp::{InputOtp, InputOtpMode, InputOtpProps, InputOtpSeparator, InputOtpStyle};
 pub use label::{Label, LabelProps};
 pub use menu_common::{
     menu_action_entry, menu_checkbox_entry, menu_label_entry, menu_radio_entry,

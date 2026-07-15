@@ -391,6 +391,31 @@ mod tests {
         );
         assert_eq!(enabled.value, EncodedAttrValue::Bool(false));
     }
+
+    #[test]
+    fn text_input_otp_attributes_use_native_types() {
+        let input_type = encode_attr("textinput", "input_type", &AttributeValue::Int(14))
+            .expect("one-time-code input type is supported");
+        assert_eq!(input_type.ty, ArkUINodeAttributeType::TextInputType);
+        assert_eq!(input_type.value, EncodedAttrValue::I32(14));
+
+        let input_filter = encode_attr(
+            "textinput",
+            "input_filter",
+            &AttributeValue::Text("[0-9]".into()),
+        )
+        .expect("text input filter is supported");
+        assert_eq!(
+            input_filter.ty,
+            ArkUINodeAttributeType::TextInputInputFilter
+        );
+        assert_eq!(input_filter.value, EncodedAttrValue::String("[0-9]".into()));
+
+        let max_length = encode_attr("textinput", "max_length", &AttributeValue::Int(6))
+            .expect("text input max length is supported");
+        assert_eq!(max_length.ty, ArkUINodeAttributeType::TextInputMaxLength);
+        assert_eq!(max_length.value, EncodedAttrValue::I32(6));
+    }
 }
 
 fn is_box_attr(name: &str) -> bool {
@@ -641,6 +666,21 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
             };
             EncodedAttr::new(name, ty, EncodedAttrValue::String(as_string(value)?))
         }
+        "input_type" if tag == "textinput" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::TextInputType,
+            EncodedAttrValue::I32(as_i32(value)?),
+        ),
+        "input_filter" if tag == "textinput" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::TextInputInputFilter,
+            EncodedAttrValue::String(as_string(value)?),
+        ),
+        "max_length" if tag == "textinput" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::TextInputMaxLength,
+            EncodedAttrValue::I32(as_i32(value)?),
+        ),
         "padding" => {
             let v = as_f32(value)?;
             EncodedAttr::new(

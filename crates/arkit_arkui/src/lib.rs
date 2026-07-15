@@ -1712,6 +1712,8 @@ fn extract_payload(
 ) -> ArkEventPayload {
     use NodeEventType::*;
     match event_type {
+        OnFocus => ArkEventPayload::Bool(true),
+        OnBlur => ArkEventPayload::Bool(false),
         // Checkbox / radio checked state: i32(0) != 0.
         CheckboxEventOnChange | RadioEventOnChange | ToggleOnChange => {
             ArkEventPayload::Bool(event.i32_value(0).unwrap_or(0) != 0)
@@ -1848,6 +1850,9 @@ fn event_type_for_name(name: &str, tag: &str) -> Option<NodeEventType> {
         // Element-bound layout/area changes.
         (ArkEventKind::AreaChange, _) => EventOnAreaChange,
 
+        (ArkEventKind::Focus, _) => OnFocus,
+        (ArkEventKind::Blur, _) => OnBlur,
+
         // Grid scroll-index events were added after the workspace's API-20
         // contract. Do not register the unrelated WaterFlow `OnWillScroll`
         // event on a Grid: it succeeds inconsistently and carries a different
@@ -1899,6 +1904,14 @@ mod event_tests {
         assert_eq!(
             event_type_for_name("_swiper_change", "swiper"),
             Some(NodeEventType::SwiperEventOnAnimationEnd)
+        );
+        assert_eq!(
+            event_type_for_name("focus", "textinput"),
+            Some(NodeEventType::OnFocus)
+        );
+        assert_eq!(
+            event_type_for_name("_blur", "textinput"),
+            Some(NodeEventType::OnBlur)
         );
     }
 }

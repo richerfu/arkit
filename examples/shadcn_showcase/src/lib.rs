@@ -11,10 +11,10 @@ use arkit::shadcn::components::{
     BottomNavigationItem, BottomSheet, BottomSheetTextInput, Button, ButtonSize, ButtonVariant,
     Calendar, Card, CardContent, CardFooter, CardHeader, Carousel, CarouselControlsPlacement,
     CarouselIndicatorVariant, CarouselStyle, Checkbox, Collapsible, ContextMenu, DatePicker,
-    Dialog, DialogFooter, DialogHeader, DropdownMenu, HoverCard, Input, Label, MenuEntry, Menubar,
-    MenubarMenuSpec, Popover, Progress, RadioGroup, Select, Separator, Skeleton, Sonner,
-    SonnerToast, Spinner, Switch, Table, Tabs, Text, TextVariant, Textarea, Toggle, ToggleGroup,
-    Tooltip,
+    Dialog, DialogFooter, DialogHeader, DropdownMenu, HoverCard, Input, InputOtp, InputOtpMode,
+    InputOtpSeparator, Label, MenuEntry, Menubar, MenubarMenuSpec, Popover, Progress, RadioGroup,
+    Select, Separator, Skeleton, Sonner, SonnerToast, Spinner, Switch, Table, Tabs, Text,
+    TextVariant, Textarea, Toggle, ToggleGroup, Tooltip,
 };
 use arkit::shadcn::icon::icon_placeholder;
 use arkit::shadcn::theme::{
@@ -126,6 +126,10 @@ const COMPONENTS: &[ComponentSpec] = &[
     ComponentSpec {
         slug: "input",
         name: "Input",
+    },
+    ComponentSpec {
+        slug: "input-otp",
+        name: "Input OTP",
     },
     ComponentSpec {
         slug: "label",
@@ -777,6 +781,12 @@ fn demo_canvas_policy(slug: &str) -> DemoCanvasPolicy {
             fill_height: true,
             padding: [spacing::XXL, spacing::LG, spacing::XXL, spacing::LG],
         },
+        "input-otp" => DemoCanvasPolicy {
+            center_x: false,
+            center_y: false,
+            fill_height: true,
+            padding: [spacing::XXL, spacing::LG, spacing::XXL, spacing::LG],
+        },
         _ => DemoCanvasPolicy {
             center_x: true,
             center_y: true,
@@ -820,6 +830,10 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let mut switch_checked = use_signal(|| false);
     let mut toggle_pressed = use_signal(|| false);
     let mut toggle_values = use_signal(|| vec!["bold".to_string()]);
+    let mut otp_value = use_signal(String::new);
+    let mut otp_invalid = use_signal(|| false);
+    let mut otp_status = use_signal(|| "Enter the six-digit code.".to_string());
+    let mut invite_code = use_signal(|| "A7".to_string());
     let sonner_toasts = use_signal(Vec::<SonnerToast>::new);
     let sonner_next_id = use_signal(|| 1_u64);
     let sonner_status = use_signal(|| "Tap a type to show a toast.".to_string());
@@ -1564,6 +1578,122 @@ fn ComponentDemo(slug: &'static str) -> Element {
             fixed_width {
                 width: 384.0,
                 Input { placeholder: Some("Email".to_string()), percent_width: Some(1.0) }
+            }
+        },
+        "input-otp" => rsx! {
+            fixed_width {
+                width: 420.0,
+                column {
+                    percent_width: 1.0,
+                    align_items: "start",
+                    text {
+                        percent_width: 1.0,
+                        content: "Verify your email".to_string(),
+                        font_size: typography::XXL,
+                        font_weight: 700_i32,
+                        font_color: theme.colors.foreground,
+                        line_height: 32.0,
+                    }
+                    v_gap { height: spacing::SM }
+                    text {
+                        percent_width: 1.0,
+                        content: "Enter the verification code sent to m@example.com.".to_string(),
+                        font_size: typography::SM,
+                        font_weight: 400_i32,
+                        font_color: theme.colors.muted_foreground,
+                        line_height: 20.0,
+                    }
+                    v_gap { height: spacing::XXL }
+                    text {
+                        content: "Verification code".to_string(),
+                        font_size: typography::SM,
+                        font_weight: 500_i32,
+                        font_color: theme.colors.foreground,
+                        line_height: 20.0,
+                    }
+                    v_gap { height: spacing::SM }
+                    InputOtp {
+                        value: otp_value(),
+                        digits: 6,
+                        invalid: otp_invalid(),
+                        on_change: move |value: String| {
+                            otp_invalid.set(false);
+                            otp_status.set(format!("{} of 6 digits entered.", value.chars().count()));
+                            otp_value.set(value);
+                        },
+                        on_complete: move |_: String| {
+                            otp_status.set("Code complete. Ready to verify.".to_string());
+                        },
+                    }
+                    v_gap { height: spacing::SM }
+                    text {
+                        percent_width: 1.0,
+                        content: otp_status(),
+                        font_size: typography::XS,
+                        font_weight: 400_i32,
+                        font_color: if otp_invalid() {
+                            theme.colors.destructive
+                        } else {
+                            theme.colors.muted_foreground
+                        },
+                        line_height: 18.0,
+                    }
+                    v_gap { height: spacing::XL }
+                    Button {
+                        percent_width: Some(1.0),
+                        disabled: Some(otp_value().chars().count() != 6),
+                        onclick: move |_| {
+                            if otp_value() == "246810" {
+                                otp_status.set("Code verified successfully.".to_string());
+                            } else {
+                                otp_invalid.set(true);
+                                otp_status.set("That code does not match. Try 246810.".to_string());
+                            }
+                        },
+                        "Verify code"
+                    }
+                    Button {
+                        variant: ButtonVariant::Link,
+                        percent_width: Some(1.0),
+                        onclick: move |_| {
+                            otp_value.set(String::new());
+                            otp_invalid.set(false);
+                            otp_status.set("A new code was sent.".to_string());
+                        },
+                        "Resend code"
+                    }
+                    v_gap { height: spacing::XXL }
+                    text {
+                        content: "Alphanumeric code".to_string(),
+                        font_size: typography::SM,
+                        font_weight: 500_i32,
+                        font_color: theme.colors.foreground,
+                        line_height: 20.0,
+                    }
+                    v_gap { height: spacing::SM }
+                    InputOtp {
+                        value: invite_code(),
+                        digits: 4,
+                        mode: InputOtpMode::Alphanumeric,
+                        group_size: 0,
+                        separator: InputOtpSeparator::None,
+                        on_change: move |value: String| invite_code.set(value),
+                    }
+                    v_gap { height: spacing::XXL }
+                    text {
+                        content: "Disabled".to_string(),
+                        font_size: typography::SM,
+                        font_weight: 500_i32,
+                        font_color: theme.colors.foreground,
+                        line_height: 20.0,
+                    }
+                    v_gap { height: spacing::SM }
+                    InputOtp {
+                        value: "123456".to_string(),
+                        digits: 6,
+                        disabled: true,
+                    }
+                }
             }
         },
         "label" => rsx! {

@@ -29,6 +29,8 @@ pub enum ArkEventKind {
     SwiperChange,
     Refresh,
     AreaChange,
+    Focus,
+    Blur,
     Hover,
     HoverMove,
     DragStart,
@@ -60,6 +62,8 @@ pub fn classify_event_name(name: &str) -> Option<ArkEventKind> {
         "swiperchange" | "swiper_change" | "swiper" => ArkEventKind::SwiperChange,
         "refresh" => ArkEventKind::Refresh,
         "area" | "area_change" | "layout" | "layout_change" => ArkEventKind::AreaChange,
+        "focus" => ArkEventKind::Focus,
+        "blur" => ArkEventKind::Blur,
         "hover" => ArkEventKind::Hover,
         "hovermove" | "hover_move" => ArkEventKind::HoverMove,
         "dragstart" | "drag_start" => ArkEventKind::DragStart,
@@ -240,6 +244,28 @@ impl From<&ArkEventData> for ClickData {
 #[derive(Default, Clone, Copy, Debug)]
 pub struct HoverData {
     pub is_hovering: bool,
+}
+
+/// Data for native focus and blur events.
+#[derive(Default, Clone, Copy, Debug)]
+pub struct FocusData {
+    pub focused: bool,
+}
+
+impl From<ArkEventData> for FocusData {
+    fn from(data: ArkEventData) -> Self {
+        Self::from(&data)
+    }
+}
+
+impl From<&ArkEventData> for FocusData {
+    fn from(data: &ArkEventData) -> Self {
+        let focused = match &data.payload {
+            ArkEventPayload::Bool(focused) => *focused,
+            _ => false,
+        };
+        Self { focused }
+    }
 }
 
 impl From<ArkEventData> for HoverData {
@@ -454,6 +480,12 @@ mod tests {
         }
         for name in ["onlongpress", "longpress", "on_long_press", "_long_press"] {
             assert_eq!(classify_event_name(name), Some(ArkEventKind::LongPress));
+        }
+        for name in ["onfocus", "focus", "on_focus", "_focus"] {
+            assert_eq!(classify_event_name(name), Some(ArkEventKind::Focus));
+        }
+        for name in ["onblur", "blur", "on_blur", "_blur"] {
+            assert_eq!(classify_event_name(name), Some(ArkEventKind::Blur));
         }
         assert!(ArkEventKind::Click.bubbles());
         assert!(ArkEventKind::LongPress.bubbles());

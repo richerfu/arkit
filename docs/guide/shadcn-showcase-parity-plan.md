@@ -217,6 +217,28 @@ Completed for `Sonner`:
   `Undo` action, closes from its 40vp dismiss target, and dismisses after a
   downward swipe without moving the page content.
 
+### 2026-07-14 Input OTP Verification
+
+Completed for `InputOtp`:
+
+- Replaced six independent inputs with one native `TextInput` and a visual slot
+  layer. Paste, deletion, focus, keyboard suggestions, and controlled updates
+  now operate on one code value while retaining shadcn's grouped composition.
+- Added renderer support for TextInput type, input filter, maximum length, and
+  focus/blur events. Numeric and alphanumeric modes filter invalid characters
+  natively before `maxLength`, and numeric mode opens the mobile number keyboard.
+- Added 48vp joined slots, configurable grouping/separator and style tokens,
+  masked values, invalid and disabled states, completion callbacks, and an
+  explicit one-time-code keyboard profile.
+- Added a full verification-page demo with a controlled six-digit flow, wrong
+  and successful verification states, resend, an ungrouped four-character
+  alphanumeric code, and a disabled example.
+- Verified on a 1320×2856 device: the main field is
+  `[56,780][1162,948]`; pasting `12a3-4567` produces `123456`, enables Verify,
+  and emits completion. `123456` shows the invalid state, `246810` shows success,
+  focus moves cleanly to the alphanumeric field, and `b-9x` filters the dash
+  before the native four-character limit.
+
 ## Component Checklist
 
 Status values:
@@ -249,6 +271,7 @@ Status values:
 | Hover Card | `hover_card.rs` | in_progress | Center anchor and start-aligned content restored; needs final placement/hover interaction acceptance. |
 | Icon | `icon.rs` | in_progress | Recheck image clarity, tile sizing, star sizing. |
 | Input | `input.rs` | in_progress | Recheck height, border, placeholder/value alignment. |
+| Input OTP | `input_otp.rs` | done | Single native input, grouped mobile slots, numeric/alphanumeric filtering, paste, completion, focus, validation, disabled state, and style overrides verified on device. |
 | Label | `label.rs` | pending | Compare text size, disabled/required examples if present. |
 | Menubar | `menubar.rs` | in_progress | Root placement and live controlled selection refresh implemented; recheck active-menu switching and submenu expansion. |
 | Popover | `popover.rs` | in_progress | Default center align updated; needs trigger anchoring screenshot and outside-dismiss verification. |

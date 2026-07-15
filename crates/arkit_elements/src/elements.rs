@@ -319,7 +319,8 @@ define_element! {
 define_element! {
     /// Text input (ArkUI `TextInput`).
     textinput => "TextInput" {
-        value, placeholder, placeholder_color, caret_color, font_size, font_color,
+        value, placeholder, placeholder_color, caret_color, input_type, input_filter, max_length,
+        font_size, font_color,
         font_weight, font_family, font_style, line_height, text_align, background_color, padding,
         padding_top, padding_right, padding_bottom, padding_left, margin, margin_top, margin_bottom,
         margin_left, margin_right, percent_width,
