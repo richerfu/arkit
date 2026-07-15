@@ -9,6 +9,10 @@ license.workspace = true
 [lints]
 workspace = true
 
+[features]
+default = []
+markdown = ["dep:pulldown-cmark", "dep:smallvec"]
+
 [dependencies]
 arkit_animation = { workspace = true }
 arkit_prelude = { workspace = true }
@@ -17,5 +21,7 @@ arkit_hooks = { workspace = true }
 arkit_runtime = { workspace = true }
 ohos-display-binding = { workspace = true }
 tokio = { workspace = true }
+pulldown-cmark = { workspace = true, optional = true }
+smallvec = { workspace = true, optional = true }
 
 [lib]

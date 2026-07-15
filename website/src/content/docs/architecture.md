@@ -96,7 +96,7 @@ OpenHarmony binding 中部分 node/adapter handle 没有隐式 Drop：
 
 ## Feature 与依赖边界
 
-核心 facade 不自动链接领域栈。`chart` 依赖 animation；`router` 依赖 animation；`shadcn` 依赖 animation + icon。这些关系只在 root `Cargo.toml`/crate manifest 中声明，业务 crate 用 `arkit` features 选择。
+核心 facade 不自动链接领域栈。`chart` 依赖 animation；`router` 依赖 animation；`shadcn` 依赖 animation + icon；`markdown` 依赖 shadcn，并单独启用 `arkit_shadcn` 的 Markdown 解析依赖。这些关系只在 root `Cargo.toml`/crate manifest 中声明，业务 crate 用 `arkit` features 选择。
 
 第三方/internal dependency version 集中在 workspace `Cargo.toml`，成员 crate 使用 `workspace = true`，确保 ArkUI binding/sys 类型身份一致。
 

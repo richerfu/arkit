@@ -41,6 +41,7 @@ export const componentCatalog: ContentCatalog = {
       sections: [
         section("alert", "Alert", "提示容器及标题、说明和列表。"),
         section("card", "Card", "卡片及 Header、Content、Footer。"),
+        section("markdown", "Markdown", "高性能原生 CommonMark/GFM 渲染。"),
         section("skeleton", "Skeleton", "结构化加载占位。"),
         section("spinner", "Spinner", "不确定进度指示器。"),
         section("progress", "Progress", "确定性进度展示。"),
