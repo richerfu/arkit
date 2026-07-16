@@ -252,6 +252,7 @@ impl arkit_runtime::ScopeNodeResolver for ArkHost {
 /// ```
 #[track_caller]
 pub fn use_ark_host_provider() -> ArkHost {
+    let _application_lifecycle = crate::lifecycle::use_application_lifecycle_provider();
     let _window_metrics = crate::safe_area::use_window_metrics_provider();
     let host = use_context_provider(ArkHost::new);
     // Register the host with the runtime so post-render passes can resolve

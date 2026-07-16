@@ -61,7 +61,6 @@ impl EmbeddedWebViewInit {
     }
 }
 
-#[derive(Default)]
 struct EmbeddedWebViewState {
     id: String,
     webview: Option<Webview>,
@@ -69,6 +68,21 @@ struct EmbeddedWebViewState {
     frame: Option<WebViewFrame>,
     current_url: Option<String>,
     current_html: Option<String>,
+    desired_visible: bool,
+}
+
+impl Default for EmbeddedWebViewState {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            webview: None,
+            node: None,
+            frame: None,
+            current_url: None,
+            current_html: None,
+            desired_visible: true,
+        }
+    }
 }
 
 /// Imperative handle for a WebView mounted as an ArkUI native child.
@@ -125,6 +139,15 @@ impl EmbeddedWebViewController {
 
         if self.inner.borrow().webview.is_none() {
             let mount = create_embedded_webview(init)?;
+            let desired_visible = self.inner.borrow().desired_visible;
+            if let Err(error) = mount.webview.set_visible(desired_visible) {
+                if let Err(dispose_error) = mount.webview.dispose() {
+                    ohos_hilog_binding::error(format!(
+                        "embedded webview cleanup after visibility failure failed: {dispose_error}"
+                    ));
+                }
+                return Err(error);
+            }
             if let Err(error) = attach_embedded_node(host, &mount.node) {
                 // The ArkTS manager owns the external content node. Disposing
                 // its controller releases that entry after a failed attach.
@@ -213,6 +236,23 @@ impl EmbeddedWebViewController {
 
     pub fn focus(&self) -> Result<()> {
         self.with_webview(|webview| webview.focus())
+    }
+
+    /// Set whether the embedded WebView participates in presentation.
+    ///
+    /// The desired value is retained before mount so application/component
+    /// lifecycle hooks cannot race the first native WebView creation.
+    pub fn set_visible(&self, visible: bool) -> Result<()> {
+        let webview = self.inner.borrow().webview.clone();
+        if let Some(webview) = webview {
+            webview.set_visible(visible)?;
+        }
+        self.inner.borrow_mut().desired_visible = visible;
+        Ok(())
+    }
+
+    pub fn is_visible(&self) -> bool {
+        self.inner.borrow().desired_visible
     }
 
     pub fn load_url(&self, url: &str) -> Result<()> {

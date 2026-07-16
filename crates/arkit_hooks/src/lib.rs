@@ -12,6 +12,8 @@
 //!   content driven by `use_overlay`.
 //! - [`layout`]: `use_layout_frame` / `use_layout_size` — observe the ArkUI
 //!   layout of the current element via `onSizeChange`/`onAreaChange`.
+//! - [`lifecycle`]: application foreground/background state and native
+//!   component show/hide observation.
 //! - [`overlay`]: `use_overlay` — floating and modal overlays. Content
 //!   is rendered declaratively as a full-screen stack subtree at the app root
 //!   via the host's overlay-content signal + `OverlayRoot`.
@@ -19,6 +21,7 @@
 //!   consumed by List/Grid/WaterFlow integrations.
 
 mod layout;
+mod lifecycle;
 mod node;
 mod overlay;
 mod safe_area;
@@ -26,10 +29,16 @@ mod virtual_list;
 mod virtual_range;
 
 pub use arkit_runtime::{
-    EdgeInsets, SafeAreaPolicy, WindowMetrics, WindowMetricsHandle, WindowMetricsSubscription,
+    ApplicationLifecycleEvent, ApplicationLifecycleHandle, ApplicationLifecyclePhase,
+    ApplicationLifecycleState, ApplicationLifecycleSubscription, EdgeInsets, SafeAreaPolicy,
+    WindowMetrics, WindowMetricsHandle, WindowMetricsSubscription,
 };
 pub use layout::{
     use_layout_frame, use_layout_frame_node, use_layout_size, LayoutFrame, LayoutSize,
+};
+pub use lifecycle::{
+    use_app_foreground, use_application_lifecycle, use_application_lifecycle_event,
+    use_component_lifecycle, use_component_visibility, ComponentLifecycleState,
 };
 pub use node::{use_ark_host_provider, use_ark_node, ArkHost, ArkNodeRef, HostNode, OverlayRoot};
 pub use overlay::{use_overlay, ModalOverlaySpec, ModalPresentation, OverlayApi, OverlayViewport};
