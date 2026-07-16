@@ -1,5 +1,6 @@
 ---
 title: Chart
+description: "轻量主题化图表与 ChartCard。"
 ---
 
 # Chart

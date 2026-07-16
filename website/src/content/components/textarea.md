@@ -1,5 +1,6 @@
 ---
 title: Textarea
+description: "多行受控文本输入。"
 ---
 
 # Textarea

@@ -1,46 +1,20 @@
-import { Suspense, useEffect, useRef, useState } from "react";
 import { lastUpdatedByContent } from "virtual:content-last-updated";
 
 import { getContentCatalog } from "./content";
 import { catalogSections, type ContentArea } from "./content/types";
 import { siteHref, siteRelativePath } from "./site-paths";
 
-type TocHeading = { depth: number; slug: string; text: string };
-
-export function ContentPage({ area }: { area: ContentArea }) {
+export function ContentPage({ area, path }: { area: ContentArea; path: string }) {
   const catalog = getContentCatalog(area);
   const sections = catalogSections(catalog);
-  const requestedId = resolveActiveId(area, sections[0].id);
+  const requestedId = resolveActiveId(area, sections[0].id, path);
   const activeSection = sections.find((section) => section.id === requestedId) ?? sections[0];
   const ActiveComponent = activeSection.Component;
   const activeIndex = sections.findIndex((section) => section.id === activeSection.id);
   const previousSection = activeIndex > 0 ? sections[activeIndex - 1] : undefined;
   const nextSection = activeIndex < sections.length - 1 ? sections[activeIndex + 1] : undefined;
-  const markdownRef = useRef<HTMLDivElement>(null);
-  const [tocHeadings, setTocHeadings] = useState<TocHeading[]>([]);
+  const tocHeadings = activeSection.headings.filter(({ depth }) => depth === 2 || depth === 3);
   const lastUpdated = formatLastUpdated(lastUpdatedByContent[`${area}/${activeSection.id}`]);
-
-  useEffect(() => {
-    const markdown = markdownRef.current;
-    if (!markdown) return;
-
-    const collectHeadings = () => {
-      setTocHeadings(
-        Array.from(markdown.querySelectorAll<HTMLHeadingElement>("h2[id], h3[id]")).map(
-          (heading) => ({
-            depth: Number(heading.tagName.slice(1)),
-            slug: heading.id,
-            text: heading.textContent?.trim() ?? "",
-          }),
-        ),
-      );
-    };
-
-    collectHeadings();
-    const observer = new MutationObserver(collectHeadings);
-    observer.observe(markdown, { childList: true, subtree: true });
-    return () => observer.disconnect();
-  }, [activeSection.id]);
 
   return (
     <div className="docs-shell">
@@ -60,10 +34,8 @@ export function ContentPage({ area }: { area: ContentArea }) {
         <main className="docs-main">
           <article className="void-md docs-markdown">
             {lastUpdated ? <p className="last-updated">最后更新：{lastUpdated}</p> : null}
-            <div className="markdown-body" ref={markdownRef}>
-              <Suspense fallback={<p className="content-loading">正在载入章节…</p>}>
-                <ActiveComponent />
-              </Suspense>
+            <div className="markdown-body">
+              <ActiveComponent />
             </div>
             <nav className="doc-pager" aria-label={`${catalog.title}翻页`}>
               {previousSection ? (
@@ -139,8 +111,8 @@ function ContentNavigation({
   );
 }
 
-function resolveActiveId(area: ContentArea, defaultId: string) {
-  const parts = siteRelativePath().split("/").filter(Boolean);
+function resolveActiveId(area: ContentArea, defaultId: string, path: string) {
+  const parts = siteRelativePath(path).split("/").filter(Boolean);
   return parts[0] === area && parts[1] ? parts[1] : defaultId;
 }
 

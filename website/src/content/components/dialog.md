@@ -1,5 +1,6 @@
 ---
 title: Dialog
+description: "居中模态框及 Header、Footer。"
 ---
 
 # Dialog

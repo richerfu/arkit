@@ -1,5 +1,6 @@
 ---
 title: Pie 饼图
+description: "扇区、环图和 named data。"
 ---
 
 # Pie 饼图

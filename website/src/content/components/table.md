@@ -1,5 +1,6 @@
 ---
 title: Table
+description: "行列数据展示。"
 ---
 
 # Table

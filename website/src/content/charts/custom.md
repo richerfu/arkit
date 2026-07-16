@@ -1,5 +1,6 @@
 ---
 title: Custom 自定义系列
+description: "Custom renderer 与热路径约束。"
 ---
 
 # Custom 自定义系列

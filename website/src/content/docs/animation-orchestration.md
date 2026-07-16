@@ -1,5 +1,6 @@
 ---
 title: Stagger 与 Animatable
+description: "分布延迟、重定向和 scope。"
 ---
 
 # Stagger 与 Animatable

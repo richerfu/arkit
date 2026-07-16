@@ -1,5 +1,6 @@
 ---
 title: 属性与关键帧
+description: "类型化属性、easing 与 composition。"
 ---
 
 # 属性与关键帧

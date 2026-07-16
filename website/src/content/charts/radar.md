@@ -1,5 +1,6 @@
 ---
 title: Radar 雷达图
+description: "Indicator 与多维对比。"
 ---
 
 # Radar 雷达图

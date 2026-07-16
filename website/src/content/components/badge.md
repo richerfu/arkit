@@ -1,5 +1,6 @@
 ---
 title: Badge
+description: "紧凑状态标签。"
 ---
 
 # Badge

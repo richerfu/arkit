@@ -1,5 +1,6 @@
 ---
 title: Menubar
+description: "多菜单命令栏。"
 ---
 
 # Menubar

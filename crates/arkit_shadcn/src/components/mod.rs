@@ -37,6 +37,8 @@ mod hover_card;
 mod input;
 mod input_otp;
 mod label;
+#[cfg(feature = "markdown")]
+mod markdown;
 mod menu_common;
 mod menubar;
 mod navigation_menu;
@@ -111,6 +113,8 @@ pub use hover_card::{HoverCard, HoverCardProps};
 pub use input::{Input, InputProps};
 pub use input_otp::{InputOtp, InputOtpMode, InputOtpProps, InputOtpSeparator, InputOtpStyle};
 pub use label::{Label, LabelProps};
+#[cfg(feature = "markdown")]
+pub use markdown::{Markdown, MarkdownOptions, MarkdownProps, MarkdownStyle};
 pub use menu_common::{
     menu_action_entry, menu_checkbox_entry, menu_label_entry, menu_radio_entry,
     menu_separator_entry, menu_submenu_entry, MenuActionEntry, MenuCheckboxEntry, MenuEntry,

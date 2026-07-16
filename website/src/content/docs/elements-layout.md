@@ -1,5 +1,6 @@
 ---
 title: 元素与布局
+description: "ArkUI 元素、尺寸、Flex 与滚动布局。"
 ---
 
 # 元素与布局

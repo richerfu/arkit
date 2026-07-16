@@ -1,5 +1,6 @@
 ---
 title: 后端与性能
+description: "sampled/native lowering、回退与诊断。"
 ---
 
 # 后端与性能

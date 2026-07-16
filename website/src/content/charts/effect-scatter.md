@@ -1,5 +1,6 @@
 ---
 title: Effect Scatter 涟漪散点图
+description: "重点点位和涟漪效果。"
 ---
 
 # Effect Scatter 涟漪散点图

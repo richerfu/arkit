@@ -1,5 +1,6 @@
 ---
 title: 示例索引
+description: "workspace 示例、覆盖范围与验证命令。"
 ---
 
 # 示例索引

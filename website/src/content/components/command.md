@@ -1,5 +1,6 @@
 ---
 title: Command
+description: "命令搜索与执行列表。"
 ---
 
 # Command

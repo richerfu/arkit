@@ -1,5 +1,6 @@
 ---
 title: Sankey 桑基图
+description: "流量节点与连接。"
 ---
 
 # Sankey 桑基图

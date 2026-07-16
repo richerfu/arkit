@@ -1,5 +1,6 @@
 ---
 title: Parallel 平行坐标图
+description: "多维数据和 Brush。"
 ---
 
 # Parallel 平行坐标图

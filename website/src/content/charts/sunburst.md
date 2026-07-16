@@ -1,5 +1,6 @@
 ---
 title: Sunburst 旭日图
+description: "同心层级数据。"
 ---
 
 # Sunburst 旭日图

@@ -1,5 +1,6 @@
 ---
 title: Input OTP
+description: "验证码输入、slot 与分隔。"
 ---
 
 # Input OTP

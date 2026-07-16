@@ -1,5 +1,6 @@
 ---
 title: 相机
+description: "CameraKit 预览、前后摄切换、拍照、扫码与资源生命周期。"
 ---
 
 # 相机

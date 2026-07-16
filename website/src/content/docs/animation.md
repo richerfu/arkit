@@ -1,5 +1,6 @@
 ---
 title: 动画概览
+description: "统一时钟、target、timeline 与渲染路径。"
 ---
 
 # 动画概览

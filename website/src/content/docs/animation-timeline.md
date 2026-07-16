@@ -1,5 +1,6 @@
 ---
 title: Timeline 编排
+description: "位置、label、call、barrier 与嵌套。"
 ---
 
 # Timeline 编排

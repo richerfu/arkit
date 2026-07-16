@@ -1,5 +1,6 @@
 ---
 title: Scatter 散点图
+description: "二维/多维点和视觉映射。"
 ---
 
 # Scatter 散点图

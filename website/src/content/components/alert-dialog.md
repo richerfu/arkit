@@ -1,5 +1,6 @@
 ---
 title: Alert Dialog
+description: "强确认模态框。"
 ---
 
 # Alert Dialog

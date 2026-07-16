@@ -1,5 +1,6 @@
 ---
 title: Input
+description: "单行受控文本输入。"
 ---
 
 # Input

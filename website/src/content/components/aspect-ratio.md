@@ -1,5 +1,6 @@
 ---
 title: AspectRatio
+description: "固定媒体宽高比。"
 ---
 
 # AspectRatio

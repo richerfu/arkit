@@ -1,5 +1,6 @@
 ---
 title: 路由概览
+description: "类型化 Route 与 RouterProvider。"
 ---
 
 # 路由概览

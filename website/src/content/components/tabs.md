@@ -1,5 +1,6 @@
 ---
 title: Tabs
+description: "页内标签视图。"
 ---
 
 # Tabs

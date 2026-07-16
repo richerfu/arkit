@@ -1,5 +1,6 @@
 ---
 title: 嵌入 WebView
+description: "原生挂载、导航、消息与资源清理。"
 ---
 
 # 嵌入 WebView
