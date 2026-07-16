@@ -1,7 +1,7 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use arkit_hooks::use_ark_node;
+use arkit_hooks::{use_app_foreground, use_ark_node, use_component_visibility};
 use arkit_prelude::*;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
@@ -120,6 +120,9 @@ pub struct CameraPreviewProps {
 pub fn CameraPreview(props: CameraPreviewProps) -> Element {
     let runtime = use_hook(|| Rc::new(ComponentRuntime::new()));
     let node_ref = use_ark_node();
+    let app_foreground = use_app_foreground();
+    let component_visible = use_component_visibility();
+    let effective_active = props.active && app_foreground && component_visible;
     let surface_registration = use_hook(|| Rc::new(RefCell::new(None::<SurfaceRegistration>)));
     let registered_node = use_hook(|| Rc::new(Cell::new(None::<usize>)));
     let controller_binding = use_hook(|| Rc::new(RefCell::new(None::<(CameraController, u64)>)));
@@ -256,7 +259,7 @@ pub fn CameraPreview(props: CameraPreviewProps) -> Element {
     let configure_runtime = runtime.clone();
     #[cfg(not(feature = "scan"))]
     use_effect(use_reactive(
-        (&props.active, &props.position, &props.profiles),
+        (&effective_active, &props.position, &props.profiles),
         move |(active, position, profiles)| {
             configure_runtime.send(WorkerCommand::Configure {
                 active,
@@ -269,7 +272,12 @@ pub fn CameraPreview(props: CameraPreviewProps) -> Element {
     let configure_runtime = runtime.clone();
     #[cfg(feature = "scan")]
     use_effect(use_reactive(
-        (&props.active, &props.position, &props.profiles, &props.scan),
+        (
+            &effective_active,
+            &props.position,
+            &props.profiles,
+            &props.scan,
+        ),
         move |(active, position, profiles, scan)| {
             configure_runtime.send(WorkerCommand::Configure {
                 active,

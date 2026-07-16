@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 use std::ops::Deref;
 use std::rc::Rc;
 
-use arkit_hooks::use_ark_node;
+use arkit_hooks::{use_app_foreground, use_ark_node, use_component_visibility};
 use arkit_prelude::*;
 use dioxus_core::use_drop;
 use ohos_arkui_binding::common::node::ArkUINode;
@@ -1876,6 +1876,7 @@ impl ArkUIEvent for CustomEventNode<'_> {}
 /// the existing native node without remounting it.
 #[component]
 pub fn ECharts(props: EChartsProps) -> Element {
+    let lifecycle_active = use_app_foreground() && use_component_visibility();
     let transition_progress = arkit_animation::use_animatable(0.0_f32);
     let state_progress = arkit_animation::use_animatable(0.0_f32);
     let clock_pulse = arkit_animation::use_animatable(0.0_f32);
@@ -2053,9 +2054,14 @@ pub fn ECharts(props: EChartsProps) -> Element {
         }
         // The initial commands may have been queued before the native node was
         // mounted. Resume once to wake the root FrameDriver with a valid node.
-        draw_transition_progress.controls().resume();
-        draw_state_progress.controls().resume();
-        if draw_state.needs_animation_clock() {
+        if lifecycle_active {
+            draw_transition_progress.controls().resume();
+            draw_state_progress.controls().resume();
+        } else {
+            draw_transition_progress.controls().pause();
+            draw_state_progress.controls().pause();
+        }
+        if lifecycle_active && draw_state.needs_animation_clock() {
             draw_clock.start();
             if draw_clock.is_running() {
                 draw_clock.poke();
@@ -2065,6 +2071,25 @@ pub fn ECharts(props: EChartsProps) -> Element {
         }
         let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
     });
+
+    let lifecycle_clock = animation_clock.clone();
+    let lifecycle_state = state.clone();
+    let lifecycle_transition_progress = transition_progress.clone();
+    let lifecycle_state_progress = state_progress.clone();
+    use_effect(use_reactive(&lifecycle_active, move |active| {
+        if active {
+            lifecycle_transition_progress.controls().resume();
+            lifecycle_state_progress.controls().resume();
+            if lifecycle_state.needs_animation_clock() {
+                lifecycle_clock.start();
+                lifecycle_clock.poke();
+            }
+        } else {
+            lifecycle_transition_progress.controls().pause();
+            lifecycle_state_progress.controls().pause();
+            lifecycle_clock.stop();
+        }
+    }));
 
     let fixed_height = if props.height.is_none() && props.percent_height.is_none() {
         Some(320.0)

@@ -12,10 +12,12 @@ pub use arkit_derive::entry;
 
 // --- Runtime: VirtualDom host ---
 pub use arkit_runtime::{
-    queue_ui_loop, register_back_press_handler, register_scope_resolver, tokio_handle, ArkRuntime,
-    BackPressRegistration, EdgeInsets, EmbeddedWebViewController, EmbeddedWebViewInit,
-    PhysicalRect, SafeAreaPolicy, ScopeNodeResolver, ScopeResolverRegistration, VirtualDom,
-    WebViewFrame, WebViewStyle, WindowMetrics, WindowMetricsHandle, WindowMetricsSubscription,
+    queue_ui_loop, register_back_press_handler, register_scope_resolver, tokio_handle,
+    ApplicationLifecycleEvent, ApplicationLifecycleHandle, ApplicationLifecyclePhase,
+    ApplicationLifecycleState, ApplicationLifecycleSubscription, ArkRuntime, BackPressRegistration,
+    EdgeInsets, EmbeddedWebViewController, EmbeddedWebViewInit, PhysicalRect, SafeAreaPolicy,
+    ScopeNodeResolver, ScopeResolverRegistration, VirtualDom, WebViewFrame, WebViewStyle,
+    WindowMetrics, WindowMetricsHandle, WindowMetricsSubscription,
 };
 
 // --- Renderer + native node primitives ---
@@ -27,9 +29,11 @@ pub use arkit_arkui::{
 // --- Hooks (escape hatches: overlay / layout / virtual range / ark node) ---
 pub use arkit_hooks as hooks;
 pub use arkit_hooks::{
-    use_ark_host_provider, use_ark_node, use_layout_frame, use_layout_frame_node, use_layout_size,
-    use_overlay, use_safe_area, use_safe_area_policy, use_virtual_list, use_virtual_node_adapter,
-    use_virtual_range, use_virtual_water_flow, use_window_metrics, ArkHost, ArkNodeRef,
+    use_app_foreground, use_application_lifecycle, use_application_lifecycle_event,
+    use_ark_host_provider, use_ark_node, use_component_lifecycle, use_component_visibility,
+    use_layout_frame, use_layout_frame_node, use_layout_size, use_overlay, use_safe_area,
+    use_safe_area_policy, use_virtual_list, use_virtual_node_adapter, use_virtual_range,
+    use_virtual_water_flow, use_window_metrics, ArkHost, ArkNodeRef, ComponentLifecycleState,
     LayoutFrame, LayoutSize, OverlayRoot, OverlayViewport, SafeArea, SafeAreaEdges, SafeAreaProps,
     VirtualListHandle, VirtualNodeAdapterHandle, VirtualVisibleRange,
 };
@@ -235,7 +239,9 @@ pub mod prelude {
 
     // Entry + runtime + renderer.
     pub use crate::{
-        entry, mount_entry, mount_entry_with_policy, ArkRuntime, ArkUIRenderer, EdgeInsets,
+        entry, mount_entry, mount_entry_with_policy, ApplicationLifecycleEvent,
+        ApplicationLifecycleHandle, ApplicationLifecyclePhase, ApplicationLifecycleState,
+        ApplicationLifecycleSubscription, ArkRuntime, ArkUIRenderer, EdgeInsets,
         EmbeddedWebViewController, EmbeddedWebViewInit, EventSink, PhysicalRect, SafeAreaPolicy,
         ScopeNodeResolver, VirtualDom, WebViewFrame, WebViewStyle, WindowMetrics,
         WindowMetricsHandle, WindowMetricsSubscription,
@@ -253,12 +259,13 @@ pub mod prelude {
 
     // Escape-hatch hooks.
     pub use crate::{
-        use_ark_host_provider, use_ark_node, use_layout_frame, use_layout_frame_node,
-        use_layout_size, use_overlay, use_safe_area, use_safe_area_policy, use_virtual_list,
-        use_virtual_node_adapter, use_virtual_range, use_virtual_water_flow, use_window_metrics,
-        ArkHost, ArkNodeRef, LayoutFrame, LayoutSize, OverlayRoot, OverlayViewport, SafeArea,
-        SafeAreaEdges, SafeAreaProps, VirtualListHandle, VirtualNodeAdapterHandle,
-        VirtualVisibleRange,
+        use_app_foreground, use_application_lifecycle, use_application_lifecycle_event,
+        use_ark_host_provider, use_ark_node, use_component_lifecycle, use_component_visibility,
+        use_layout_frame, use_layout_frame_node, use_layout_size, use_overlay, use_safe_area,
+        use_safe_area_policy, use_virtual_list, use_virtual_node_adapter, use_virtual_range,
+        use_virtual_water_flow, use_window_metrics, ArkHost, ArkNodeRef, ComponentLifecycleState,
+        LayoutFrame, LayoutSize, OverlayRoot, OverlayViewport, SafeArea, SafeAreaEdges,
+        SafeAreaProps, VirtualListHandle, VirtualNodeAdapterHandle, VirtualVisibleRange,
     };
 
     #[cfg(feature = "i18n")]

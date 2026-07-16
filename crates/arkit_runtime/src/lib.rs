@@ -28,9 +28,14 @@ use napi_ohos::{Error, Result};
 use ohos_arkui_binding::common::handle::ArkUIHandle;
 use openharmony_ability::{Event as AbilityEvent, OpenHarmonyApp, OpenHarmonyWaker};
 
+mod lifecycle;
 mod webview;
 mod window;
 
+pub use lifecycle::{
+    ApplicationLifecycleEvent, ApplicationLifecycleHandle, ApplicationLifecyclePhase,
+    ApplicationLifecycleState, ApplicationLifecycleSubscription,
+};
 pub use webview::{EmbeddedWebViewController, EmbeddedWebViewInit, WebViewFrame, WebViewStyle};
 pub use window::{
     EdgeInsets, PhysicalRect, SafeAreaPolicy, WindowMetrics, WindowMetricsHandle,
@@ -544,9 +549,12 @@ impl ArkRuntime {
         // first rebuild so the framework root and every business component see
         // the same initial snapshot.
         let window_metrics = WindowMetricsHandle::new(WindowMetrics::from_app(&app, None));
+        let application_lifecycle =
+            ApplicationLifecycleHandle::new(ApplicationLifecycleState::default());
         #[cfg(debug_assertions)]
         log_window_metrics(window_metrics.get());
         dom.provide_root_context(window_metrics.clone());
+        dom.provide_root_context(application_lifecycle.clone());
         dom.provide_root_context(safe_area_policy);
 
         // Initial mount: build the real DOM tree onto the slot.
@@ -573,10 +581,12 @@ impl ArkRuntime {
         let loop_task_waker = task_waker.clone();
         let loop_sink = sink.clone();
         let loop_metrics = window_metrics.clone();
+        let loop_lifecycle = application_lifecycle;
         let metrics_app = app.clone();
         let mut keyboard_height_px = None;
         app.run_loop(move |event| {
             let is_user_event = matches!(&event, AbilityEvent::UserEvent);
+            let lifecycle_event = ApplicationLifecycleHandle::handles_ability_event(&event);
             let refresh_window_metrics = matches!(
                 &event,
                 AbilityEvent::WindowCreate
@@ -592,9 +602,12 @@ impl ArkRuntime {
                 keyboard_height_px = Some(*height);
             }
 
-            if is_user_event || refresh_window_metrics {
+            if is_user_event || refresh_window_metrics || lifecycle_event {
                 if let Err(payload) = panic::catch_unwind(AssertUnwindSafe(|| {
                     if let Some(inner) = weak_inner.upgrade() {
+                        if lifecycle_event {
+                            loop_lifecycle.update_from_ability_event(&event);
+                        }
                         if refresh_window_metrics {
                             let next = WindowMetrics::from_app(&metrics_app, keyboard_height_px);
                             if loop_metrics.update(next) {

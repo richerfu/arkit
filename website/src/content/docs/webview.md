@@ -21,6 +21,17 @@ fn app() -> Element {
 
 controller id 在首次 mount 后不可变化。一个 controller 对应一个 embedded WebView；clone 共享同一 mounted state。
 
+`EmbeddedWebViewController::set_visible` 可在 native WebView 创建前调用，期望值会保留到首次挂载。嵌入组件应组合应用与组件可见性，避免后台或隐藏页面继续展示/播放 Web 内容：
+
+```rust
+let visible = use_app_foreground() && use_component_visibility();
+let lifecycle_controller = controller.clone();
+
+use_effect(use_reactive(&visible, move |visible| {
+    let _ = lifecycle_controller.set_visible(visible);
+}));
+```
+
 ## 挂载与同步
 
 ```rust

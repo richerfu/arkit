@@ -192,6 +192,15 @@ fn WebviewArea(
     status: dioxus_signals::Signal<String>,
 ) -> Element {
     let webview: EmbeddedWebViewController = use_context();
+    let lifecycle_visible = use_app_foreground() && use_component_visibility();
+
+    let lifecycle_webview = webview.clone();
+    let mut lifecycle_status = status;
+    use_effect(use_reactive(&lifecycle_visible, move |visible| {
+        if let Err(error) = lifecycle_webview.set_visible(visible) {
+            lifecycle_status.set(format!("webview visibility update failed: {error}"));
+        }
+    }));
 
     let url_for_frame = url;
     let title_sig = title;
