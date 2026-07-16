@@ -1,5 +1,6 @@
 ---
 title: Avatar
+description: "头像图片与 fallback。"
 ---
 
 # Avatar

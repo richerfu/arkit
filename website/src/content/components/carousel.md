@@ -1,5 +1,6 @@
 ---
 title: Carousel
+description: "轮播、控制器和指示器。"
 ---
 
 # Carousel

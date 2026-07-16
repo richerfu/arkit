@@ -1,5 +1,6 @@
 ---
 title: 异步任务
+description: "resource、future、Tokio 与取消语义。"
 ---
 
 # 异步任务

@@ -1,5 +1,6 @@
 ---
 title: Slider
+description: "单值、范围和多 thumb 滑块。"
 ---
 
 # Slider

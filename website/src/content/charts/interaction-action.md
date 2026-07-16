@@ -1,5 +1,6 @@
 ---
 title: 事件与 Action
+description: "Controller、选择、缩放与事件。"
 ---
 
 # 事件与 Action

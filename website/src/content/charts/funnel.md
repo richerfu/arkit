@@ -1,5 +1,6 @@
 ---
 title: Funnel 漏斗图
+description: "阶段顺序和转化。"
 ---
 
 # Funnel 漏斗图

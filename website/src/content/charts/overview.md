@@ -1,5 +1,6 @@
 ---
 title: 图表总览
+description: "原生 renderer、支持范围和阅读路径。"
 ---
 
 # 图表总览

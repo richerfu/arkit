@@ -1,5 +1,6 @@
 ---
 title: Graph 关系图
+description: "节点、连线和布局。"
 ---
 
 # Graph 关系图

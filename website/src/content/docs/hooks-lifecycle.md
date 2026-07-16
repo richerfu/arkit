@@ -1,5 +1,6 @@
 ---
 title: Hooks 与生命周期
+description: "hook 规则、effect、memo 与清理。"
 ---
 
 # Hooks 与生命周期

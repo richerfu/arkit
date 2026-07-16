@@ -1,5 +1,6 @@
 ---
 title: Tree 树图
+description: "层级节点、边和展开。"
 ---
 
 # Tree 树图

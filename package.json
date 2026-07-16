@@ -4,8 +4,8 @@
   "type": "module",
   "scripts": {
     "check": "pnpm run format:check && pnpm run lint && pnpm run website:typecheck",
-    "format": "oxfmt website/src website/index.html website/docs/index.html website/components/index.html website/charts/index.html website/vite.config.ts website/package.json package.json pnpm-workspace.yaml prek.toml .github/workflows/website.yml .oxfmtrc.json .oxlintrc.json",
-    "format:check": "oxfmt --check website/src website/index.html website/docs/index.html website/components/index.html website/charts/index.html website/vite.config.ts website/package.json package.json pnpm-workspace.yaml prek.toml .github/workflows/website.yml .oxfmtrc.json .oxlintrc.json",
+    "format": "oxfmt website/src website/index.html website/vite.config.ts website/package.json package.json pnpm-workspace.yaml prek.toml .github/workflows/website.yml .oxfmtrc.json .oxlintrc.json",
+    "format:check": "oxfmt --check website/src website/index.html website/vite.config.ts website/package.json package.json pnpm-workspace.yaml prek.toml .github/workflows/website.yml .oxfmtrc.json .oxlintrc.json",
     "lint": "oxlint website/src website/vite.config.ts",
     "lint:fix": "oxlint --fix website/src website/vite.config.ts",
     "prek:check": "prek run --all-files",

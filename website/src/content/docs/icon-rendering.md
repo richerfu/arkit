@@ -1,5 +1,6 @@
 ---
 title: 渲染与缓存
+description: "尺寸、颜色、描边、raster 与缓存。"
 ---
 
 # 渲染与缓存

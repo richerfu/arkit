@@ -1,5 +1,6 @@
 ---
 title: Sidebar
+description: "侧边导航及 SidebarItem。"
 ---
 
 # Sidebar

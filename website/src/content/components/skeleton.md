@@ -1,5 +1,6 @@
 ---
 title: Skeleton
+description: "结构化加载占位。"
 ---
 
 # Skeleton

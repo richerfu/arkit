@@ -1,5 +1,6 @@
 ---
 title: 安全区与浮层
+description: "SafeArea、OverlayRoot 与层级管理。"
 ---
 
 # 安全区与浮层

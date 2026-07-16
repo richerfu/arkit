@@ -1,5 +1,6 @@
 ---
 title: 原生节点与布局 Hooks
+description: "节点句柄、布局观测与 UI-loop handoff。"
 ---
 
 # 原生节点与布局 Hooks

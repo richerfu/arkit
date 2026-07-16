@@ -1,5 +1,6 @@
 ---
 title: Spinner
+description: "不确定进度指示器。"
 ---
 
 # Spinner

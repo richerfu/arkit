@@ -1,5 +1,6 @@
 ---
 title: 主题系统
+description: "预设、明暗模式、tokens 与运行时切换。"
 ---
 
 # 主题系统

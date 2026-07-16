@@ -1,5 +1,6 @@
 ---
 title: Pictorial Bar 象形柱图
+description: "Symbol 重复和裁切。"
 ---
 
 # Pictorial Bar 象形柱图

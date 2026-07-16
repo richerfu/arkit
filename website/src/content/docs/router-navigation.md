@@ -1,5 +1,6 @@
 ---
 title: 导航与历史栈
+description: "Link、push、replace、back 与系统返回键。"
 ---
 
 # 导航与历史栈

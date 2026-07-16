@@ -1,5 +1,6 @@
 ---
 title: Markdown
+description: "高性能原生 CommonMark/GFM 渲染。"
 ---
 
 # Markdown

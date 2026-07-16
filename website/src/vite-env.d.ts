@@ -8,6 +8,7 @@ declare module "*.md" {
     slug: string;
     text: string;
   }>;
+  export const frontmatter: Record<string, unknown>;
 
   const MarkdownComponent: ComponentType;
   export default MarkdownComponent;

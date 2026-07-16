@@ -1,5 +1,6 @@
 ---
 title: Switch
+description: "即时二元设置。"
 ---
 
 # Switch

@@ -1,5 +1,6 @@
 ---
 title: Button
+description: "按钮变体、尺寸、禁用和点击。"
 ---
 
 # Button

@@ -1,5 +1,6 @@
 ---
 title: Sonner
+description: "安全区感知的 Toast 队列。"
 ---
 
 # Sonner

@@ -1,5 +1,6 @@
 ---
 title: 架构与 crate 边界
+description: "运行时、渲染器与领域 crate 职责。"
 ---
 
 # 架构与 crate 边界

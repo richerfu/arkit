@@ -1,5 +1,6 @@
 ---
 title: 状态管理
+description: "Signal、派生状态、共享状态与更新原则。"
 ---
 
 # 状态管理

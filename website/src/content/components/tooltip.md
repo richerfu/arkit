@@ -1,5 +1,6 @@
 ---
 title: Tooltip
+description: "简短说明浮层。"
 ---
 
 # Tooltip

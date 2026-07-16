@@ -1,5 +1,6 @@
 ---
 title: Scroll Area
+description: "主题化滚动容器。"
 ---
 
 # Scroll Area

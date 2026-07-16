@@ -1,5 +1,6 @@
 ---
 title: Treemap 矩形树图
+description: "面积编码与下钻。"
 ---
 
 # Treemap 矩形树图

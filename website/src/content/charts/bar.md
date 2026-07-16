@@ -1,5 +1,6 @@
 ---
 title: Bar 柱状图
+description: "离散比较、堆叠和柱宽。"
 ---
 
 # Bar 柱状图

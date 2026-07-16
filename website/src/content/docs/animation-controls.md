@@ -1,5 +1,6 @@
 ---
 title: 播放控制
+description: "play、seek、reverse、cancel 与快照。"
 ---
 
 # 播放控制

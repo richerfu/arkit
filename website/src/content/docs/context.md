@@ -1,5 +1,6 @@
 ---
 title: 上下文与 Provider
+description: "跨层依赖、provider 所有权与作用域。"
 ---
 
 # 上下文与 Provider

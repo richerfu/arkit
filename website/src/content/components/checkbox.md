@@ -1,5 +1,6 @@
 ---
 title: Checkbox
+description: "受控和非受控复选。"
 ---
 
 # Checkbox

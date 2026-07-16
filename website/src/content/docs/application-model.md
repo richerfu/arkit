@@ -1,5 +1,6 @@
 ---
 title: 组件与 RSX
+description: "组件边界、Props、children 与组合模式。"
 ---
 
 # 组件与 RSX

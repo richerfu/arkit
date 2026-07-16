@@ -1,5 +1,6 @@
 ---
 title: Text
+description: "主题化文本层级与排版。"
 ---
 
 # Text

@@ -1,5 +1,6 @@
 ---
 title: Label
+description: "表单与控件标签。"
 ---
 
 # Label

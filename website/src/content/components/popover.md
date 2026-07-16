@@ -1,5 +1,6 @@
 ---
 title: Popover
+description: "锚点交互浮层。"
 ---
 
 # Popover
