@@ -1,0 +1,6 @@
+{
+  "name": "libcamera_example.so",
+  "types": "./Index.d.ts",
+  "version": "1.0.0",
+  "description": "arkit camera example napi bindings"
+}

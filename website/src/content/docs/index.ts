@@ -41,6 +41,7 @@ export const docsCatalog: ContentCatalog = {
         section("virtualization", "虚拟列表", "List、Grid、WaterFlow 的 NodeAdapter。"),
         section("window-metrics", "窗口与尺寸", "窗口尺寸、密度、方向和响应式布局。"),
         section("safe-area-overlay", "安全区与浮层", "SafeArea、OverlayRoot 与层级管理。"),
+        section("camera", "相机", "CameraKit 预览、前后摄切换、拍照与资源生命周期。"),
         section("webview", "嵌入 WebView", "原生挂载、导航、消息与资源清理。"),
       ],
     },

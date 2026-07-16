@@ -2,9 +2,10 @@
 //!
 //! The default facade exports Dioxus core (`rsx!`, `use_signal`, `Element`),
 //! the ArkUI element registry, renderer, runtime, and host hooks. Domain
-//! libraries are opt-in through the `animation`, `chart`, `i18n`, `icon`,
-//! `router`, and `shadcn` features (or `full`). The `#[entry]` macro mounts a
-//! `fn() -> Element` root component into a NodeContent slot.
+//! libraries are opt-in through the `animation`, `camera`, `chart`, `i18n`,
+//! `icon`, `router`, and `shadcn` features (or `full`). The
+//! `#[entry]` macro mounts a `fn() -> Element` root component into a NodeContent
+//! slot.
 
 // --- Entry macro ---
 pub use arkit_derive::entry;
@@ -85,6 +86,27 @@ pub use arkit_animation::{
     BORDER_COLOR, BORDER_RADIUS, BORDER_WIDTH, BRIGHTNESS, CONTRAST, FONT_COLOR, FONT_SIZE,
     FOREGROUND_COLOR, GRAYSCALE, HEIGHT, INVERT, LETTER_SPACING, LINE_HEIGHT, OPACITY, POSITION_X,
     POSITION_Y, ROTATION, SATURATION, SCALE_X, SCALE_Y, SEPIA, TRANSLATE_X, TRANSLATE_Y, WIDTH,
+};
+
+// --- Native CameraKit preview and capture ---
+#[cfg(feature = "camera")]
+pub use arkit_camera as camera;
+#[cfg(feature = "camera")]
+pub use arkit_camera::{
+    CameraCapabilities, CameraCaptureOptions, CameraController, CameraControls, CameraError,
+    CameraErrorKind, CameraExposureMode, CameraFlashMode, CameraFloatRange, CameraFocusMode,
+    CameraFocusState, CameraFrameRateRange, CameraImageRotation, CameraLocation, CameraMode,
+    CameraPhotoModeConfiguration, CameraPhotoPreviewInteractions, CameraPhotoQuality,
+    CameraPhotoToolbarConfiguration, CameraPoint, CameraPosition, CameraPreview,
+    CameraPreviewProps, CameraProfileSelection, CameraQualityPriority, CameraResult,
+    CameraSessionInfo, CameraSize, CameraStabilizationMode, CameraStatus, CameraTorchMode,
+    CameraView, CameraViewProps, CameraWhiteBalanceMode, CapturedPhoto,
+};
+#[cfg(feature = "camera-scan")]
+pub use arkit_camera::{
+    CameraScanConfiguration, CameraScanFormat, CameraScanModeConfiguration,
+    CameraScanPreviewInteractions, CameraScanRegion, CameraScanResult,
+    CameraScanToolbarConfiguration,
 };
 
 // --- Icon ---
@@ -294,6 +316,23 @@ pub mod prelude {
         LabelLayoutOptions, LabelStyle, Legend, LineStyle, LinkData, MapFeature, MapOptions,
         MapPolygon, MapSeries, NodeData, SankeySeries, Series, SeriesOptions, Title, Tooltip,
         VisualStyle,
+    };
+
+    #[cfg(feature = "camera")]
+    pub use crate::{
+        CameraCapabilities, CameraCaptureOptions, CameraController, CameraControls, CameraError,
+        CameraErrorKind, CameraFlashMode, CameraFocusMode, CameraMode,
+        CameraPhotoModeConfiguration, CameraPhotoPreviewInteractions,
+        CameraPhotoToolbarConfiguration, CameraPoint, CameraPosition, CameraPreview,
+        CameraPreviewProps, CameraProfileSelection, CameraResult, CameraSessionInfo, CameraSize,
+        CameraStatus, CameraTorchMode, CameraView, CameraViewProps, CapturedPhoto,
+    };
+
+    #[cfg(feature = "camera-scan")]
+    pub use crate::{
+        CameraScanConfiguration, CameraScanFormat, CameraScanModeConfiguration,
+        CameraScanPreviewInteractions, CameraScanRegion, CameraScanResult,
+        CameraScanToolbarConfiguration,
     };
 
     #[cfg(feature = "shadcn")]

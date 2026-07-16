@@ -2,6 +2,7 @@
   "string": [
     { "name": "module_desc", "value": "arkit example module" },
     { "name": "EntryAbility_desc", "value": "arkit example" },
-    { "name": "EntryAbility_label", "value": "arkit example" }
+    { "name": "EntryAbility_label", "value": "arkit example" },
+    { "name": "camera_permission_reason", "value": "用于显示相机预览并拍摄照片" }
   ]
 }
