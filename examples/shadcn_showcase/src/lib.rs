@@ -1,5 +1,7 @@
 //! shadcn showcase aligned with the pre-Dioxus React Native Reusables demo.
 
+use std::time::Duration;
+
 use arkit::dioxus_core::EventHandler;
 use arkit::dioxus_signals::WritableExt;
 use arkit::entry;
@@ -13,10 +15,10 @@ use arkit::shadcn::components::{
     CarouselIndicatorVariant, CarouselStyle, Checkbox, Collapsible, ContextMenu, DatePicker,
     Dialog, DialogFooter, DialogHeader, DropdownMenu, Field, FieldContent, FieldDescription,
     FieldError, FieldGroup, FieldOrientation, FieldSeparator, FieldSet, FieldTitle, Form, FormItem,
-    HoverCard, Input, InputOtp, InputOtpMode, InputOtpSeparator, Label, MenuEntry, Menubar,
-    MenubarMenuSpec, MultiSlider, Popover, Progress, RadioGroup, RangeSlider, Select, Separator,
-    Skeleton, Slider, SliderOrientation, SliderStyle, Sonner, SonnerToast, Spinner, Switch, Table,
-    Tabs, Text, TextVariant, Textarea, Toggle, ToggleGroup, Tooltip,
+    HoverCard, Input, InputOtp, InputOtpMode, InputOtpSeparator, Label, Markdown, MenuEntry,
+    Menubar, MenubarMenuSpec, MultiSlider, Popover, Progress, RadioGroup, RangeSlider, Select,
+    Separator, Skeleton, Slider, SliderOrientation, SliderStyle, Sonner, SonnerToast, Spinner,
+    Switch, Table, Tabs, Text, TextVariant, Textarea, Toggle, ToggleGroup, Tooltip,
 };
 use arkit::shadcn::icon::icon_placeholder;
 use arkit::shadcn::theme::{
@@ -27,6 +29,44 @@ use arkit::shadcn::theme::{
 const HOME_HEADER_HEIGHT: f32 = 80.0;
 const DETAIL_HEADER_HEIGHT: f32 = 48.0;
 const TRACKING_TIGHT: f32 = -0.35;
+const MARKDOWN_STREAM_INTERVAL_MS: u64 = 500;
+
+const MARKDOWN_STREAM_CHUNKS: &[&str] = &[
+    "# Live deployment briefing\n\n",
+    "**Chunked",
+    " Markdown response**\n\n",
+    "Content arrives from the release assistant. Each chunk is reparsed as a compact event stream and rendered directly into native ArkUI nodes.\n\n",
+    "> [!NOTE]\n",
+    "> Watch incomplete emphasis, tables, and fenced code settle into their final structure ",
+    "as later chunks arrive.\n\n",
+    "## Rollout status\n\n",
+    "| Region | Version | Health |\n",
+    "| :-- | --: | :-- |\n",
+    "| Shanghai | `2.8.0` | ✅ Healthy |\n",
+    "| Singapore | `2.8.0` | 🟡 Observing |\n",
+    "| Frankfurt | `2.7.9` | ⏳ Queued |\n\n",
+    "## What changed\n\n",
+    "- **Parser pipeline**\n  - consumes CommonMark events without HTML\n",
+    "  - coalesces adjacent text runs to reduce native nodes\n",
+    "- **Renderer**\n  1. maps blocks to ArkUI layout primitives\n",
+    "  2. keeps theme and link callbacks independent from parsing\n\n",
+    "## Streaming Rust\n\n```rust\n",
+    "let mut source = String::new();\n",
+    "while let Some(chunk) = response.next().await {\n",
+    "    source.push_str(&chunk);\n",
+    "    markdown_source.set(source.clone());\n",
+    "}\n",
+    "```\n\n",
+    "## Verification matrix\n\n",
+    "- [x] headings, emphasis, and links\n",
+    "- [x] nested ordered and unordered lists\n",
+    "- [x] tables, task lists, code fences, and footnotes\n",
+    "- [ ] production endpoint connected\n\n",
+    "> **Result: one component handles partial and complete documents with the same API.**\n\n",
+    "The final snapshot is reusable across theme changes.[^snapshot]\n\n",
+    "[^snapshot]: Parsing is memoized while `source` and `options` stay unchanged.\n\n",
+    "Read the [Markdown component guide](https://example.com/arkit/markdown).",
+];
 
 const THEME_PRESETS: [ThemePreset; 7] = [
     ThemePreset::Zinc,
@@ -140,6 +180,10 @@ const COMPONENTS: &[ComponentSpec] = &[
     ComponentSpec {
         slug: "label",
         name: "Label",
+    },
+    ComponentSpec {
+        slug: "markdown",
+        name: "Markdown",
     },
     ComponentSpec {
         slug: "menubar",
@@ -815,6 +859,12 @@ fn demo_canvas_policy(slug: &str) -> DemoCanvasPolicy {
             fill_height: true,
             padding: [spacing::XXL, spacing::LG, spacing::XXL, spacing::LG],
         },
+        "markdown" => DemoCanvasPolicy {
+            center_x: true,
+            center_y: false,
+            fill_height: false,
+            padding: [spacing::XXL, spacing::LG, spacing::XXL, spacing::LG],
+        },
         _ => DemoCanvasPolicy {
             center_x: true,
             center_y: true,
@@ -880,6 +930,45 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let sonner_toasts = use_signal(Vec::<SonnerToast>::new);
     let sonner_next_id = use_signal(|| 1_u64);
     let sonner_status = use_signal(|| "Tap a type to show a toast.".to_string());
+    let mut markdown_link =
+        use_signal(|| "Links become active as soon as their chunk arrives.".to_string());
+    let mut markdown_source = use_signal(String::new);
+    let mut markdown_chunk_index = use_signal(|| 0_usize);
+    let mut markdown_streaming = use_signal(|| true);
+
+    let async_runtime = arkit::tokio_handle();
+    let markdown_stream_task = use_future(move || {
+        let async_runtime = async_runtime.clone();
+        async move {
+            if slug != "markdown" {
+                return;
+            }
+
+            loop {
+                let timer = async_runtime.spawn(async {
+                    tokio::time::sleep(Duration::from_millis(MARKDOWN_STREAM_INTERVAL_MS)).await;
+                });
+                if timer.await.is_err() {
+                    markdown_streaming.set(false);
+                    return;
+                }
+
+                let index = markdown_chunk_index();
+                let Some(chunk) = MARKDOWN_STREAM_CHUNKS.get(index) else {
+                    markdown_streaming.set(false);
+                    return;
+                };
+
+                markdown_source.write().push_str(chunk);
+                let next = index + 1;
+                markdown_chunk_index.set(next);
+                if next == MARKDOWN_STREAM_CHUNKS.len() {
+                    markdown_streaming.set(false);
+                    return;
+                }
+            }
+        }
+    });
 
     let theme = arkit_shadcn::theme::use_theme();
     let on_page = EventHandler::new(move |value: i32| page.set(value.max(1)));
@@ -1928,6 +2017,93 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 Label { content: "Accept terms and conditions".to_string() }
             }
         },
+        "markdown" => {
+            let chunk_index = markdown_chunk_index();
+            let complete = chunk_index == MARKDOWN_STREAM_CHUNKS.len();
+            let streaming = markdown_streaming();
+            let document = markdown_source();
+            let status = if complete {
+                format!(
+                    "Complete · {} chunks · {} bytes",
+                    MARKDOWN_STREAM_CHUNKS.len(),
+                    document.len()
+                )
+            } else if streaming {
+                format!(
+                    "Receiving chunk {}/{} · {} bytes",
+                    chunk_index + 1,
+                    MARKDOWN_STREAM_CHUNKS.len(),
+                    document.len()
+                )
+            } else {
+                format!(
+                    "Paused at chunk {}/{} · {} bytes",
+                    chunk_index,
+                    MARKDOWN_STREAM_CHUNKS.len(),
+                    document.len()
+                )
+            };
+            let stream_action = if streaming { "Pause" } else { "Continue" };
+            let mut stream_control = markdown_stream_task;
+            let mut stream_replay = markdown_stream_task;
+
+            rsx! {
+                fixed_width {
+                    width: 640.0,
+                    column {
+                        percent_width: 1.0,
+                        align_items: "start",
+                        Text { content: status, variant: TextVariant::Muted }
+                        v_gap { height: spacing::SM }
+                        Progress {
+                            value: chunk_index as f32,
+                            total: Some(MARKDOWN_STREAM_CHUNKS.len() as f32),
+                            height: Some(4.0),
+                            animation_duration_ms: 120,
+                        }
+                        v_gap { height: spacing::MD }
+                        row {
+                            Button {
+                                variant: ButtonVariant::Outline,
+                                size: ButtonSize::Sm,
+                                disabled: Some(complete),
+                                onclick: move |_| {
+                                    if markdown_streaming() {
+                                        markdown_streaming.set(false);
+                                        stream_control.pause();
+                                    } else {
+                                        markdown_streaming.set(true);
+                                        stream_control.resume();
+                                    }
+                                },
+                                "{stream_action}"
+                            }
+                            h_gap { width: spacing::SM }
+                            Button {
+                                size: ButtonSize::Sm,
+                                onclick: move |_| {
+                                    markdown_source.set(String::new());
+                                    markdown_chunk_index.set(0);
+                                    markdown_streaming.set(true);
+                                    markdown_link.set("Links become active as soon as their chunk arrives.".to_string());
+                                    stream_replay.restart();
+                                },
+                                "Replay"
+                            }
+                        }
+                        v_gap { height: spacing::XL }
+                        Markdown {
+                            source: document,
+                            on_link_click: Some(EventHandler::new(move |url: String| {
+                                markdown_link.set(format!("Activated: {url}"));
+                            })),
+                        }
+                        v_gap { height: spacing::LG }
+                        Text { content: markdown_link(), variant: TextVariant::Muted }
+                    }
+                }
+            }
+        }
         "menubar" => rsx! {
             Menubar {
                 active: Some(menubar_active()),

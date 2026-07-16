@@ -1,5 +1,6 @@
 ---
 title: Bottom Navigation
+description: "移动端底部主导航。"
 ---
 
 # Bottom Navigation

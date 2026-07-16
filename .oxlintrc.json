@@ -32,12 +32,14 @@
       "files": ["website/src/**/*.{ts,tsx}"],
       "env": {
         "browser": true
+      },
+      "rules": {
+        "import/no-unassigned-import": ["warn", { "allow": ["**/*.css"] }]
       }
     },
     {
       "files": ["website/src/main.tsx"],
       "rules": {
-        "import/no-unassigned-import": "off",
         "react/no-array-index-key": "off"
       }
     },

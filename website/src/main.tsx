@@ -1,12 +1,6 @@
-import "@fontsource/maple-mono/index.css";
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-
 import { ContentPage } from "./content-page";
 import type { ContentArea } from "./content/types";
 import { siteHref, siteRelativePath } from "./site-paths";
-
-import "./styles.css";
 
 type SiteRoute = "home" | ContentArea;
 
@@ -100,12 +94,12 @@ const counterCode: ReadonlyArray<ReadonlyArray<CodeToken>> = [
   [["}"]],
 ];
 
-function App() {
-  const route = resolveRoute();
+export function App({ path = siteRelativePath() }: { path?: string }) {
+  const route = resolveRoute(path);
   return (
     <>
       <SiteHeader route={route} />
-      {route === "home" ? <HomePage /> : <ContentPage area={route} />}
+      {route === "home" ? <HomePage /> : <ContentPage area={route} path={path} />}
       <SiteFooter />
     </>
   );
@@ -314,13 +308,7 @@ function SiteFooter() {
   );
 }
 
-function resolveRoute(): SiteRoute {
-  const area = siteRelativePath().split("/")[0];
+function resolveRoute(path: string): SiteRoute {
+  const area = siteRelativePath(path).split("/")[0];
   return area === "docs" || area === "components" || area === "charts" ? area : "home";
 }
-
-createRoot(document.getElementById("app")!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);

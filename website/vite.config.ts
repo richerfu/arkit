@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { readdirSync, statSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -13,11 +13,6 @@ const siteBasePath = normalizeBasePath(process.env.SITE_BASE_PATH);
 const CONTENT_LAST_UPDATED_ID = "virtual:content-last-updated";
 const RESOLVED_CONTENT_LAST_UPDATED_ID = `\0${CONTENT_LAST_UPDATED_ID}`;
 const contentAreas = ["docs", "components", "charts"] as const;
-const contentLandingByArea = {
-  docs: "getting-started",
-  components: "overview",
-  charts: "overview",
-} as const;
 const contentMarkdownFiles = contentAreas.flatMap((area) =>
   readdirSync(resolve(rootDir, "src/content", area))
     .filter((file) => file.endsWith(".md"))
@@ -30,15 +25,11 @@ function contentFallback(): Plugin {
     apply: "serve",
     configureServer(server) {
       server.middlewares.use((req, _res, next) => {
-        const area = contentAreas.find((candidate) => req.url?.startsWith(`/${candidate}/`));
-        if (area && !req.url?.includes(".")) req.url = `/${area}/index.html`;
-        next();
-      });
-    },
-    configurePreviewServer(server) {
-      server.middlewares.use((req, _res, next) => {
-        const area = contentAreas.find((candidate) => req.url?.startsWith(`/${candidate}/`));
-        if (area && !req.url?.includes(".")) req.url = `/${area}/index.html`;
+        const relativeUrl = req.url?.startsWith(siteBasePath)
+          ? `/${req.url.slice(siteBasePath.length)}`
+          : req.url;
+        const area = contentAreas.find((candidate) => relativeUrl?.startsWith(`/${candidate}/`));
+        if (area && !relativeUrl?.includes(".")) req.url = `${siteBasePath}index.html`;
         next();
       });
     },
@@ -60,22 +51,6 @@ function contentLastUpdated(): Plugin {
         }),
       );
       return `export const lastUpdatedByContent = ${JSON.stringify(updated, null, 2)};`;
-    },
-  };
-}
-
-function contentStaticRoutes(): Plugin {
-  return {
-    name: "content-static-routes",
-    apply: "build",
-    closeBundle() {
-      for (const [area, sectionId] of contentMarkdownFiles) {
-        if (sectionId === contentLandingByArea[area]) continue;
-        const areaEntry = resolve(rootDir, "dist", area, "index.html");
-        const routeDir = resolve(rootDir, "dist", area, sectionId);
-        mkdirSync(routeDir, { recursive: true });
-        copyFileSync(areaEntry, resolve(routeDir, "index.html"));
-      }
     },
   };
 }
@@ -108,19 +83,12 @@ export default defineConfig({
     }),
     contentFallback(),
     contentLastUpdated(),
-    contentStaticRoutes(),
     tailwindcss(),
   ],
   build: {
     outDir: "dist",
     emptyOutDir: true,
-    rollupOptions: {
-      input: {
-        main: resolve(rootDir, "index.html"),
-        docs: resolve(rootDir, "docs/index.html"),
-        components: resolve(rootDir, "components/index.html"),
-        charts: resolve(rootDir, "charts/index.html"),
-      },
-    },
+    manifest: true,
+    modulePreload: { polyfill: false },
   },
 });

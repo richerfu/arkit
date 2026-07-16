@@ -1,5 +1,6 @@
 ---
 title: 事件处理
+description: "事件 payload、闭包捕获与默认行为。"
 ---
 
 # 事件处理

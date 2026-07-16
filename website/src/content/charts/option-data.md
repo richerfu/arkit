@@ -1,5 +1,6 @@
 ---
 title: Option 与数据
+description: "typed builder、JSON、dataset 与数据形状。"
 ---
 
 # Option 与数据

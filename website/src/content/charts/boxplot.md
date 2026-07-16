@@ -1,5 +1,6 @@
 ---
 title: Boxplot 箱线图
+description: "五数摘要和异常点。"
 ---
 
 # Boxplot 箱线图

@@ -1,16 +1,25 @@
 ---
 title: 组件库介绍
+description: "安装、导入、组件边界与完整索引。"
 ---
 
 # 组件库介绍
 
 `arkit_shadcn` 是基于 Dioxus、ArkUI element、Arkit Animation 与 OverlayRoot 实现的原生组件库。启用 `shadcn` feature 后即可使用，且会自动启用 `animation` 与 `icon`。
 
+`Markdown` 是独立的可选能力。使用该组件时启用 `markdown` feature；它会自动启用 `shadcn`，并且仅在此时引入 Markdown 解析依赖。
+
 ## 安装与导入
 
 ```toml
 [dependencies]
 arkit = { version = "*", features = ["shadcn"] }
+```
+
+仅使用 Markdown 时可以直接写：
+
+```toml
+arkit = { version = "*", features = ["markdown"] }
 ```
 
 ```rust

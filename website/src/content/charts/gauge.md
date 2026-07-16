@@ -1,5 +1,6 @@
 ---
 title: Gauge 仪表盘
+description: "单值、区间和进度。"
 ---
 
 # Gauge 仪表盘

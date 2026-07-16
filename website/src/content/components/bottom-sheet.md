@@ -1,5 +1,6 @@
 ---
 title: Bottom Sheet
+description: "移动端底部面板与输入框。"
 ---
 
 # Bottom Sheet

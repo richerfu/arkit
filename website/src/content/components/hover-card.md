@@ -1,5 +1,6 @@
 ---
 title: Hover Card
+description: "悬浮预览卡片。"
 ---
 
 # Hover Card

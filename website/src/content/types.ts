@@ -1,12 +1,19 @@
-import { lazy, type ComponentType, type LazyExoticComponent } from "react";
+import type { ComponentType } from "react";
 
 export type ContentArea = "docs" | "components" | "charts";
 
 export type ContentSection = {
   id: string;
   title: string;
-  summary: string;
-  Component: LazyExoticComponent<ComponentType>;
+  description: string;
+  Component: ComponentType;
+  headings: MarkdownHeading[];
+};
+
+export type MarkdownHeading = {
+  depth: number;
+  slug: string;
+  text: string;
 };
 
 export type ContentGroup = {
@@ -20,15 +27,26 @@ export type ContentCatalog = {
   groups: ContentGroup[];
 };
 
-type MarkdownModule = { default: ComponentType };
+export type MarkdownModule = {
+  default: ComponentType;
+  frontmatter: Record<string, unknown>;
+  headings: MarkdownHeading[];
+};
 
-export function markdownComponent(
-  modules: Record<string, () => Promise<MarkdownModule>>,
+export function markdownSection(
+  modules: Record<string, MarkdownModule>,
   id: string,
-) {
-  const load = modules[`./${id}.md`];
-  if (!load) throw new Error(`missing markdown module: ${id}`);
-  return lazy(load);
+): ContentSection {
+  const module = modules[`./${id}.md`];
+  if (!module) throw new Error(`missing markdown module: ${id}`);
+  const { title, description } = module.frontmatter;
+  if (typeof title !== "string" || !title.trim()) {
+    throw new Error(`missing Markdown title: ${id}`);
+  }
+  if (typeof description !== "string" || !description.trim()) {
+    throw new Error(`missing Markdown description: ${id}`);
+  }
+  return { id, title, description, Component: module.default, headings: module.headings };
 }
 
 export function catalogSections(catalog: ContentCatalog) {

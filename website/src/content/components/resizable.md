@@ -1,5 +1,6 @@
 ---
 title: Resizable
+description: "双栏内容与分隔布局。"
 ---
 
 # Resizable

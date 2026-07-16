@@ -1,5 +1,6 @@
 ---
 title: Drag 与 Scroll
+description: "手势联动、惯性、阈值与同步。"
 ---
 
 # Drag 与 Scroll

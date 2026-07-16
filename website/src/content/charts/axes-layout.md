@@ -1,5 +1,6 @@
 ---
 title: 坐标轴与布局
+description: "Axis、Grid、绘图区与坐标转换。"
 ---
 
 # 坐标轴与布局

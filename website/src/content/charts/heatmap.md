@@ -1,5 +1,6 @@
 ---
 title: Heatmap 热力图
+description: "x/y/value 与 VisualMap。"
 ---
 
 # Heatmap 热力图

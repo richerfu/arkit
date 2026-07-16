@@ -510,10 +510,6 @@ pre {
   color: var(--faint);
   font-size: 0.72rem;
 }
-.content-loading {
-  min-height: 45vh;
-  color: var(--faint);
-}
 .docs-toc a {
   display: block;
   margin: 0.55rem 0;

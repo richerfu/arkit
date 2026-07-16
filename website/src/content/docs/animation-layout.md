@@ -1,5 +1,6 @@
 ---
 title: Layout 与 Presence
+description: "FLIP、进退场和重排。"
 ---
 
 # Layout 与 Presence

@@ -1,5 +1,6 @@
 ---
 title: 视觉与交互组件
+description: "Legend、Tooltip、DataZoom、VisualMap 与状态样式。"
 ---
 
 # 视觉与交互组件

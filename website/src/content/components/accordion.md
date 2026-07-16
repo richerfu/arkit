@@ -1,5 +1,6 @@
 ---
 title: Accordion
+description: "多项折叠内容。"
 ---
 
 # Accordion

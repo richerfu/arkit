@@ -1,5 +1,6 @@
 ---
 title: 运行时切换
+description: "Provider、语言回退与响应式刷新。"
 ---
 
 # 运行时切换

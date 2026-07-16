@@ -1,5 +1,6 @@
 ---
 title: Separator
+description: "水平和垂直分隔。"
 ---
 
 # Separator

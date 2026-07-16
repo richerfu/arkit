@@ -1,5 +1,6 @@
 ---
 title: ECharts 组件
+description: "Props、尺寸、事件与 Controller 绑定。"
 ---
 
 # ECharts 组件

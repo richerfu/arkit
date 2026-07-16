@@ -1,5 +1,6 @@
 ---
 title: 图标概览
+description: "Lucide 图标目录与 feature 接入。"
 ---
 
 # 图标概览

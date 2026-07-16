@@ -4,7 +4,9 @@ export function siteHref(path = "") {
   return `${siteBasePath}${path.replace(/^\/+/, "")}`;
 }
 
-export function siteRelativePath(pathname = window.location.pathname) {
+export function siteRelativePath(
+  pathname = typeof window === "undefined" ? siteBasePath : window.location.pathname,
+) {
   const relativePath = pathname.startsWith(siteBasePath)
     ? pathname.slice(siteBasePath.length)
     : pathname;

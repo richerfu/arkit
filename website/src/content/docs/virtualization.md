@@ -1,5 +1,6 @@
 ---
 title: 虚拟列表与可见范围
+description: "List、Grid、WaterFlow 的 NodeAdapter。"
 ---
 
 # 虚拟列表与可见范围

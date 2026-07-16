@@ -1,5 +1,6 @@
 ---
 title: 布局与浮层
+description: "尺寸、SafeArea、OverlayRoot 与键盘。"
 ---
 
 # 布局与浮层

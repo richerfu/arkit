@@ -1,5 +1,6 @@
 ---
 title: 嵌套路由
+description: "Outlet、参数、查询串与页面壳。"
 ---
 
 # 嵌套路由

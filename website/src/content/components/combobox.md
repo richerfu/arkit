@@ -1,5 +1,6 @@
 ---
 title: Combobox
+description: "可检索选项选择。"
 ---
 
 # Combobox

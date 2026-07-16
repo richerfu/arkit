@@ -1,5 +1,6 @@
 ---
 title: 实时更新与动画
+description: "受控更新、appendData 与统一时钟。"
 ---
 
 # 实时更新与动画

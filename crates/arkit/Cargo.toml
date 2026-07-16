@@ -11,11 +11,12 @@ workspace = true
 
 [features]
 default = []
-full = ["animation", "chart", "i18n", "icon", "router", "shadcn"]
+full = ["animation", "chart", "i18n", "icon", "markdown", "router", "shadcn"]
 animation = ["dep:arkit_animation"]
 chart = ["animation", "dep:arkit_chart"]
 i18n = ["dep:arkit_i18n"]
 icon = ["dep:arkit_icon"]
+markdown = ["shadcn", "arkit_shadcn/markdown"]
 router = ["animation", "dep:arkit_router"]
 shadcn = ["animation", "icon", "dep:arkit_shadcn"]
 

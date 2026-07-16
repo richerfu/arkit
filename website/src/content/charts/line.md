@@ -1,5 +1,6 @@
 ---
 title: Line 折线图
+description: "连续趋势、平滑、区域和标记。"
 ---
 
 # Line 折线图

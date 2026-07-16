@@ -3,8 +3,8 @@
 //! The default facade exports Dioxus core (`rsx!`, `use_signal`, `Element`),
 //! the ArkUI element registry, renderer, runtime, and host hooks. Domain
 //! libraries are opt-in through the `animation`, `chart`, `i18n`, `icon`,
-//! `router`, and `shadcn` features (or `full`). The `#[entry]` macro mounts a
-//! `fn() -> Element` root component into a NodeContent slot.
+//! `markdown`, `router`, and `shadcn` features (or `full`). The `#[entry]`
+//! macro mounts a `fn() -> Element` root component into a NodeContent slot.
 
 // --- Entry macro ---
 pub use arkit_derive::entry;

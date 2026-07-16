@@ -1,5 +1,6 @@
 ---
 title: Collapsible
+description: "单区域展开收起。"
 ---
 
 # Collapsible

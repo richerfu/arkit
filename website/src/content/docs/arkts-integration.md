@@ -1,5 +1,6 @@
 ---
 title: ArkTS 工程接入
+description: "NativeAbility、XComponent 与生命周期。"
 ---
 
 # ArkTS 工程接入

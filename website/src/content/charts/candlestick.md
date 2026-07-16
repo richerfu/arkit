@@ -1,5 +1,6 @@
 ---
 title: Candlestick K 线图
+description: "OHLC 数据和金融样式。"
 ---
 
 # Candlestick K 线图
