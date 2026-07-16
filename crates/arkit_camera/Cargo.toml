@@ -1,0 +1,28 @@
+[package]
+name = "arkit_camera"
+description = "Native CameraKit preview and photo capture components for arkit"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+scan = ["dep:arkit_animation", "dep:rxing"]
+
+[dependencies]
+arkit_animation = { workspace = true, optional = true }
+arkit_hooks.workspace = true
+arkit_icon.workspace = true
+arkit_prelude.workspace = true
+ohos-ability-access-control-binding.workspace = true
+ohos-camera-binding.workspace = true
+ohos-xcomponent-binding.workspace = true
+ohos-xcomponent-sys.workspace = true
+ohos-hilog-binding.workspace = true
+ohos-arkui-binding.workspace = true
+tokio.workspace = true
+rxing = { workspace = true, optional = true }

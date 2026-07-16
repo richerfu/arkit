@@ -31,6 +31,7 @@ export const docsCatalog: ContentCatalog = {
         section("virtualization"),
         section("window-metrics"),
         section("safe-area-overlay"),
+        section("camera"),
         section("webview"),
       ],
     },

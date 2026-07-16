@@ -14,11 +14,13 @@ members = [
     "crates/arkit_animation",
     "crates/arkit_animation_core",
     "crates/arkit_chart",
+    "crates/arkit_camera",
     "crates/arkit_icon",
     "examples/counter",
     "examples/async_task",
     "examples/animation",
     "examples/chart",
+    "examples/camera",
     "examples/complex_cases",
     "examples/i18n",
     "examples/router",
@@ -55,6 +57,7 @@ framework = { package = "arkit", path = "crates/arkit" }
 arkit_animation = { path = "crates/arkit_animation" }
 arkit_animation_core = { path = "crates/arkit_animation_core" }
 arkit_chart = { path = "crates/arkit_chart" }
+arkit_camera = { path = "crates/arkit_camera" }
 arkit_derive = { path = "crates/arkit_derive" }
 arkit_icon = { path = "crates/arkit_icon" }
 arkit_i18n = { path = "crates/arkit_i18n" }
@@ -68,6 +71,7 @@ arkit_prelude = { path = "crates/arkit_prelude" }
 arkit_hooks = { path = "crates/arkit_hooks" }
 rust-embed = { version = "8.11.0", features = ["debug-embed"] }
 tokio = { version = "1.52", features = ["rt-multi-thread", "sync", "time"] }
+rxing = { version = "0.9.1", default-features = false, features = ["decoders", "encoding_rs", "full_barcode_format_support"] }
 
 # Dioxus 0.7 — reuse its VirtualDom, diff/reconcile, signals, hooks, and router
 # directly rather than maintaining parallel framework primitives.
@@ -104,6 +108,10 @@ ohos-arkui-binding = { version = "0.2.0", default-features = false, features = [
 ohos-arkui-sys = { version = "0.1.0", default-features = false, features = ["api-20"] }
 ohos-drawing-binding = "0.2.0"
 ohos-native-drawing-sys = "0.2.0"
-ohos-image-native-binding = "0.0.1"
+ohos-image-native-binding = { version = "0.0.3", default-features = false, features = ["api-20"] }
 ohos-display-binding = "0.1.0"
 ohos-hilog-binding = "0.2.0"
+ohos-ability-access-control-binding = "0.1.0"
+ohos-camera-binding = { version = "0.1.0", default-features = false, features = ["api-20", "xcomponent"] }
+ohos-xcomponent-binding = { version = "0.3.1", default-features = false, features = ["callbacks", "api-20"] }
+ohos-xcomponent-sys = { version = "0.1.1", default-features = false, features = ["api-20"] }

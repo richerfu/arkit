@@ -31,6 +31,12 @@ fn app() -> Element {
 
 The complete runnable version is in [examples/counter](examples/counter/src/lib.rs).
 
+Optional domain APIs are feature-gated. For example, native CameraKit preview
+and JPEG capture are enabled with `arkit = { features = ["camera"] }`; configurable
+barcode scanning is added by `camera-scan`. CameraKit and scan-decoder dependency edges
+are absent from the default graph and follow their respective features.
+See [examples/camera](examples/camera/src/lib.rs).
+
 ## License
 
 [MIT](./LICENSE-MIT) or [Apache2.0](./LICENSE-APACHE)

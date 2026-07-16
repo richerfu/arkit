@@ -44,9 +44,11 @@ napi-build-ohos = "1.1"
 ```toml
 arkit = {
   version = "*",
-  features = ["animation", "router", "i18n", "icon"]
+  features = ["animation", "camera", "router", "i18n", "icon"]
 }
 ```
+
+每个领域能力及其 native 依赖都跟随对应 feature。未启用 `camera` 时不会引入 `arkit_camera`、CameraKit 及该领域新增的 native surface/image 依赖边；基础 renderer 已经使用的共享 ArkUI 绑定不受此规则影响。
 
 `build.rs` 只初始化 N-API 构建：
 

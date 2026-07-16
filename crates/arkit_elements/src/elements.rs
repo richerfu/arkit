@@ -35,6 +35,16 @@ macro_rules! define_element {
 // (Inline since `define_element!` takes a literal comma-list.)
 
 define_element! {
+    /// Native media surface (ArkUI `XComponent`, surface mode).
+    xcomponent => "XComponent" {
+        background_color, margin, margin_top, margin_bottom, margin_left,
+        margin_right, percent_width, percent_height, width, height,
+        opacity, border_radius, border_width, border_color, visibility,
+        enabled, clip, hit_test_behavior, aspect_ratio, position, z_index,
+    }
+}
+
+define_element! {
     /// Column layout container (ArkUI `Column`).
     column => "Column" {
         font_size, font_color, font_weight, foreground_color, background_color, padding, padding_top, padding_right, padding_bottom, padding_left, margin,
@@ -376,5 +386,6 @@ pub mod completions {
         datepicker {},
         textinput {},
         textarea {},
+        xcomponent {},
     }
 }

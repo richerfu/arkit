@@ -9,7 +9,7 @@ use ohos_arkui_binding::common::node::ArkUINode;
 use ohos_arkui_binding::component::built_in_component::{
     CalendarPicker, Checkbox, Column, Custom, DatePicker, Flex, FlowItem, Grid, GridItem, Image,
     List, ListItem, LoadingProgress, Progress, Radio, Refresh, Row, Scroll, Slider, Stack, Swiper,
-    Text, TextArea, TextInput, Toggle, WaterFlow,
+    Text, TextArea, TextInput, Toggle, WaterFlow, XComponent,
 };
 
 /// The canonical set of ArkUI built-in component kinds the renderer supports.
@@ -44,6 +44,7 @@ pub enum NodeKind {
     TextInput,
     Toggle,
     WaterFlow,
+    XComponent,
 }
 
 /// Instantiate a native [`ArkUINode`] for the given component kind.
@@ -80,6 +81,7 @@ pub fn create_node(kind: NodeKind) -> ArkUIResult<ArkUINode> {
         NodeKind::TextInput => TextInput::new()?.into(),
         NodeKind::Toggle => Toggle::new()?.into(),
         NodeKind::WaterFlow => WaterFlow::new()?.into(),
+        NodeKind::XComponent => XComponent::new()?.into(),
     })
 }
 
@@ -116,6 +118,7 @@ pub fn kind_from_tag(tag: &str) -> Option<NodeKind> {
         "textinput" | "TextInput" => NodeKind::TextInput,
         "toggle" | "Toggle" => NodeKind::Toggle,
         "waterflow" | "WaterFlow" => NodeKind::WaterFlow,
+        "xcomponent" | "XComponent" => NodeKind::XComponent,
         _ => return None,
     })
 }
@@ -168,6 +171,7 @@ pub fn canonical_tag(tag: &str) -> &'static str {
         "textinput" | "TextInput" => "textinput",
         "toggle" | "Toggle" => "toggle",
         "waterflow" | "WaterFlow" => "waterflow",
+        "xcomponent" | "XComponent" => "xcomponent",
         _ => "stack",
     }
 }

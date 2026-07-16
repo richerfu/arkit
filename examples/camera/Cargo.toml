@@ -1,0 +1,22 @@
+[package]
+name = "camera_example"
+description = "Native CameraKit preview and capture showcase for arkit"
+publish = false
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+arkit = { workspace = true, features = ["camera-scan"] }
+napi-ohos.workspace = true
+napi-derive-ohos.workspace = true
+
+[build-dependencies]
+napi-build-ohos.workspace = true

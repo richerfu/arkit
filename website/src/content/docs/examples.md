@@ -5,7 +5,7 @@ description: "workspace 示例、覆盖范围与验证命令。"
 
 # 示例索引
 
-workspace 提供 9 个可运行 OpenHarmony `cdylib`。示例既是入门代码，也是公开 API 的编译与真机契约。
+workspace 提供 10 个可运行 OpenHarmony `cdylib`。示例既是入门代码，也是公开 API 的编译与真机契约。
 
 ## 示例矩阵
 
@@ -14,6 +14,7 @@ workspace 提供 9 个可运行 OpenHarmony `cdylib`。示例既是入门代码�
 | `counter`         | `#[entry]`、RSX、signal、click                                            | `examples/counter/src/lib.rs`         |
 | `async_task`      | `use_resource`、Tokio timer、UI wake                                      | `examples/async_task/src/lib.rs`      |
 | `animation`       | timeline、easing、controls、layout/presence、drag/scroll、lowering        | `examples/animation/src/lib.rs`       |
+| `camera`          | CameraKit 拍照/扫码双模式、可配置工具栏、分辨率与完整控制项               | `examples/camera/src/lib.rs`          |
 | `chart`           | 22 series、realtime option、actions、events、appendData、coordinate query | `examples/chart/src/lib.rs`           |
 | `complex_cases`   | 10,000 item List/Grid/WaterFlow NodeAdapter                               | `examples/complex_cases/src/lib.rs`   |
 | `i18n`            | Fluent macro、typed message、locale switch、Cargo rename                  | `examples/i18n/src/lib.rs`            |
@@ -62,6 +63,17 @@ ohrs build --arch aarch
 ## chart
 
 展示全部 series family 和 ECharts-compatible instance operations。除画面外检查 tooltip/hit-test、legend/dataZoom、selection state、realtime transition、appendData、coordinate conversion 和图片导出。
+
+## camera
+
+使用全屏 XComponent 预览并覆盖 Rust ArkUI 控件，验证：
+
+- CameraKit session 与 XComponent Surface 的生命周期绑定。
+- 后置/前置相机切换、暂停和恢复。
+- JPEG 拍照数据从 ImageNative/NativeBuffer 安全复制到 `CapturedPhoto`。
+- 权限拒绝、无相机设备和 native error 的可观察状态。
+
+相机画面与拍照必须在带 CameraKit 相机设备的真机上验收。没有虚拟相机的模拟器仍可验证 HAP 加载、权限请求、Surface 建立和 `Unavailable` 错误路径。
 
 ## complex_cases
 
