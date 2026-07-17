@@ -9,7 +9,7 @@
 //! small outer shadow, start-aligned content. Anchored below the trigger.
 
 use super::floating_layer::{
-    FloatingAlign, FloatingPanelPlacement, FloatingSide, FLOATING_BACKDROP, SHADOW_SM,
+    FloatingAlign, FloatingPanelPlacement, FloatingSide, HIT_TEST_DEFAULT, HIT_TEST_NONE, SHADOW_SM,
 };
 use crate::theme::*;
 use arkit_prelude::*;
@@ -93,13 +93,8 @@ pub fn HoverCard(
             } else {
                 FloatingPanelPlacement::fallback(viewport)
             };
-            let dismiss_overlay = show_overlay.clone();
-            let dismiss = EventHandler::new(move |_: ()| {
-                set_open.call(false);
-                dismiss_overlay.dismiss();
-            });
             show_overlay.show_floating(move || {
-                hover_card_overlay_content(theme, panel_width, placement, dismiss, panel)
+                hover_card_overlay_content(theme, panel_width, placement, panel)
             });
         },
     );
@@ -144,7 +139,6 @@ fn hover_card_overlay_content(
     theme: Theme,
     panel_width: f32,
     placement: FloatingPanelPlacement,
-    on_dismiss: EventHandler<()>,
     children: Element,
 ) -> Element {
     let top = placement.y.max(0.0);
@@ -155,11 +149,11 @@ fn hover_card_overlay_content(
             percent_height: 1.0,
             align_items: "start",
             padding_top: top,
-            background_color: FLOATING_BACKDROP,
-            onclick: move |_| on_dismiss.call(()),
+            hit_test_behavior: HIT_TEST_NONE,
             row {
                 percent_width: 1.0,
                 align_items: "start",
+                hit_test_behavior: HIT_TEST_NONE,
                 arkit_animation::MountTransition {
                     preset: Some(arkit_animation::TransitionPreset::SlideUp),
                     duration_ms: Some(140),
@@ -168,6 +162,7 @@ fn hover_card_overlay_content(
                         margin_left: left,
                         width: panel_width,
                         align_items: "start",
+                        hit_test_behavior: HIT_TEST_DEFAULT,
                         padding: spacing::LG,
                         border_radius: theme.radii.md,
                         border_width: 1.0,

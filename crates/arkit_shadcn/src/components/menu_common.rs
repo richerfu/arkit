@@ -13,6 +13,8 @@
 use crate::theme::*;
 use arkit_prelude::*;
 
+use super::floating_layer::{FLOATING_CAPTURE_COLOR, HIT_TEST_DEFAULT, HIT_TEST_NONE};
+
 pub(crate) const TRANSPARENT: u32 = 0x00000000;
 const MENU_PANEL_HORIZONTAL_PADDING: f32 = spacing::XXS * 2.0;
 const MENU_PANEL_VERTICAL_PADDING: f32 = spacing::XXS * 2.0;
@@ -651,40 +653,40 @@ pub(crate) fn menu_overlay_content(
             percent_width: 1.0,
             percent_height: 1.0,
             align_items: "start",
-            hit_test_behavior: 2_i32,
+            hit_test_behavior: HIT_TEST_NONE,
             if let Some(region) = pass_through_region {
                 if region.top() > 0.0 {
                     row {
                         percent_width: 1.0,
                         height: region.top(),
-                        background_color: 0x01000000u32,
-                        hit_test_behavior: 0_i32,
+                        background_color: FLOATING_CAPTURE_COLOR,
+                        hit_test_behavior: HIT_TEST_DEFAULT,
                         onclick: move |_| on_dismiss.call(()),
                     }
                 }
                 row {
                     percent_width: 1.0,
                     height: region.height,
-                    hit_test_behavior: 2_i32,
+                    hit_test_behavior: HIT_TEST_NONE,
                     if region.x > 0.0 {
                         row {
                             width: region.x,
                             percent_height: 1.0,
-                            background_color: 0x01000000u32,
-                            hit_test_behavior: 0_i32,
+                            background_color: FLOATING_CAPTURE_COLOR,
+                            hit_test_behavior: HIT_TEST_DEFAULT,
                             onclick: move |_| on_dismiss.call(()),
                         }
                     }
                     row {
                         width: region.width,
                         percent_height: 1.0,
-                        hit_test_behavior: 2_i32,
+                        hit_test_behavior: HIT_TEST_NONE,
                     }
                     row {
                         layout_weight: 1.0,
                         percent_height: 1.0,
-                        background_color: 0x01000000u32,
-                        hit_test_behavior: 0_i32,
+                        background_color: FLOATING_CAPTURE_COLOR,
+                        hit_test_behavior: HIT_TEST_DEFAULT,
                         onclick: move |_| on_dismiss.call(()),
                     }
                 }
@@ -694,8 +696,8 @@ pub(crate) fn menu_overlay_content(
                 layout_weight: 1.0,
                 align_items: "start",
                 padding_top: backdrop_top_padding,
-                background_color: 0x01000000u32,
-                hit_test_behavior: 0_i32,
+                background_color: FLOATING_CAPTURE_COLOR,
+                hit_test_behavior: HIT_TEST_DEFAULT,
                 onclick: move |_| on_dismiss.call(()),
                 row {
                     percent_width: 1.0,

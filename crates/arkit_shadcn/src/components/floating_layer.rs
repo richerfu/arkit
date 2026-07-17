@@ -3,10 +3,10 @@
 //!
 //! The legacy implementation drove ArkUI's native floating-overlay system
 //! (`floating_overlay_with_surfaces`). In the dioxus migration we render
-//! inline: the trigger is mounted normally, and when `open` a near-transparent
-//! full-size capture layer is stacked over the trigger area; clicking that
-//! layer dismisses the panel (`on_close`), while the panel itself stops
-//! propagation so its own interactions don't dismiss.
+//! inline: the trigger is mounted normally, and when `open` an optional
+//! full-size outside-dismiss layer is stacked over the trigger area. Passive
+//! hover surfaces remain pass-through; click-opened surfaces consume an
+//! outside click to dismiss while the panel itself keeps normal interaction.
 //!
 //! Shared constants/enums here are consumed by the overlay components
 //! (`popover`, `tooltip`, `hover_card`, `dialog`, `drawer`, `sheet`,
@@ -19,9 +19,14 @@ use crate::theme::spacing;
 
 /// Backdrop color for modal overlays (50% black).
 pub(crate) const OVERLAY_BACKDROP: u32 = 0x80000000u32;
-/// Near-transparent capture layer for floating overlays (legacy used
-/// `0x01000000` so the trigger remains visible underneath).
-pub(crate) const FLOATING_BACKDROP: u32 = 0x01000000u32;
+/// Near-transparent paint used only to make an outside-dismiss hit plane
+/// concrete on all supported ArkUI versions. It is an interaction mask, not a
+/// visible backdrop.
+pub(crate) const FLOATING_CAPTURE_COLOR: u32 = 0x01000000u32;
+/// ArkUI `HitTestMode::Default`: this node and its children own the hit.
+pub(crate) const HIT_TEST_DEFAULT: i32 = 0;
+/// ArkUI `HitTestMode::None`: this node is skipped but its children can hit.
+pub(crate) const HIT_TEST_NONE: i32 = 3;
 /// ArkUI `ShadowType::OuterDefaultSm` (small outer shadow).
 pub(crate) const SHADOW_SM: i32 = 1;
 
@@ -202,8 +207,9 @@ fn display_vp_ratio() -> f32 {
 ///
 /// `hover` selects the trigger activation mode: when `true`, hovering the
 /// trigger opens the panel (tooltip/hover-card behaviour); otherwise the
-/// trigger toggles on click (popover behaviour). In both cases the capture
-/// layer dismisses on click via `on_close`.
+/// trigger toggles on click (popover behaviour). Hover panels do not block the
+/// application below them; click-opened panels consume one outside click to
+/// dismiss without activating an obscured or retained route below.
 #[component]
 pub fn FloatingLayer(
     trigger: Element,
@@ -253,6 +259,7 @@ pub fn FloatingLayer(
             percent_width: 1.0,
             percent_height: 1.0,
             alignment: ALIGN_TOP,
+            hit_test_behavior: HIT_TEST_NONE,
             if hover {
                 row {
                     onclick: move |_| toggle.call(()),
@@ -266,13 +273,27 @@ pub fn FloatingLayer(
                 }
             }
             if current {
-                stack {
-                    percent_width: 1.0,
-                    percent_height: 1.0,
-                    background_color: FLOATING_BACKDROP,
-                    alignment: alignment,
-                    onclick: move |_| close.call(()),
-                    {children}
+                if hover {
+                    stack {
+                        percent_width: 1.0,
+                        percent_height: 1.0,
+                        alignment: alignment,
+                        hit_test_behavior: HIT_TEST_NONE,
+                        {children}
+                    }
+                } else {
+                    stack {
+                        percent_width: 1.0,
+                        percent_height: 1.0,
+                        background_color: FLOATING_CAPTURE_COLOR,
+                        alignment: alignment,
+                        hit_test_behavior: HIT_TEST_DEFAULT,
+                        onclick: move |_| close.call(()),
+                        stack {
+                            onclick: move |evt| evt.stop_propagation(),
+                            {children}
+                        }
+                    }
                 }
             }
         }
@@ -295,6 +316,12 @@ mod tests {
     fn side_from_name_defaults_to_bottom() {
         assert_eq!(side_from_name("right"), FloatingSide::Right);
         assert_eq!(side_from_name("nonsense"), FloatingSide::Bottom);
+    }
+
+    #[test]
+    fn pass_through_mode_skips_only_the_layout_shell() {
+        assert_eq!(HIT_TEST_DEFAULT, 0);
+        assert_eq!(HIT_TEST_NONE, 3);
     }
 
     #[test]

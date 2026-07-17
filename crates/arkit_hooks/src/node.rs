@@ -31,6 +31,12 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::layout::LayoutFrame;
 
+// ArkUI `HitTestMode::None`: the portal root itself never becomes a touch
+// target, while interactive descendants keep participating in hit testing.
+// `Transparent` is not equivalent here: it still makes the full-screen node
+// itself part of the hit-test result.
+const HIT_TEST_NONE: i32 = 3;
+
 /// Shared handle to the native ArkUI node backing a dioxus element. This is the
 /// same `Rc` mounted in the ArkUI tree (the event-dispatch user-data target),
 /// so event registration on it reaches ArkUI's dispatcher.
@@ -293,7 +299,7 @@ pub fn OverlayRoot() -> Element {
                 percent_width: 1.0,
                 percent_height: 1.0,
                 alignment: 0,
-                hit_test_behavior: 2_i32,
+                hit_test_behavior: HIT_TEST_NONE,
                 {node}
             }
         },
@@ -302,7 +308,7 @@ pub fn OverlayRoot() -> Element {
                 percent_width: 1.0,
                 percent_height: 1.0,
                 alignment: 0,
-                hit_test_behavior: 2_i32,
+                hit_test_behavior: HIT_TEST_NONE,
             }
         },
     }

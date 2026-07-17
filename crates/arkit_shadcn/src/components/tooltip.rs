@@ -9,7 +9,7 @@
 //! trigger.
 
 use super::floating_layer::{
-    FloatingAlign, FloatingPanelPlacement, FloatingSide, FLOATING_BACKDROP,
+    FloatingAlign, FloatingPanelPlacement, FloatingSide, HIT_TEST_DEFAULT, HIT_TEST_NONE,
 };
 use crate::theme::*;
 use arkit_prelude::*;
@@ -91,13 +91,8 @@ pub fn Tooltip(
             } else {
                 FloatingPanelPlacement::fallback(viewport)
             };
-            let dismiss_overlay = show_overlay.clone();
-            let dismiss = EventHandler::new(move |_: ()| {
-                set_open.call(false);
-                dismiss_overlay.dismiss();
-            });
             show_overlay.show_floating(move || {
-                tooltip_overlay_content(theme, panel_width, placement, dismiss, label)
+                tooltip_overlay_content(theme, panel_width, placement, label)
             });
         },
     );
@@ -142,7 +137,6 @@ fn tooltip_overlay_content(
     theme: Theme,
     panel_width: f32,
     placement: FloatingPanelPlacement,
-    on_dismiss: EventHandler<()>,
     content: String,
 ) -> Element {
     let top = placement.y.max(0.0);
@@ -153,11 +147,11 @@ fn tooltip_overlay_content(
             percent_height: 1.0,
             align_items: "start",
             padding_top: top,
-            background_color: FLOATING_BACKDROP,
-            onclick: move |_| on_dismiss.call(()),
+            hit_test_behavior: HIT_TEST_NONE,
             row {
                 percent_width: 1.0,
                 align_items: "start",
+                hit_test_behavior: HIT_TEST_NONE,
                 arkit_animation::MountTransition {
                     preset: Some(arkit_animation::TransitionPreset::SlideDown),
                     duration_ms: Some(120),
@@ -167,6 +161,7 @@ fn tooltip_overlay_content(
                         width: panel_width,
                         align_items: "center",
                         justify_content: "center",
+                        hit_test_behavior: HIT_TEST_DEFAULT,
                         padding_top: 6.0,
                         padding_right: 12.0,
                         padding_bottom: 6.0,

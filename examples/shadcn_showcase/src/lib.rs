@@ -897,6 +897,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let mut context_bookmarks = use_signal(|| true);
     let mut context_full_urls = use_signal(|| false);
     let mut context_person = use_signal(|| "pedro".to_string());
+    let mut context_outside_clicks = use_signal(|| 0_u32);
     let mut menubar_active = use_signal(|| None::<usize>);
     let mut select_open = use_signal(|| false);
     let mut selected_fruit = use_signal(|| "Apple".to_string());
@@ -930,6 +931,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let sonner_toasts = use_signal(Vec::<SonnerToast>::new);
     let sonner_next_id = use_signal(|| 1_u64);
     let sonner_status = use_signal(|| "Tap a type to show a toast.".to_string());
+    let mut sonner_background_clicks = use_signal(|| 0_u32);
     let mut markdown_link =
         use_signal(|| "Links become active as soon as their chunk arrives.".to_string());
     let mut markdown_source = use_signal(String::new);
@@ -1544,34 +1546,49 @@ fn ComponentDemo(slug: &'static str) -> Element {
         "context-menu" => rsx! {
             fixed_width {
                 width: 300.0,
-                ContextMenu {
-                    open: Some(context_open()),
-                    default_open: false,
-                    on_open_change: move |value| context_open.set(value),
-                    width: Some(288.0),
-                    items: context_menu_items(
-                        context_bookmarks(),
-                        context_full_urls(),
-                        context_person(),
-                        EventHandler::new(move |value| context_bookmarks.set(value)),
-                        EventHandler::new(move |value| context_full_urls.set(value)),
-                        EventHandler::new(move |value| context_person.set(value)),
-                    ),
-                    stack {
-                        width: 300.0,
-                        height: 150.0,
-                        alignment: 4_i32,
-                        border_width: 1.0,
-                        border_color: theme.colors.foreground,
-                        border_radius: theme.radii.md,
-                        border_style: 1_i32,
-                        clip: true,
-                        text {
-                            content: "Long press here".to_string(),
-                            font_size: typography::LG,
-                            font_color: theme.colors.foreground,
-                            line_height: 22.0,
+                column {
+                    percent_width: 1.0,
+                    ContextMenu {
+                        open: Some(context_open()),
+                        default_open: false,
+                        on_open_change: move |value| context_open.set(value),
+                        width: Some(288.0),
+                        items: context_menu_items(
+                            context_bookmarks(),
+                            context_full_urls(),
+                            context_person(),
+                            EventHandler::new(move |value| context_bookmarks.set(value)),
+                            EventHandler::new(move |value| context_full_urls.set(value)),
+                            EventHandler::new(move |value| context_person.set(value)),
+                        ),
+                        stack {
+                            width: 300.0,
+                            height: 150.0,
+                            alignment: 4_i32,
+                            border_width: 1.0,
+                            border_color: theme.colors.foreground,
+                            border_radius: theme.radii.md,
+                            border_style: 1_i32,
+                            clip: true,
+                            text {
+                                content: "Long press here".to_string(),
+                                font_size: typography::LG,
+                                font_color: theme.colors.foreground,
+                                line_height: 22.0,
+                            }
                         }
+                    }
+                    v_gap { height: spacing::LG }
+                    Button {
+                        variant: ButtonVariant::Outline,
+                        percent_width: Some(1.0),
+                        onclick: move |_| context_outside_clicks += 1,
+                        "Outside click · {context_outside_clicks()}"
+                    }
+                    v_gap { height: spacing::SM }
+                    Text {
+                        content: "With the menu open, the first click closes it without activating the button. The next click increments the count.".to_string(),
+                        variant: TextVariant::Muted,
                     }
                 }
             }
@@ -2706,6 +2723,13 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         font_weight: 400_i32,
                         font_color: theme.colors.muted_foreground,
                         line_height: 20.0,
+                    }
+                    v_gap { height: spacing::LG }
+                    Button {
+                        variant: ButtonVariant::Outline,
+                        percent_width: Some(1.0),
+                        onclick: move |_| sonner_background_clicks += 1,
+                        "Background click test · {sonner_background_clicks()}"
                     }
                     v_gap { height: spacing::XXL }
                     row {

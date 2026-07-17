@@ -90,6 +90,11 @@ pub struct OverlayApi {
 impl OverlayApi {
     /// Show floating content as a full-screen subtree at `OverlayRoot`.
     /// Positioning and dismissal layers are part of the supplied Dioxus tree.
+    /// The portal root itself uses ArkUI `HitTestMode::None`, so blank space is
+    /// pass-through by default. A floating subtree that needs outside-click
+    /// dismissal must add an explicit blocking hit plane; otherwise a single
+    /// click can both dismiss the surface and activate a retained route below
+    /// it. Masked/modal surfaces follow the same blocking rule.
     pub fn show_floating(&self, content: impl FnOnce() -> Element + 'static) {
         self.set_content(content);
     }

@@ -14,6 +14,8 @@ use crate::icon::icon_placeholder;
 use crate::theme::*;
 use arkit_prelude::*;
 
+use super::floating_layer::{HIT_TEST_DEFAULT, HIT_TEST_NONE};
+
 const DEFAULT_DURATION_MS: u64 = 4_000;
 const DEFAULT_MAX_WIDTH: f32 = 420.0;
 const DEFAULT_MIN_HEIGHT: f32 = 64.0;
@@ -315,7 +317,7 @@ pub fn Toast(props: ToastProps) -> Element {
             // The Sonner layer is intentionally pass-through. Re-enable hit
             // testing on the card itself so ArkUI delivers touch sequences to
             // the swipe recognizer while the empty overlay remains inert.
-            hit_test_behavior: 0_i32,
+            hit_test_behavior: HIT_TEST_DEFAULT,
             on_touch: move |event| {
                 let Some(pointer) = event.data().pointer else {
                     return;
@@ -598,30 +600,32 @@ fn SonnerLayer(
             padding_right: safe_area.right + style.inset,
             padding_bottom: safe_area.bottom + style.offset,
             padding_left: safe_area.left + style.inset,
-            hit_test_behavior: 2_i32,
+            hit_test_behavior: HIT_TEST_NONE,
             if !is_top {
                 row {
                     percent_width: 1.0,
                     layout_weight: 1.0,
-                    hit_test_behavior: 2_i32,
+                    hit_test_behavior: HIT_TEST_NONE,
                 }
             }
             row {
                 percent_width: 1.0,
                 align_items: "end",
-                hit_test_behavior: 2_i32,
+                hit_test_behavior: HIT_TEST_NONE,
                 if horizontal != HorizontalPosition::Left {
-                    row { layout_weight: 1.0, hit_test_behavior: 2_i32 }
+                    row { layout_weight: 1.0, hit_test_behavior: HIT_TEST_NONE }
                 }
                 column {
                     width: toast_width,
                     align_items: "start",
+                    hit_test_behavior: HIT_TEST_NONE,
                     for (index, toast) in stack {
                         column {
                             key: "{toast.id}",
                             percent_width: 1.0,
+                            hit_test_behavior: HIT_TEST_NONE,
                             if index > 0 {
-                                row { height: style.gap, hit_test_behavior: 2_i32 }
+                                row { height: style.gap, hit_test_behavior: HIT_TEST_NONE }
                             }
                             SonnerToastEntry {
                                 toast,
@@ -634,14 +638,14 @@ fn SonnerLayer(
                     }
                 }
                 if horizontal != HorizontalPosition::Right {
-                    row { layout_weight: 1.0, hit_test_behavior: 2_i32 }
+                    row { layout_weight: 1.0, hit_test_behavior: HIT_TEST_NONE }
                 }
             }
             if is_top {
                 row {
                     percent_width: 1.0,
                     layout_weight: 1.0,
-                    hit_test_behavior: 2_i32,
+                    hit_test_behavior: HIT_TEST_NONE,
                 }
             }
         }
