@@ -63,7 +63,7 @@ pub fn ContextMenu(
     use_menu_overlay_refresh(
         overlay.clone(),
         current_open,
-        *overlay_session.read(),
+        overlay_session,
         style,
         theme,
         dismiss,

@@ -22,8 +22,7 @@ use arkit::shadcn::components::{
 };
 use arkit::shadcn::icon::icon_placeholder;
 use arkit::shadcn::theme::{
-    spacing, typography, use_theme_provider, ColorTokens, RadiusTokens, Theme, ThemeMode,
-    ThemePreset,
+    spacing, typography, ColorTokens, RadiusTokens, Theme, ThemeMode, ThemePreset, ThemeProvider,
 };
 
 const HOME_HEADER_HEIGHT: f32 = 80.0;
@@ -267,76 +266,77 @@ fn app() -> Element {
     let mut theme_menu_open = use_signal(|| false);
     let mut selected = use_signal(|| None::<&'static str>);
     let mut query = use_signal(String::new);
-    let mut theme_signal = use_theme_provider(resolve_theme(mode(), preset(), custom()));
 
     let theme = resolve_theme(mode(), preset(), custom());
-    theme_signal.set(theme);
 
     let selected_slug = selected();
     let home_key = "home";
 
     rsx! {
-        column {
-            percent_width: 1.0,
-            percent_height: 1.0,
-            background_color: theme.colors.background,
-            if let Some(slug) = selected_slug {
-                MountTransition {
-                    key: "{slug}",
-                    preset: TransitionPreset::SlideLeft,
-                    duration_ms: 220,
-                    fill: true,
-                    DetailView {
-                        slug,
-                        mode: mode(),
-                        preset: preset(),
-                        custom: custom(),
-                        theme_menu_open: theme_menu_open(),
-                        on_back: move |_| selected.set(None),
-                        on_theme_menu_open: move |value| theme_menu_open.set(value),
-                        on_mode: move |value| {
-                            mode.set(value);
-                            theme_menu_open.set(false);
-                        },
-                        on_preset: move |value| {
-                            preset.set(value);
-                            custom.set(false);
-                            theme_menu_open.set(false);
-                        },
-                        on_custom: move |value| {
-                            custom.set(value);
-                            theme_menu_open.set(false);
-                        },
+        ThemeProvider {
+            theme,
+            column {
+                percent_width: 1.0,
+                percent_height: 1.0,
+                background_color: theme.colors.background,
+                if let Some(slug) = selected_slug {
+                    MountTransition {
+                        key: "{slug}",
+                        preset: TransitionPreset::SlideLeft,
+                        duration_ms: 220,
+                        fill: true,
+                        DetailView {
+                            slug,
+                            mode: mode(),
+                            preset: preset(),
+                            custom: custom(),
+                            theme_menu_open: theme_menu_open(),
+                            on_back: move |_| selected.set(None),
+                            on_theme_menu_open: move |value| theme_menu_open.set(value),
+                            on_mode: move |value| {
+                                mode.set(value);
+                                theme_menu_open.set(false);
+                            },
+                            on_preset: move |value| {
+                                preset.set(value);
+                                custom.set(false);
+                                theme_menu_open.set(false);
+                            },
+                            on_custom: move |value| {
+                                custom.set(value);
+                                theme_menu_open.set(false);
+                            },
+                        }
                     }
-                }
-            } else {
-                MountTransition {
-                    key: "{home_key}",
-                    preset: TransitionPreset::SlideRight,
-                    duration_ms: 200,
-                    fill: true,
-                    HomeView {
-                        query: query(),
-                        mode: mode(),
-                        preset: preset(),
-                        custom: custom(),
-                        theme_menu_open: theme_menu_open(),
-                        on_query: move |value: String| query.set(value),
-                        on_select: move |slug: &'static str| selected.set(Some(slug)),
-                        on_theme_menu_open: move |value| theme_menu_open.set(value),
-                        on_mode: move |value| {
-                            mode.set(value);
-                            theme_menu_open.set(false);
-                        },
-                        on_preset: move |value| {
-                            preset.set(value);
-                            custom.set(false);
-                            theme_menu_open.set(false);
-                        },
-                        on_custom: move |value| {
-                            custom.set(value);
-                            theme_menu_open.set(false);
-                        },
+                } else {
+                    MountTransition {
+                        key: "{home_key}",
+                        preset: TransitionPreset::SlideRight,
+                        duration_ms: 200,
+                        fill: true,
+                        HomeView {
+                            query: query(),
+                            mode: mode(),
+                            preset: preset(),
+                            custom: custom(),
+                            theme_menu_open: theme_menu_open(),
+                            on_query: move |value: String| query.set(value),
+                            on_select: move |slug: &'static str| selected.set(Some(slug)),
+                            on_theme_menu_open: move |value| theme_menu_open.set(value),
+                            on_mode: move |value| {
+                                mode.set(value);
+                                theme_menu_open.set(false);
+                            },
+                            on_preset: move |value| {
+                                preset.set(value);
+                                custom.set(false);
+                                theme_menu_open.set(false);
+                            },
+                            on_custom: move |value| {
+                                custom.set(value);
+                                theme_menu_open.set(false);
+                            },
+                        }
                     }
                 }
             }
@@ -345,12 +345,14 @@ fn app() -> Element {
 }
 
 fn resolve_theme(mode: ThemeMode, preset: ThemePreset, custom: bool) -> Theme {
-    if custom {
-        return Theme::custom(custom_theme_colors(mode))
+    let theme = if custom {
+        Theme::custom(custom_theme_colors(mode))
             .with_mode(mode)
-            .with_radius(RadiusTokens::from_base(10.0));
-    }
-    Theme::preset(preset, mode)
+            .with_radius(RadiusTokens::from_base(10.0))
+    } else {
+        Theme::preset(preset, mode)
+    };
+    theme.with_colors(theme.colors.with_surface(theme.colors.secondary))
 }
 
 fn custom_theme_colors(mode: ThemeMode) -> ColorTokens {
@@ -599,6 +601,11 @@ fn ThemeMenu(
         theme_preset_key(preset).to_string()
     };
     let selected_mode = theme_mode_key(mode).to_string();
+    let active_theme_label = if custom {
+        "Custom"
+    } else {
+        theme_preset_label(preset)
+    };
     let icon = match mode {
         ThemeMode::Light => "sun",
         ThemeMode::Dark => "moon",
@@ -611,32 +618,40 @@ fn ThemeMenu(
             "light",
             selected_mode.clone(),
             EventHandler::new(move |_| on_mode.call(ThemeMode::Light)),
-        ),
+        )
+        .close_on_select(),
         MenuEntry::radio(
             "Dark",
             "dark",
             selected_mode,
             EventHandler::new(move |_| on_mode.call(ThemeMode::Dark)),
-        ),
+        )
+        .close_on_select(),
         MenuEntry::separator(),
         MenuEntry::label("Theme"),
     ];
 
     for item in THEME_PRESETS {
-        items.push(MenuEntry::radio(
-            theme_preset_label(item),
-            theme_preset_key(item),
-            selected_preset.clone(),
-            EventHandler::new(move |_| on_preset.call(item)),
-        ));
+        items.push(
+            MenuEntry::radio(
+                theme_preset_label(item),
+                theme_preset_key(item),
+                selected_preset.clone(),
+                EventHandler::new(move |_| on_preset.call(item)),
+            )
+            .close_on_select(),
+        );
     }
     items.push(MenuEntry::separator());
-    items.push(MenuEntry::radio(
-        "Custom",
-        "custom",
-        selected_preset,
-        EventHandler::new(move |_| on_custom.call(true)),
-    ));
+    items.push(
+        MenuEntry::radio(
+            "Custom",
+            "custom",
+            selected_preset,
+            EventHandler::new(move |_| on_custom.call(true)),
+        )
+        .close_on_select(),
+    );
 
     rsx! {
         DropdownMenu {
@@ -646,12 +661,38 @@ fn ThemeMenu(
             on_open_change: Some(on_open),
             trigger_capture: Some(false),
             row {
-                width: 36.0,
+                width: 120.0,
                 height: 36.0,
                 align_items: "center",
-                justify_content: "center",
+                padding_right: spacing::SM,
+                padding_left: spacing::SM,
                 border_radius: theme.radii.md,
-                {icon_placeholder(icon, 18.0, theme.colors.foreground)}
+                border_width: 1.0,
+                border_color: theme.colors.border,
+                background_color: theme.colors.secondary,
+                row {
+                    width: 12.0,
+                    height: 12.0,
+                    border_radius: theme.radii.full,
+                    background_color: theme.colors.primary,
+                }
+                row { width: spacing::SM }
+                row {
+                    layout_weight: 1.0,
+                    clip: true,
+                    text {
+                        percent_width: 1.0,
+                        content: active_theme_label.to_string(),
+                        font_size: typography::SM,
+                        font_weight: 500_i32,
+                        font_color: theme.colors.secondary_foreground,
+                        line_height: 18.0,
+                        max_lines: 1_i32,
+                        text_overflow: 2_i32,
+                    }
+                }
+                row { width: spacing::XS }
+                {icon_placeholder(icon, 16.0, theme.colors.secondary_foreground)}
             }
         }
     }
@@ -878,6 +919,8 @@ fn demo_canvas_policy(slug: &str) -> DemoCanvasPolicy {
 fn ComponentDemo(slug: &'static str) -> Element {
     let mut page = use_signal(|| 1_i32);
     let mut dialog_open = use_signal(|| false);
+    let mut dialog_name = use_signal(|| "Pedro Duarte".to_string());
+    let mut dialog_username = use_signal(|| "@peduarte".to_string());
     let mut alert_open = use_signal(|| false);
     let mut bottom_navigation_selected = use_signal(|| 0_usize);
     let mut bottom_sheet_open = use_signal(|| false);
@@ -1615,10 +1658,38 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     title: "Edit profile".to_string(),
                     description: Some("Make changes to your profile here. Click save when you're done.".to_string()),
                 }
+                column {
+                    percent_width: 1.0,
+                    align_items: "start",
+                    margin_top: spacing::XL,
+                    Label { content: "Name".to_string() }
+                    v_gap { height: spacing::SM }
+                    Input {
+                        value: Some(dialog_name()),
+                        placeholder: Some("Your name".to_string()),
+                        percent_width: Some(1.0),
+                        on_change: move |value| dialog_name.set(value),
+                    }
+                    v_gap { height: spacing::LG }
+                    Label { content: "Username".to_string() }
+                    v_gap { height: spacing::SM }
+                    Input {
+                        value: Some(dialog_username()),
+                        placeholder: Some("@username".to_string()),
+                        percent_width: Some(1.0),
+                        on_change: move |value| dialog_username.set(value),
+                    }
+                }
                 DialogFooter {
                     Button {
+                        variant: ButtonVariant::Outline,
                         onclick: move |_| dialog_open.set(false),
-                        "OK"
+                        "Cancel"
+                    }
+                    row { width: spacing::SM }
+                    Button {
+                        onclick: move |_| dialog_open.set(false),
+                        "Save changes"
                     }
                 }
             }

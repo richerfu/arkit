@@ -96,17 +96,23 @@ impl MenuOverlaySession {
 pub(crate) fn use_menu_overlay_refresh(
     overlay: arkit_hooks::OverlayApi,
     open: bool,
-    session: Option<MenuOverlaySession>,
+    mut overlay_session: Signal<Option<MenuOverlaySession>>,
     style: MenuStyle,
     theme: Theme,
     on_dismiss: EventHandler<()>,
     entries: Vec<MenuEntry>,
 ) {
+    let session = *overlay_session.read();
     let mut refresh = use_effect(move || {
-        if open && overlay.is_open() {
-            if let Some(session) = session {
-                session.show(&overlay, style, theme, on_dismiss, entries.clone());
+        if open {
+            if overlay.is_open() {
+                if let Some(session) = session {
+                    session.show(&overlay, style, theme, on_dismiss, entries.clone());
+                }
             }
+        } else if session.is_some() {
+            overlay_session.set(None);
+            overlay.dismiss();
         }
     });
     refresh.mark_dirty();
@@ -444,6 +450,16 @@ impl MenuEntry {
     pub fn on_select(mut self, callback: EventHandler<()>) -> Self {
         if let Self::Action(entry) = &mut self {
             entry.on_select = Some(callback);
+        }
+        self
+    }
+
+    /// Close the owning menu after a checkbox/radio value is committed.
+    pub fn close_on_select(mut self) -> Self {
+        match &mut self {
+            Self::Checkbox(entry) => entry.close_on_select = true,
+            Self::Radio(entry) => entry.close_on_select = true,
+            _ => {}
         }
         self
     }
