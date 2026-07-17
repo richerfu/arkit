@@ -37,6 +37,13 @@ barcode scanning is added by `camera-scan`. CameraKit and scan-decoder dependenc
 are absent from the default graph and follow their respective features.
 See [examples/camera](examples/camera/src/lib.rs).
 
+High-performance Lottie rendering is enabled independently with the `lottie`
+feature; cancellable HTTP/HTTPS URL sources are added by `lottie-network` so
+embedded-only apps do not pay for Reqwest/Rustls. ThorVG runs on a render worker
+and writes directly into an ArkUI XComponent native window; the default
+dependency graph contains neither the renderer nor network stack. See
+[examples/lottie](examples/lottie/src/lib.rs).
+
 ## License
 
 [MIT](./LICENSE-MIT) or [Apache2.0](./LICENSE-APACHE)

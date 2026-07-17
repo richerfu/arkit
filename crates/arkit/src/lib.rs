@@ -3,7 +3,7 @@
 //! The default facade exports Dioxus core (`rsx!`, `use_signal`, `Element`),
 //! the ArkUI element registry, renderer, runtime, and host hooks. Domain
 //! libraries are opt-in through the `animation`, `camera`, `chart`, `i18n`,
-//! `icon`, `markdown`, `router`, and `shadcn` features (or `full`). The
+//! `icon`, `lottie`, `markdown`, `router`, and `shadcn` features (or `full`). The
 //! `#[entry]` macro mounts a `fn() -> Element` root component into a NodeContent
 //! slot.
 
@@ -116,6 +116,16 @@ pub use arkit_camera::{
 // --- Icon ---
 #[cfg(feature = "icon")]
 pub use arkit_icon::{has_icon, icon, icon_names};
+
+// --- High-performance native Lottie ---
+#[cfg(feature = "lottie")]
+pub use arkit_lottie as lottie;
+#[cfg(feature = "lottie")]
+pub use arkit_lottie::{
+    LottieAlignment, LottieComposition, LottieController, LottieError, LottieErrorKind, LottieFit,
+    LottieFrame, LottieNetworkSource, LottiePlayer, LottiePlayerProps, LottieRepeatMode,
+    LottieResult, LottieSource, LottieStatus,
+};
 
 // --- Native ECharts-compatible charts ---
 #[cfg(feature = "chart")]
@@ -275,6 +285,13 @@ pub mod prelude {
 
     #[cfg(feature = "icon")]
     pub use crate::{has_icon, icon, icon_names};
+
+    #[cfg(feature = "lottie")]
+    pub use crate::{
+        lottie, LottieAlignment, LottieComposition, LottieController, LottieError, LottieErrorKind,
+        LottieFit, LottieFrame, LottieNetworkSource, LottiePlayer, LottiePlayerProps,
+        LottieRepeatMode, LottieResult, LottieSource, LottieStatus,
+    };
 
     #[cfg(feature = "router")]
     pub use crate::{

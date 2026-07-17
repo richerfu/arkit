@@ -6,7 +6,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "libcamera_example.so": "file:./src/main/cpp/types/libcamera_example",
+    "liblottie_example.so": "file:./src/main/cpp/types/liblottie_example",
     "@ohos-rs/ability": "0.4.0-beta.7"
   }
 }
