@@ -11,6 +11,7 @@ members = [
     "crates/arkit_router",
     "crates/arkit_i18n",
     "crates/arkit_i18n_macros",
+    "crates/arkit_lottie",
     "crates/arkit_animation",
     "crates/arkit_animation_core",
     "crates/arkit_chart",
@@ -23,6 +24,7 @@ members = [
     "examples/camera",
     "examples/complex_cases",
     "examples/i18n",
+    "examples/lottie",
     "examples/router",
     "examples/shadcn_showcase",
     "examples/webview",
@@ -62,6 +64,7 @@ arkit_derive = { path = "crates/arkit_derive" }
 arkit_icon = { path = "crates/arkit_icon" }
 arkit_i18n = { path = "crates/arkit_i18n" }
 arkit_i18n_macros = { path = "crates/arkit_i18n_macros" }
+arkit_lottie = { path = "crates/arkit_lottie" }
 arkit_router = { path = "crates/arkit_router" }
 arkit_runtime = { path = "crates/arkit_runtime" }
 arkit_shadcn = { path = "crates/arkit_shadcn" }
@@ -71,6 +74,9 @@ arkit_prelude = { path = "crates/arkit_prelude" }
 arkit_hooks = { path = "crates/arkit_hooks" }
 rust-embed = { version = "8.11.0", features = ["debug-embed"] }
 tokio = { version = "1.52", features = ["rt-multi-thread", "sync", "time"] }
+# Reqwest 0.12 exposes a WebPKI-root feature that avoids relying on platform
+# certificate-store discovery, which is not portable to the OHOS target.
+reqwest = { version = "0.12.28", default-features = false, features = ["brotli", "deflate", "gzip", "rustls-tls-webpki-roots"] }
 rxing = { version = "0.9.1", default-features = false, features = ["decoders", "encoding_rs", "full_barcode_format_support"] }
 
 # Dioxus 0.7 — reuse its VirtualDom, diff/reconcile, signals, hooks, and router
@@ -104,14 +110,17 @@ pulldown-cmark = { version = "0.13.4", default-features = false }
 # dispose APIs used by arkit_runtime yet. Keep the upstream commit pinned until released.
 openharmony-ability = { git = "https://github.com/harmony-contrib/openharmony-ability.git", rev = "edc4e49d0d431035c6c001fc5e583abf62a998e3" }
 
-ohos-arkui-binding = { version = "0.2.0", default-features = false, features = ["napi", "image", "drawing", "api-20"] }
-ohos-arkui-sys = { version = "0.1.0", default-features = false, features = ["api-20"] }
-ohos-drawing-binding = "0.2.0"
-ohos-native-drawing-sys = "0.2.0"
-ohos-image-native-binding = { version = "0.0.3", default-features = false, features = ["api-20"] }
-ohos-display-binding = "0.1.0"
-ohos-hilog-binding = "0.2.0"
-ohos-ability-access-control-binding = "0.1.0"
-ohos-camera-binding = { version = "0.1.0", default-features = false, features = ["api-20", "xcomponent"] }
-ohos-xcomponent-binding = { version = "0.3.1", default-features = false, features = ["callbacks", "api-20"] }
+ohos-arkui-binding = { version = "0.2.3", default-features = false, features = ["napi", "image", "drawing", "api-20"] }
+ohos-arkui-sys = { version = "0.1.1", default-features = false, features = ["api-20"] }
+ohos-drawing-binding = "0.2.1"
+ohos-native-drawing-sys = "0.2.1"
+ohos-image-native-binding = { version = "0.0.4", default-features = false, features = ["api-20"] }
+ohos-display-binding = "0.1.1"
+ohos-hilog-binding = "0.2.1"
+ohos-ability-access-control-binding = "0.1.1"
+ohos-camera-binding = { version = "0.1.1", default-features = false, features = ["api-20", "xcomponent"] }
+ohos-xcomponent-binding = { version = "0.3.1", default-features = false, features = ["callbacks", "multi_mode", "api-20"] }
 ohos-xcomponent-sys = { version = "0.1.1", default-features = false, features = ["api-20"] }
+ohos-native-window-binding = { version = "0.2.3", default-features = false, features = ["api-20"] }
+thorvg = { version = "0.5.0", default-features = false, features = ["vendored", "lottie", "png", "fonts", "threads"] }
+thorvg-sys = { version = "0.3.0", default-features = false }

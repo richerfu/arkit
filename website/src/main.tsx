@@ -9,8 +9,8 @@ const capabilities = [
     "Dioxus 原生渲染",
     "以 VirtualDom、signals、hooks 和 rsx! 驱动 ArkUI 原生节点，不维护第二套 UI 状态树。",
   ],
-  ["完整应用能力", "内置路由、国际化、动画、图表、图标、WebView 与 shadcn 风格组件库。"],
-  ["原生性能路径", "事件排队、NodeAdapter 虚拟化、Drawing canvas、动画 dirty batch 与有界缓存。"],
+  ["完整应用能力", "内置路由、国际化、动画、Lottie、图表、图标、WebView 与 shadcn 风格组件库。"],
+  ["原生性能路径", "事件排队、NodeAdapter 虚拟化、Drawing canvas、Lottie 原生窗口与有界缓存。"],
   [
     "OpenHarmony 生命周期",
     "#[entry] 生成 N-API init/render/destroy，并接入窗口、安全区与系统返回键。",
@@ -24,6 +24,7 @@ const featureRows = [
   ["router", "dioxus-router、原生 Link、系统返回键、页面转场；自动启用 animation"],
   ["i18n", "编译期 Fluent catalog、类型安全消息、响应式 locale"],
   ["icon", "内嵌 Lucide 图标、SVG raster、可配置描边与颜色"],
+  ["lottie", "ThorVG 多线程软件渲染、XComponent 帧同步、NativeWindow 直写与生命周期暂停"],
   ["shadcn", "主题 tokens 与 50+ 业务组件；自动启用 animation 和 icon"],
   ["full", "启用全部领域能力"],
 ];

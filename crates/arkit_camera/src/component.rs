@@ -1,7 +1,7 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use arkit_hooks::{use_app_foreground, use_ark_node, use_component_visibility};
+use arkit_hooks::{use_app_foreground, use_ark_node};
 use arkit_prelude::*;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
@@ -121,8 +121,10 @@ pub fn CameraPreview(props: CameraPreviewProps) -> Element {
     let runtime = use_hook(|| Rc::new(ComponentRuntime::new()));
     let node_ref = use_ark_node();
     let app_foreground = use_app_foreground();
-    let component_visible = use_component_visibility();
-    let effective_active = props.active && app_foreground && component_visible;
+    // CameraPreview is a Surface XComponent. Its created/destroyed callbacks
+    // are the authoritative component lifecycle; ArkUI's visible-area event
+    // can transiently report 0% for an on-screen Surface node.
+    let effective_active = props.active && app_foreground;
     let surface_registration = use_hook(|| Rc::new(RefCell::new(None::<SurfaceRegistration>)));
     let registered_node = use_hook(|| Rc::new(Cell::new(None::<usize>)));
     let controller_binding = use_hook(|| Rc::new(RefCell::new(None::<(CameraController, u64)>)));

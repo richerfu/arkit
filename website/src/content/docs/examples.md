@@ -5,7 +5,7 @@ description: "workspace 示例、覆盖范围与验证命令。"
 
 # 示例索引
 
-workspace 提供 10 个可运行 OpenHarmony `cdylib`。示例既是入门代码，也是公开 API 的编译与真机契约。
+workspace 提供 11 个可运行 OpenHarmony `cdylib`。示例既是入门代码，也是公开 API 的编译与真机契约。
 
 ## 示例矩阵
 
@@ -18,6 +18,7 @@ workspace 提供 10 个可运行 OpenHarmony `cdylib`。示例既是入门代码
 | `chart`           | 22 series、realtime option、actions、events、appendData、coordinate query | `examples/chart/src/lib.rs`           |
 | `complex_cases`   | 10,000 item List/Grid/WaterFlow NodeAdapter                               | `examples/complex_cases/src/lib.rs`   |
 | `i18n`            | Fluent macro、typed message、locale switch、Cargo rename                  | `examples/i18n/src/lib.rs`            |
+| `lottie`          | ThorVG worker、XComponent 帧同步、播放控制、fit/repeat/speed              | `examples/lottie/src/lib.rs`          |
 | `router`          | typed routes、ArkUI Link、dynamic param、route transition                 | `examples/router/src/lib.rs`          |
 | `shadcn_showcase` | themes、表单、导航、浮层、反馈、数据展示组件                              | `examples/shadcn_showcase/src/lib.rs` |
 | `webview`         | embedded mount、URL、title callback、reload/focus/zoom                    | `examples/webview/src/lib.rs`         |
@@ -84,6 +85,17 @@ ohrs build --arch aarch
 - WaterFlow：五种循环高度与固定 auto-fill track。
 
 它验证 NodeAdapter attach、wrapper kind、item recycle 和 NodeBuilder early-error ownership。
+
+## lottie
+
+通过独立 `lottie` feature 引入 ThorVG 和 NativeWindow 依赖。示例包含持续旋转、缩放、渐变与多轨道图层，验证播放/暂停/停止、seek、倍速、循环/往返和 contain/cover/fill。进入后台或让组件完全不可见后，frame callback 不再提交渲染；恢复可见时从原帧继续。
+
+```sh
+cd examples/lottie
+ohrs build --arch aarch
+cd ../../
+./app/run.sh lottie all
+```
 
 ## i18n
 

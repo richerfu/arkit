@@ -2,7 +2,7 @@
 # 把指定 arkit example 打包成 hap 安装到 OpenHarmony 模拟器并启动。
 #
 # 用法: ./run.sh <example-dir> [install|build|start|log]
-#   example-dir: counter | async_task | animation | camera | chart | complex_cases | i18n | router | shadcn_showcase | webview
+#   example-dir: counter | async_task | animation | camera | chart | complex_cases | i18n | lottie | router | shadcn_showcase | webview
 #
 # 每个 example 的 .so 名 = lib<crate-name>.so（crate-name 取自 examples/<dir>/Cargo.toml）。
 # 切换 example 时同步更新 app 壳的 moduleName / lib 依赖 / cpp/types，保持名字一致。
@@ -69,6 +69,16 @@ EOF
   rm -f "$APP/entry/libs/arm64-v8a"/lib*.so
   mkdir -p "$APP/entry/libs/arm64-v8a"
   cp "$SO_SRC" "$APP/entry/libs/arm64-v8a/lib${CRATE}.so"
+  # Native libraries linked against OHOS libc++ cannot resolve the system copy
+  # from an application's module namespace. Bundle the SDK's matching shared
+  # runtime whenever the example cdylib declares it as a dependency.
+  if [ -n "${OHOS_NDK_HOME:-}" ] && \
+    "$OHOS_NDK_HOME/native/llvm/bin/llvm-readelf" -d "$SO_SRC" | \
+      grep -q '\[libc++_shared\.so\]'; then
+    CXX_SHARED="$OHOS_NDK_HOME/native/llvm/lib/aarch64-linux-ohos/libc++_shared.so"
+    [ -f "$CXX_SHARED" ] || { echo "OHOS libc++ runtime not found: $CXX_SHARED"; exit 1; }
+    cp "$CXX_SHARED" "$APP/entry/libs/arm64-v8a/libc++_shared.so"
+  fi
   # entry oh-package.json5 的 lib 依赖
   cat > "$APP/entry/oh-package.json5" <<EOF
 {

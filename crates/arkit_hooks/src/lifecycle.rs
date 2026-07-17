@@ -255,6 +255,18 @@ fn dispatch_component_lifecycle(
     }
 }
 
+fn lifecycle_from_visible_fraction(visible_fraction: f32) -> ComponentLifecycleState {
+    let visible_fraction = if visible_fraction.is_finite() {
+        visible_fraction.clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    ComponentLifecycleState {
+        visible: visible_fraction > f32::EPSILON,
+        visible_fraction,
+    }
+}
+
 fn queue_component_lifecycle(node_key: usize, generation: u64, state: ComponentLifecycleState) {
     arkit_runtime::queue_ui_loop(move || {
         dispatch_component_lifecycle(node_key, generation, state);
@@ -262,9 +274,13 @@ fn queue_component_lifecycle(node_key: usize, generation: u64, state: ComponentL
 }
 
 fn register_component_lifecycle_events(node: &HostNode, node_key: usize, generation: u64) {
-    // Crossing zero is enough to suspend expensive native resources when the
-    // component is fully clipped or moved off screen.
-    let _ = node.borrow().set_visible_area_change_ratio(vec![0.0_f32]);
+    // A literal zero threshold can emit the pre-layout 0% snapshot without a
+    // later transition when the node becomes visible. Use the smallest
+    // practical positive threshold so mounting crosses it in both directions.
+    const VISIBILITY_THRESHOLD: f32 = 0.001;
+    let _ = node
+        .borrow()
+        .set_visible_area_change_ratio(vec![VISIBILITY_THRESHOLD]);
 
     let mut borrowed = node.borrow_mut();
     let mut event_node = LifecycleEventNode(&mut borrowed);
@@ -281,14 +297,11 @@ fn register_component_lifecycle_events(node: &HostNode, node_key: usize, generat
     event_node.on_disappear(move || {
         queue_component_lifecycle(node_key, generation, ComponentLifecycleState::default());
     });
-    event_node.on_visible_area_change(move |visible, fraction| {
+    event_node.on_visible_area_change(move |_increased, fraction| {
         queue_component_lifecycle(
             node_key,
             generation,
-            ComponentLifecycleState {
-                visible,
-                visible_fraction: fraction,
-            },
+            lifecycle_from_visible_fraction(fraction),
         );
     });
 }
@@ -379,15 +392,26 @@ mod tests {
 
     #[test]
     fn zero_visible_fraction_is_hidden() {
-        let mut state = ComponentLifecycleState {
-            visible: true,
-            visible_fraction: 0.0,
-        };
-        state.visible_fraction = state.visible_fraction.clamp(0.0, 1.0);
-        if state.visible_fraction <= f32::EPSILON {
-            state.visible = false;
-        }
+        let state = lifecycle_from_visible_fraction(0.0);
         assert!(!state.is_visible());
+    }
+
+    #[test]
+    fn decreasing_visible_area_remains_visible_above_zero() {
+        // ArkUI's first event value is the direction of the ratio change, not
+        // the current visibility. A decreasing but non-zero ratio must remain
+        // active so native components are not spuriously suspended.
+        let state = lifecycle_from_visible_fraction(0.5);
+        assert!(state.is_visible());
+        assert_eq!(state.visible_fraction, 0.5);
+    }
+
+    #[test]
+    fn invalid_visible_fraction_is_hidden() {
+        assert_eq!(
+            lifecycle_from_visible_fraction(f32::NAN),
+            ComponentLifecycleState::default()
+        );
     }
 
     #[test]

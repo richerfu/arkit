@@ -1,0 +1,30 @@
+[package]
+name = "arkit_lottie"
+description = "High-performance native Lottie rendering components for arkit"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+expressions = ["thorvg/expressions"]
+network = ["dep:reqwest"]
+
+[dependencies]
+arkit_hooks.workspace = true
+arkit_prelude.workspace = true
+arkit_runtime.workspace = true
+ohos-arkui-binding.workspace = true
+ohos-hilog-binding.workspace = true
+ohos-xcomponent-binding.workspace = true
+ohos-xcomponent-sys.workspace = true
+reqwest = { workspace = true, optional = true }
+tokio.workspace = true
+
+ohos-native-window-binding.workspace = true
+thorvg.workspace = true
+thorvg-sys.workspace = true
