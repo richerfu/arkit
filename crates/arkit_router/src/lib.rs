@@ -34,10 +34,12 @@ use dioxus_core_macro::{component, rsx, Props};
 /// router).
 ///
 /// A back press is consumed (returns `true`) when the router can go back;
-/// otherwise it passes through to the system.
+/// otherwise it passes through to the system. The native interceptor enters
+/// through a Dioxus callback so router history is resolved in the component
+/// scope that installed this hook, even though ArkTS initiated the call.
 pub fn use_back_handler() -> impl Fn() -> bool {
     let navigator = dioxus_router::navigator();
-    let handler: Rc<dyn Fn() -> bool> = Rc::new(move || {
+    let scoped_handler = dioxus_hooks::use_callback(move |()| {
         if navigator.can_go_back() {
             navigator.go_back();
             true
@@ -45,6 +47,7 @@ pub fn use_back_handler() -> impl Fn() -> bool {
             false
         }
     });
+    let handler: Rc<dyn Fn() -> bool> = Rc::new(move || scoped_handler.call(()));
     let registered_handler = handler.clone();
     let _registration = use_hook(|| {
         Rc::new(arkit_runtime::register_back_press_handler(
@@ -206,5 +209,81 @@ pub fn Link<R: Clone + PartialEq + 'static + std::fmt::Debug + dioxus_router::Ro
             },
             {props.children}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    use arkit_prelude::dioxus_core::VNode;
+    use arkit_prelude::*;
+    use dioxus_core::NoOpMutations;
+
+    use super::{dioxus_router, use_back_handler, Routable, Router};
+
+    thread_local! {
+        static INSTALLED_BACK_HANDLER: RefCell<Option<Rc<dyn Fn() -> bool>>> =
+            const { RefCell::new(None) };
+    }
+
+    #[derive(Routable, Clone, Debug, PartialEq)]
+    enum TestRoute {
+        #[layout(TestShell)]
+        #[route("/")]
+        Home {},
+        #[route("/other")]
+        Other {},
+    }
+
+    fn test_app() -> Element {
+        rsx! { Router::<TestRoute> {} }
+    }
+
+    #[component]
+    fn TestShell() -> Element {
+        let back_handler: Rc<dyn Fn() -> bool> = Rc::new(use_back_handler());
+        let installed_handler = back_handler.clone();
+        use_hook(move || {
+            INSTALLED_BACK_HANDLER.with(|slot| slot.replace(Some(installed_handler)));
+        });
+
+        let navigator = dioxus_router::navigator();
+        use_effect(move || {
+            navigator.push(TestRoute::Other {});
+        });
+
+        rsx! { dioxus_router::Outlet::<TestRoute> {} }
+    }
+
+    #[component]
+    fn Home() -> Element {
+        rsx! { "home" }
+    }
+
+    #[component]
+    fn Other() -> Element {
+        rsx! { "other" }
+    }
+
+    #[test]
+    fn back_handler_reenters_the_installing_dioxus_scope() {
+        let mut dom = dioxus_core::VirtualDom::new(test_app);
+        let mut mutations = NoOpMutations;
+        dom.rebuild(&mut mutations);
+        dom.render_immediate(&mut mutations);
+
+        let handler = INSTALLED_BACK_HANDLER.with(|slot| {
+            slot.borrow()
+                .as_ref()
+                .expect("test shell should install a back handler")
+                .clone()
+        });
+
+        assert!(handler(), "the pushed route should consume system back");
+        assert!(!handler(), "the root route should pass system back through");
+
+        INSTALLED_BACK_HANDLER.with(|slot| slot.borrow_mut().take());
     }
 }

@@ -252,6 +252,7 @@ dependencies = [
  "arkit_animation",
  "arkit_prelude",
  "arkit_runtime",
+ "dioxus",
  "dioxus-router",
 ]
 

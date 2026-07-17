@@ -8,10 +8,11 @@ use arkit::prelude::*;
 // The upstream derive emits `::dioxus_router` paths. Bind that name through
 // Arkit's supported router namespace instead of adding an internal crate edge.
 use arkit::router::dioxus_router;
-use arkit::router::{Link, Routable, RouteTransition, Router};
+use arkit::router::{use_back_handler, Link, Outlet, Routable, RouteTransition, Router};
 
 #[derive(Routable, Clone, PartialEq, Debug)]
 enum Route {
+    #[layout(AppShell)]
     #[route("/")]
     Home {},
     #[route("/settings")]
@@ -25,6 +26,12 @@ fn app() -> Element {
     rsx! {
         Router::<Route> {}
     }
+}
+
+#[component]
+fn AppShell() -> Element {
+    let _back_handler = use_back_handler();
+    rsx! { Outlet::<Route> {} }
 }
 
 #[component]
