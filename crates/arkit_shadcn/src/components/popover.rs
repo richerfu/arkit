@@ -9,7 +9,8 @@
 //! content.
 
 use super::floating_layer::{
-    FloatingAlign, FloatingPanelPlacement, FloatingSide, FLOATING_BACKDROP, SHADOW_SM,
+    FloatingAlign, FloatingPanelPlacement, FloatingSide, FLOATING_CAPTURE_COLOR, HIT_TEST_DEFAULT,
+    SHADOW_SM,
 };
 use crate::theme::*;
 use arkit_prelude::*;
@@ -128,7 +129,8 @@ fn popover_overlay_content(
             percent_height: 1.0,
             align_items: "start",
             padding_top: top,
-            background_color: FLOATING_BACKDROP,
+            background_color: FLOATING_CAPTURE_COLOR,
+            hit_test_behavior: HIT_TEST_DEFAULT,
             onclick: move |_| on_dismiss.call(()),
             row {
                 percent_width: 1.0,

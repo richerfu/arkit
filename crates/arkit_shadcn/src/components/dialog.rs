@@ -104,6 +104,7 @@ pub fn Dialog(
             shadow: SHADOW_SM,
             column {
                 percent_width: 1.0,
+                align_items: "start",
                 padding_top: spacing::XXL,
                 padding_right: spacing::XXL,
                 padding_bottom: spacing::XXL,
@@ -141,8 +142,8 @@ pub fn Dialog(
     rsx! {}
 }
 
-/// Dialog header — RN Reusables native defaults: centered, `native:text-xl`
-/// title and `native:text-base` muted description with `gap-1.5` spacing.
+/// Dialog header — start-aligned `native:text-xl` title and `native:text-base`
+/// muted description with `gap-1.5` spacing.
 #[component]
 pub fn DialogHeader(title: String, description: Option<String>) -> Element {
     let theme = use_theme();
@@ -150,14 +151,14 @@ pub fn DialogHeader(title: String, description: Option<String>) -> Element {
     rsx! {
         column {
             percent_width: 1.0,
-            align_items: "center",
+            align_items: "start",
             text {
                 percent_width: 1.0,
                 font_size: typography::XL,
                 font_weight: 600_i32,
                 font_color: theme.colors.foreground,
                 line_height: 20.0,
-                text_align: 1,
+                text_align: 0,
                 "{title}"
             }
             if let Some(description) = description.as_ref() {
@@ -168,7 +169,7 @@ pub fn DialogHeader(title: String, description: Option<String>) -> Element {
                         font_size: typography::MD,
                         font_color: theme.colors.muted_foreground,
                         line_height: 20.0,
-                        text_align: 1,
+                        text_align: 0,
                         "{description}"
                     }
                 }
@@ -177,15 +178,17 @@ pub fn DialogHeader(title: String, description: Option<String>) -> Element {
     }
 }
 
-/// Dialog footer — full-width column holding action children. Components with
+/// Dialog footer — full-width end-aligned row holding action children. Components with
 /// semantic action/cancel slots, such as `AlertDialog`, own their native visual
 /// ordering explicitly instead of trying to reverse opaque Dioxus children.
 #[component]
 pub fn DialogFooter(children: Element) -> Element {
     rsx! {
-        column {
+        row {
             percent_width: 1.0,
             margin_top: spacing::LG,
+            align_items: "center",
+            justify_content: "end",
             {children}
         }
     }

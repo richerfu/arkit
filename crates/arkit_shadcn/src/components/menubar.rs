@@ -141,7 +141,7 @@ fn MenubarMenu(
     use_menu_overlay_refresh(
         overlay.clone(),
         active,
-        *overlay_session.read(),
+        overlay_session,
         style,
         theme,
         dismiss,
