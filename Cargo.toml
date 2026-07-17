@@ -110,17 +110,17 @@ pulldown-cmark = { version = "0.13.4", default-features = false }
 # dispose APIs used by arkit_runtime yet. Keep the upstream commit pinned until released.
 openharmony-ability = { git = "https://github.com/harmony-contrib/openharmony-ability.git", rev = "edc4e49d0d431035c6c001fc5e583abf62a998e3" }
 
-ohos-arkui-binding = { version = "0.2.0", default-features = false, features = ["napi", "image", "drawing", "api-20"] }
-ohos-arkui-sys = { version = "0.1.0", default-features = false, features = ["api-20"] }
-ohos-drawing-binding = "0.2.0"
-ohos-native-drawing-sys = "0.2.0"
-ohos-image-native-binding = { version = "0.0.3", default-features = false, features = ["api-20"] }
-ohos-display-binding = "0.1.0"
-ohos-hilog-binding = "0.2.0"
-ohos-ability-access-control-binding = "0.1.0"
-ohos-camera-binding = { version = "0.1.0", default-features = false, features = ["api-20", "xcomponent"] }
+ohos-arkui-binding = { version = "0.2.3", default-features = false, features = ["napi", "image", "drawing", "api-20"] }
+ohos-arkui-sys = { version = "0.1.1", default-features = false, features = ["api-20"] }
+ohos-drawing-binding = "0.2.1"
+ohos-native-drawing-sys = "0.2.1"
+ohos-image-native-binding = { version = "0.0.4", default-features = false, features = ["api-20"] }
+ohos-display-binding = "0.1.1"
+ohos-hilog-binding = "0.2.1"
+ohos-ability-access-control-binding = "0.1.1"
+ohos-camera-binding = { version = "0.1.1", default-features = false, features = ["api-20", "xcomponent"] }
 ohos-xcomponent-binding = { version = "0.3.1", default-features = false, features = ["callbacks", "multi_mode", "api-20"] }
 ohos-xcomponent-sys = { version = "0.1.1", default-features = false, features = ["api-20"] }
-ohos-native-window-binding = { version = "0.2.2", path = "../ohos-native-bindings/crates/native_window", default-features = false, features = ["api-20"] }
+ohos-native-window-binding = { version = "0.2.3", default-features = false, features = ["api-20"] }
 thorvg = { version = "0.5.0", default-features = false, features = ["vendored", "lottie", "png", "fonts", "threads"] }
 thorvg-sys = { version = "0.3.0", default-features = false }
