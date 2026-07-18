@@ -6,8 +6,8 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 
 use ohos_drawing_binding::{
-    Brush, Canvas, FontCollection, Path, Pen, Point, Rect, TextStyle, Typography,
-    TypographyBuilder, TypographyStyle,
+    Brush, Canvas, FontCollection, FontStyle, FontWeight, LineCap, Path, PathEffect, Pen, Point,
+    Rect, TextStyle, Typography, TypographyBuilder, TypographyStyle,
 };
 use rustc_hash::FxHashMap;
 
@@ -93,7 +93,10 @@ impl TextCache {
         let mut text_style = TextStyle::new();
         text_style.set_color(paint.color);
         text_style.set_font_size(paint.size);
-        text_style.set_font_weight(paint.weight);
+        text_style.set_font_style(FontStyle {
+            weight: FontWeight::from_css(paint.weight.clamp(1, 1_000) as u16),
+            ..FontStyle::default()
+        });
         let mut builder = TypographyBuilder::new(&mut typography_style, &mut self.fonts);
         builder.push_text_style(&mut text_style);
         builder.add_text(&text);
@@ -156,11 +159,7 @@ pub(super) fn fill_oval(canvas: &Canvas, x: f32, y: f32, width: f32, height: f32
     brush.set_color(color);
     let rect = Rect::new(x, y, x + width.max(0.0), y + height.max(0.0));
     canvas.attach_brush(&brush);
-    // SAFETY: canvas and rect are live for this synchronous draw call; the
-    // attached brush is detached before any owner is dropped.
-    unsafe {
-        ohos_native_drawing_sys::OH_Drawing_CanvasDrawOval(canvas.as_ptr(), rect.as_ptr());
-    }
+    canvas.draw_oval(&rect);
     canvas.detach_brush();
 }
 
@@ -291,11 +290,7 @@ pub(super) fn stroke_oval(
     pen.set_width(stroke_width);
     let rect = Rect::new(x, y, x + width.max(0.0), y + height.max(0.0));
     canvas.attach_pen(&pen);
-    // SAFETY: canvas and rect are live for this synchronous draw call; the
-    // attached pen is detached before any owner is dropped.
-    unsafe {
-        ohos_native_drawing_sys::OH_Drawing_CanvasDrawOval(canvas.as_ptr(), rect.as_ptr());
-    }
+    canvas.draw_oval(&rect);
     canvas.detach_pen();
 }
 
@@ -331,31 +326,12 @@ pub(super) fn stroke_path_style(canvas: &Canvas, path: &Path, color: u32, width:
         "dotted" => Some([width.max(1.0), width.max(1.0) * 2.0]),
         _ => None,
     }
-    .and_then(|mut intervals| {
-        // SAFETY: the native constructor consumes the interval values during
-        // this call; both entries remain initialized for its duration.
-        let effect = unsafe {
-            ohos_native_drawing_sys::OH_Drawing_CreateDashPathEffect(
-                intervals.as_mut_ptr(),
-                intervals.len() as i32,
-                0.0,
-            )
-        };
-        (!effect.is_null()).then_some(effect)
-    });
-    if let Some(effect) = effect {
-        // SAFETY: `pen` and the non-null effect are live. The effect remains
-        // owned here until drawing is complete and the pen is detached.
-        unsafe { ohos_native_drawing_sys::OH_Drawing_PenSetPathEffect(pen.as_ptr(), effect) };
-    }
+    .and_then(|intervals| PathEffect::dash(&intervals, 0.0));
+    pen.set_path_effect(effect.as_ref());
     canvas.attach_pen(&pen);
     canvas.draw_path(path);
     canvas.detach_pen();
-    if let Some(effect) = effect {
-        // SAFETY: the pen no longer references the effect and this scope owns
-        // the only native effect handle.
-        unsafe { ohos_native_drawing_sys::OH_Drawing_PathEffectDestroy(effect) };
-    }
+    drop(effect);
 }
 
 pub(super) fn fill_path(canvas: &Canvas, path: &Path, color: u32) {
@@ -459,13 +435,7 @@ pub(super) fn stroke_arc_with_cap(
     pen.set_color(color);
     pen.set_width(width);
     if round_cap {
-        // SAFETY: `pen` is a live uniquely configured native pen handle.
-        unsafe {
-            ohos_native_drawing_sys::OH_Drawing_PenSetCap(
-                pen.as_ptr(),
-                ohos_native_drawing_sys::OH_Drawing_PenLineCapStyle_LINE_ROUND_CAP,
-            );
-        }
+        pen.set_cap(LineCap::RoundCap);
     }
     canvas.attach_pen(&pen);
     canvas.draw_path(&path);
@@ -517,16 +487,7 @@ pub(super) fn draw_rotated_text(
         return;
     }
     canvas.save();
-    // SAFETY: `canvas` remains live and the transform is balanced by restore
-    // before returning.
-    unsafe {
-        ohos_native_drawing_sys::OH_Drawing_CanvasRotate(
-            canvas.as_ptr(),
-            degrees,
-            pivot_x,
-            pivot_y,
-        );
-    }
+    canvas.rotate_degrees_around(degrees, pivot_x, pivot_y);
     draw_text(canvas, text, x, y, size, color, weight);
     canvas.restore();
 }

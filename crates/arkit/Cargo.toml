@@ -11,10 +11,11 @@ workspace = true
 
 [features]
 default = []
-full = ["animation", "camera-scan", "chart", "i18n", "icon", "lottie-network", "markdown", "router", "shadcn"]
+full = ["animation", "camera-scan", "canvas", "chart", "i18n", "icon", "lottie-network", "markdown", "router", "shadcn"]
 animation = ["dep:arkit_animation"]
 camera = ["dep:arkit_camera"]
 camera-scan = ["animation", "camera", "arkit_camera/scan"]
+canvas = ["dep:arkit_canvas"]
 chart = ["animation", "dep:arkit_chart"]
 i18n = ["dep:arkit_i18n"]
 icon = ["dep:arkit_icon"]
@@ -35,6 +36,7 @@ arkit_i18n = { workspace = true, optional = true }
 arkit_router = { workspace = true, optional = true }
 arkit_animation = { workspace = true, optional = true }
 arkit_camera = { workspace = true, optional = true }
+arkit_canvas = { workspace = true, optional = true }
 arkit_chart = { workspace = true, optional = true }
 arkit_shadcn = { workspace = true, optional = true }
 arkit_icon = { workspace = true, optional = true }

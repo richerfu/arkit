@@ -29,6 +29,7 @@ Arkit 的唯一 UI 运行模型是 Dioxus：
 | `arkit_hooks`                      | native node、layout、overlay、safe area、virtualization hooks               |
 | `arkit_animation_core`             | 无 ArkUI 依赖的 resolve/compile/sample/state engine                         |
 | `arkit_animation`                  | root frame driver、ArkUI/Drawing adapter、native lowering、交互             |
+| `arkit_canvas`                     | W3C Canvas 2D 状态、路径、样式与 ArkUI Custom 原生绘制                      |
 | `arkit_chart`                      | option/parser、series render、hit test、ECharts component                   |
 | `arkit_router`                     | dioxus-router 的 ArkUI Link/back/transition 集成                            |
 | `arkit_i18n` / `arkit_i18n_macros` | runtime locale 与编译期 Fluent catalog                                      |
@@ -97,7 +98,7 @@ OpenHarmony binding 中部分 node/adapter handle 没有隐式 Drop：
 
 ## Feature 与依赖边界
 
-核心 facade 不自动链接领域栈。`chart` 依赖 animation；`router` 依赖 animation；`shadcn` 依赖 animation + icon；`markdown` 依赖 shadcn，并单独启用 `arkit_shadcn` 的 Markdown 解析依赖。这些关系只在 root `Cargo.toml`/crate manifest 中声明，业务 crate 用 `arkit` features 选择。
+核心 facade 不自动链接领域栈。`canvas` 独立引入 native drawing；`chart` 依赖 animation；`router` 依赖 animation；`shadcn` 依赖 animation + icon；`markdown` 依赖 shadcn，并单独启用 `arkit_shadcn` 的 Markdown 解析依赖。这些关系只在 root `Cargo.toml`/crate manifest 中声明，业务 crate 用 `arkit` features 选择。
 
 第三方/internal dependency version 集中在 workspace `Cargo.toml`，成员 crate 使用 `workspace = true`，确保 ArkUI binding/sys 类型身份一致。
 

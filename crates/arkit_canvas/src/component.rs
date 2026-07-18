@@ -1,0 +1,384 @@
+use std::cell::{Cell, RefCell};
+use std::fmt;
+use std::rc::Rc;
+
+use arkit_hooks::use_ark_node;
+use arkit_prelude::*;
+use dioxus_core::use_drop;
+use ohos_arkui_binding::common::node::ArkUINode;
+use ohos_arkui_binding::component::attribute::{ArkUIAttributeBasic, ArkUIEvent};
+use ohos_arkui_binding::types::advanced::NodeDirtyFlag;
+use ohos_drawing_binding::{BlendMode, Canvas as NativeCanvas, ClipOperation, Rect as NativeRect};
+
+use crate::context::CanvasSurface;
+use crate::{CanvasImage, CanvasRenderingContext2D, CanvasRenderingContext2DSettings};
+
+type CanvasDrawCallback = dyn for<'frame> Fn(&mut CanvasRenderingContext2D<'frame>);
+
+/// A stable drawing callback accepted by [`Canvas`].
+#[derive(Clone)]
+pub struct CanvasRenderer(Rc<CanvasDrawCallback>);
+
+impl CanvasRenderer {
+    pub fn new(
+        callback: impl for<'frame> Fn(&mut CanvasRenderingContext2D<'frame>) + 'static,
+    ) -> Self {
+        Self(Rc::new(callback))
+    }
+
+    fn draw(&self, context: &mut CanvasRenderingContext2D<'_>) {
+        (self.0)(context);
+    }
+}
+
+impl fmt::Debug for CanvasRenderer {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("CanvasRenderer(..)")
+    }
+}
+
+impl PartialEq for CanvasRenderer {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+type CanvasInvalidator = Rc<dyn Fn()>;
+type CanvasSizeReader = Rc<dyn Fn() -> [f32; 2]>;
+type CanvasSnapshotReader = Rc<dyn Fn() -> Option<CanvasImage>>;
+
+struct CanvasControllerBinding {
+    id: u64,
+    invalidate: CanvasInvalidator,
+    size: CanvasSizeReader,
+    snapshot: CanvasSnapshotReader,
+}
+
+#[derive(Default)]
+struct CanvasControllerState {
+    next_binding: u64,
+    binding: Option<CanvasControllerBinding>,
+    pending_redraw: bool,
+}
+
+/// Imperative handle for redraw requests and mounted logical size queries.
+#[derive(Clone, Default)]
+pub struct CanvasController {
+    inner: Rc<RefCell<CanvasControllerState>>,
+}
+
+impl CanvasController {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn request_redraw(&self) {
+        let invalidate = self
+            .inner
+            .borrow()
+            .binding
+            .as_ref()
+            .map(|binding| binding.invalidate.clone());
+        if let Some(invalidate) = invalidate {
+            invalidate();
+        } else {
+            self.inner.borrow_mut().pending_redraw = true;
+        }
+    }
+
+    pub fn get_size(&self) -> Option<[f32; 2]> {
+        let reader = self
+            .inner
+            .borrow()
+            .binding
+            .as_ref()
+            .map(|binding| binding.size.clone())?;
+        Some(reader())
+    }
+
+    pub fn get_width(&self) -> Option<f32> {
+        self.get_size().map(|size| size[0])
+    }
+
+    pub fn get_height(&self) -> Option<f32> {
+        self.get_size().map(|size| size[1])
+    }
+
+    /// Copy the mounted backing store into an immutable image source.
+    ///
+    /// The returned image can be passed to another context's `draw_image*`
+    /// methods or used to create a pattern. Before the first draw, after
+    /// unmount, or while the surface is already mutably borrowed, this returns
+    /// `None` instead of panicking.
+    pub fn snapshot(&self) -> Option<CanvasImage> {
+        let reader = self
+            .inner
+            .borrow()
+            .binding
+            .as_ref()
+            .map(|binding| binding.snapshot.clone())?;
+        reader()
+    }
+
+    pub fn is_mounted(&self) -> bool {
+        self.inner.borrow().binding.is_some()
+    }
+
+    fn bind(
+        &self,
+        invalidate: CanvasInvalidator,
+        size: CanvasSizeReader,
+        snapshot: CanvasSnapshotReader,
+    ) -> u64 {
+        let (id, pending) = {
+            let mut state = self.inner.borrow_mut();
+            state.next_binding = state
+                .next_binding
+                .checked_add(1)
+                .expect("arkit_canvas: controller binding id space exhausted");
+            let id = state.next_binding;
+            state.binding = Some(CanvasControllerBinding {
+                id,
+                invalidate: invalidate.clone(),
+                size,
+                snapshot,
+            });
+            (id, std::mem::take(&mut state.pending_redraw))
+        };
+        if pending {
+            invalidate();
+        }
+        id
+    }
+
+    fn unbind(&self, id: u64) {
+        let mut state = self.inner.borrow_mut();
+        if state
+            .binding
+            .as_ref()
+            .is_some_and(|binding| binding.id == id)
+        {
+            state.binding = None;
+        }
+    }
+}
+
+impl fmt::Debug for CanvasController {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("CanvasController")
+            .field("mounted", &self.is_mounted())
+            .finish_non_exhaustive()
+    }
+}
+
+impl PartialEq for CanvasController {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.inner, &other.inner)
+    }
+}
+
+/// Layout and drawing properties for [`Canvas`].
+#[derive(Clone, Props, PartialEq)]
+pub struct CanvasProps {
+    /// Synchronous Canvas 2D renderer called from ArkUI's custom draw frame.
+    pub draw: CanvasRenderer,
+    /// Fixed logical width in vp. Omit to use `percent_width`.
+    #[props(default)]
+    pub width: Option<f32>,
+    /// Fixed logical height in vp. Defaults to 300 when no relative height is supplied.
+    #[props(default)]
+    pub height: Option<f32>,
+    #[props(default = 1.0)]
+    pub percent_width: f32,
+    #[props(default)]
+    pub percent_height: Option<f32>,
+    /// Clear the backing bitmap before invoking `draw`. The clear value is
+    /// transparent black for alpha contexts and opaque black otherwise.
+    #[props(default = false)]
+    pub clear_before_draw: bool,
+    /// Canvas 2D context creation attributes. Unsupported native backing
+    /// formats are reflected as their actual fallback by
+    /// `get_context_attributes()`.
+    #[props(default)]
+    pub settings: CanvasRenderingContext2DSettings,
+    /// Optional imperative redraw handle.
+    #[props(default)]
+    pub controller: Option<CanvasController>,
+}
+
+struct CustomEventNode<'a>(&'a mut ArkUINode);
+
+impl ArkUIAttributeBasic for CustomEventNode<'_> {
+    fn raw(&self) -> &ArkUINode {
+        self.0
+    }
+
+    fn borrow_mut(&mut self) -> &mut ArkUINode {
+        self.0
+    }
+}
+
+impl ArkUIEvent for CustomEventNode<'_> {}
+
+/// Native Canvas 2D component backed by an ArkUI custom-draw node.
+#[component]
+pub fn Canvas(props: CanvasProps) -> Element {
+    let node_ref = use_ark_node();
+    let renderer = use_hook(|| Rc::new(RefCell::new(props.draw.clone())));
+    renderer.replace(props.draw.clone());
+    let clear_before_draw = use_hook(|| Rc::new(Cell::new(props.clear_before_draw)));
+    clear_before_draw.set(props.clear_before_draw);
+    let settings = use_hook(|| Rc::new(Cell::new(props.settings)));
+    settings.set(props.settings);
+    let registered_node = use_hook(|| Rc::new(Cell::new(None::<usize>)));
+    let surface = use_hook(|| Rc::new(RefCell::new(None::<CanvasSurface>)));
+
+    let controller_binding = use_hook(|| Rc::new(RefCell::new(None::<(CanvasController, u64)>)));
+    let controller_changed = {
+        let binding = controller_binding.borrow();
+        match (binding.as_ref(), props.controller.as_ref()) {
+            (Some((current, _)), Some(next)) => current != next,
+            (None, None) => false,
+            _ => true,
+        }
+    };
+    if controller_changed {
+        if let Some((controller, binding)) = controller_binding.borrow_mut().take() {
+            controller.unbind(binding);
+        }
+        if let Some(controller) = props.controller.clone() {
+            let invalidate_node = node_ref;
+            let size_node = node_ref;
+            let snapshot_surface = surface.clone();
+            let binding = controller.bind(
+                Rc::new(move || {
+                    if let Some(node) = invalidate_node.peek() {
+                        let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
+                    }
+                }),
+                Rc::new(move || {
+                    let ratio = CanvasSurface::display_pixel_ratio();
+                    size_node
+                        .peek()
+                        .and_then(|node| node.borrow().layout_size().ok())
+                        .map_or([0.0, 0.0], |size| {
+                            [size.width as f32 / ratio, size.height as f32 / ratio]
+                        })
+                }),
+                Rc::new(move || {
+                    snapshot_surface
+                        .try_borrow()
+                        .ok()
+                        .and_then(|surface| surface.as_ref().and_then(CanvasSurface::snapshot))
+                }),
+            );
+            controller_binding
+                .borrow_mut()
+                .replace((controller, binding));
+        }
+    }
+    let drop_binding = controller_binding.clone();
+    use_drop(move || {
+        if let Some((controller, binding)) = drop_binding.borrow_mut().take() {
+            controller.unbind(binding);
+        }
+    });
+
+    let effect_renderer = renderer.clone();
+    let effect_clear = clear_before_draw.clone();
+    let effect_settings = settings.clone();
+    let effect_registered = registered_node.clone();
+    let effect_surface = surface.clone();
+    use_effect(move || {
+        let Some(node) = node_ref.get() else {
+            return;
+        };
+        let native_key = node.borrow().raw_handle() as usize;
+        if effect_registered.get() != Some(native_key) {
+            let renderer = effect_renderer.clone();
+            let clear_before_draw = effect_clear.clone();
+            let settings = effect_settings.clone();
+            let surface = effect_surface.clone();
+            CustomEventNode(&mut node.borrow_mut()).on_custom_draw(move |event| {
+                let Some(draw_context) = event.draw_context_in_draw() else {
+                    return;
+                };
+                let Some(raw_canvas) = draw_context.canvas() else {
+                    return;
+                };
+                // SAFETY: ArkUI owns the canvas for exactly this synchronous
+                // callback. The borrowed wrapper and 2D context do not escape.
+                let native = unsafe { NativeCanvas::from_raw_borrowed(raw_canvas.cast()) };
+                let size = draw_context.size();
+                let ratio = CanvasSurface::display_pixel_ratio();
+                let width = size.width as f32 / ratio;
+                let height = size.height as f32 / ratio;
+                let pixel_width = size.width.max(1) as u32;
+                let pixel_height = size.height.max(1) as u32;
+                let context_settings = settings.get();
+                let mut surface = surface.borrow_mut();
+                if surface.as_ref().is_none_or(|surface| {
+                    !surface.matches(pixel_width, pixel_height, ratio, context_settings)
+                }) {
+                    surface.replace(CanvasSurface::new(
+                        width,
+                        height,
+                        pixel_width,
+                        pixel_height,
+                        ratio,
+                        context_settings,
+                    ));
+                }
+                let surface = surface
+                    .as_mut()
+                    .expect("arkit_canvas: surface initialized above");
+                if clear_before_draw.get() {
+                    surface.clear_pixels();
+                }
+                {
+                    let mut context = surface.context();
+                    renderer.borrow().draw(&mut context);
+                }
+                // `OH_Drawing_CanvasClear` ignores the custom node's clip and
+                // can erase sibling ArkUI content because the borrowed draw
+                // canvas may share the parent's render target. Clear through a
+                // clipped draw operation so invalidating Canvas never damages
+                // the header or other nodes in the same XComponent tree.
+                native.save();
+                let bounds = NativeRect::new(
+                    0.0,
+                    0.0,
+                    size.width.max(1) as f32,
+                    size.height.max(1) as f32,
+                );
+                native.clip_rect(&bounds, ClipOperation::Intersect, false);
+                let _ = native.draw_color(0x0000_0000, BlendMode::Clear);
+                surface.draw_to(&native);
+                native.restore();
+            });
+            effect_registered.set(Some(native_key));
+        }
+        let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
+    });
+
+    let fixed_height = if props.height.is_none() && props.percent_height.is_none() {
+        Some(300.0)
+    } else {
+        props.height
+    };
+    let relative_height = if props.height.is_none() {
+        props.percent_height
+    } else {
+        None
+    };
+    rsx! {
+        custom {
+            width: if let Some(width) = props.width { width },
+            height: if let Some(height) = fixed_height { height },
+            percent_width: if props.width.is_none() { props.percent_width },
+            percent_height: if let Some(height) = relative_height { height },
+            hit_test_behavior: 0,
+        }
+    }
+}

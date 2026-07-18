@@ -86,11 +86,7 @@ pub(super) fn draw_symbol(
     let (x, y) = spec.center(x, y);
     canvas.save();
     if spec.rotate.abs() > f32::EPSILON {
-        // SAFETY: `canvas` is a live borrowed drawing handle and the transform
-        // is balanced by the restore at the end of this function.
-        unsafe {
-            ohos_native_drawing_sys::OH_Drawing_CanvasRotate(canvas.as_ptr(), spec.rotate, x, y)
-        };
+        canvas.rotate_degrees_around(spec.rotate, x, y);
     }
     let left = x - width / 2.0;
     let top = y - height / 2.0;

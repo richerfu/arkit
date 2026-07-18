@@ -3,7 +3,7 @@
 //! The default facade exports Dioxus core (`rsx!`, `use_signal`, `Element`),
 //! the ArkUI element registry, renderer, runtime, and host hooks. Domain
 //! libraries are opt-in through the `animation`, `camera`, `chart`, `i18n`,
-//! `icon`, `lottie`, `markdown`, `router`, and `shadcn` features (or `full`). The
+//! `canvas`, `icon`, `lottie`, `markdown`, `router`, and `shadcn` features (or `full`). The
 //! `#[entry]` macro mounts a `fn() -> Element` root component into a NodeContent
 //! slot.
 
@@ -106,11 +106,27 @@ pub use arkit_camera::{
     CameraSessionInfo, CameraSize, CameraStabilizationMode, CameraStatus, CameraTorchMode,
     CameraView, CameraViewProps, CameraWhiteBalanceMode, CapturedPhoto,
 };
+
 #[cfg(feature = "camera-scan")]
 pub use arkit_camera::{
     CameraScanConfiguration, CameraScanFormat, CameraScanModeConfiguration,
     CameraScanPreviewInteractions, CameraScanRegion, CameraScanResult,
     CameraScanToolbarConfiguration,
+};
+
+// --- W3C-aligned Canvas 2D ---
+#[cfg(feature = "canvas")]
+pub use arkit_canvas as canvas;
+#[cfg(feature = "canvas")]
+pub use arkit_canvas::{
+    Canvas, CanvasColor, CanvasColorSpace, CanvasColorType, CanvasController, CanvasError,
+    CanvasFont, CanvasFontKerning, CanvasFontStretch, CanvasFontStyle, CanvasFontVariantCaps,
+    CanvasGradient, CanvasImage, CanvasImageSmoothingQuality, CanvasLineCap, CanvasLineJoin,
+    CanvasPattern, CanvasPatternRepetition, CanvasRadius, CanvasRenderer, CanvasRenderingContext2D,
+    CanvasRenderingContext2DSettings, CanvasResult, CanvasStyle, CanvasTextAlign,
+    CanvasTextBaseline, CanvasTextDirection, CanvasTextMetrics, CanvasTextRendering, DomMatrix2D,
+    FillRule, Float16, GlobalCompositeOperation, ImageData, ImageDataArray, ImageDataPixelFormat,
+    ImageDataSettings, IntoCanvasFont, IntoCanvasRadii, IntoCanvasStyle, Path2D,
 };
 
 // --- Icon ---
@@ -340,6 +356,19 @@ pub mod prelude {
         LabelLayoutOptions, LabelStyle, Legend, LineStyle, LinkData, MapFeature, MapOptions,
         MapPolygon, MapSeries, NodeData, SankeySeries, Series, SeriesOptions, Title, Tooltip,
         VisualStyle,
+    };
+
+    #[cfg(feature = "canvas")]
+    pub use crate::{
+        canvas, Canvas, CanvasColor, CanvasColorSpace, CanvasColorType, CanvasController,
+        CanvasError, CanvasFont, CanvasFontKerning, CanvasFontStretch, CanvasFontStyle,
+        CanvasFontVariantCaps, CanvasGradient, CanvasImage, CanvasImageSmoothingQuality,
+        CanvasLineCap, CanvasLineJoin, CanvasPattern, CanvasPatternRepetition, CanvasRadius,
+        CanvasRenderer, CanvasRenderingContext2D, CanvasRenderingContext2DSettings, CanvasResult,
+        CanvasStyle, CanvasTextAlign, CanvasTextBaseline, CanvasTextDirection, CanvasTextMetrics,
+        CanvasTextRendering, DomMatrix2D, FillRule, Float16, GlobalCompositeOperation, ImageData,
+        ImageDataArray, ImageDataPixelFormat, ImageDataSettings, IntoCanvasFont, IntoCanvasRadii,
+        IntoCanvasStyle, Path2D,
     };
 
     #[cfg(feature = "camera")]

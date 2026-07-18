@@ -1,6 +1,6 @@
 [package]
-name = "arkit_chart"
-description = "Native ECharts-compatible chart components for the Arkit Dioxus renderer"
+name = "arkit_canvas"
+description = "W3C-aligned Canvas 2D component for the Arkit Dioxus renderer"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,12 +10,11 @@ license.workspace = true
 workspace = true
 
 [dependencies]
-arkit_animation.workspace = true
 arkit_hooks.workspace = true
 arkit_prelude.workspace = true
+csscolorparser.workspace = true
 ohos-arkui-binding.workspace = true
-ohos-drawing-binding.workspace = true
-ohos-image-native-binding.workspace = true
 ohos-display-binding.workspace = true
-serde_json.workspace = true
-rustc-hash.workspace = true
+ohos-drawing-binding.workspace = true
+half.workspace = true
+smallvec.workspace = true

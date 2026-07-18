@@ -1,4 +1,4 @@
-use ohos_drawing_binding::Rect;
+use ohos_drawing_binding::{ClipOperation, Rect};
 
 use super::super::compat;
 use super::super::prelude::*;
@@ -225,14 +225,5 @@ fn resolve_margin(value: Option<&serde_json::Value>, base: f32) -> f32 {
 fn begin_clip(canvas: &ohos_drawing_binding::Canvas, bounds: (f32, f32, f32, f32)) {
     canvas.save();
     let rect = Rect::new(bounds.0, bounds.1, bounds.0 + bounds.2, bounds.1 + bounds.3);
-    // SAFETY: canvas and rect are live for the synchronous clip call; the
-    // matching end-clip path restores the saved canvas state.
-    unsafe {
-        ohos_native_drawing_sys::OH_Drawing_CanvasClipRect(
-            canvas.as_ptr(),
-            rect.as_ptr(),
-            ohos_native_drawing_sys::OH_Drawing_CanvasClipOp_INTERSECT,
-            true,
-        );
-    }
+    canvas.clip_rect(&rect, ClipOperation::Intersect, true);
 }

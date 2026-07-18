@@ -1,0 +1,22 @@
+[package]
+name = "canvas_example"
+description = "W3C-aligned Canvas 2D showcase for Arkit"
+publish = false
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+arkit = { workspace = true, features = ["canvas"] }
+napi-ohos.workspace = true
+napi-derive-ohos.workspace = true
+
+[build-dependencies]
+napi-build-ohos.workspace = true

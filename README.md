@@ -37,6 +37,13 @@ barcode scanning is added by `camera-scan`. CameraKit and scan-decoder dependenc
 are absent from the default graph and follow their respective features.
 See [examples/camera](examples/camera/src/lib.rs).
 
+The `canvas` feature provides a W3C/WHATWG-aligned Canvas 2D context rendered
+by an ArkUI custom-draw node with a persistent high-DPI native backing store.
+It covers Path2D, gradients/patterns, shadows/filters, text, images and
+ImageData while keeping the default dependency graph free of native drawing
+APIs and avoiding a separate XComponent surface. See
+[examples/canvas](examples/canvas/src/lib.rs).
+
 High-performance Lottie rendering is enabled independently with the `lottie`
 feature; cancellable HTTP/HTTPS URL sources are added by `lottie-network` so
 embedded-only apps do not pay for Reqwest/Rustls. ThorVG runs on a render worker

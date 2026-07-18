@@ -2,7 +2,7 @@
 # 把指定 arkit example 打包成 hap 安装到 OpenHarmony 模拟器并启动。
 #
 # 用法: ./run.sh <example-dir> [install|build|start|log]
-#   example-dir: counter | async_task | animation | camera | chart | complex_cases | i18n | lottie | router | shadcn_showcase | webview
+#   example-dir: counter | async_task | animation | camera | canvas | chart | complex_cases | i18n | lottie | router | shadcn_showcase | webview
 #
 # 每个 example 的 .so 名 = lib<crate-name>.so（crate-name 取自 examples/<dir>/Cargo.toml）。
 # 切换 example 时同步更新 app 壳的 moduleName / lib 依赖 / cpp/types，保持名字一致。

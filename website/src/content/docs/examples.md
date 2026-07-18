@@ -5,7 +5,7 @@ description: "workspace 示例、覆盖范围与验证命令。"
 
 # 示例索引
 
-workspace 提供 11 个可运行 OpenHarmony `cdylib`。示例既是入门代码，也是公开 API 的编译与真机契约。
+workspace 提供 12 个可运行 OpenHarmony `cdylib`。示例既是入门代码，也是公开 API 的编译与真机契约。
 
 ## 示例矩阵
 
@@ -15,6 +15,7 @@ workspace 提供 11 个可运行 OpenHarmony `cdylib`。示例既是入门代码
 | `async_task`      | `use_resource`、Tokio timer、UI wake                                      | `examples/async_task/src/lib.rs`      |
 | `animation`       | timeline、easing、controls、layout/presence、drag/scroll、lowering        | `examples/animation/src/lib.rs`       |
 | `camera`          | CameraKit 拍照/扫码双模式、可配置工具栏、分辨率与完整控制项               | `examples/camera/src/lib.rs`          |
+| `canvas`          | W3C Canvas 2D 完整绘制面：Path2D、paint、文字、图片与像素                 | `examples/canvas/src/lib.rs`          |
 | `chart`           | 22 series、realtime option、actions、events、appendData、coordinate query | `examples/chart/src/lib.rs`           |
 | `complex_cases`   | 10,000 item List/Grid/WaterFlow NodeAdapter                               | `examples/complex_cases/src/lib.rs`   |
 | `i18n`            | Fluent macro、typed message、locale switch、Cargo rename                  | `examples/i18n/src/lib.rs`            |
@@ -64,6 +65,10 @@ ohrs build --arch aarch
 ## chart
 
 展示全部 series family 和 ECharts-compatible instance operations。除画面外检查 tooltip/hit-test、legend/dataZoom、selection state、realtime transition、appendData、coordinate conversion 和图片导出。
+
+## canvas
+
+通过 `canvas` feature 使用持久化 ArkUI Custom + Native Drawing backing store，不创建额外 XComponent。示例验证高 DPI logical pixel、gradient/pattern/shadow、roundRect/arcTo/ellipse、SVG Path2D、dash、affine transform、ImageData/drawImage、fill/stroke text 与完整文字测量。
 
 ## camera
 

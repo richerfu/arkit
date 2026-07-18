@@ -2007,7 +2007,7 @@ pub fn ECharts(props: EChartsProps) -> Element {
                 // SAFETY: ArkUI owns `raw_canvas` for exactly this synchronous
                 // custom-draw callback. `Canvas` is borrowed (never destroyed)
                 // and does not escape the callback.
-                let canvas = unsafe { Canvas::from_raw_borrowed(raw_canvas.as_ptr().cast()) };
+                let canvas = unsafe { Canvas::from_raw_borrowed(raw_canvas.cast()) };
                 let size = draw_context.size();
                 let pixel_ratio = pixel_ratio();
                 let logical_size = (

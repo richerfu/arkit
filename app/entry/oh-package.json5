@@ -6,7 +6,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "liblottie_example.so": "file:./src/main/cpp/types/liblottie_example",
+    "libcanvas_example.so": "file:./src/main/cpp/types/libcanvas_example",
     "@ohos-rs/ability": "0.4.0-beta.7"
   }
 }

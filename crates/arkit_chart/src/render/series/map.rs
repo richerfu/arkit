@@ -1,4 +1,4 @@
-use ohos_drawing_binding::Path;
+use ohos_drawing_binding::{Path, PathFillType};
 use serde_json::Value;
 
 use super::super::prelude::*;
@@ -250,7 +250,7 @@ fn map_fill_color(
 
 fn feature_path(feature: &MapFeature, transform: GeoTransform) -> (Path, Vec<HitPolygon>) {
     let mut path = Path::new();
-    path.set_fill_type(ohos_native_drawing_sys::OH_Drawing_PathFillType_PATH_FILL_TYPE_EVEN_ODD);
+    path.set_fill_type(PathFillType::EvenOdd);
     let mut hit_polygons = Vec::with_capacity(feature.polygons.len());
     for polygon in &feature.polygons {
         let exterior = project_ring(&mut path, &polygon.exterior, transform);
