@@ -56,7 +56,7 @@ pub mod image;
 pub use image::{ArkImageSource, RetainedImage};
 
 pub mod virtual_adapter;
-pub use virtual_adapter::{RenderItem, VirtualKind, VirtualListAdapter, VirtualNodeAdapter};
+pub use virtual_adapter::{RenderItem, VirtualKind, VirtualNodeAdapter};
 
 pub mod node_builder;
 pub use node_builder::NodeBuilder;

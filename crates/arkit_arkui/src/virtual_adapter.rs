@@ -57,27 +57,14 @@ pub type RenderItem = Rc<dyn Fn(u32) -> ArkUIResult<ArkUINode>>;
 struct AdapterState {
     kind: VirtualKind,
     total_count: u32,
-    /// Rendering generation encoded into the node ids returned to ArkUI.
-    ///
-    /// `ReloadAllItems` diffs the new data against mounted nodes by node id.
-    /// Keeping `index` as the id for equal-length content changes makes ArkUI
-    /// reuse the old native subtree, including its old event callbacks. The
-    /// generation flips the id namespace on every content reload so visible
-    /// rows are rebuilt from the latest render callback.
-    render_generation: u32,
     render_item: RenderItem,
-    /// Mounted items keyed by native handle. During `reload_all_items`, ArkUI
-    /// may add the replacement for an index before removing the old node for
-    /// that same index. Keying by index would overwrite and then dispose the
-    /// replacement's Rust event receiver when the old removal arrives.
-    mounted: FxHashMap<usize, MountedItem>,
+    /// Mounted items keyed by native handle. During a reload ArkUI may add the
+    /// replacement for an index before removing the old node for that same
+    /// index. Keying by index would overwrite and then dispose the replacement
+    /// when the old removal arrives.
+    mounted: FxHashMap<usize, ArkUINode>,
     adapter: Option<NodeAdapter>,
     attached_host: Option<ArkUINode>,
-}
-
-struct MountedItem {
-    index: u32,
-    node: ArkUINode,
 }
 
 /// A virtual adapter attached to a `list`, `grid`, or `waterflow` host node.
@@ -87,6 +74,14 @@ pub struct VirtualNodeAdapter {
     state: Rc<RefCell<AdapterState>>,
 }
 
+impl PartialEq for VirtualNodeAdapter {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.state, &other.state)
+    }
+}
+
+impl Eq for VirtualNodeAdapter {}
+
 impl VirtualNodeAdapter {
     /// Create a new adapter. Call [`attach`](Self::attach) to bind it to a host
     /// node.
@@ -95,7 +90,6 @@ impl VirtualNodeAdapter {
             state: Rc::new(RefCell::new(AdapterState {
                 kind,
                 total_count,
-                render_generation: 0,
                 render_item,
                 mounted: FxHashMap::default(),
                 adapter: None,
@@ -150,132 +144,159 @@ impl VirtualNodeAdapter {
         Ok(())
     }
 
+    /// Replace the item renderer used by future creates and reloads.
+    ///
+    /// This only updates Rust-owned state; it does not synchronously mutate
+    /// ArkUI. Call [`reload_items`](Self::reload_items) after changing the
+    /// backing data for already-mounted rows.
+    pub fn set_render_item(&self, render_item: RenderItem) {
+        self.state.borrow_mut().render_item = render_item;
+    }
+
+    /// Return the current logical item count.
+    pub fn total_count(&self) -> u32 {
+        self.state.borrow().total_count
+    }
+
     /// Detach and dispose the native adapter and every mounted item.
     pub fn detach(&self) -> ArkUIResult<()> {
-        let (kind, host, adapter, mounted) = {
+        let (kind, host, adapter) = {
             let mut state = self.state.borrow_mut();
-            (
-                state.kind,
-                state.attached_host.take(),
-                state.adapter.take(),
-                std::mem::take(&mut state.mounted),
-            )
+            (state.kind, state.attached_host.take(), state.adapter.take())
         };
-        // Cleanup must not be skipped when the host was already detached by
-        // ArkUI and resetting its attribute reports an error.
+
+        // Resetting the attribute and disposing the adapter can synchronously
+        // emit removal events. Leave `mounted` in AdapterState so the event
+        // receiver remains the single owner that disposes those native nodes.
         let reset_result = host.map_or(Ok(()), |host| host.reset_attribute(kind.adapter_attr()));
-        for (_, mut item) in mounted {
-            let _ = item.node.dispose();
-        }
         if let Some(adapter) = adapter {
             adapter.dispose();
+        }
+
+        // A successful detach should have emitted removal callbacks. Dispose
+        // only genuine leftovers; on a failed reset the host may already be
+        // invalid, so issuing native operations through copied handles would
+        // risk a use-after-free.
+        let mounted = std::mem::take(&mut self.state.borrow_mut().mounted);
+        if reset_result.is_ok() {
+            for (_, mut node) in mounted {
+                let _ = node.dispose();
+            }
         }
         reset_result
     }
 
-    /// Update the total item count and notify the adapter to reload.
+    /// Replace the logical item count and rebuild currently visible content.
+    ///
+    /// Prefer [`insert_items`](Self::insert_items) and
+    /// [`remove_items`](Self::remove_items) when the structural change is
+    /// known; they preserve unaffected native rows and scroll state.
     pub fn set_total_count(&self, total: u32) -> ArkUIResult<()> {
-        let (adapter, previous_generation) = {
-            let mut state = self.state.borrow_mut();
-            if state.total_count == total {
-                return Ok(());
-            }
-            state.total_count = total;
-            let previous_generation = state.render_generation;
-            state.render_generation = state.render_generation.wrapping_add(1);
-            (state.adapter.take(), previous_generation)
-        };
-        let Some(mut adapter) = adapter else {
+        if self.total_count() == total {
             return Ok(());
-        };
-
-        // NodeAdapter mutations synchronously invoke the registered receiver
-        // on some ArkUI versions. Do not hold AdapterState's RefCell borrow
-        // across either native call: the receiver needs to borrow the same
-        // state to remove and build mounted nodes.
-        let result = adapter
-            .set_total_node_count(total)
-            .and_then(|()| adapter.reload_all_items());
-        let mut state = self.state.borrow_mut();
-        state.adapter = Some(adapter);
-        if result.is_err() {
-            state.render_generation = previous_generation;
         }
-        result
+
+        self.with_native_adapter(|adapter| adapter.set_total_node_count(total))?;
+        self.state.borrow_mut().total_count = total;
+        self.reload_all_items()
     }
 
-    /// Re-render all mounted items without replacing the host adapter.
+    /// Re-render all currently visible items without replacing the host
+    /// adapter.
     ///
     /// This preserves virtualization while allowing equal-length data updates
     /// such as selection, progress, locale and theme changes.
     pub fn reload_all_items(&self) -> ArkUIResult<()> {
-        let (adapter, previous_generation) = {
-            let mut state = self.state.borrow_mut();
-            let previous_generation = state.render_generation;
-            state.render_generation = state.render_generation.wrapping_add(1);
-            (state.adapter.take(), previous_generation)
-        };
-        let Some(mut adapter) = adapter else {
+        let total = self.total_count();
+        if total == 0 {
             return Ok(());
-        };
-
-        // Reload can synchronously deliver OnRemoveNodeFromAdapter and
-        // OnAddNodeToAdapter. Keep AdapterState unborrowed while ArkUI invokes
-        // those callbacks.
-        let result = adapter.reload_all_items();
-        let mut state = self.state.borrow_mut();
-        state.adapter = Some(adapter);
-        if result.is_err() {
-            state.render_generation = previous_generation;
         }
-        result
+        self.reload_items(0, total)
     }
 
-    /// Re-render mounted items in a contiguous range without mutating the
-    /// adapter's item sequence.
-    ///
-    /// Use this for equal-length item-local visual changes. Calling ArkUI's
-    /// positional `ReloadItem` for a Grid can change its visible cache anchor
-    /// even though the data order is unchanged. Arkit therefore keeps the
-    /// ListItem/GridItem/FlowItem wrapper mounted at the same index and only
-    /// replaces its content subtree. The adapter order, scroll position and
-    /// column assignment are never touched.
+    /// Re-render a contiguous item range while preserving unaffected rows.
     pub fn reload_items(&self, start: u32, count: u32) -> ArkUIResult<()> {
+        validate_item_range(self.total_count(), start, count)?;
         if count == 0 {
             return Ok(());
         }
-        let end = start.saturating_add(count);
-        let (render_item, mut targets) = {
-            let mut state = self.state.borrow_mut();
-            let render_item = state.render_item.clone();
-            let keys = state
-                .mounted
-                .iter()
-                .filter_map(|(key, item)| (item.index >= start && item.index < end).then_some(*key))
-                .collect::<Vec<_>>();
-            let targets = keys
-                .into_iter()
-                .filter_map(|key| state.mounted.remove(&key).map(|item| (key, item)))
-                .collect::<Vec<_>>();
-            (render_item, targets)
-        };
+        self.with_native_adapter(|adapter| adapter.reload_item(start, count))
+    }
 
-        let mut first_error = None;
-        for (_, item) in &mut targets {
-            match render_item(item.index)
-                .and_then(|content| replace_item_content(&mut item.node, content))
-            {
-                Ok(()) => {}
-                Err(error) if first_error.is_none() => first_error = Some(error),
-                Err(_) => {}
+    /// Insert `count` logical items at `start` and preserve unaffected rows.
+    /// The backing data must be updated before this method is called.
+    pub fn insert_items(&self, start: u32, count: u32) -> ArkUIResult<()> {
+        let total = self.total_count();
+        validate_insert(total, start, count)?;
+        if count == 0 {
+            return Ok(());
+        }
+        let next_total = total
+            .checked_add(count)
+            .ok_or_else(|| invalid_parameter("virtual adapter item count overflowed u32"))?;
+
+        self.with_native_adapter(|adapter| {
+            adapter.insert_item(start, count)?;
+            if let Err(error) = adapter.set_total_node_count(next_total) {
+                let _ = adapter.remove_item(start, count);
+                return Err(error);
             }
-        }
+            Ok(())
+        })?;
+        self.state.borrow_mut().total_count = next_total;
+        Ok(())
+    }
 
-        let mut state = self.state.borrow_mut();
-        for (key, item) in targets {
-            state.mounted.insert(key, item);
+    /// Remove `count` logical items at `start` and preserve unaffected rows.
+    /// The backing data must be updated before this method is called.
+    pub fn remove_items(&self, start: u32, count: u32) -> ArkUIResult<()> {
+        let total = self.total_count();
+        validate_item_range(total, start, count)?;
+        if count == 0 {
+            return Ok(());
         }
-        first_error.map_or(Ok(()), Err)
+        let next_total = total - count;
+
+        self.with_native_adapter(|adapter| {
+            adapter.remove_item(start, count)?;
+            if let Err(error) = adapter.set_total_node_count(next_total) {
+                let _ = adapter.insert_item(start, count);
+                return Err(error);
+            }
+            Ok(())
+        })?;
+        self.state.borrow_mut().total_count = next_total;
+        Ok(())
+    }
+
+    /// Move one logical item while preserving its native node when possible.
+    /// The backing data must be updated before this method is called.
+    pub fn move_item(&self, from: u32, to: u32) -> ArkUIResult<()> {
+        let total = self.total_count();
+        validate_item_index(total, from)?;
+        validate_item_index(total, to)?;
+        if from == to {
+            return Ok(());
+        }
+        self.with_native_adapter(|adapter| adapter.move_item(from, to))
+    }
+
+    /// Run one native adapter mutation without holding the shared state borrow.
+    ///
+    /// ArkUI may synchronously invoke the registered receiver from any of its
+    /// update methods. Temporarily moving the adapter out of `AdapterState`
+    /// prevents a nested `RefCell` borrow from panicking in that callback.
+    fn with_native_adapter(
+        &self,
+        mutate: impl FnOnce(&mut NodeAdapter) -> ArkUIResult<()>,
+    ) -> ArkUIResult<()> {
+        let adapter = self.state.borrow_mut().adapter.take();
+        let Some(mut adapter) = adapter else {
+            return Ok(());
+        };
+        let result = mutate(&mut adapter);
+        self.state.borrow_mut().adapter = Some(adapter);
+        result
     }
 }
 
@@ -307,12 +328,6 @@ impl Drop for VirtualNodeAdapter {
     }
 }
 
-/// Backwards-compatible name for [`VirtualNodeAdapter`].
-///
-/// New code should use the container-neutral name because the adapter also
-/// owns Grid and WaterFlow virtualization.
-pub type VirtualListAdapter = VirtualNodeAdapter;
-
 fn handle_adapter_event(state: &Weak<RefCell<AdapterState>>, event: &mut NodeAdapterEvent) {
     let Some(state) = state.upgrade() else {
         return;
@@ -320,8 +335,7 @@ fn handle_adapter_event(state: &Weak<RefCell<AdapterState>>, event: &mut NodeAda
     match event.event_type() {
         NodeAdapterEventType::OnGetNodeId => {
             let index = event.item_index();
-            let generation = state.borrow().render_generation;
-            let _ = event.set_node_id(node_id_for_generation(index, generation));
+            let _ = event.set_node_id(index as i32);
         }
         NodeAdapterEventType::OnAddNodeToAdapter => {
             let index = event.item_index();
@@ -339,10 +353,8 @@ fn handle_adapter_event(state: &Weak<RefCell<AdapterState>>, event: &mut NodeAda
                         return;
                     }
                     let node_key = node.raw_handle() as usize;
-                    let mounted = MountedItem { index, node };
-                    if let Some(mut replaced) = state.borrow_mut().mounted.insert(node_key, mounted)
-                    {
-                        let _ = replaced.node.dispose();
+                    if let Some(mut replaced) = state.borrow_mut().mounted.insert(node_key, node) {
+                        let _ = replaced.dispose();
                     }
                 }
                 Err(e) => {
@@ -360,8 +372,8 @@ fn handle_adapter_event(state: &Weak<RefCell<AdapterState>>, event: &mut NodeAda
                 return;
             };
             let node_key = removed.raw_handle() as usize;
-            if let Some(mut item) = state.borrow_mut().mounted.remove(&node_key) {
-                let _ = item.node.dispose();
+            if let Some(mut node) = state.borrow_mut().mounted.remove(&node_key) {
+                let _ = node.dispose();
             }
         }
         NodeAdapterEventType::WillAttachToNode => {}
@@ -372,19 +384,6 @@ fn handle_adapter_event(state: &Weak<RefCell<AdapterState>>, event: &mut NodeAda
             state.borrow_mut().attached_host = None;
         }
     }
-}
-
-/// Return a unique, monotonically increasing id for `index` whose namespace
-/// changes on every generation.
-///
-/// ArkUI uses these ids to diff `ReloadAllItems`. The low bit selects one of
-/// two disjoint generations while the remaining bits preserve index order.
-/// This forces an equal-length content reload to replace the old native node
-/// and event callback without exposing a reversed or negative id sequence to
-/// the adapter's internal diff.
-fn node_id_for_generation(index: u32, generation: u32) -> i32 {
-    debug_assert!(index <= 0x3fff_ffff);
-    ((index << 1) | (generation & 1)) as i32
 }
 
 /// Build a single virtual item: a wrapper (ListItem/GridItem/FlowItem)
@@ -405,51 +404,88 @@ fn build_item(kind: VirtualKind, index: u32, render_item: &RenderItem) -> ArkUIR
     Ok(wrapper)
 }
 
-fn replace_item_content(wrapper: &mut ArkUINode, content: ArkUINode) -> ArkUIResult<()> {
-    // Insert first so a failed native insertion leaves the existing subtree
-    // intact. Once the replacement is attached, the previous child moves to
-    // index 1 and can be detached and disposed safely.
-    wrapper.insert_child(content, 0)?;
-    if let Some(previous) = wrapper.remove_child(1)? {
-        previous.borrow_mut().dispose()?;
+fn validate_item_index(total: u32, index: u32) -> ArkUIResult<()> {
+    if index < total {
+        Ok(())
+    } else {
+        Err(invalid_parameter(format!(
+            "virtual adapter index {index} is outside item count {total}"
+        )))
     }
-    Ok(())
+}
+
+fn validate_item_range(total: u32, start: u32, count: u32) -> ArkUIResult<()> {
+    let Some(end) = start.checked_add(count) else {
+        return Err(invalid_parameter(
+            "virtual adapter item range overflowed u32",
+        ));
+    };
+    if start <= total && end <= total {
+        Ok(())
+    } else {
+        Err(invalid_parameter(format!(
+            "virtual adapter range {start}..{end} is outside item count {total}"
+        )))
+    }
+}
+
+fn validate_insert(total: u32, start: u32, count: u32) -> ArkUIResult<()> {
+    if start > total {
+        return Err(invalid_parameter(format!(
+            "virtual adapter insert index {start} is outside item count {total}"
+        )));
+    }
+    total
+        .checked_add(count)
+        .map(|_| ())
+        .ok_or_else(|| invalid_parameter("virtual adapter item count overflowed u32"))
+}
+
+fn invalid_parameter(message: impl Into<String>) -> ohos_arkui_binding::common::error::ArkUIError {
+    ohos_arkui_binding::common::error::ArkUIError::new(
+        ohos_arkui_binding::arkui_input_binding::ArkUIErrorCode::ParamInvalid,
+        message.into(),
+    )
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
+    use std::rc::Rc;
 
-    use super::node_id_for_generation;
+    use super::{validate_insert, validate_item_range, VirtualKind, VirtualNodeAdapter};
 
     #[test]
-    fn reload_generation_changes_every_visible_node_identity() {
-        for index in 0..10_000 {
-            assert_ne!(
-                node_id_for_generation(index, 0),
-                node_id_for_generation(index, 1)
-            );
-        }
+    fn item_ranges_accept_empty_tail_and_bounded_content() {
+        assert!(validate_item_range(10, 10, 0).is_ok());
+        assert!(validate_item_range(10, 3, 4).is_ok());
     }
 
     #[test]
-    fn node_ids_remain_unique_within_each_generation() {
-        for generation in 0..4 {
-            let ids = (0..10_000)
-                .map(|index| node_id_for_generation(index, generation))
-                .collect::<HashSet<_>>();
-            assert_eq!(ids.len(), 10_000);
-        }
+    fn item_ranges_reject_overflow_and_out_of_bounds() {
+        assert!(validate_item_range(10, 8, 3).is_err());
+        assert!(validate_item_range(u32::MAX, u32::MAX, 1).is_err());
     }
 
     #[test]
-    fn node_ids_are_non_negative_and_preserve_index_order() {
-        for generation in 0..4 {
-            let ids = (0..10_000)
-                .map(|index| node_id_for_generation(index, generation))
-                .collect::<Vec<_>>();
-            assert!(ids.iter().all(|id| *id >= 0));
-            assert!(ids.windows(2).all(|pair| pair[0] < pair[1]));
-        }
+    fn insert_accepts_tail_and_rejects_invalid_growth() {
+        assert!(validate_insert(10, 10, 2).is_ok());
+        assert!(validate_insert(10, 11, 1).is_err());
+        assert!(validate_insert(u32::MAX, u32::MAX, 1).is_err());
+    }
+
+    #[test]
+    fn detached_adapter_applies_structural_updates_to_its_model() {
+        let adapter = VirtualNodeAdapter::new(
+            VirtualKind::List,
+            3,
+            Rc::new(|_| panic!("detached updates must not request native rows")),
+        );
+
+        adapter.insert_items(1, 2).unwrap();
+        assert_eq!(adapter.total_count(), 5);
+        adapter.move_item(0, 4).unwrap();
+        adapter.reload_items(1, 2).unwrap();
+        adapter.remove_items(2, 3).unwrap();
+        assert_eq!(adapter.total_count(), 2);
     }
 }
