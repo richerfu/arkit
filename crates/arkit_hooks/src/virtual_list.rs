@@ -77,10 +77,10 @@ pub fn use_virtual_node_adapter(
 /// Create a virtual adapter with item-local invalidation.
 ///
 /// `item_keys[index]` must cover every visual input for that item. Equal-size
-/// updates reload only the smallest contiguous range containing changed keys,
-/// while count changes are handled by [`use_virtual_node_adapter`]. Native
-/// wrappers stay at their original indices, preserving Grid assignment,
-/// selection order, and scroll anchoring.
+/// updates reload only the changed contiguous runs, while count changes are
+/// handled by [`use_virtual_node_adapter`]. Keeping distant changes separate
+/// is important for selection updates: reloading the entire range between the
+/// previous and next selection can disturb a List's scroll anchor.
 #[track_caller]
 pub fn use_virtual_node_adapter_items_keyed<K>(
     kind: VirtualKind,
@@ -106,14 +106,17 @@ where
             *effect_previous_item_keys.borrow_mut() = next_item_keys;
             return;
         }
-        let Some((start, count)) = changed_item_range(&previous_item_keys, &next_item_keys) else {
+        let changed_ranges = changed_item_ranges(&previous_item_keys, &next_item_keys);
+        if changed_ranges.is_empty() {
             return;
-        };
-        if let Err(error) = update_adapter.reload_items(start, count) {
-            ohos_hilog_binding::error(format!(
-                "arkit_hooks: item-keyed virtual adapter update failed: {error}"
-            ));
-            return;
+        }
+        for (start, count) in changed_ranges {
+            if let Err(error) = update_adapter.reload_items(start, count) {
+                ohos_hilog_binding::error(format!(
+                    "arkit_hooks: item-keyed virtual adapter update failed: {error}"
+                ));
+                return;
+            }
         }
         *effect_previous_item_keys.borrow_mut() = next_item_keys;
     }));
@@ -121,41 +124,58 @@ where
     adapter
 }
 
-fn changed_item_range<K: PartialEq>(previous: &[K], next: &[K]) -> Option<(u32, u32)> {
+fn changed_item_ranges<K: PartialEq>(previous: &[K], next: &[K]) -> Vec<(u32, u32)> {
     debug_assert_eq!(previous.len(), next.len());
-    let first = previous
-        .iter()
-        .zip(next)
-        .position(|(previous, next)| previous != next)?;
-    let last = previous
-        .iter()
-        .zip(next)
-        .rposition(|(previous, next)| previous != next)
-        .unwrap_or(first);
-    Some((first as u32, (last - first + 1) as u32))
+    let mut ranges = Vec::new();
+    let mut start = None;
+    for (index, (previous, next)) in previous.iter().zip(next).enumerate() {
+        if previous != next {
+            start.get_or_insert(index);
+        } else if let Some(range_start) = start.take() {
+            ranges.push((range_start as u32, (index - range_start) as u32));
+        }
+    }
+    if let Some(range_start) = start {
+        ranges.push((range_start as u32, (previous.len() - range_start) as u32));
+    }
+    ranges
 }
 
 #[cfg(test)]
 mod item_key_tests {
-    use super::changed_item_range;
+    use super::changed_item_ranges;
 
     #[test]
-    fn item_key_diff_returns_one_atomic_bounding_range() {
+    fn item_key_diff_keeps_distant_changes_separate() {
         let previous = [0, 1, 2, 3, 4, 5, 6];
         let next = [9, 1, 8, 7, 4, 5, 0];
-        assert_eq!(changed_item_range(&previous, &next), Some((0, 7)));
+        assert_eq!(
+            changed_item_ranges(&previous, &next),
+            vec![(0, 1), (2, 2), (6, 1)]
+        );
     }
 
     #[test]
     fn unchanged_item_keys_do_not_reload_rows() {
-        assert_eq!(changed_item_range(&[1, 2, 3], &[1, 2, 3]), None);
+        assert!(changed_item_ranges(&[1, 2, 3], &[1, 2, 3]).is_empty());
     }
 
     #[test]
     fn adjacent_changes_keep_the_reload_range_tight() {
         assert_eq!(
-            changed_item_range(&[1, 2, 3, 4, 5], &[1, 8, 9, 4, 5]),
-            Some((1, 2))
+            changed_item_ranges(&[1, 2, 3, 4, 5], &[1, 8, 9, 4, 5]),
+            vec![(1, 2)]
+        );
+    }
+
+    #[test]
+    fn moving_selection_reloads_only_previous_and_next_rows() {
+        assert_eq!(
+            changed_item_ranges(
+                &[false, true, false, false, false, false],
+                &[false, false, false, false, false, true],
+            ),
+            vec![(1, 1), (5, 1)]
         );
     }
 }
