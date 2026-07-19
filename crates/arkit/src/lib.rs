@@ -34,8 +34,8 @@ pub use arkit_hooks::{
     use_layout_frame, use_layout_frame_node, use_layout_size, use_overlay, use_safe_area,
     use_safe_area_policy, use_virtual_list, use_virtual_node_adapter, use_virtual_range,
     use_virtual_water_flow, use_window_metrics, ArkHost, ArkNodeRef, ComponentLifecycleState,
-    LayoutFrame, LayoutSize, OverlayRoot, OverlayViewport, SafeArea, SafeAreaEdges, SafeAreaProps,
-    VirtualListHandle, VirtualNodeAdapterHandle, VirtualVisibleRange,
+    HitTestMode, LayoutFrame, LayoutSize, OverlayLayer, OverlayRoot, OverlayViewport, SafeArea,
+    SafeAreaEdges, SafeAreaProps, VirtualListHandle, VirtualNodeAdapterHandle, VirtualVisibleRange,
 };
 
 // --- i18n ---
@@ -274,8 +274,9 @@ pub mod prelude {
         use_layout_frame, use_layout_frame_node, use_layout_size, use_overlay, use_safe_area,
         use_safe_area_policy, use_virtual_list, use_virtual_node_adapter, use_virtual_range,
         use_virtual_water_flow, use_window_metrics, ArkHost, ArkNodeRef, ComponentLifecycleState,
-        LayoutFrame, LayoutSize, OverlayRoot, OverlayViewport, SafeArea, SafeAreaEdges,
-        SafeAreaProps, VirtualListHandle, VirtualNodeAdapterHandle, VirtualVisibleRange,
+        HitTestMode, LayoutFrame, LayoutSize, OverlayLayer, OverlayRoot, OverlayViewport, SafeArea,
+        SafeAreaEdges, SafeAreaProps, VirtualListHandle, VirtualNodeAdapterHandle,
+        VirtualVisibleRange,
     };
 
     #[cfg(feature = "i18n")]
