@@ -45,6 +45,7 @@ pub(crate) struct ToggleSurfaceStyle {
     pub(crate) border_width: f32,
     pub(crate) border_radius: String,
     pub(crate) shadow: Option<bool>,
+    pub(crate) percent_width: Option<f32>,
 }
 
 pub(crate) fn toggle_default_size() -> ToggleSizeStyle {
@@ -178,8 +179,9 @@ pub(crate) fn toggle_surface(
             background_color: background,
             height: height,
             width: width,
+            percent_width: style.percent_width,
             alignment: 4,
-            shadow: if shadow_on { 1 } else { 0 },
+            shadow: if shadow_on { 1 },
             onclick: move |_| on_click(),
             {content}
         }
@@ -247,6 +249,7 @@ pub fn Toggle(props: ToggleProps) -> Element {
                 border_width: 0.0,
                 border_radius: radius,
                 shadow: None,
+                percent_width: None,
             },
             move || {
                 let next = !active;

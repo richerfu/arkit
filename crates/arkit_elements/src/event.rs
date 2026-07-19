@@ -101,7 +101,7 @@ pub enum ArkEventPayload {
     ScrollOffset(ScrollOffsetPayload),
     /// Layout frame payload for element-bound area/layout change events.
     Layout(LayoutPayload),
-    /// Pointer payload for click/touch/drag events.
+    /// Pointer payload for input events such as click, touch, and hover move.
     Pointer(PointerPayload),
 }
 
@@ -284,7 +284,10 @@ impl From<&ArkEventData> for HoverData {
     }
 }
 
-/// Data for a drag / touch event.
+/// Data for a touch or pointer movement event. Drag lifecycle events currently
+/// carry `None` because ArkUI exposes `ArkUI_DragEvent` rather than an input
+/// event; use `NodeBuilder`'s raw drag callbacks when the native object is
+/// required.
 #[derive(Default, Clone, Copy, Debug)]
 pub struct PointerData {
     pub pointer: Option<PointerPayload>,

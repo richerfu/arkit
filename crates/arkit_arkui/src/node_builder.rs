@@ -10,10 +10,24 @@ use ohos_arkui_binding::common::node::ArkUINode;
 use ohos_arkui_binding::component::attribute::{
     ArkUIAttributeBasic, ArkUICommonAttribute, ArkUIEvent,
 };
-use ohos_arkui_binding::types::{attribute::ArkUINodeAttributeType, event::NodeEventType};
-use std::cell::Cell;
-use std::rc::Rc;
-use std::time::{Duration, Instant};
+pub use ohos_arkui_binding::event::inner_event::Event as NativeNodeEvent;
+pub use ohos_arkui_binding::r#type::drag::PreDragStatus;
+use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
+pub use ohos_arkui_binding::types::event::NodeEventType;
+
+struct EventNode<'a>(&'a mut ArkUINode);
+
+impl ArkUIAttributeBasic for EventNode<'_> {
+    fn raw(&self) -> &ArkUINode {
+        self.0
+    }
+
+    fn borrow_mut(&mut self) -> &mut ArkUINode {
+        self.0
+    }
+}
+
+impl ArkUIEvent for EventNode<'_> {}
 
 /// A chainable builder over an [`ArkUINode`]. Consumes itself to produce the
 /// node via [`build`](Self::build).
@@ -129,50 +143,231 @@ impl NodeBuilder {
         self.attr(ArkUINodeAttributeType::Margin, vec![v[0], v[1], v[2], v[3]])
     }
 
-    /// Register a click callback on an imperatively-built node.
+    /// Register any ArkUI node event on an imperatively-built node.
     ///
-    /// API 18+ can deliver either the legacy `OnClick` event or the newer
-    /// `OnClickEvent` for nodes mounted through a `NodeAdapter`. Registering
-    /// both keeps virtual List/Grid/WaterFlow items interactive across ArkUI
-    /// runtime versions. Duplicate variants from the same gesture are
-    /// coalesced before invoking the application callback.
-    pub fn on_click(mut self, callback: impl Fn() + 'static) -> ArkUIResult<Self> {
-        struct EventNode<'a>(&'a mut ArkUINode);
-        impl ArkUIAttributeBasic for EventNode<'_> {
-            fn raw(&self) -> &ArkUINode {
-                self.0
-            }
-
-            fn borrow_mut(&mut self) -> &mut ArkUINode {
-                self.0
-            }
-        }
-        impl ArkUIEvent for EventNode<'_> {}
-
-        let callback = Rc::new(callback);
-        let last_invoked = Rc::new(Cell::new(None::<Instant>));
-        let invoke = Rc::new(move || {
-            let now = Instant::now();
-            if last_invoked
-                .get()
-                .is_some_and(|previous| now.duration_since(previous) < Duration::from_millis(50))
-            {
-                return;
-            }
-            last_invoked.set(Some(now));
-            callback();
-        });
+    /// This is the escape hatch for component-specific events. Prefer the
+    /// typed convenience methods below for common input and lifecycle events.
+    /// The borrowed [`NativeNodeEvent`] is valid only for the duration of the
+    /// callback and must not be retained.
+    pub fn on_event(
+        mut self,
+        event_type: NodeEventType,
+        callback: impl Fn(&NativeNodeEvent) + 'static,
+    ) -> ArkUIResult<Self> {
         let node = self
             .node
             .as_mut()
             .expect("NodeBuilder owns a node until build");
-        let mut event_node = EventNode(node);
-        let click_event_callback = invoke.clone();
-        event_node.on_event(NodeEventType::OnClickEvent, move |_| {
-            click_event_callback();
-        });
-        event_node.on_event_no_param(NodeEventType::OnClick, move || invoke());
+        EventNode(node).on_event(event_type, callback);
         Ok(self)
+    }
+
+    /// Register a payload-free ArkUI node event.
+    pub fn on_event_no_param(
+        self,
+        event_type: NodeEventType,
+        callback: impl Fn() + 'static,
+    ) -> ArkUIResult<Self> {
+        self.on_event(event_type, move |_| callback())
+    }
+
+    /// Register a click callback.
+    ///
+    /// Arkit targets API 20 and deliberately uses the API 18+
+    /// `OnClickEvent`, whose payload is an `ArkUI_UIInputEvent`. Registering
+    /// the legacy and modern variants together causes duplicate delivery on
+    /// some runtimes and unreliable delivery inside `NodeAdapter` items.
+    pub fn on_click(self, callback: impl Fn() + 'static) -> ArkUIResult<Self> {
+        self.on_event_no_param(NodeEventType::OnClickEvent, callback)
+    }
+
+    /// Register raw touch input (down, move, up, and cancel).
+    pub fn on_touch(self, callback: impl Fn(&NativeNodeEvent) + 'static) -> ArkUIResult<Self> {
+        self.on_event(NodeEventType::TouchEvent, callback)
+    }
+
+    /// Intercept raw touch input. Return `true` to consume it.
+    pub fn on_touch_intercept(
+        self,
+        callback: impl Fn(&NativeNodeEvent) -> bool + 'static,
+    ) -> ArkUIResult<Self> {
+        self.on_event(NodeEventType::OnTouchIntercept, move |event| {
+            let _ = event.set_return_bool(callback(event));
+        })
+    }
+
+    /// Register hover enter/leave.
+    ///
+    /// The component-event variant is intentional. The API 17 input-event
+    /// variant is not a touch event, while the current upstream Rust binding
+    /// unconditionally parses every input action as `UI_TOUCH_EVENT_ACTION`.
+    /// That turns a valid hover into a panic before `is_hovered` can be read.
+    pub fn on_hover(self, callback: impl Fn(bool) + 'static) -> ArkUIResult<Self> {
+        self.on_event(NodeEventType::OnHover, move |event| {
+            callback(event.i32_value(0).unwrap_or_default() != 0);
+        })
+    }
+
+    /// Register continuous pointer/stylus hover movement.
+    pub fn on_hover_move(self, callback: impl Fn(&NativeNodeEvent) + 'static) -> ArkUIResult<Self> {
+        self.on_event(NodeEventType::OnHoverMove, callback)
+    }
+
+    /// Register mouse button or movement input.
+    pub fn on_mouse(self, callback: impl Fn(&NativeNodeEvent) + 'static) -> ArkUIResult<Self> {
+        self.on_event(NodeEventType::OnMouse, callback)
+    }
+
+    /// Register native focus acquisition.
+    pub fn on_focus(self, callback: impl Fn() + 'static) -> ArkUIResult<Self> {
+        self.on_event_no_param(NodeEventType::OnFocus, callback)
+    }
+
+    /// Register native focus loss.
+    pub fn on_blur(self, callback: impl Fn() + 'static) -> ArkUIResult<Self> {
+        self.on_event_no_param(NodeEventType::OnBlur, callback)
+    }
+
+    /// Register when the node becomes mounted and visible.
+    pub fn on_appear(self, callback: impl Fn() + 'static) -> ArkUIResult<Self> {
+        self.on_event_no_param(NodeEventType::EventOnAppear, callback)
+    }
+
+    /// Register when the node becomes unmounted or hidden.
+    pub fn on_disappear(self, callback: impl Fn() + 'static) -> ArkUIResult<Self> {
+        self.on_event_no_param(NodeEventType::EventOnDisappear, callback)
+    }
+
+    /// Register when the node is attached to the native tree.
+    pub fn on_attach(self, callback: impl Fn() + 'static) -> ArkUIResult<Self> {
+        self.on_event_no_param(NodeEventType::EventOnAttach, callback)
+    }
+
+    /// Register when the node is detached from the native tree.
+    pub fn on_detach(self, callback: impl Fn() + 'static) -> ArkUIResult<Self> {
+        self.on_event_no_param(NodeEventType::EventOnDetach, callback)
+    }
+
+    /// Register element area changes.
+    pub fn on_area_change(
+        self,
+        callback: impl Fn(&NativeNodeEvent) + 'static,
+    ) -> ArkUIResult<Self> {
+        self.on_event(NodeEventType::EventOnAreaChange, callback)
+    }
+
+    /// Register exact visible-area threshold changes.
+    pub fn on_visible_area_change(
+        self,
+        callback: impl Fn(bool, f32) + 'static,
+    ) -> ArkUIResult<Self> {
+        self.on_event(NodeEventType::EventOnVisibleAreaChange, move |event| {
+            callback(
+                event.i32_value(0).unwrap_or_default() != 0,
+                event.f32_value(1).unwrap_or_default(),
+            );
+        })
+    }
+
+    /// Register throttled visible-area changes.
+    ///
+    /// Configure `VisibleAreaApproximateChangeRatio` on the node before using
+    /// this callback; ArkUI otherwise has no threshold or interval to observe.
+    pub fn on_visible_area_approximate_change(
+        self,
+        callback: impl Fn(bool, f32) + 'static,
+    ) -> ArkUIResult<Self> {
+        self.on_event(
+            NodeEventType::VisibleAreaApproximateChangeEvent,
+            move |event| {
+                callback(
+                    event.i32_value(0).unwrap_or_default() != 0,
+                    event.f32_value(1).unwrap_or_default(),
+                );
+            },
+        )
+    }
+
+    /// Register an accessibility action.
+    pub fn on_accessibility_action(self, callback: impl Fn(u32) + 'static) -> ArkUIResult<Self> {
+        self.on_event(NodeEventType::OnAccessibilityActions, move |event| {
+            callback(event.u32_value(0).unwrap_or_default());
+        })
+    }
+
+    /// Register the pre-drag state transition.
+    pub fn on_pre_drag(
+        self,
+        callback: impl Fn(Option<PreDragStatus>) + 'static,
+    ) -> ArkUIResult<Self> {
+        self.on_event(NodeEventType::OnPreDrag, move |event| {
+            callback(event.pre_drag_status());
+        })
+    }
+
+    /// Register drag start.
+    pub fn on_drag_start(self, callback: impl Fn(&NativeNodeEvent) + 'static) -> ArkUIResult<Self> {
+        self.on_event(NodeEventType::OnDragStart, callback)
+    }
+
+    /// Register drag enter.
+    pub fn on_drag_enter(self, callback: impl Fn(&NativeNodeEvent) + 'static) -> ArkUIResult<Self> {
+        self.on_event(NodeEventType::OnDragEnter, callback)
+    }
+
+    /// Register drag movement.
+    pub fn on_drag_move(self, callback: impl Fn(&NativeNodeEvent) + 'static) -> ArkUIResult<Self> {
+        self.on_event(NodeEventType::OnDragMove, callback)
+    }
+
+    /// Register drag leave.
+    pub fn on_drag_leave(self, callback: impl Fn(&NativeNodeEvent) + 'static) -> ArkUIResult<Self> {
+        self.on_event(NodeEventType::OnDragLeave, callback)
+    }
+
+    /// Register drop.
+    pub fn on_drop(self, callback: impl Fn(&NativeNodeEvent) + 'static) -> ArkUIResult<Self> {
+        self.on_event(NodeEventType::OnDrop, callback)
+    }
+
+    /// Register drag end.
+    pub fn on_drag_end(self, callback: impl Fn(&NativeNodeEvent) + 'static) -> ArkUIResult<Self> {
+        self.on_event(NodeEventType::OnDragEnd, callback)
+    }
+
+    /// Register a focused node's key event.
+    pub fn on_key(self, callback: impl Fn(&NativeNodeEvent) + 'static) -> ArkUIResult<Self> {
+        self.on_event(NodeEventType::OnKeyEvent, callback)
+    }
+
+    /// Register a key event before IME handling. Return `true` to consume it.
+    pub fn on_key_pre_ime(
+        self,
+        callback: impl Fn(&NativeNodeEvent) -> bool + 'static,
+    ) -> ArkUIResult<Self> {
+        self.on_event(NodeEventType::OnKeyPreIme, move |event| {
+            let _ = event.set_return_bool(callback(event));
+        })
+    }
+
+    /// Intercept key dispatch to child nodes. Return `true` to consume it.
+    pub fn on_dispatch_key(
+        self,
+        callback: impl Fn(&NativeNodeEvent) -> bool + 'static,
+    ) -> ArkUIResult<Self> {
+        self.on_event(NodeEventType::DispatchKeyEvent, move |event| {
+            let _ = event.set_return_bool(callback(event));
+        })
+    }
+
+    /// Register joystick/focus-axis input.
+    pub fn on_focus_axis(self, callback: impl Fn(&NativeNodeEvent) + 'static) -> ArkUIResult<Self> {
+        self.on_event(NodeEventType::OnFocusAxis, callback)
+    }
+
+    /// Register mouse-wheel, touchpad, or other axis input.
+    pub fn on_axis(self, callback: impl Fn(&NativeNodeEvent) + 'static) -> ArkUIResult<Self> {
+        self.on_event(NodeEventType::OnAxis, callback)
     }
 
     /// Build the node.

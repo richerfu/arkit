@@ -30,6 +30,13 @@ pub struct ToggleGroupProps {
     /// Allow multiple selections.
     #[props(default)]
     pub multi: bool,
+    /// Optional group width. When provided, the items share the available
+    /// width evenly, which is useful for mobile mode selectors.
+    #[props(default)]
+    pub percent_width: Option<f32>,
+    /// Override the outline group's default small elevation.
+    #[props(default)]
+    pub shadow: Option<bool>,
     #[props(default)]
     pub on_change: EventHandler<Vec<String>>,
 }
@@ -49,6 +56,8 @@ pub fn ToggleGroup(props: ToggleGroupProps) -> Element {
     let total = props.options.len();
     let multi = props.multi;
     let icons = props.icons;
+    let stretched = props.percent_width.is_some();
+    let group_shadow = props.shadow.unwrap_or(true);
     let on_change = props.on_change;
     let size_style = if icons {
         toggle_icon_size()
@@ -81,7 +90,7 @@ pub fn ToggleGroup(props: ToggleGroupProps) -> Element {
             let click_value = option.clone();
             let current_selected = selected.clone();
             let mut local = local;
-            toggle_surface(
+            let surface = toggle_surface(
                 content,
                 ToggleSurfaceStyle {
                     active,
@@ -90,6 +99,7 @@ pub fn ToggleGroup(props: ToggleGroupProps) -> Element {
                     border_width: 1.0,
                     border_radius: item_radius,
                     shadow: Some(false),
+                    percent_width: if stretched { Some(1.0) } else { None },
                 },
                 move || {
                     let next = if multi {
@@ -109,17 +119,28 @@ pub fn ToggleGroup(props: ToggleGroupProps) -> Element {
                     on_change.call(next);
                 },
                 &theme,
-            )
+            );
+            if stretched {
+                rsx! {
+                    row {
+                        layout_weight: 1.0,
+                        {surface}
+                    }
+                }
+            } else {
+                surface
+            }
         })
         .collect();
 
     rsx! {
         row {
+            percent_width: if let Some(width) = props.percent_width { width },
             align_items: "center",
             justify_content: "start",
             border_radius: theme.radii.md,
             clip: true,
-            shadow: 1,
+            shadow: if group_shadow { 1 },
             {items.into_iter()}
         }
     }

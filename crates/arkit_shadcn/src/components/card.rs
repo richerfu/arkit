@@ -11,12 +11,17 @@ use arkit_prelude::*;
 /// shadowed column with the theme's `card` background.
 #[derive(Props, Clone, PartialEq)]
 pub struct CardProps {
+    /// Override the default small card elevation. Set to `false` for the
+    /// border-only shadcn surface commonly used in dense mobile layouts.
+    #[props(default)]
+    pub shadow: Option<bool>,
     pub children: Element,
 }
 
 #[component]
 pub fn Card(props: CardProps) -> Element {
     let theme = use_theme();
+    let shadow = props.shadow.unwrap_or(true);
     rsx! {
         column {
             percent_width: 1.0,
@@ -30,7 +35,7 @@ pub fn Card(props: CardProps) -> Element {
             border_width: 1.0,
             border_color: theme.colors.border,
             border_radius: theme.radii.lg,
-            shadow: 1,
+            shadow: if shadow { 1 },
             {props.children}
         }
     }
