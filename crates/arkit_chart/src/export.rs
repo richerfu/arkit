@@ -8,7 +8,8 @@ use std::path::{Path, PathBuf};
 
 use ohos_drawing_binding::{AlphaFormat, Bitmap, BitmapFormat, Canvas, ColorFormat};
 use ohos_image_native_binding::{
-    ImagePacker, ImageString, PackingOptions, PixelFormat, PixelMap, PixelMapInitializationOptions,
+    ImagePacker, ImageString, PackingOptions, PixelFormat, PixelMap, PixelMapAlphaType,
+    PixelMapInitializationOptions,
 };
 
 use crate::model::{ChartEvent, ChartOption};
@@ -193,7 +194,9 @@ pub(crate) fn save_chart_image(context: ExportContext<'_>) -> Result<PathBuf, Ch
                 .ok_or(ChartExportError::BufferSizeOverflow)?,
         )
         .map_err(image_error)?;
-    initialization.set_alpha_type(2).map_err(image_error)?;
+    initialization
+        .set_alpha_type(PixelMapAlphaType::Premultiplied)
+        .map_err(image_error)?;
     let pixelmap = PixelMap::create(&mut pixels, &mut initialization).map_err(image_error)?;
 
     let path = export_path(context.option, feature, extension);

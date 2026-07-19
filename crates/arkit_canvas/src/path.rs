@@ -72,6 +72,13 @@ pub struct Path2D {
     pub(crate) inner: Path,
     current_point: Option<(f32, f32)>,
     subpath_start: Option<(f32, f32)>,
+    polygon: Option<PolygonPath>,
+}
+
+#[derive(Clone, Debug, Default)]
+struct PolygonPath {
+    points: Vec<(f32, f32)>,
+    closed: bool,
 }
 
 impl Path2D {
@@ -80,6 +87,7 @@ impl Path2D {
             inner: Path::new(),
             current_point: None,
             subpath_start: None,
+            polygon: Some(PolygonPath::default()),
         }
     }
 
@@ -93,6 +101,7 @@ impl Path2D {
         }
         let mut result = Self::new();
         if result.inner.build_from_svg(path) {
+            result.polygon = None;
             Ok(result)
         } else {
             Err(CanvasError::InvalidSvgPath)
@@ -107,14 +116,26 @@ impl Path2D {
         self.inner.add_path(&path.inner, matrix.as_ref());
         self.current_point = None;
         self.subpath_start = None;
+        self.polygon = None;
     }
 
     pub fn move_to(&mut self, x: f32, y: f32) {
         self.move_to_transformed(x, y, DomMatrix2D::IDENTITY);
+        if Self::finite([x, y]) {
+            match &mut self.polygon {
+                Some(polygon) if polygon.points.is_empty() => polygon.points.push((x, y)),
+                _ => self.polygon = None,
+            }
+        }
     }
 
     pub fn line_to(&mut self, x: f32, y: f32) {
         self.line_to_transformed(x, y, DomMatrix2D::IDENTITY);
+        if Self::finite([x, y]) {
+            if let Some(polygon) = &mut self.polygon {
+                polygon.points.push((x, y));
+            }
+        }
     }
 
     pub fn close_path(&mut self) {
@@ -122,9 +143,13 @@ impl Path2D {
             self.inner.close();
             self.current_point = self.subpath_start;
         }
+        if let Some(polygon) = &mut self.polygon {
+            polygon.closed = true;
+        }
     }
 
     pub fn quadratic_curve_to(&mut self, control_x: f32, control_y: f32, x: f32, y: f32) {
+        self.polygon = None;
         self.quadratic_curve_to_transformed(control_x, control_y, x, y, DomMatrix2D::IDENTITY);
     }
 
@@ -138,6 +163,7 @@ impl Path2D {
         x: f32,
         y: f32,
     ) {
+        self.polygon = None;
         self.bezier_curve_to_transformed(
             control_x1,
             control_y1,
@@ -150,10 +176,12 @@ impl Path2D {
     }
 
     pub fn arc_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, radius: f32) -> CanvasResult<()> {
+        self.polygon = None;
         self.arc_to_transformed(x1, y1, x2, y2, radius, DomMatrix2D::IDENTITY)
     }
 
     pub fn rect(&mut self, x: f32, y: f32, width: f32, height: f32) {
+        self.polygon = None;
         self.rect_transformed(x, y, width, height, DomMatrix2D::IDENTITY);
     }
 
@@ -165,6 +193,7 @@ impl Path2D {
         height: f32,
         radii: impl IntoCanvasRadii,
     ) -> CanvasResult<()> {
+        self.polygon = None;
         self.round_rect_transformed(
             x,
             y,
@@ -184,6 +213,7 @@ impl Path2D {
         end_angle: f32,
         counterclockwise: bool,
     ) -> CanvasResult<()> {
+        self.polygon = None;
         self.ellipse(
             x,
             y,
@@ -208,6 +238,7 @@ impl Path2D {
         end_angle: f32,
         counterclockwise: bool,
     ) -> CanvasResult<()> {
+        self.polygon = None;
         self.ellipse_transformed(
             x,
             y,
@@ -219,6 +250,74 @@ impl Path2D {
             counterclockwise,
             DomMatrix2D::IDENTITY,
         )
+    }
+
+    /// Returns a copy whose closed straight-edged polygon corners are rounded.
+    ///
+    /// This is the `Path2D.round()` extension used by the upstream
+    /// `@napi-rs/canvas` examples. Curves, SVG paths, multiple subpaths, and
+    /// open paths are rejected because they do not have an unambiguous polygon
+    /// corner model.
+    pub fn round(&self, radius: f32) -> CanvasResult<Self> {
+        if radius < 0.0 {
+            return Err(CanvasError::NegativeRadius);
+        }
+        if !radius.is_finite() {
+            return Err(CanvasError::NonFinite);
+        }
+        let polygon = self
+            .polygon
+            .as_ref()
+            .filter(|polygon| polygon.closed && polygon.points.len() >= 3)
+            .ok_or(CanvasError::UnsupportedRoundedPath)?;
+        if radius == 0.0 {
+            return Ok(self.clone());
+        }
+
+        let mut points = polygon.points.clone();
+        if points.len() > 3 && points.first() == points.last() {
+            points.pop();
+        }
+        if points.len() < 3 {
+            return Err(CanvasError::UnsupportedRoundedPath);
+        }
+
+        let corners: Vec<_> = (0..points.len())
+            .map(|index| {
+                let previous = points[(index + points.len() - 1) % points.len()];
+                let corner = points[index];
+                let next = points[(index + 1) % points.len()];
+                let incoming = (previous.0 - corner.0, previous.1 - corner.1);
+                let outgoing = (next.0 - corner.0, next.1 - corner.1);
+                let incoming_length = incoming.0.hypot(incoming.1);
+                let outgoing_length = outgoing.0.hypot(outgoing.1);
+                if incoming_length <= ARC_EPSILON || outgoing_length <= ARC_EPSILON {
+                    return None;
+                }
+                let distance = radius.min(incoming_length * 0.5).min(outgoing_length * 0.5);
+                Some((
+                    (
+                        corner.0 + incoming.0 / incoming_length * distance,
+                        corner.1 + incoming.1 / incoming_length * distance,
+                    ),
+                    corner,
+                    (
+                        corner.0 + outgoing.0 / outgoing_length * distance,
+                        corner.1 + outgoing.1 / outgoing_length * distance,
+                    ),
+                ))
+            })
+            .collect::<Option<_>>()
+            .ok_or(CanvasError::UnsupportedRoundedPath)?;
+
+        let mut rounded = Self::new();
+        rounded.move_to(corners[0].0 .0, corners[0].0 .1);
+        for (entry, corner, exit) in corners {
+            rounded.line_to(entry.0, entry.1);
+            rounded.quadratic_curve_to(corner.0, corner.1, exit.0, exit.1);
+        }
+        rounded.close_path();
+        Ok(rounded)
     }
 
     pub(crate) fn move_to_transformed(&mut self, x: f32, y: f32, transform: DomMatrix2D) {
@@ -582,6 +681,7 @@ impl Path2D {
         self.inner.reset();
         self.current_point = None;
         self.subpath_start = None;
+        self.polygon = Some(PolygonPath::default());
     }
 
     fn canvas_arc_sweep(start: f32, end: f32, counterclockwise: bool) -> f32 {
@@ -682,6 +782,7 @@ impl Clone for Path2D {
             inner: self.inner.clone_path(),
             current_point: self.current_point,
             subpath_start: self.subpath_start,
+            polygon: self.polygon.clone(),
         }
     }
 }

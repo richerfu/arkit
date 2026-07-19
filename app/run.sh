@@ -14,7 +14,7 @@ HVIGWORW="/Users/ranger/Downloads/command-line-tools/bin/hvigorw"
 OHPM="/Users/ranger/Downloads/command-line-tools/bin/ohpm"
 BUNDLE="com.arkit.example"
 ABILITY="EntryAbility"
-HDC_TARGET="${HDC_TARGET:-$(hdc list targets -v 2>/dev/null | sed -n '1s/[[:space:]].*//p')}"
+HDC_TARGET="${HDC_TARGET:-$(hdc list targets -v 2>/dev/null | awk '$3 == "Connected" { print $1; exit }')}"
 HDC=(hdc)
 if [ -n "$HDC_TARGET" ]; then
   HDC+=(-t "$HDC_TARGET")
@@ -28,7 +28,9 @@ run_hdc() {
   local attempt
   for attempt in 1 2 3; do
     output=$("${HDC[@]}" "$@" 2>&1) || true
-    if [[ "$output" != *"Connect server failed"* ]]; then
+    if [[ "$output" != *"Connect server failed"* && \
+      "$output" != *"[Fail]"* && \
+      "$output" != *"Device not found or connected"* ]]; then
       printf '%s\n' "$output"
       return 0
     fi

@@ -14,8 +14,10 @@ mod component;
 mod context;
 mod error;
 mod filter;
+mod font;
 mod image;
 mod native;
+mod offscreen;
 mod path;
 mod state;
 mod text;
@@ -27,9 +29,12 @@ pub use color::{
 pub use component::{Canvas, CanvasController, CanvasProps, CanvasRenderer};
 pub use context::CanvasRenderingContext2D;
 pub use error::{CanvasError, CanvasResult};
+pub use font::{CanvasFontFace, CanvasFontRegistry};
 pub use image::{
-    CanvasImage, Float16, ImageData, ImageDataArray, ImageDataPixelFormat, ImageDataSettings,
+    CanvasImage, CanvasImageDecodeOptions, CanvasImageEncodeOptions, CanvasImageFormat, Float16,
+    ImageData, ImageDataArray, ImageDataPixelFormat, ImageDataSettings,
 };
+pub use offscreen::OffscreenCanvas;
 pub use path::{CanvasRadius, IntoCanvasRadii, Path2D};
 pub use state::{
     CanvasColorSpace, CanvasColorType, CanvasFont, CanvasFontKerning, CanvasFontStretch,

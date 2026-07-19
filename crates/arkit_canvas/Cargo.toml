@@ -12,9 +12,11 @@ workspace = true
 [dependencies]
 arkit_hooks.workspace = true
 arkit_prelude.workspace = true
+base64.workspace = true
 csscolorparser.workspace = true
 ohos-arkui-binding.workspace = true
 ohos-display-binding.workspace = true
 ohos-drawing-binding.workspace = true
+ohos-image-native-binding.workspace = true
 half.workspace = true
 smallvec.workspace = true

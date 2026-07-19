@@ -2,12 +2,59 @@ use std::rc::Rc;
 
 use half::f16;
 use ohos_drawing_binding::{AlphaFormat, Bitmap, BitmapFormat, ColorFormat};
+use ohos_image_native_binding::{
+    DecodingOptions, ImagePacker, ImageSource, ImageString, PackingOptions, PixelFormat, PixelMap,
+    PixelMapAlphaType, PixelMapInitializationOptions,
+};
 
 use crate::color_space::ColorSpaceTransform;
 use crate::{CanvasColorSpace, CanvasError, CanvasResult};
 
 /// IEEE 754 binary16 channel value used by `rgba-float16` image data.
 pub type Float16 = f16;
+
+/// Image formats accepted by [`CanvasImage::encode`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CanvasImageFormat {
+    Png,
+    Jpeg,
+    WebP,
+    Avif,
+    Heif,
+}
+
+impl CanvasImageFormat {
+    pub const fn mime_type(self) -> &'static str {
+        match self {
+            Self::Png => "image/png",
+            Self::Jpeg => "image/jpeg",
+            Self::WebP => "image/webp",
+            Self::Avif => "image/avif",
+            Self::Heif => "image/heif",
+        }
+    }
+}
+
+/// Decode controls corresponding to `createImageBitmap()`'s frame and resize
+/// inputs. A missing size preserves the source dimensions.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CanvasImageDecodeOptions {
+    pub frame_index: u32,
+    pub desired_size: Option<[u32; 2]>,
+}
+
+/// Options used by [`CanvasImage::encode`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CanvasImageEncodeOptions {
+    /// Lossy quality in the inclusive range 0..=1.
+    pub quality: f32,
+}
+
+impl Default for CanvasImageEncodeOptions {
+    fn default() -> Self {
+        Self { quality: 0.92 }
+    }
+}
 
 /// Storage behind an [`ImageData`] object, matching the web `ImageDataArray`
 /// union.
@@ -346,9 +393,24 @@ impl ImageData {
 #[derive(Clone, Debug)]
 pub struct CanvasImage {
     bitmap: Rc<Bitmap>,
+    alpha: CanvasBitmapAlpha,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CanvasBitmapAlpha {
+    Opaque,
+    Premultiplied,
+    Unpremultiplied,
 }
 
 impl CanvasImage {
+    /// Creates an image from tightly packed, unpremultiplied RGBA bytes.
+    pub fn from_rgba(data: Vec<u8>, width: u32, height: u32) -> CanvasResult<Self> {
+        Ok(Self::from_image_data(&ImageData::from_rgba(
+            data, width, height,
+        )?))
+    }
+
     pub fn from_image_data(image_data: &ImageData) -> Self {
         let mut bitmap = Bitmap::new(
             image_data.width,
@@ -363,6 +425,7 @@ impl CanvasImage {
             .copy_from_slice(&image_data.to_srgb_unorm8());
         Self {
             bitmap: Rc::new(bitmap),
+            alpha: CanvasBitmapAlpha::Unpremultiplied,
         }
     }
 
@@ -382,7 +445,233 @@ impl CanvasImage {
         snapshot.pixels_mut().copy_from_slice(bitmap.pixels());
         Self {
             bitmap: Rc::new(snapshot),
+            alpha: if alpha {
+                CanvasBitmapAlpha::Premultiplied
+            } else {
+                CanvasBitmapAlpha::Opaque
+            },
         }
+    }
+
+    /// Decodes PNG, JPEG, WebP, GIF, SVG, HEIF, or any other format exposed by
+    /// the device image framework into a native canvas image.
+    pub fn decode(data: &[u8], options: CanvasImageDecodeOptions) -> CanvasResult<Self> {
+        if data.is_empty()
+            || options
+                .desired_size
+                .is_some_and(|[width, height]| width == 0 || height == 0)
+        {
+            return Err(CanvasError::InvalidImageData);
+        }
+
+        let source = ImageSource::create_from_data(data)
+            .map_err(|error| CanvasError::ImageDecode(error.code))?;
+        let mut decoding =
+            DecodingOptions::new().map_err(|error| CanvasError::ImageDecode(error.code))?;
+        decoding
+            .set_index(options.frame_index)
+            .map_err(|error| CanvasError::ImageDecode(error.code))?;
+        decoding
+            .set_pixel_format(PixelFormat::Rgba8888)
+            .map_err(|error| CanvasError::ImageDecode(error.code))?;
+        if let Some([width, height]) = options.desired_size {
+            decoding
+                .set_desired_size(ohos_image_native_binding::types::ImageSize { width, height })
+                .map_err(|error| CanvasError::ImageDecode(error.code))?;
+        }
+        let pixelmap = source
+            .create_pixelmap(&mut decoding)
+            .map_err(|error| CanvasError::ImageDecode(error.code))?;
+        Self::from_pixelmap(&pixelmap)
+    }
+
+    /// Returns the decoder formats exposed by the current device.
+    pub fn supported_decode_formats() -> CanvasResult<Vec<String>> {
+        ImageSource::supported_formats().map_err(|error| CanvasError::ImageDecode(error.code))
+    }
+
+    /// Returns the encoder formats exposed by the current device.
+    pub fn supported_encode_formats() -> CanvasResult<Vec<String>> {
+        ImagePacker::supported_formats().map_err(|error| CanvasError::ImageEncode(error.code))
+    }
+
+    /// Encodes this image with the device image framework.
+    pub fn encode(
+        &self,
+        format: CanvasImageFormat,
+        options: CanvasImageEncodeOptions,
+    ) -> CanvasResult<Vec<u8>> {
+        if !options.quality.is_finite() {
+            return Err(CanvasError::NonFinite);
+        }
+        let supported = Self::supported_encode_formats()?;
+        if !supported
+            .iter()
+            .any(|candidate| candidate.eq_ignore_ascii_case(format.mime_type()))
+        {
+            return Err(CanvasError::UnsupportedImageFormat);
+        }
+
+        let mut pixels = Self::copy_bytes(self.bitmap.pixels())?;
+        let mut initialization = PixelMapInitializationOptions::new()
+            .map_err(|error| CanvasError::ImageEncode(error.code))?;
+        initialization
+            .set_width(self.width())
+            .map_err(|error| CanvasError::ImageEncode(error.code))?;
+        initialization
+            .set_height(self.height())
+            .map_err(|error| CanvasError::ImageEncode(error.code))?;
+        initialization
+            .set_src_pixel_format(PixelFormat::Rgba8888)
+            .map_err(|error| CanvasError::ImageEncode(error.code))?;
+        initialization
+            .set_pixel_format(PixelFormat::Rgba8888)
+            .map_err(|error| CanvasError::ImageEncode(error.code))?;
+        initialization
+            .set_row_stride(
+                i32::try_from(
+                    self.width()
+                        .checked_mul(4)
+                        .ok_or(CanvasError::InvalidDimensions)?,
+                )
+                .map_err(|_| CanvasError::InvalidDimensions)?,
+            )
+            .map_err(|error| CanvasError::ImageEncode(error.code))?;
+        initialization
+            .set_alpha_type(match self.alpha {
+                CanvasBitmapAlpha::Opaque => PixelMapAlphaType::Opaque,
+                CanvasBitmapAlpha::Premultiplied => PixelMapAlphaType::Premultiplied,
+                CanvasBitmapAlpha::Unpremultiplied => PixelMapAlphaType::Unpremultiplied,
+            })
+            .map_err(|error| CanvasError::ImageEncode(error.code))?;
+        let pixelmap = PixelMap::create(&mut pixels, &mut initialization)
+            .map_err(|error| CanvasError::ImageEncode(error.code))?;
+
+        let mut packing =
+            PackingOptions::new().map_err(|error| CanvasError::ImageEncode(error.code))?;
+        let mut mime = ImageString::from_str(format.mime_type())
+            .map_err(|error| CanvasError::ImageEncode(error.code))?;
+        packing
+            .set_mime_type(&mut mime)
+            .map_err(|error| CanvasError::ImageEncode(error.code))?;
+        packing
+            .set_quality((options.quality.clamp(0.0, 1.0) * 100.0).round() as u32)
+            .map_err(|error| CanvasError::ImageEncode(error.code))?;
+
+        let raw_length = pixels.len();
+        let output_capacity = raw_length
+            .checked_add((raw_length / 8).max(64 * 1024))
+            .ok_or(CanvasError::ImageDataAllocation)?;
+        let mut output = Vec::new();
+        output
+            .try_reserve_exact(output_capacity)
+            .map_err(|_| CanvasError::ImageDataAllocation)?;
+        output.resize(output_capacity, 0);
+        let mut packer =
+            ImagePacker::new().map_err(|error| CanvasError::ImageEncode(error.code))?;
+        let length = packer
+            .pack_to_data_from_pixelmap(&mut packing, &pixelmap, &mut output)
+            .map_err(|error| CanvasError::ImageEncode(error.code))?;
+        if length > output.len() {
+            return Err(CanvasError::ImageEncode(
+                ohos_image_native_binding::sys::Image_ErrorCode_IMAGE_ENCODE_FAILED,
+            ));
+        }
+        output.truncate(length);
+        Ok(output)
+    }
+
+    /// Copies the native bitmap into W3C-style unpremultiplied RGBA bytes.
+    pub fn to_image_data(&self) -> CanvasResult<ImageData> {
+        let mut pixels = Self::copy_bytes(self.bitmap.pixels())?;
+        if self.alpha == CanvasBitmapAlpha::Premultiplied {
+            for pixel in pixels.chunks_exact_mut(4) {
+                pixel.copy_from_slice(&ImageData::unpremultiply_pixel(pixel));
+            }
+        }
+        ImageData::from_rgba(pixels, self.width(), self.height())
+    }
+
+    fn from_pixelmap(pixelmap: &PixelMap) -> CanvasResult<Self> {
+        let info = pixelmap
+            .image_info()
+            .map_err(|error| CanvasError::ImageDecode(error.code))?;
+        let width = info
+            .width()
+            .map_err(|error| CanvasError::ImageDecode(error.code))?;
+        let height = info
+            .height()
+            .map_err(|error| CanvasError::ImageDecode(error.code))?;
+        if width == 0 || height == 0 {
+            return Err(CanvasError::InvalidImageData);
+        }
+        let row_stride = usize::try_from(
+            info.row_stride()
+                .map_err(|error| CanvasError::ImageDecode(error.code))?,
+        )
+        .map_err(|_| CanvasError::InvalidDimensions)?;
+        let tight_stride = usize::try_from(width)
+            .ok()
+            .and_then(|width| width.checked_mul(4))
+            .ok_or(CanvasError::InvalidDimensions)?;
+        if row_stride < tight_stride {
+            return Err(CanvasError::InvalidImageData);
+        }
+        let storage_length = row_stride
+            .checked_mul(usize::try_from(height).map_err(|_| CanvasError::InvalidDimensions)?)
+            .ok_or(CanvasError::InvalidDimensions)?;
+        let mut storage = Vec::new();
+        storage
+            .try_reserve_exact(storage_length)
+            .map_err(|_| CanvasError::ImageDataAllocation)?;
+        storage.resize(storage_length, 0);
+        let written = pixelmap
+            .read_pixels(&mut storage)
+            .map_err(|error| CanvasError::ImageDecode(error.code))?;
+        if written < storage_length {
+            return Err(CanvasError::InvalidImageData);
+        }
+        let alpha = match info
+            .alpha_type()
+            .map_err(|error| CanvasError::ImageDecode(error.code))?
+        {
+            PixelMapAlphaType::Opaque => CanvasBitmapAlpha::Opaque,
+            PixelMapAlphaType::Premultiplied => CanvasBitmapAlpha::Premultiplied,
+            PixelMapAlphaType::Unknown | PixelMapAlphaType::Unpremultiplied => {
+                CanvasBitmapAlpha::Unpremultiplied
+            }
+        };
+        let mut bitmap = Bitmap::new(
+            width,
+            height,
+            BitmapFormat {
+                color: ColorFormat::Rgba8888,
+                alpha: match alpha {
+                    CanvasBitmapAlpha::Opaque => AlphaFormat::Opaque,
+                    CanvasBitmapAlpha::Premultiplied => AlphaFormat::Premul,
+                    CanvasBitmapAlpha::Unpremultiplied => AlphaFormat::Unpremul,
+                },
+            },
+        );
+        for (destination, source) in bitmap
+            .pixels_mut()
+            .chunks_exact_mut(tight_stride)
+            .zip(storage.chunks_exact(row_stride))
+        {
+            destination.copy_from_slice(&source[..tight_stride]);
+        }
+        Ok(Self {
+            bitmap: Rc::new(bitmap),
+            alpha,
+        })
+    }
+
+    fn copy_bytes(source: &[u8]) -> CanvasResult<Vec<u8>> {
+        let mut copy = Vec::new();
+        copy.try_reserve_exact(source.len())
+            .map_err(|_| CanvasError::ImageDataAllocation)?;
+        copy.extend_from_slice(source);
+        Ok(copy)
     }
 
     pub fn width(&self) -> u32 {

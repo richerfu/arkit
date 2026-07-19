@@ -40,8 +40,11 @@ See [examples/camera](examples/camera/src/lib.rs).
 The `canvas` feature provides a W3C/WHATWG-aligned Canvas 2D context rendered
 by an ArkUI custom-draw node with a persistent high-DPI native backing store.
 It covers Path2D, gradients/patterns, shadows/filters, text, images and
-ImageData while keeping the default dependency graph free of native drawing
-APIs and avoiding a separate XComponent surface. See
+ImageData. `OffscreenCanvas`, device image codecs, runtime font registration,
+SVG rasterization, and timed Lottie frame export are available through typed
+owners without putting file or codec state on `CanvasRenderingContext2D`.
+The default dependency graph remains free of native drawing APIs and the
+on-screen component does not require a separate XComponent surface. See
 [examples/canvas](examples/canvas/src/lib.rs).
 
 High-performance Lottie rendering is enabled independently with the `lottie`

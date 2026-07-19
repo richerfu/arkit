@@ -120,13 +120,15 @@ pub use arkit_canvas as canvas;
 #[cfg(feature = "canvas")]
 pub use arkit_canvas::{
     Canvas, CanvasColor, CanvasColorSpace, CanvasColorType, CanvasController, CanvasError,
-    CanvasFont, CanvasFontKerning, CanvasFontStretch, CanvasFontStyle, CanvasFontVariantCaps,
-    CanvasGradient, CanvasImage, CanvasImageSmoothingQuality, CanvasLineCap, CanvasLineJoin,
-    CanvasPattern, CanvasPatternRepetition, CanvasRadius, CanvasRenderer, CanvasRenderingContext2D,
-    CanvasRenderingContext2DSettings, CanvasResult, CanvasStyle, CanvasTextAlign,
-    CanvasTextBaseline, CanvasTextDirection, CanvasTextMetrics, CanvasTextRendering, DomMatrix2D,
-    FillRule, Float16, GlobalCompositeOperation, ImageData, ImageDataArray, ImageDataPixelFormat,
-    ImageDataSettings, IntoCanvasFont, IntoCanvasRadii, IntoCanvasStyle, Path2D,
+    CanvasFont, CanvasFontFace, CanvasFontKerning, CanvasFontRegistry, CanvasFontStretch,
+    CanvasFontStyle, CanvasFontVariantCaps, CanvasGradient, CanvasImage, CanvasImageDecodeOptions,
+    CanvasImageEncodeOptions, CanvasImageFormat, CanvasImageSmoothingQuality, CanvasLineCap,
+    CanvasLineJoin, CanvasPattern, CanvasPatternRepetition, CanvasRadius, CanvasRenderer,
+    CanvasRenderingContext2D, CanvasRenderingContext2DSettings, CanvasResult, CanvasStyle,
+    CanvasTextAlign, CanvasTextBaseline, CanvasTextDirection, CanvasTextMetrics,
+    CanvasTextRendering, DomMatrix2D, FillRule, Float16, GlobalCompositeOperation, ImageData,
+    ImageDataArray, ImageDataPixelFormat, ImageDataSettings, IntoCanvasFont, IntoCanvasRadii,
+    IntoCanvasStyle, OffscreenCanvas, Path2D,
 };
 
 // --- Icon ---
@@ -139,8 +141,9 @@ pub use arkit_lottie as lottie;
 #[cfg(feature = "lottie")]
 pub use arkit_lottie::{
     LottieAlignment, LottieComposition, LottieController, LottieError, LottieErrorKind, LottieFit,
-    LottieFrame, LottieNetworkSource, LottiePlayer, LottiePlayerProps, LottieRepeatMode,
-    LottieResult, LottieSource, LottieStatus,
+    LottieFrame, LottieFrameRenderOptions, LottieFrameRenderer, LottieNetworkSource, LottiePlayer,
+    LottiePlayerProps, LottieRenderedFrame, LottieRepeatMode, LottieResult, LottieSource,
+    LottieStatus,
 };
 
 // --- Native ECharts-compatible charts ---
@@ -305,8 +308,9 @@ pub mod prelude {
     #[cfg(feature = "lottie")]
     pub use crate::{
         lottie, LottieAlignment, LottieComposition, LottieController, LottieError, LottieErrorKind,
-        LottieFit, LottieFrame, LottieNetworkSource, LottiePlayer, LottiePlayerProps,
-        LottieRepeatMode, LottieResult, LottieSource, LottieStatus,
+        LottieFit, LottieFrame, LottieFrameRenderOptions, LottieFrameRenderer, LottieNetworkSource,
+        LottiePlayer, LottiePlayerProps, LottieRenderedFrame, LottieRepeatMode, LottieResult,
+        LottieSource, LottieStatus,
     };
 
     #[cfg(feature = "router")]
@@ -361,14 +365,16 @@ pub mod prelude {
     #[cfg(feature = "canvas")]
     pub use crate::{
         canvas, Canvas, CanvasColor, CanvasColorSpace, CanvasColorType, CanvasController,
-        CanvasError, CanvasFont, CanvasFontKerning, CanvasFontStretch, CanvasFontStyle,
-        CanvasFontVariantCaps, CanvasGradient, CanvasImage, CanvasImageSmoothingQuality,
-        CanvasLineCap, CanvasLineJoin, CanvasPattern, CanvasPatternRepetition, CanvasRadius,
-        CanvasRenderer, CanvasRenderingContext2D, CanvasRenderingContext2DSettings, CanvasResult,
-        CanvasStyle, CanvasTextAlign, CanvasTextBaseline, CanvasTextDirection, CanvasTextMetrics,
-        CanvasTextRendering, DomMatrix2D, FillRule, Float16, GlobalCompositeOperation, ImageData,
-        ImageDataArray, ImageDataPixelFormat, ImageDataSettings, IntoCanvasFont, IntoCanvasRadii,
-        IntoCanvasStyle, Path2D,
+        CanvasError, CanvasFont, CanvasFontFace, CanvasFontKerning, CanvasFontRegistry,
+        CanvasFontStretch, CanvasFontStyle, CanvasFontVariantCaps, CanvasGradient, CanvasImage,
+        CanvasImageDecodeOptions, CanvasImageEncodeOptions, CanvasImageFormat,
+        CanvasImageSmoothingQuality, CanvasLineCap, CanvasLineJoin, CanvasPattern,
+        CanvasPatternRepetition, CanvasRadius, CanvasRenderer, CanvasRenderingContext2D,
+        CanvasRenderingContext2DSettings, CanvasResult, CanvasStyle, CanvasTextAlign,
+        CanvasTextBaseline, CanvasTextDirection, CanvasTextMetrics, CanvasTextRendering,
+        DomMatrix2D, FillRule, Float16, GlobalCompositeOperation, ImageData, ImageDataArray,
+        ImageDataPixelFormat, ImageDataSettings, IntoCanvasFont, IntoCanvasRadii, IntoCanvasStyle,
+        OffscreenCanvas, Path2D,
     };
 
     #[cfg(feature = "camera")]

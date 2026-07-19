@@ -7,8 +7,9 @@ use ohos_drawing_binding::{
 
 use crate::state::CanvasStyleState;
 use crate::{
-    CanvasFontKerning, CanvasFontStretch, CanvasFontStyle, CanvasFontVariantCaps, CanvasTextAlign,
-    CanvasTextBaseline, CanvasTextDirection, CanvasTextMetrics, CanvasTextRendering,
+    CanvasFontKerning, CanvasFontRegistry, CanvasFontStretch, CanvasFontStyle,
+    CanvasFontVariantCaps, CanvasTextAlign, CanvasTextBaseline, CanvasTextDirection,
+    CanvasTextMetrics, CanvasTextRendering,
 };
 
 thread_local! {
@@ -66,15 +67,23 @@ impl TextLayout {
             .map(|family| family.trim().trim_matches(['\'', '"']))
             .filter(|family| !family.is_empty())
             .collect();
-        let typeface = FONT_MANAGER.with_borrow(|manager| {
-            families
-                .iter()
-                .find_map(|family| manager.match_family_style(family, native_style))
-        });
+        let registered_typeface = CanvasFontRegistry::resolve_typeface(&families);
+        let system_typeface = registered_typeface
+            .is_none()
+            .then(|| {
+                FONT_MANAGER.with_borrow(|manager| {
+                    families
+                        .iter()
+                        .find_map(|family| manager.match_family_style(family, native_style))
+                })
+            })
+            .flatten();
 
         let mut font = Font::new();
         font.set_text_size(state.font.size_px);
-        if let Some(typeface) = typeface {
+        if let Some(typeface) = registered_typeface {
+            font.set_shared_typeface(typeface);
+        } else if let Some(typeface) = system_typeface {
             font.set_typeface(typeface);
         } else {
             // Only synthesize weight/slant when the system has no matching

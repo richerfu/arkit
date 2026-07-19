@@ -1,19 +1,46 @@
 //! W3C-style Canvas 2D API showcase.
 
+mod tiger;
+
 use std::f32::consts::{PI, TAU};
+use std::rc::Rc;
 
 use arkit::entry;
 use arkit::prelude::*;
 
+use tiger::TigerScene;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Demo {
+    Tiger,
+    Api,
+    Pipeline,
+}
+
 #[entry]
 fn app() -> Element {
+    let mut active = use_signal(|| Demo::Tiger);
     let mut rotation = use_signal(|| 0.0_f32);
     let mut dashed = use_signal(|| true);
+    let mut tiger_zoom = use_signal(|| 1.0_f32);
+    let tiger = use_hook(|| Rc::new(TigerScene::load()));
+    let mut pipeline = use_signal(|| None::<Rc<PipelineResult>>);
+    let demo = active();
     let angle = rotation();
     let show_dash = dashed();
-    let renderer = CanvasRenderer::new(move |context| {
-        draw_showcase(context, angle, show_dash);
-    });
+    let zoom = tiger_zoom();
+    let pipeline_scene = pipeline();
+    let renderer = match demo {
+        Demo::Tiger => {
+            let tiger = tiger.clone();
+            CanvasRenderer::new(move |context| tiger.draw(context, zoom))
+        }
+        Demo::Api => CanvasRenderer::new(move |context| draw_showcase(context, angle, show_dash)),
+        Demo::Pipeline => CanvasRenderer::new(move |context| match &pipeline_scene {
+            Some(pipeline) => draw_pipeline_scene(context, pipeline),
+            None => draw_pipeline_loading(context),
+        }),
+    };
 
     rsx! {
         column {
@@ -27,30 +54,86 @@ fn app() -> Element {
                     font_size: 24.0,
                     line_height: 30.0,
                     font_weight: 700,
-                    "Canvas 2D"
+                    match demo {
+                        Demo::Tiger => "Canvas Tiger",
+                        Demo::Api => "Canvas 2D",
+                        Demo::Pipeline => "Canvas pipeline",
+                    }
                 }
                 text {
                     margin_top: 4.0,
                     font_size: 13.0,
                     line_height: 18.0,
                     font_color: 0xFF475569u32,
-                    "W3C-style context · ArkUI native custom draw · high-DPI logical pixels"
+                    match demo {
+                        Demo::Tiger => "240 vector Path2D layers · native fill/stroke · scale-to-fit",
+                        Demo::Api => "W3C-style context · ArkUI native custom draw · high-DPI logical pixels",
+                        Demo::Pipeline => "SVG decode · Lottie frame · OffscreenCanvas · PNG round-trip",
+                    }
                 }
                 row {
                     margin_top: 12.0,
                     button {
-                        width: 150.0,
-                        onclick: move |_| rotation += PI / 12.0,
-                        "Rotate"
+                        width: 104.0,
+                        onclick: move |_| active.set(Demo::Tiger),
+                        "Tiger"
                     }
                     button {
-                        width: 150.0,
+                        width: 104.0,
+                        margin_left: 8.0,
+                        onclick: move |_| active.set(Demo::Api),
+                        "Canvas 2D"
+                    }
+                    button {
+                        width: 104.0,
                         margin_left: 8.0,
                         onclick: move |_| {
-                            let value = dashed();
-                            dashed.set(!value);
+                            if pipeline.peek().is_none() {
+                                pipeline.set(Some(Rc::new(build_pipeline_scene())));
+                            }
+                            active.set(Demo::Pipeline);
                         },
-                        if show_dash { "Solid line" } else { "Dashed line" }
+                        "Pipeline"
+                    }
+                }
+                if demo == Demo::Tiger {
+                    row {
+                        margin_top: 8.0,
+                        button {
+                            width: 96.0,
+                            onclick: move |_| tiger_zoom.set((tiger_zoom() - 0.1).max(0.6)),
+                            "Zoom -"
+                        }
+                        button {
+                            width: 96.0,
+                            margin_left: 8.0,
+                            onclick: move |_| tiger_zoom.set(1.0),
+                            "Reset"
+                        }
+                        button {
+                            width: 96.0,
+                            margin_left: 8.0,
+                            onclick: move |_| tiger_zoom.set((tiger_zoom() + 0.1).min(1.5)),
+                            "Zoom +"
+                        }
+                    }
+                } else if demo == Demo::Api {
+                    row {
+                        margin_top: 8.0,
+                        button {
+                            width: 150.0,
+                            onclick: move |_| rotation += PI / 12.0,
+                            "Rotate"
+                        }
+                        button {
+                            width: 150.0,
+                            margin_left: 8.0,
+                            onclick: move |_| {
+                                let value = dashed();
+                                dashed.set(!value);
+                            },
+                            if show_dash { "Solid line" } else { "Dashed line" }
+                        }
                     }
                 }
             }
@@ -66,6 +149,137 @@ fn app() -> Element {
             }
         }
     }
+}
+
+type PipelineResult = Result<CanvasImage, Box<dyn std::error::Error>>;
+
+fn build_pipeline_scene() -> PipelineResult {
+    const SVG: &[u8] = br##"<svg xmlns="http://www.w3.org/2000/svg" width="220" height="160" viewBox="0 0 220 160">
+      <defs><linearGradient id="g"><stop stop-color="#22d3ee"/><stop offset="1" stop-color="#6366f1"/></linearGradient></defs>
+      <rect width="220" height="160" rx="28" fill="url(#g)"/>
+      <circle cx="70" cy="80" r="38" fill="#fef08a"/>
+      <path d="M125 45h58v18h-58zm0 32h42v14h-42zm0 27h52v14h-52z" fill="white"/>
+    </svg>"##;
+
+    let svg = CanvasImage::decode(
+        SVG,
+        CanvasImageDecodeOptions {
+            frame_index: 0,
+            desired_size: Some([330, 240]),
+        },
+    )?;
+    CanvasFontRegistry::register(CanvasFontFace::from_file(
+        "Pipeline Sans",
+        "/system/fonts/HarmonyOS_Sans.ttf",
+    )?);
+
+    let mut lottie_frame = None;
+    LottieFrameRenderer::new(LottieSource::embedded(
+        "canvas-pipeline-orbit",
+        include_bytes!("../../lottie/assets/orbit.json"),
+    ))
+    .with_options(LottieFrameRenderOptions {
+        size: Some([220, 220]),
+        ..LottieFrameRenderOptions::default()
+    })
+    .render_range(18..19, |frame| {
+        lottie_frame = CanvasImage::from_rgba(frame.rgba.to_vec(), frame.width, frame.height).ok();
+    })?;
+
+    let mut offscreen = OffscreenCanvas::new(720, 480)?;
+    {
+        let mut context = offscreen.get_context_2d();
+        let background = context.create_linear_gradient(0.0, 0.0, 720.0, 480.0)?;
+        background.add_color_stop(0.0, "#081225")?;
+        background.add_color_stop(1.0, "#172554")?;
+        context.set_fill_style(background);
+        context.fill_rect(0.0, 0.0, 720.0, 480.0);
+        context.draw_image(&svg, 36.0, 42.0);
+        if let Some(frame) = &lottie_frame {
+            context.draw_image_scaled(frame, 454.0, 30.0, 230.0, 230.0);
+        }
+
+        let points = [
+            (48.0, 340.0),
+            (146.0, 286.0),
+            (264.0, 342.0),
+            (372.0, 292.0),
+            (452.0, 392.0),
+            (286.0, 438.0),
+            (128.0, 418.0),
+        ];
+        let mut polygon = Path2D::new();
+        polygon.move_to(points[0].0, points[0].1);
+        for point in &points[1..] {
+            polygon.line_to(point.0, point.1);
+        }
+        polygon.close_path();
+        let rounded = polygon.round(20.0)?;
+        context.set_fill_style("rgba(34, 211, 238, 0.22)");
+        context.fill_path(&rounded);
+        context.set_stroke_style("#67e8f9");
+        context.set_line_width(5.0);
+        context.stroke_path(&rounded);
+        context.set_fill_style("white");
+        context.set_font("700 24px sans-serif");
+        context.set_text_align(CanvasTextAlign::Center);
+        context.fill_text("Path2D.round()", 250.0, 375.0);
+        context.set_font("600 16px 'Pipeline Sans'");
+        context.fill_text("decoded SVG", 202.0, 272.0);
+        context.fill_text("Lottie → RGBA", 568.0, 278.0);
+    }
+
+    let png =
+        offscreen.convert_to_blob(CanvasImageFormat::Png, CanvasImageEncodeOptions::default())?;
+    Ok(CanvasImage::decode(
+        &png,
+        CanvasImageDecodeOptions::default(),
+    )?)
+}
+
+fn draw_pipeline_scene(context: &mut CanvasRenderingContext2D<'_>, pipeline: &PipelineResult) {
+    context.set_fill_style("#020617");
+    context.fill_rect(0.0, 0.0, context.width(), context.height());
+    match pipeline {
+        Ok(image) => {
+            let scale = (context.width() / image.width() as f32)
+                .min(context.height() / image.height() as f32)
+                .min(1.0);
+            let width = image.width() as f32 * scale;
+            let height = image.height() as f32 * scale;
+            context.draw_image_scaled(
+                image,
+                (context.width() - width) * 0.5,
+                (context.height() - height) * 0.5,
+                width,
+                height,
+            );
+        }
+        Err(error) => {
+            context.set_fill_style("#fecaca");
+            context.set_font("600 16px sans-serif");
+            context.set_text_align(CanvasTextAlign::Center);
+            context.fill_text_max_width(
+                &format!("Pipeline failed: {error}"),
+                context.width() * 0.5,
+                context.height() * 0.5,
+                context.width() - 32.0,
+            );
+        }
+    }
+}
+
+fn draw_pipeline_loading(context: &mut CanvasRenderingContext2D<'_>) {
+    context.set_fill_style("#020617");
+    context.fill_rect(0.0, 0.0, context.width(), context.height());
+    context.set_fill_style("#cbd5e1");
+    context.set_font("600 16px sans-serif");
+    context.set_text_align(CanvasTextAlign::Center);
+    context.fill_text(
+        "Preparing off-screen pipeline…",
+        context.width() * 0.5,
+        context.height() * 0.5,
+    );
 }
 
 fn draw_showcase(context: &mut CanvasRenderingContext2D<'_>, rotation: f32, dashed: bool) {
