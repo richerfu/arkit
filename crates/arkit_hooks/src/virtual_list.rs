@@ -9,6 +9,7 @@
 //! return a fresh [`ArkUINode`] for that item's content (the adapter wraps it
 //! in a ListItem/GridItem/FlowItem automatically).
 
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use arkit_prelude::{use_effect, use_hook, use_reactive};
@@ -71,4 +72,90 @@ pub fn use_virtual_node_adapter(
     }));
 
     adapter
+}
+
+/// Create a virtual adapter with item-local invalidation.
+///
+/// `item_keys[index]` must cover every visual input for that item. Equal-size
+/// updates reload only the smallest contiguous range containing changed keys,
+/// while count changes are handled by [`use_virtual_node_adapter`]. Native
+/// wrappers stay at their original indices, preserving Grid assignment,
+/// selection order, and scroll anchoring.
+#[track_caller]
+pub fn use_virtual_node_adapter_items_keyed<K>(
+    kind: VirtualKind,
+    item_keys: Vec<K>,
+    render_item: impl Fn(u32) -> ArkUIResult<ArkUINode> + 'static,
+) -> VirtualNodeAdapter
+where
+    K: Clone + PartialEq + 'static,
+{
+    let total_count = item_keys.len() as u32;
+    let adapter = use_virtual_node_adapter(kind, total_count, render_item);
+    let previous_item_keys = use_hook(|| Rc::new(RefCell::new(item_keys.clone())));
+    let update_adapter = adapter.clone();
+    let effect_previous_item_keys = previous_item_keys.clone();
+
+    use_effect(use_reactive((&item_keys,), move |(next_item_keys,)| {
+        let previous_item_keys = effect_previous_item_keys.borrow().clone();
+
+        // The base hook owns structural count changes and reloads visible
+        // content after updating the native adapter. This effect only handles
+        // equal-size item-local changes.
+        if previous_item_keys.len() != next_item_keys.len() {
+            *effect_previous_item_keys.borrow_mut() = next_item_keys;
+            return;
+        }
+        let Some((start, count)) = changed_item_range(&previous_item_keys, &next_item_keys) else {
+            return;
+        };
+        if let Err(error) = update_adapter.reload_items(start, count) {
+            ohos_hilog_binding::error(format!(
+                "arkit_hooks: item-keyed virtual adapter update failed: {error}"
+            ));
+            return;
+        }
+        *effect_previous_item_keys.borrow_mut() = next_item_keys;
+    }));
+
+    adapter
+}
+
+fn changed_item_range<K: PartialEq>(previous: &[K], next: &[K]) -> Option<(u32, u32)> {
+    debug_assert_eq!(previous.len(), next.len());
+    let first = previous
+        .iter()
+        .zip(next)
+        .position(|(previous, next)| previous != next)?;
+    let last = previous
+        .iter()
+        .zip(next)
+        .rposition(|(previous, next)| previous != next)
+        .unwrap_or(first);
+    Some((first as u32, (last - first + 1) as u32))
+}
+
+#[cfg(test)]
+mod item_key_tests {
+    use super::changed_item_range;
+
+    #[test]
+    fn item_key_diff_returns_one_atomic_bounding_range() {
+        let previous = [0, 1, 2, 3, 4, 5, 6];
+        let next = [9, 1, 8, 7, 4, 5, 0];
+        assert_eq!(changed_item_range(&previous, &next), Some((0, 7)));
+    }
+
+    #[test]
+    fn unchanged_item_keys_do_not_reload_rows() {
+        assert_eq!(changed_item_range(&[1, 2, 3], &[1, 2, 3]), None);
+    }
+
+    #[test]
+    fn adjacent_changes_keep_the_reload_range_tight() {
+        assert_eq!(
+            changed_item_range(&[1, 2, 3, 4, 5], &[1, 8, 9, 4, 5]),
+            Some((1, 2))
+        );
+    }
 }

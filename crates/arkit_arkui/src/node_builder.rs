@@ -7,8 +7,13 @@
 use ohos_arkui_binding::common::attribute::ArkUINodeAttributeItem;
 use ohos_arkui_binding::common::error::ArkUIResult;
 use ohos_arkui_binding::common::node::ArkUINode;
-use ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
-use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
+use ohos_arkui_binding::component::attribute::{
+    ArkUIAttributeBasic, ArkUICommonAttribute, ArkUIEvent,
+};
+use ohos_arkui_binding::types::{attribute::ArkUINodeAttributeType, event::NodeEventType};
+use std::cell::Cell;
+use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 /// A chainable builder over an [`ArkUINode`]. Consumes itself to produce the
 /// node via [`build`](Self::build).
@@ -122,6 +127,52 @@ impl NodeBuilder {
     /// Convenience: margin [top, right, bottom, left].
     pub fn margin(self, v: [f32; 4]) -> ArkUIResult<Self> {
         self.attr(ArkUINodeAttributeType::Margin, vec![v[0], v[1], v[2], v[3]])
+    }
+
+    /// Register a click callback on an imperatively-built node.
+    ///
+    /// API 18+ can deliver either the legacy `OnClick` event or the newer
+    /// `OnClickEvent` for nodes mounted through a `NodeAdapter`. Registering
+    /// both keeps virtual List/Grid/WaterFlow items interactive across ArkUI
+    /// runtime versions. Duplicate variants from the same gesture are
+    /// coalesced before invoking the application callback.
+    pub fn on_click(mut self, callback: impl Fn() + 'static) -> ArkUIResult<Self> {
+        struct EventNode<'a>(&'a mut ArkUINode);
+        impl ArkUIAttributeBasic for EventNode<'_> {
+            fn raw(&self) -> &ArkUINode {
+                self.0
+            }
+
+            fn borrow_mut(&mut self) -> &mut ArkUINode {
+                self.0
+            }
+        }
+        impl ArkUIEvent for EventNode<'_> {}
+
+        let callback = Rc::new(callback);
+        let last_invoked = Rc::new(Cell::new(None::<Instant>));
+        let invoke = Rc::new(move || {
+            let now = Instant::now();
+            if last_invoked
+                .get()
+                .is_some_and(|previous| now.duration_since(previous) < Duration::from_millis(50))
+            {
+                return;
+            }
+            last_invoked.set(Some(now));
+            callback();
+        });
+        let node = self
+            .node
+            .as_mut()
+            .expect("NodeBuilder owns a node until build");
+        let mut event_node = EventNode(node);
+        let click_event_callback = invoke.clone();
+        event_node.on_event(NodeEventType::OnClickEvent, move |_| {
+            click_event_callback();
+        });
+        event_node.on_event_no_param(NodeEventType::OnClick, move || invoke());
+        Ok(self)
     }
 
     /// Build the node.
