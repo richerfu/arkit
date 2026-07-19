@@ -1,0 +1,6 @@
+{
+  "name": "libcomplex_cases.so",
+  "types": "./Index.d.ts",
+  "version": "1.0.0",
+  "description": "arkit complex_cases example napi bindings"
+}

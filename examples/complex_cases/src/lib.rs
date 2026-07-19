@@ -1,9 +1,12 @@
 //! Complex cases — List / Grid / WaterFlow virtualized via ArkUI `NodeAdapter`.
 //!
-//! `use_virtual_node_adapter` and `use_virtual_water_flow` attach the matching
-//! adapter to the native host so only visible items are created on demand
-//! (true virtualization). 10 000 items scroll smoothly; `render_item` builds
-//! each item's content node lazily via `NodeBuilder` (no raw binding calls).
+//! `use_virtual_node_adapter` attaches the matching adapter to the native host
+//! so only visible items are created on demand (true virtualization). Each
+//! container also demonstrates item-local invalidation: updating one revision
+//! calls `reload_items(index, 1)` and rebuilds only that native item.
+
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use arkit::dioxus_signals::WritableExt;
 use arkit::entry;
@@ -65,89 +68,153 @@ fn app() -> Element {
                 "total {TOTAL} (NodeAdapter virtualized)"
             }
 
-            VirtualListView { active: cur == Case::List }
-            VirtualGridView { active: cur == Case::Grid }
-            VirtualWaterFlowView { active: cur == Case::WaterFlow }
+            VirtualCaseView { kind: VirtualKind::List, active: cur == Case::List }
+            VirtualCaseView { kind: VirtualKind::Grid, active: cur == Case::Grid }
+            VirtualCaseView { kind: VirtualKind::WaterFlow, active: cur == Case::WaterFlow }
         }
     }
 }
 
 #[component]
-fn VirtualListView(active: bool) -> Element {
-    use_virtual_adapter(VirtualKind::List);
-    let height = if active { 1.0 } else { 0.0 };
-    let visibility = if active { 0 } else { 1 };
-    let opacity = if active { 1.0 } else { 0.0 };
-
-    rsx! {
-        list {
-            percent_width: 1.0,
-            percent_height: height,
-            visibility,
-            opacity,
-        }
-    }
-}
-
-#[component]
-fn VirtualGridView(active: bool) -> Element {
-    use_virtual_adapter(VirtualKind::Grid);
-    let height = if active { 1.0 } else { 0.0 };
-    let visibility = if active { 0 } else { 1 };
-    let opacity = if active { 1.0 } else { 0.0 };
-
-    rsx! {
-        grid {
-            percent_width: 1.0,
-            percent_height: height,
-            visibility,
-            opacity,
-            grid_column_template: "1fr 1fr",
-        }
-    }
-}
-
-#[component]
-fn VirtualWaterFlowView(active: bool) -> Element {
-    let handle = use_virtual_water_flow(TOTAL, move |index| {
-        render_virtual_item(VirtualKind::WaterFlow, index)
+fn VirtualCaseView(kind: VirtualKind, active: bool) -> Element {
+    let revisions = use_hook(|| Rc::new(RefCell::new(vec![0_u32; TOTAL as usize])));
+    let render_revisions = revisions.clone();
+    let adapter = use_virtual_node_adapter(kind, TOTAL, move |index| {
+        let revision = render_revisions.borrow()[index as usize];
+        render_virtual_item(kind, index, revision)
     });
-    use_attach_virtual_adapter(handle);
+    let mut target = use_signal(|| 2_u32);
+    let mut status = use_signal(|| "点击更新只会重建目标 item".to_string());
+    let target_index = target();
+    let target_revision = revisions.borrow()[target_index as usize];
     let height = if active { 1.0 } else { 0.0 };
     let visibility = if active { 0 } else { 1 };
     let opacity = if active { 1.0 } else { 0.0 };
+    let kind_label = virtual_kind_label(kind);
+
+    let previous_target = move |_| {
+        let current = *target.peek();
+        target.set(if current == 0 { TOTAL - 1 } else { current - 1 });
+    };
+    let next_target = move |_| {
+        let current = *target.peek();
+        target.set((current + 1) % TOTAL);
+    };
+    let update_revisions = revisions.clone();
+    let update_adapter = adapter.clone();
+    let update_target = move |_| {
+        let index = *target.peek();
+        let revision = {
+            let mut revisions = update_revisions.borrow_mut();
+            let revision = &mut revisions[index as usize];
+            *revision = revision.wrapping_add(1);
+            *revision
+        };
+        match update_adapter.reload_items(index, 1) {
+            Ok(()) => status.set(format!(
+                "{kind_label} #{index:05} 已局部更新到 rev {revision}"
+            )),
+            Err(error) => status.set(format!("局部更新失败: {error}")),
+        }
+    };
 
     rsx! {
-        waterflow {
+        column {
             percent_width: 1.0,
             percent_height: height,
             visibility,
             opacity,
-            padding: 12.0,
-            water_flow_column_template: "repeat(auto-fill, 104vp)",
-            water_flow_column_gap: 12.0,
-            water_flow_row_gap: 12.0,
-            water_flow_cached_count: 6_i32,
+            column {
+                percent_width: 1.0,
+                height: 88.0,
+                padding: 8.0,
+                background_color: "#fff1f5f9",
+                text {
+                    percent_width: 1.0,
+                    height: 34.0,
+                    font_size: 12.0,
+                    font_color: "#ff475569",
+                    "{kind_label} #{target_index:05} · rev {target_revision}\n{status}"
+                }
+                row {
+                    percent_width: 1.0,
+                    height: 38.0,
+                    alignment: 1,
+                    button {
+                        font_size: 12.0,
+                        padding: 8.0,
+                        background_color: "#ffffffff",
+                        font_color: "#ff334155",
+                        onclick: previous_target,
+                        "上一项"
+                    }
+                    button {
+                        margin_left: 6.0,
+                        font_size: 12.0,
+                        padding: 8.0,
+                        background_color: "#ff2563eb",
+                        font_color: "#ffffffff",
+                        onclick: update_target,
+                        "更新单项"
+                    }
+                    button {
+                        margin_left: 6.0,
+                        font_size: 12.0,
+                        padding: 8.0,
+                        background_color: "#ffffffff",
+                        font_color: "#ff334155",
+                        onclick: next_target,
+                        "下一项"
+                    }
+                }
+            }
+            VirtualHost { kind, adapter }
         }
     }
 }
 
-fn use_virtual_adapter(kind: VirtualKind) {
-    let handle =
-        use_virtual_node_adapter(kind, TOTAL, move |index| render_virtual_item(kind, index));
-    use_attach_virtual_adapter(handle);
+#[component]
+fn VirtualHost(kind: VirtualKind, adapter: VirtualNodeAdapter) -> Element {
+    use_attach_virtual_adapter(adapter);
+    match kind {
+        VirtualKind::List => rsx! {
+            list {
+                percent_width: 1.0,
+                layout_weight: 1.0,
+            }
+        },
+        VirtualKind::Grid => rsx! {
+            grid {
+                percent_width: 1.0,
+                layout_weight: 1.0,
+                grid_column_template: "1fr 1fr",
+            }
+        },
+        VirtualKind::WaterFlow => rsx! {
+            waterflow {
+                percent_width: 1.0,
+                layout_weight: 1.0,
+                padding: 12.0,
+                water_flow_column_template: "repeat(auto-fill, 104vp)",
+                water_flow_column_gap: 12.0,
+                water_flow_row_gap: 12.0,
+                water_flow_cached_count: 6_i32,
+            }
+        },
+    }
 }
 
-fn use_attach_virtual_adapter(handle: VirtualNodeAdapterHandle) {
-    let attach_handle = handle.clone();
+fn use_attach_virtual_adapter(adapter: VirtualNodeAdapter) {
+    let attach_adapter = adapter.clone();
     use_layout_frame_node(move |host_node, _frame| {
-        let _ = attach_handle.attach(&host_node);
+        let _ = attach_adapter.attach(&host_node);
     });
 }
 
 fn render_virtual_item(
     kind: VirtualKind,
     index: u32,
+    revision: u32,
 ) -> arkit::ohos_arkui_binding::common::error::ArkUIResult<
     arkit::ohos_arkui_binding::common::node::ArkUINode,
 > {
@@ -161,15 +228,25 @@ fn render_virtual_item(
                 "#fffce7f3",
                 "#ffede9fe",
             ];
-            let variant = index as usize % HEIGHTS.len();
+            let variant = (index as usize + revision as usize) % HEIGHTS.len();
             (HEIGHTS[variant], COLORS[variant])
         }
-        VirtualKind::List | VirtualKind::Grid => (44.0, "#ffffffff"),
+        VirtualKind::List | VirtualKind::Grid => {
+            const COLORS: [&str; 5] = [
+                "#ffffffff",
+                "#ffdbeafe",
+                "#ffdcfce7",
+                "#fffef3c7",
+                "#fffce7f3",
+            ];
+            let variant = revision as usize % COLORS.len();
+            (44.0, COLORS[variant])
+        }
     };
     let label = if kind == VirtualKind::WaterFlow {
-        format!("#{index:05}\n{height:.0}vp")
+        format!("#{index:05}\nrev {revision} · {height:.0}vp")
     } else {
-        format!("#{index:05}")
+        format!("#{index:05} · rev {revision}")
     };
     let text = NodeBuilder::new("text")?
         .font_size(14.0)?
@@ -190,4 +267,12 @@ fn render_virtual_item(
         item.percent_width(1.0)?
     };
     Ok(item.build())
+}
+
+fn virtual_kind_label(kind: VirtualKind) -> &'static str {
+    match kind {
+        VirtualKind::List => "List",
+        VirtualKind::Grid => "Grid",
+        VirtualKind::WaterFlow => "WaterFlow",
+    }
 }

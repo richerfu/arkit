@@ -45,8 +45,5 @@ pub use overlay::{use_overlay, ModalOverlaySpec, ModalPresentation, OverlayApi, 
 pub use safe_area::{
     use_safe_area, use_safe_area_policy, use_window_metrics, SafeArea, SafeAreaEdges, SafeAreaProps,
 };
-pub use virtual_list::{
-    use_virtual_list, use_virtual_node_adapter, use_virtual_water_flow, VirtualListHandle,
-    VirtualNodeAdapterHandle,
-};
+pub use virtual_list::use_virtual_node_adapter;
 pub use virtual_range::{use_virtual_range, VirtualVisibleRange};
