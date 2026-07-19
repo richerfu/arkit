@@ -20,6 +20,30 @@ use arkit_prelude::*;
 
 const STACK_ALIGN_CENTER: i32 = 4;
 
+/// Stable overlay planes rendered together by [`crate::OverlayRoot`].
+///
+/// Modal content blocks the application through its explicit backdrop,
+/// floating content sits above modal surfaces, and transient notifications
+/// sit above both while their full-screen positioning roots remain
+/// pass-through.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub enum OverlayLayer {
+    #[default]
+    Modal,
+    Floating,
+    Transient,
+}
+
+impl OverlayLayer {
+    pub(crate) const fn z_index(self) -> i32 {
+        match self {
+            Self::Modal => 100,
+            Self::Floating => 200,
+            Self::Transient => 300,
+        }
+    }
+}
+
 /// Modal presentation style.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ModalPresentation {
@@ -96,7 +120,15 @@ impl OverlayApi {
     /// click can both dismiss the surface and activate a retained route below
     /// it. Masked/modal surfaces follow the same blocking rule.
     pub fn show_floating(&self, content: impl FnOnce() -> Element + 'static) {
-        self.set_content(content);
+        self.set_content(OverlayLayer::Floating, content);
+    }
+
+    /// Show a transient notification layer above modal and floating content.
+    /// The supplied subtree must keep its viewport-sized positioning nodes on
+    /// ArkUI `HitTestMode::None`; only concrete interactive cards opt back into
+    /// hit testing.
+    pub fn show_transient(&self, content: impl FnOnce() -> Element + 'static) {
+        self.set_content(OverlayLayer::Transient, content);
     }
 
     /// Show a modal overlay (centered dialog / right sheet / bottom drawer).
@@ -120,7 +152,7 @@ impl OverlayApi {
             }) as Rc<dyn Fn()>
         };
         let element = modal_overlay_layer(spec, content(), dismiss);
-        self.set_element(element);
+        self.set_element(OverlayLayer::Modal, element);
     }
 
     /// Dismiss the active overlay (clears the overlay-content signal).
@@ -164,12 +196,12 @@ impl OverlayApi {
 
     /// Shared helper: render the content closure to an `Element` and publish it
     /// on the host's overlay-content signal, marking the overlay open.
-    fn set_content(&self, content: impl FnOnce() -> Element + 'static) {
+    fn set_content(&self, layer: OverlayLayer, content: impl FnOnce() -> Element + 'static) {
         let element = content();
-        self.set_element(element);
+        self.set_element(layer, element);
     }
 
-    fn set_element(&self, element: Element) {
+    fn set_element(&self, layer: OverlayLayer, element: Element) {
         let (host, token, mounted) = {
             let state = self.inner.borrow();
             (state.host.clone(), state.token, state.mounted)
@@ -177,7 +209,7 @@ impl OverlayApi {
         if !mounted {
             return;
         }
-        host.set_overlay(token, element);
+        host.set_overlay(token, layer, element);
         let mut state = self.inner.borrow_mut();
         state.open = true;
     }
@@ -362,4 +394,17 @@ pub fn use_overlay() -> OverlayApi {
     let cleanup = overlay.clone();
     use_drop(move || cleanup.dispose());
     overlay
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn overlay_layers_have_stable_interaction_order() {
+        assert!(OverlayLayer::Modal < OverlayLayer::Floating);
+        assert!(OverlayLayer::Floating < OverlayLayer::Transient);
+        assert_eq!(OverlayLayer::Modal.z_index(), 100);
+        assert_eq!(OverlayLayer::Transient.z_index(), 300);
+    }
 }

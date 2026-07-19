@@ -125,6 +125,10 @@ impl Default for SonnerStyle {
 pub struct SonnerToast {
     /// Stable identity. Reusing an id for two live toasts is unsupported.
     pub id: u64,
+    /// Presentation revision. Incrementing it remounts the entry and restarts
+    /// its timer, which is required when a persistent loading toast is updated
+    /// in place to a timed success or error toast.
+    pub revision: u32,
     pub title: String,
     pub description: Option<String>,
     pub variant: ToastVariant,
@@ -142,6 +146,7 @@ impl fmt::Debug for SonnerToast {
         formatter
             .debug_struct("SonnerToast")
             .field("id", &self.id)
+            .field("revision", &self.revision)
             .field("title", &self.title)
             .field("description", &self.description)
             .field("variant", &self.variant)
@@ -156,6 +161,7 @@ impl fmt::Debug for SonnerToast {
 impl PartialEq for SonnerToast {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
+            && self.revision == other.revision
             && self.title == other.title
             && self.description == other.description
             && self.variant == other.variant
@@ -172,6 +178,7 @@ impl SonnerToast {
     pub fn new(id: u64, title: impl Into<String>) -> Self {
         Self {
             id,
+            revision: 0,
             title: title.into(),
             description: None,
             variant: ToastVariant::Default,
@@ -213,6 +220,11 @@ impl SonnerToast {
 
     pub const fn variant(mut self, variant: ToastVariant) -> Self {
         self.variant = variant;
+        self
+    }
+
+    pub const fn revision(mut self, revision: u32) -> Self {
+        self.revision = revision;
         self
     }
 
@@ -500,11 +512,16 @@ pub struct SonnerProps {
     pub rich_colors: bool,
     #[props(default)]
     pub style: SonnerStyle,
+    /// Controlled dismissal callback. When supplied, the caller owns removal
+    /// from `toasts`; Sonner does not retain a local dismissal tombstone.
+    #[props(default)]
+    pub on_dismiss: Option<EventHandler<u64>>,
 }
 
 /// A root-level, safe-area-aware stack of toast notifications.
 #[component]
 pub fn Sonner(props: SonnerProps) -> Element {
+    let theme = use_theme();
     let mut dismissed = use_signal(Vec::<u64>::new);
     let mut items = props.toasts;
     items.extend(
@@ -518,12 +535,17 @@ pub fn Sonner(props: SonnerProps) -> Element {
     );
     items.retain(|toast| !dismissed().contains(&toast.id));
 
+    let controlled_dismiss = props.on_dismiss;
     let dismiss = EventHandler::new(move |id: u64| {
-        dismissed.with_mut(|ids| {
-            if !ids.contains(&id) {
-                ids.push(id);
-            }
-        });
+        if let Some(handler) = controlled_dismiss {
+            handler.call(id);
+        } else {
+            dismissed.with_mut(|ids| {
+                if !ids.contains(&id) {
+                    ids.push(id);
+                }
+            });
+        }
     });
 
     let layer = rsx! {
@@ -533,6 +555,7 @@ pub fn Sonner(props: SonnerProps) -> Element {
             visible_toasts: props.visible_toasts.max(1),
             rich_colors: props.rich_colors,
             style: props.style,
+            theme,
             on_dismiss: dismiss,
         }
     };
@@ -547,7 +570,7 @@ fn use_sonner_overlay(open: bool, layer: Element) {
     let mut refresh = use_effect(move || {
         if open {
             let layer = effect_layer.clone();
-            effect_overlay.show_floating(move || layer.clone());
+            effect_overlay.show_transient(move || layer.clone());
         } else {
             effect_overlay.dismiss();
         }
@@ -565,6 +588,7 @@ fn SonnerLayer(
     visible_toasts: usize,
     rich_colors: bool,
     style: SonnerStyle,
+    theme: Theme,
     on_dismiss: EventHandler<u64>,
 ) -> Element {
     let safe_area = arkit_hooks::use_safe_area();
@@ -620,8 +644,11 @@ fn SonnerLayer(
                     align_items: "start",
                     hit_test_behavior: HIT_TEST_NONE,
                     for (index, toast) in stack {
+                        {
+                            let entry_key = format!("{}:{}", toast.id, toast.revision);
+                            rsx! {
                         column {
-                            key: "{toast.id}",
+                            key: "{entry_key}",
                             percent_width: 1.0,
                             hit_test_behavior: HIT_TEST_NONE,
                             if index > 0 {
@@ -632,7 +659,10 @@ fn SonnerLayer(
                                 rich_colors,
                                 swipe_direction,
                                 style: style.toast,
+                                theme,
                                 on_dismiss,
+                            }
+                        }
                             }
                         }
                     }
@@ -658,6 +688,7 @@ fn SonnerToastEntry(
     rich_colors: bool,
     swipe_direction: ToastSwipeDirection,
     style: ToastStyle,
+    theme: Theme,
     on_dismiss: EventHandler<u64>,
 ) -> Element {
     let id = toast.id;
@@ -707,18 +738,21 @@ fn SonnerToastEntry(
     });
 
     rsx! {
-        Toast {
-            message: toast.title,
-            description: toast.description,
-            variant: toast.variant,
-            action_label: toast.action_label,
-            icon: toast.icon,
-            dismissible: toast.dismissible,
-            rich_colors,
-            swipe_direction,
-            style,
-            on_action: action,
-            on_dismiss: dismiss,
+        ThemeProvider {
+            theme,
+            Toast {
+                message: toast.title,
+                description: toast.description,
+                variant: toast.variant,
+                action_label: toast.action_label,
+                icon: toast.icon,
+                dismissible: toast.dismissible,
+                rich_colors,
+                swipe_direction,
+                style,
+                on_action: action,
+                on_dismiss: dismiss,
+            }
         }
     }
 }
@@ -865,6 +899,13 @@ mod tests {
         assert_eq!(toast.variant, ToastVariant::Loading);
         assert_eq!(toast.duration_ms, 0);
         assert!(toast.dismissible);
+    }
+
+    #[test]
+    fn revision_can_restart_a_controlled_toast_entry() {
+        let toast = SonnerToast::success(7, "Uploaded").revision(3);
+        assert_eq!(toast.id, 7);
+        assert_eq!(toast.revision, 3);
     }
 
     #[test]
