@@ -147,6 +147,10 @@ pub struct ButtonProps {
     pub size: ButtonSize,
     pub disabled: Option<bool>,
     pub percent_width: Option<f32>,
+    /// Override the variant's default elevation. Passing `false` keeps the
+    /// shadcn geometry and colors while rendering a flat mobile surface.
+    #[props(default)]
+    pub shadow: Option<bool>,
     pub onclick: Option<EventHandler<()>>,
     pub children: Element,
 }
@@ -158,6 +162,7 @@ pub fn Button(props: ButtonProps) -> Element {
     let vs = variant_style(props.variant, &theme);
     let ss = size_style(props.size);
     let disabled = props.disabled.unwrap_or(false);
+    let shadow = props.shadow.unwrap_or(vs.shadow);
     let onclick = props.onclick;
 
     rsx! {
@@ -183,7 +188,7 @@ pub fn Button(props: ButtonProps) -> Element {
             border_radius: theme.radii.md,
             clip: true,
             alignment: 4,
-            shadow: if vs.shadow { 1 } else { 0 },
+            shadow: if shadow { 1 },
             opacity: if disabled { 0.5 } else { 1.0 },
             enabled: !disabled,
             onclick: move |_| {

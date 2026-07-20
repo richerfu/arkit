@@ -23,7 +23,8 @@ pub use arkit_runtime::{
 // --- Renderer + native node primitives ---
 pub use arkit_arkui::{
     canonical_tag, create_node, create_node_by_tag, kind_from_tag, ArkUIRenderer, EventSink,
-    NodeBuilder, NodeKind, VirtualKind, VirtualNodeAdapter,
+    NativeNodeEvent, NodeBuilder, NodeEventType, NodeKind, PreDragStatus, VirtualKind,
+    VirtualNodeAdapter,
 };
 
 // --- Hooks (escape hatches: overlay / layout / virtual range / ark node) ---
@@ -32,9 +33,10 @@ pub use arkit_hooks::{
     use_app_foreground, use_application_lifecycle, use_application_lifecycle_event,
     use_ark_host_provider, use_ark_node, use_component_lifecycle, use_component_visibility,
     use_layout_frame, use_layout_frame_node, use_layout_size, use_overlay, use_safe_area,
-    use_safe_area_policy, use_virtual_node_adapter, use_virtual_range, use_window_metrics, ArkHost,
-    ArkNodeRef, ComponentLifecycleState, HitTestMode, LayoutFrame, LayoutSize, OverlayLayer,
-    OverlayRoot, OverlayViewport, SafeArea, SafeAreaEdges, SafeAreaProps, VirtualVisibleRange,
+    use_safe_area_policy, use_virtual_node_adapter, use_virtual_node_adapter_items_keyed,
+    use_virtual_range, use_window_metrics, ArkHost, ArkNodeRef, ComponentLifecycleState,
+    HitTestMode, LayoutFrame, LayoutSize, OverlayLayer, OverlayRoot, OverlayViewport, SafeArea,
+    SafeAreaEdges, SafeAreaProps, VirtualVisibleRange,
 };
 
 // --- i18n ---
@@ -262,8 +264,8 @@ pub mod prelude {
 
     // Native node primitives + virtual container builder.
     pub use crate::{
-        canonical_tag, create_node, create_node_by_tag, kind_from_tag, NodeBuilder, NodeKind,
-        VirtualKind, VirtualNodeAdapter,
+        canonical_tag, create_node, create_node_by_tag, kind_from_tag, NativeNodeEvent,
+        NodeBuilder, NodeEventType, NodeKind, PreDragStatus, VirtualKind, VirtualNodeAdapter,
     };
 
     // Escape-hatch hooks.
@@ -271,10 +273,10 @@ pub mod prelude {
         use_app_foreground, use_application_lifecycle, use_application_lifecycle_event,
         use_ark_host_provider, use_ark_node, use_component_lifecycle, use_component_visibility,
         use_layout_frame, use_layout_frame_node, use_layout_size, use_overlay, use_safe_area,
-        use_safe_area_policy, use_virtual_node_adapter, use_virtual_range, use_window_metrics,
-        ArkHost, ArkNodeRef, ComponentLifecycleState, HitTestMode, LayoutFrame, LayoutSize,
-        OverlayLayer, OverlayRoot, OverlayViewport, SafeArea, SafeAreaEdges, SafeAreaProps,
-        VirtualVisibleRange,
+        use_safe_area_policy, use_virtual_node_adapter, use_virtual_node_adapter_items_keyed,
+        use_virtual_range, use_window_metrics, ArkHost, ArkNodeRef, ComponentLifecycleState,
+        HitTestMode, LayoutFrame, LayoutSize, OverlayLayer, OverlayRoot, OverlayViewport, SafeArea,
+        SafeAreaEdges, SafeAreaProps, VirtualVisibleRange,
     };
 
     #[cfg(feature = "i18n")]

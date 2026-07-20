@@ -45,6 +45,11 @@ pub(crate) struct ToggleSurfaceStyle {
     pub(crate) border_width: f32,
     pub(crate) border_radius: String,
     pub(crate) shadow: Option<bool>,
+    pub(crate) percent_width: Option<f32>,
+    /// Overrides the native button fill. Toggle groups use a transparent
+    /// button and paint selection on the rectangular segment container so
+    /// ArkUI cannot turn the selected state into a capsule.
+    pub(crate) background: Option<u32>,
 }
 
 pub(crate) fn toggle_default_size() -> ToggleSizeStyle {
@@ -157,7 +162,7 @@ pub(crate) fn toggle_surface(
     let pb = style.size.padding[2];
     let pl = style.size.padding[3];
     let border_color = visual.border_color;
-    let background = visual.background;
+    let background = style.background.unwrap_or(visual.background);
     let shadow_on = style.shadow.unwrap_or(visual.shadow);
     let mut on_click = on_click;
     rsx! {
@@ -178,8 +183,9 @@ pub(crate) fn toggle_surface(
             background_color: background,
             height: height,
             width: width,
+            percent_width: style.percent_width,
             alignment: 4,
-            shadow: if shadow_on { 1 } else { 0 },
+            shadow: if shadow_on { 1 },
             onclick: move |_| on_click(),
             {content}
         }
@@ -247,6 +253,8 @@ pub fn Toggle(props: ToggleProps) -> Element {
                 border_width: 0.0,
                 border_radius: radius,
                 shadow: None,
+                percent_width: None,
+                background: None,
             },
             move || {
                 let next = !active;
