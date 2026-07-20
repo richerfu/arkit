@@ -30,12 +30,27 @@ use ohos_arkui_binding::common::node::ArkUINode;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::layout::LayoutFrame;
+use crate::overlay::OverlayLayer;
 
 // ArkUI `HitTestMode::None`: the portal root itself never becomes a touch
 // target, while interactive descendants keep participating in hit testing.
 // `Transparent` is not equivalent here: it still makes the full-screen node
 // itself part of the hit-test result.
-const HIT_TEST_NONE: i32 = 3;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum HitTestMode {
+    Default = 0,
+    Block = 1,
+    Transparent = 2,
+    None = 3,
+}
+
+#[derive(Clone)]
+struct OverlayEntry {
+    token: u64,
+    layer: OverlayLayer,
+    element: Element,
+}
 
 /// Shared handle to the native ArkUI node backing a dioxus element. This is the
 /// same `Rc` mounted in the ArkUI tree (the event-dispatch user-data target),
@@ -58,13 +73,13 @@ struct ArkHostInner {
     /// Keeping this separate from `bindings` avoids traversing every hooked
     /// scope after unrelated renders elsewhere in the tree.
     dirty_scopes: FxHashSet<ScopeId>,
-    /// The active overlay content, rendered as a full-screen stack subtree at
-    /// the app root by [`use_ark_host_provider`]. `None` = no overlay open.
-    /// Driven by [`crate::use_overlay`].
-    overlay_content: Option<Signal<Option<Element>>>,
-    /// Tokenized overlay stack. A stale component may remove only its own
-    /// entry; the previously visible entry is restored automatically.
-    overlay_entries: Vec<(u64, Element)>,
+    /// All active overlay entries, rendered together as keyed full-screen
+    /// pass-through subtrees at the app root. Modal/floating/transient layers
+    /// must coexist: publishing a toast must never hide an active dialog.
+    overlay_content: Option<Signal<Vec<OverlayEntry>>>,
+    /// Tokenized overlay registry. A stale component may update or remove only
+    /// its own entry. Ordering is stable across content refreshes.
+    overlay_entries: Vec<OverlayEntry>,
     next_overlay_token: u64,
     /// Measured frame of the app-level overlay root. Trigger layout frames are
     /// window-relative, while overlay children are laid out inside this root, so
@@ -152,14 +167,14 @@ impl ArkHost {
     }
 
     /// Allocate (if needed) and return the overlay-content signal. The signal
-    /// holds the currently-open overlay's `Element`; `use_ark_host_provider`
-    /// renders it as a full-screen stack subtree at the app root.
-    pub(crate) fn overlay_content(&self) -> Signal<Option<Element>> {
+    /// holds every currently-open entry; [`OverlayRoot`] renders them in stable
+    /// layer/token order.
+    fn overlay_content(&self) -> Signal<Vec<OverlayEntry>> {
         let mut inner = self.inner.borrow_mut();
         if let Some(sig) = inner.overlay_content {
             return sig;
         }
-        let sig = Signal::new(None);
+        let sig = Signal::new(Vec::new());
         inner.overlay_content = Some(sig);
         sig
     }
@@ -173,35 +188,43 @@ impl ArkHost {
         inner.next_overlay_token
     }
 
-    pub(crate) fn set_overlay(&self, token: u64, element: Element) {
+    pub(crate) fn set_overlay(&self, token: u64, layer: OverlayLayer, element: Element) {
         let mut signal = self.overlay_content();
-        let current = {
+        let entries = {
             let mut inner = self.inner.borrow_mut();
-            inner.overlay_entries.retain(|(owner, _)| *owner != token);
-            inner.overlay_entries.push((token, element));
+            if let Some(entry) = inner
+                .overlay_entries
+                .iter_mut()
+                .find(|entry| entry.token == token)
+            {
+                entry.layer = layer;
+                entry.element = element;
+            } else {
+                inner.overlay_entries.push(OverlayEntry {
+                    token,
+                    layer,
+                    element,
+                });
+            }
             inner
                 .overlay_entries
-                .last()
-                .map(|(_, element)| element.clone())
+                .sort_by_key(|entry| (entry.layer, entry.token));
+            inner.overlay_entries.clone()
         };
-        signal.set(current);
+        signal.set(entries);
     }
 
     pub(crate) fn dismiss_overlay(&self, token: u64) -> bool {
         let mut signal = self.overlay_content();
-        let (removed, current) = {
+        let (removed, entries) = {
             let mut inner = self.inner.borrow_mut();
             let before = inner.overlay_entries.len();
-            inner.overlay_entries.retain(|(owner, _)| *owner != token);
+            inner.overlay_entries.retain(|entry| entry.token != token);
             let removed = before != inner.overlay_entries.len();
-            let current = inner
-                .overlay_entries
-                .last()
-                .map(|(_, element)| element.clone());
-            (removed, current)
+            (removed, inner.overlay_entries.clone())
         };
         if removed {
-            signal.set(current);
+            signal.set(entries);
         }
         removed
     }
@@ -292,25 +315,25 @@ pub fn OverlayRoot() -> Element {
         }
     });
     let content = host.overlay_content();
-    let current = content();
-    match current {
-        Some(node) => rsx! {
-            stack {
-                percent_width: 1.0,
-                percent_height: 1.0,
-                alignment: 0,
-                hit_test_behavior: HIT_TEST_NONE,
-                {node}
+    let entries = content();
+    rsx! {
+        stack {
+            percent_width: 1.0,
+            percent_height: 1.0,
+            alignment: 0,
+            hit_test_behavior: HitTestMode::None as i32,
+            for entry in entries {
+                stack {
+                    key: "{entry.token}",
+                    percent_width: 1.0,
+                    percent_height: 1.0,
+                    alignment: 0,
+                    z_index: entry.layer.z_index(),
+                    hit_test_behavior: HitTestMode::None as i32,
+                    {entry.element}
+                }
             }
-        },
-        None => rsx! {
-            stack {
-                percent_width: 1.0,
-                percent_height: 1.0,
-                alignment: 0,
-                hit_test_behavior: HIT_TEST_NONE,
-            }
-        },
+        }
     }
 }
 

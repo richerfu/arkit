@@ -236,8 +236,9 @@ define_element! {
         grid_column_template, grid_row_template, grid_column_gap, grid_row_gap,
         grid_cached_count, background_color, padding, margin, margin_top,
         margin_bottom, margin_left, margin_right, percent_width, percent_height,
-        width, height, opacity, border_radius, border_width, border_color, visibility,
-        enabled, clip, hit_test_behavior, aspect_ratio, position, z_index,
+        width, height, layout_weight, opacity, border_radius, border_width,
+        border_color, visibility, enabled, clip, hit_test_behavior, aspect_ratio,
+        position, z_index,
     }
 }
 
@@ -256,8 +257,9 @@ define_element! {
     list => "List" {
         list_cached_count, list_sticky, background_color, padding, margin, margin_top,
         margin_bottom, margin_left, margin_right, percent_width, percent_height,
-        width, height, opacity, border_radius, border_width, border_color, visibility,
-        enabled, clip, hit_test_behavior, aspect_ratio, position, z_index,
+        width, height, layout_weight, opacity, border_radius, border_width,
+        border_color, visibility, enabled, clip, hit_test_behavior, aspect_ratio,
+        position, z_index,
     }
 }
 
@@ -277,9 +279,9 @@ define_element! {
         water_flow_column_template, water_flow_row_template, water_flow_column_gap,
         water_flow_row_gap, water_flow_cached_count, background_color, padding, margin,
         margin_top, margin_bottom, margin_left, margin_right, percent_width,
-        percent_height, width, height, opacity, border_radius, border_width,
-        border_color, visibility, enabled, clip, hit_test_behavior, aspect_ratio,
-        position, z_index,
+        percent_height, width, height, layout_weight, opacity, border_radius,
+        border_width, border_color, visibility, enabled, clip, hit_test_behavior,
+        aspect_ratio, position, z_index,
     }
 }
 

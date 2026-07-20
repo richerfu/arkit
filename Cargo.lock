@@ -190,6 +190,7 @@ dependencies = [
  "arkit_prelude",
  "arkit_runtime",
  "ohos-arkui-binding",
+ "ohos-hilog-binding",
  "rustc-hash",
  "smallvec",
 ]

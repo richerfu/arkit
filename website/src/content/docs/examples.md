@@ -17,7 +17,7 @@ workspace 提供 12 个可运行 OpenHarmony `cdylib`。示例既是入门代码
 | `camera`          | CameraKit 拍照/扫码双模式、可配置工具栏、分辨率与完整控制项               | `examples/camera/src/lib.rs`          |
 | `canvas`          | W3C Canvas 2D 完整绘制面：Path2D、paint、文字、图片与像素                 | `examples/canvas/src/lib.rs`          |
 | `chart`           | 22 series、realtime option、actions、events、appendData、coordinate query | `examples/chart/src/lib.rs`           |
-| `complex_cases`   | 10,000 item List/Grid/WaterFlow NodeAdapter                               | `examples/complex_cases/src/lib.rs`   |
+| `complex_cases`   | 10,000 item List/Grid/WaterFlow、单项动态更新与变高重排                   | `examples/complex_cases/src/lib.rs`   |
 | `i18n`            | Fluent macro、typed message、locale switch、Cargo rename                  | `examples/i18n/src/lib.rs`            |
 | `lottie`          | ThorVG worker、XComponent 帧同步、播放控制、fit/repeat/speed              | `examples/lottie/src/lib.rs`          |
 | `router`          | typed routes、ArkUI Link、dynamic param、route transition                 | `examples/router/src/lib.rs`          |
@@ -88,8 +88,9 @@ ohrs build --arch aarch
 - List：固定高 10,000 item。
 - Grid：两列。
 - WaterFlow：五种循环高度与固定 auto-fill track。
+- 三种容器都可选择目标 index 并执行 `reload_items(index, 1)`；revision、颜色立即变化，WaterFlow 同时改变该项高度。
 
-它验证 NodeAdapter attach、wrapper kind、item recycle 和 NodeBuilder early-error ownership。
+它验证 NodeAdapter attach、wrapper kind、item recycle、局部失效、变高重新测量和 NodeBuilder early-error ownership。点击“更新单项”时，业务数据先更新，再同步调用 adapter；状态文案的 Dioxus 重渲染发生在 native item 更新之后，因此不会掩盖局部更新链路的问题。
 
 ## lottie
 

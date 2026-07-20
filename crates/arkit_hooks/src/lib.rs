@@ -40,13 +40,14 @@ pub use lifecycle::{
     use_app_foreground, use_application_lifecycle, use_application_lifecycle_event,
     use_component_lifecycle, use_component_visibility, ComponentLifecycleState,
 };
-pub use node::{use_ark_host_provider, use_ark_node, ArkHost, ArkNodeRef, HostNode, OverlayRoot};
-pub use overlay::{use_overlay, ModalOverlaySpec, ModalPresentation, OverlayApi, OverlayViewport};
+pub use node::{
+    use_ark_host_provider, use_ark_node, ArkHost, ArkNodeRef, HitTestMode, HostNode, OverlayRoot,
+};
+pub use overlay::{
+    use_overlay, ModalOverlaySpec, ModalPresentation, OverlayApi, OverlayLayer, OverlayViewport,
+};
 pub use safe_area::{
     use_safe_area, use_safe_area_policy, use_window_metrics, SafeArea, SafeAreaEdges, SafeAreaProps,
 };
-pub use virtual_list::{
-    use_virtual_list, use_virtual_node_adapter, use_virtual_water_flow, VirtualListHandle,
-    VirtualNodeAdapterHandle,
-};
+pub use virtual_list::use_virtual_node_adapter;
 pub use virtual_range::{use_virtual_range, VirtualVisibleRange};
