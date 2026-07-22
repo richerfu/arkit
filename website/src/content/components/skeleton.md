@@ -5,7 +5,7 @@ description: "结构化加载占位。"
 
 # Skeleton
 
-Skeleton 是固定尺寸加载占位，使用 Theme accent 色。
+Skeleton 是固定尺寸加载占位。填充为 `primary` 约 10% 透明度（对齐 shadcn `bg-primary/10`），在白色与灰色画布上都能看清。
 
 ```rust
 column {

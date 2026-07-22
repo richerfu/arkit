@@ -1,11 +1,15 @@
 //! Skeleton — shadcn-style loading placeholder.
 //!
 //! Migrated from the original Elm builder API to dioxus 0.7 `#[component]` +
-//! `rsx!`. Preserves the original logic: a `accent`-colored box whose radius
-//! becomes `full` for square shapes ≥ 40px, otherwise `md`.
+//! `rsx!`. Geometry: square ≥ 40vp uses full radius (circle), otherwise `md`.
+//! Fill matches modern shadcn (`bg-primary/10`) so the block stays visible on
+//! both pure white and the showcase `surface=secondary` canvas.
 
 use crate::theme::*;
 use arkit_prelude::*;
+
+/// ~10% opacity primary — shadcn `bg-primary/10`.
+const SKELETON_PRIMARY_ALPHA: u8 = 0x1A;
 
 /// Props for [`Skeleton`].
 #[derive(Props, Clone, PartialEq)]
@@ -23,12 +27,17 @@ pub fn Skeleton(props: SkeletonProps) -> Element {
     } else {
         theme.radii.md
     };
+    // Do not use `accent`/`secondary`/`muted`: in this theme they are identical,
+    // and the showcase remaps `surface` to `secondary`, so accent-on-surface
+    // painted nothing visible.
+    let fill = with_alpha(theme.colors.primary, SKELETON_PRIMARY_ALPHA);
     rsx! {
         row {
             width: props.width,
             height: props.height,
-            background_color: theme.colors.accent,
+            background_color: fill,
             border_radius: radius,
+            clip: true,
         }
     }
 }
