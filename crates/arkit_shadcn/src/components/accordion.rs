@@ -122,10 +122,12 @@ pub fn Accordion(
                                 }
                             }
                             if is_open {
+                                // Content-sized only — `fill: true` would stretch the open
+                                // panel to the parent height and push later items off-screen.
                                 arkit_animation::MountTransition {
                                     preset: Some(arkit_animation::TransitionPreset::SlideUp),
                                     duration_ms: Some(140),
-                                    fill: Some(true),
+                                    fill: Some(false),
                                     column {
                                         percent_width: 1.0,
                                         align_items: "start",

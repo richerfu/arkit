@@ -28,3 +28,5 @@ Select {
 | `on_select`        | `Option<EventHandler<String>>` | `None`   | 选中回调       |
 
 当前 option 字符串同时承担值和标签。业务对象应使用稳定 id，并在进入组件前映射显示文案；需要搜索时改用 Combobox。
+
+弹出层相对 **Select 触发器根节点** 锚点（`side=bottom`、`align=start`、宽度≈触发器），与 shadcn 一致；不是相对页面布局对齐。几何以 `use_layout_frame` 测量为准，不使用点击命中子节点的 bounds。

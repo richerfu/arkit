@@ -59,7 +59,7 @@ pub fn Popover(
         }
     });
 
-    let toggle = move |pointer: Option<dioxus_elements::event::PointerPayload>| {
+    let toggle = move |_| {
         if current {
             set_open.call(false);
             overlay.dismiss();
@@ -68,31 +68,15 @@ pub fn Popover(
             let panel = children.clone();
             let frame = *trigger_frame.read();
             let viewport = overlay.viewport();
-            let placement = if let Some(placement) = pointer.and_then(|pointer| {
-                FloatingPanelPlacement::from_pointer(
-                    pointer,
-                    viewport,
-                    panel_width,
-                    POPOVER_ESTIMATED_HEIGHT,
-                    FloatingSide::Bottom,
-                    FloatingAlign::Center,
-                    spacing::XXS,
-                )
-            }) {
-                placement
-            } else if frame.is_measured() {
-                FloatingPanelPlacement::from_trigger(
-                    frame,
-                    viewport,
-                    panel_width,
-                    POPOVER_ESTIMATED_HEIGHT,
-                    FloatingSide::Bottom,
-                    FloatingAlign::Center,
-                    spacing::XXS,
-                )
-            } else {
-                FloatingPanelPlacement::fallback(viewport)
-            };
+            let placement = FloatingPanelPlacement::resolve(
+                frame,
+                viewport,
+                panel_width,
+                POPOVER_ESTIMATED_HEIGHT,
+                FloatingSide::Bottom,
+                FloatingAlign::Center,
+                spacing::XXS,
+            );
             let dismiss_overlay = overlay.clone();
             let dismiss = EventHandler::new(move |_: ()| {
                 set_open.call(false);
@@ -106,8 +90,8 @@ pub fn Popover(
 
     rsx! {
         row {
-            onclick: move |evt: dioxus_core::Event<dioxus_elements::event::ClickData>| {
-                toggle(evt.data().pointer);
+            onclick: move |_| {
+                toggle(());
             },
             {trigger}
         }
@@ -124,34 +108,24 @@ fn popover_overlay_content(
     let top = placement.y.max(0.0);
     let left = placement.x.max(0.0);
     rsx! {
-        column {
+        stack {
             percent_width: 1.0,
             percent_height: 1.0,
-            align_items: "start",
-            padding_top: top,
             background_color: FLOATING_CAPTURE_COLOR,
             hit_test_behavior: HIT_TEST_DEFAULT,
             onclick: move |_| on_dismiss.call(()),
-            row {
-                percent_width: 1.0,
+            column {
+                position: format!("{left},{top}"),
+                width: panel_width,
+                onclick: move |evt| evt.stop_propagation(),
                 align_items: "start",
-                arkit_animation::MountTransition {
-                    preset: Some(arkit_animation::TransitionPreset::SlideUp),
-                    duration_ms: Some(140),
-                    column {
-                        onclick: move |evt| evt.stop_propagation(),
-                        margin_left: left,
-                        width: panel_width,
-                        align_items: "start",
-                        padding: spacing::LG,
-                        border_radius: theme.radii.md,
-                        border_width: 1.0,
-                        border_color: theme.colors.border,
-                        background_color: theme.colors.popover,
-                        shadow: SHADOW_SM,
-                        {children}
-                    }
-                }
+                padding: spacing::LG,
+                border_radius: theme.radii.md,
+                border_width: 1.0,
+                border_color: theme.colors.border,
+                background_color: theme.colors.popover,
+                shadow: SHADOW_SM,
+                {children}
             }
         }
     }

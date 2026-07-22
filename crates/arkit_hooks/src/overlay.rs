@@ -101,8 +101,12 @@ impl OverlayState {
 /// Full overlay frame plus the current effective visual safe insets.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct OverlayViewport {
+    /// Overlay root frame in physical pixels (window space).
     pub frame: LayoutFrame,
+    /// Visual safe-area insets in vp.
     pub safe_area: arkit_runtime::EdgeInsets,
+    /// Physical-pixel → ArkUI-vp scale (window density).
+    pub scale: f32,
 }
 
 /// Handle returned by [`use_overlay`]. Cloning shares the underlying state.
@@ -184,13 +188,14 @@ impl OverlayApi {
     /// Current positioning viewport for floating content.
     pub fn viewport(&self) -> OverlayViewport {
         let state = self.inner.borrow();
+        let metrics = state.window_metrics.as_ref().map(|metrics| metrics.get());
         OverlayViewport {
             frame: state.host.overlay_frame_value(),
-            safe_area: state
-                .window_metrics
-                .as_ref()
-                .map(|metrics| metrics.get().safe_area)
-                .unwrap_or_default(),
+            safe_area: metrics.map(|metrics| metrics.safe_area).unwrap_or_default(),
+            scale: metrics
+                .map(|metrics| metrics.scale)
+                .filter(|scale| scale.is_finite() && *scale > 0.0)
+                .unwrap_or(1.0),
         }
     }
 

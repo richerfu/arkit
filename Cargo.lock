@@ -281,6 +281,7 @@ dependencies = [
  "arkit_prelude",
  "arkit_runtime",
  "ohos-display-binding",
+ "ohos-hilog-binding",
  "pulldown-cmark",
  "smallvec",
  "tokio",

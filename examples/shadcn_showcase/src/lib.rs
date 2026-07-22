@@ -19,7 +19,7 @@ use arkit::shadcn::components::{
     Menubar, MenubarMenuSpec, MultiSlider, Popover, Progress, RadioGroup, RangeSlider, Select,
     Separator, Skeleton, Slider, SliderOrientation, SliderStyle, Sonner, SonnerPosition,
     SonnerToast, Spinner, Switch, Table, Tabs, Text, TextVariant, Textarea, ToastAppearance,
-    Toggle, ToggleGroup, Tooltip,
+    Toggle, ToggleGroup, ToggleVariant, Tooltip,
 };
 use arkit::shadcn::icon::icon_placeholder;
 use arkit::shadcn::theme::{
@@ -3151,9 +3151,12 @@ fn ComponentDemo(slug: &'static str) -> Element {
             }
         },
         "toggle" => rsx! {
+            // Outline so pressed/unpressed stay visible on light Zinc surfaces
+            // (Default accent fill is nearly the same as the canvas).
             Toggle {
                 label: "".to_string(),
                 icon: Some("bold".to_string()),
+                variant: ToggleVariant::Outline,
                 checked: Some(toggle_pressed()),
                 on_change: EventHandler::new(move |value| toggle_pressed.set(value)),
             }
@@ -3200,6 +3203,10 @@ fn ComponentDemo(slug: &'static str) -> Element {
 
 #[component]
 fn fixed_width(width: f32, children: Element) -> Element {
+    // shadcn-style max-width cap: fill the parent up to `width`, never force a
+    // hard width that can overflow narrow screens (512vp ≈ 1664px @3.25x).
+    // Select/Popover still measure the painted control; anchor geometry no
+    // longer depends on this wrapper using an absolute width.
     rsx! {
         column {
             percent_width: 1.0,
@@ -3207,7 +3214,7 @@ fn fixed_width(width: f32, children: Element) -> Element {
             column {
                 percent_width: 1.0,
                 max_width_constraint: width,
-                align_items: "center",
+                align_items: "stretch",
                 {children}
             }
         }
