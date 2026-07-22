@@ -1817,9 +1817,12 @@ fn extract_pointer_payload(event: &ArkNativeEvent) -> Option<PointerPayload> {
 fn extract_layout_payload(node: &NodeRef) -> Option<LayoutPayload> {
     let n = node.borrow();
     let size = n.layout_size().ok()?;
+    // Prefer layout position (window, no graphic translate). Translate-inclusive
+    // coords accumulate ancestor matrix offsets and mis-anchor floating panels
+    // (Select same-width start align was ~48vp too far right on device).
     let position = n
-        .position_with_translate_in_window()
-        .or_else(|_| n.layout_position_in_window())
+        .layout_position_in_window()
+        .or_else(|_| n.position_with_translate_in_window())
         .ok()?;
     Some(LayoutPayload {
         x: position.x as f32,

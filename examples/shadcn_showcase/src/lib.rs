@@ -17,8 +17,9 @@ use arkit::shadcn::components::{
     FieldError, FieldGroup, FieldOrientation, FieldSeparator, FieldSet, FieldTitle, Form, FormItem,
     HoverCard, Input, InputOtp, InputOtpMode, InputOtpSeparator, Label, Markdown, MenuEntry,
     Menubar, MenubarMenuSpec, MultiSlider, Popover, Progress, RadioGroup, RangeSlider, Select,
-    Separator, Skeleton, Slider, SliderOrientation, SliderStyle, Sonner, SonnerToast, Spinner,
-    Switch, Table, Tabs, Text, TextVariant, Textarea, Toggle, ToggleGroup, Tooltip,
+    Separator, Skeleton, Slider, SliderOrientation, SliderStyle, Sonner, SonnerPosition,
+    SonnerToast, Spinner, Switch, Table, Tabs, Text, TextVariant, Textarea, ToastAppearance,
+    Toggle, ToggleGroup, ToggleVariant, Tooltip,
 };
 use arkit::shadcn::icon::icon_placeholder;
 use arkit::shadcn::theme::{
@@ -2789,7 +2790,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     v_gap { height: spacing::SM }
                     text {
                         percent_width: 1.0,
-                        content: "Toast messages are rendered at the app root, above the bottom safe area. Swipe down or sideways to dismiss.".to_string(),
+                        content: "Bottom-center Sonner stack (official peeks). Swipe up to expand, down to collapse/dismiss. Minimal is a compact chip.".to_string(),
                         font_size: typography::SM,
                         font_weight: 400_i32,
                         font_color: theme.colors.muted_foreground,
@@ -2803,6 +2804,15 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         "Background click test · {sonner_background_clicks()}"
                     }
                     v_gap { height: spacing::XXL }
+                    text {
+                        percent_width: 1.0,
+                        content: "Notification".to_string(),
+                        font_size: typography::SM,
+                        font_weight: 600_i32,
+                        font_color: theme.colors.foreground,
+                        line_height: 20.0,
+                    }
+                    v_gap { height: spacing::MD }
                     row {
                         percent_width: 1.0,
                         Button {
@@ -2811,13 +2821,13 @@ fn ComponentDemo(slug: &'static str) -> Element {
                             onclick: move |_| enqueue_sonner_toast(
                                 sonner_toasts,
                                 sonner_next_id,
-                                move |id| SonnerToast::new(id, "Event has been created.")
-                                    .description("Monday, January 3rd at 6:00pm")
+                                move |id| SonnerToast::new(id, "Event created")
+                                    .description("Mon, Jan 3 · 6:00pm")
                                     .action("Undo")
                                     .duration_ms(0)
                                     .on_action(move || {
                                         let mut status = sonner_status;
-                                        status.set(format!("Action selected for toast #{id}."));
+                                        status.set(format!("Undo #{id}"));
                                     }),
                             ),
                             "Default"
@@ -2829,7 +2839,8 @@ fn ComponentDemo(slug: &'static str) -> Element {
                                 sonner_toasts,
                                 sonner_next_id,
                                 |id| SonnerToast::success(id, "Changes saved")
-                                    .description("Your profile is up to date."),
+                                    .description("Profile is up to date")
+                                    .duration_ms(0),
                             ),
                             "Success"
                         }
@@ -2843,8 +2854,9 @@ fn ComponentDemo(slug: &'static str) -> Element {
                             onclick: move |_| enqueue_sonner_toast(
                                 sonner_toasts,
                                 sonner_next_id,
-                                |id| SonnerToast::info(id, "New version available")
-                                    .description("Update when you are ready."),
+                                |id| SonnerToast::info(id, "Update available")
+                                    .description("Install when ready")
+                                    .duration_ms(0),
                             ),
                             "Info"
                         }
@@ -2855,8 +2867,9 @@ fn ComponentDemo(slug: &'static str) -> Element {
                             onclick: move |_| enqueue_sonner_toast(
                                 sonner_toasts,
                                 sonner_next_id,
-                                |id| SonnerToast::warning(id, "Storage almost full")
-                                    .description("Free up space to keep syncing."),
+                                |id| SonnerToast::warning(id, "Storage low")
+                                    .description("Free up space")
+                                    .duration_ms(0),
                             ),
                             "Warning"
                         }
@@ -2871,7 +2884,8 @@ fn ComponentDemo(slug: &'static str) -> Element {
                                 sonner_toasts,
                                 sonner_next_id,
                                 |id| SonnerToast::error(id, "Upload failed")
-                                    .description("Check your connection and try again."),
+                                    .description("Check connection")
+                                    .duration_ms(0),
                             ),
                             "Error"
                         }
@@ -2882,10 +2896,92 @@ fn ComponentDemo(slug: &'static str) -> Element {
                             onclick: move |_| enqueue_sonner_toast(
                                 sonner_toasts,
                                 sonner_next_id,
-                                |id| SonnerToast::loading(id, "Uploading photos")
-                                    .description("This toast stays until dismissed."),
+                                |id| SonnerToast::loading(id, "Uploading…")
+                                    .description("Stays until dismissed"),
                             ),
                             "Loading"
+                        }
+                    }
+                    v_gap { height: spacing::MD }
+                    Button {
+                        variant: ButtonVariant::Secondary,
+                        percent_width: Some(1.0),
+                        onclick: move |_| {
+                            for (title, description) in [
+                                ("Alice", "Free this afternoon?"),
+                                ("Reminder", "Review in 10 min"),
+                                ("Payment", "¥128 received"),
+                            ] {
+                                enqueue_sonner_toast(
+                                    sonner_toasts,
+                                    sonner_next_id,
+                                    move |id| SonnerToast::info(id, title)
+                                        .description(description)
+                                        .duration_ms(0),
+                                );
+                            }
+                            let mut status = sonner_status;
+                            status.set("Stack ready — swipe up to expand, down to dismiss.".into());
+                        },
+                        "Stack 3 · swipe up"
+                    }
+                    v_gap { height: spacing::XXL }
+                    text {
+                        percent_width: 1.0,
+                        content: "Minimal".to_string(),
+                        font_size: typography::SM,
+                        font_weight: 600_i32,
+                        font_color: theme.colors.foreground,
+                        line_height: 20.0,
+                    }
+                    v_gap { height: spacing::SM }
+                    text {
+                        percent_width: 1.0,
+                        content: "Compact chip — short copy only.".to_string(),
+                        font_size: typography::XS,
+                        font_weight: 400_i32,
+                        font_color: theme.colors.muted_foreground,
+                        line_height: 16.0,
+                    }
+                    v_gap { height: spacing::MD }
+                    row {
+                        percent_width: 1.0,
+                        Button {
+                            variant: ButtonVariant::Outline,
+                            percent_width: Some(0.31),
+                            onclick: move |_| enqueue_sonner_toast(
+                                sonner_toasts,
+                                sonner_next_id,
+                                |id| SonnerToast::minimal(id, "Copied"),
+                            ),
+                            "Copy"
+                        }
+                        row { layout_weight: 1.0 }
+                        Button {
+                            percent_width: Some(0.31),
+                            onclick: move |_| enqueue_sonner_toast(
+                                sonner_toasts,
+                                sonner_next_id,
+                                |id| SonnerToast::success(id, "Saved")
+                                    .appearance(ToastAppearance::Minimal)
+                                    .dismissible(false)
+                                    .duration_ms(2_000),
+                            ),
+                            "Saved"
+                        }
+                        row { layout_weight: 1.0 }
+                        Button {
+                            variant: ButtonVariant::Destructive,
+                            percent_width: Some(0.31),
+                            onclick: move |_| enqueue_sonner_toast(
+                                sonner_toasts,
+                                sonner_next_id,
+                                |id| SonnerToast::error(id, "Failed")
+                                    .appearance(ToastAppearance::Minimal)
+                                    .dismissible(false)
+                                    .duration_ms(2_500),
+                            ),
+                            "Fail"
                         }
                     }
                     v_gap { height: spacing::XL }
@@ -2901,6 +2997,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
             }
             Sonner {
                 toasts: sonner_toasts(),
+                position: SonnerPosition::BottomCenter,
                 visible_toasts: 3,
                 rich_colors: true,
             }
@@ -3054,9 +3151,12 @@ fn ComponentDemo(slug: &'static str) -> Element {
             }
         },
         "toggle" => rsx! {
+            // Outline so pressed/unpressed stay visible on light Zinc surfaces
+            // (Default accent fill is nearly the same as the canvas).
             Toggle {
                 label: "".to_string(),
                 icon: Some("bold".to_string()),
+                variant: ToggleVariant::Outline,
                 checked: Some(toggle_pressed()),
                 on_change: EventHandler::new(move |value| toggle_pressed.set(value)),
             }
@@ -3103,6 +3203,10 @@ fn ComponentDemo(slug: &'static str) -> Element {
 
 #[component]
 fn fixed_width(width: f32, children: Element) -> Element {
+    // shadcn-style max-width cap: fill the parent up to `width`, never force a
+    // hard width that can overflow narrow screens (512vp ≈ 1664px @3.25x).
+    // Select/Popover still measure the painted control; anchor geometry no
+    // longer depends on this wrapper using an absolute width.
     rsx! {
         column {
             percent_width: 1.0,
@@ -3110,7 +3214,7 @@ fn fixed_width(width: f32, children: Element) -> Element {
             column {
                 percent_width: 1.0,
                 max_width_constraint: width,
-                align_items: "center",
+                align_items: "stretch",
                 {children}
             }
         }

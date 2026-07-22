@@ -7,8 +7,8 @@
 //! callers.
 
 use super::floating_layer::{
-    FloatingAlign, FloatingPanelPlacement, FloatingSide, FLOATING_CAPTURE_COLOR, HIT_TEST_DEFAULT,
-    SHADOW_SM,
+    trigger_width_vp, FloatingAlign, FloatingPanelPlacement, FloatingSide, FLOATING_CAPTURE_COLOR,
+    HIT_TEST_DEFAULT, SHADOW_SM,
 };
 use crate::theme::*;
 use arkit_prelude::*;
@@ -33,11 +33,10 @@ pub fn Select(
 ) -> Element {
     let theme = use_theme();
     let overlay = arkit_hooks::use_overlay();
-    let trigger_frame = use_signal(arkit_hooks::LayoutFrame::default);
-    arkit_hooks::use_layout_frame(move |frame| {
-        let mut trigger_frame = trigger_frame;
-        trigger_frame.set(frame);
-    });
+    let mut trigger_frame = use_signal(arkit_hooks::LayoutFrame::default);
+    // Measure only the painted trigger root via `onarea` (full control width).
+    // Do not also attach `use_layout_frame` here — a second observer can race
+    // and overwrite with a different host frame.
     let mut internal_open = use_signal(|| default_open);
     let mut internal_selected = use_signal(|| default_selected.clone());
     let open_controlled = open.is_some();
@@ -79,7 +78,7 @@ pub fn Select(
     };
     let count = options.len();
 
-    let toggle = move |pointer: Option<dioxus_elements::event::PointerPayload>| {
+    let toggle = move |_| {
         if current_open {
             set_open.call(false);
             overlay.dismiss();
@@ -90,34 +89,17 @@ pub fn Select(
 
         let frame = *trigger_frame.read();
         let viewport = overlay.viewport();
-        let panel_width = select_panel_width(pointer, frame);
+        let panel_width = trigger_width_vp(frame, viewport, SELECT_PANEL_FALLBACK_WIDTH);
         let panel_height = select_panel_estimated_height(count);
-        let placement = if let Some(placement) = pointer.and_then(|pointer| {
-            FloatingPanelPlacement::from_pointer(
-                pointer,
-                viewport,
-                panel_width,
-                panel_height,
-                FloatingSide::Bottom,
-                FloatingAlign::Start,
-                SELECT_PANEL_SIDE_OFFSET,
-            )
-        }) {
-            placement
-        } else if frame.is_measured() {
-            FloatingPanelPlacement::from_trigger(
-                frame,
-                viewport,
-                panel_width,
-                panel_height,
-                FloatingSide::Bottom,
-                FloatingAlign::Start,
-                SELECT_PANEL_SIDE_OFFSET,
-            )
-        } else {
-            FloatingPanelPlacement::fallback(viewport)
-        };
-
+        let placement = FloatingPanelPlacement::resolve(
+            frame,
+            viewport,
+            panel_width,
+            panel_height,
+            FloatingSide::Bottom,
+            FloatingAlign::Start,
+            SELECT_PANEL_SIDE_OFFSET,
+        );
         let dismiss_overlay = overlay.clone();
         let dismiss = EventHandler::new(move |_: ()| {
             set_open.call(false);
@@ -142,8 +124,20 @@ pub fn Select(
     rsx! {
         row {
             percent_width: 1.0,
-            onclick: move |evt: dioxus_core::Event<dioxus_elements::event::ClickData>| {
-                toggle(evt.data().pointer);
+            // Measure the full control (same width as the painted chrome).
+            onarea: move |evt: dioxus_core::Event<dioxus_elements::event::AreaData>| {
+                let frame = evt.data().frame;
+                if frame.is_measured() {
+                    trigger_frame.set(arkit_hooks::LayoutFrame {
+                        x: frame.x,
+                        y: frame.y,
+                        width: frame.width,
+                        height: frame.height,
+                    });
+                }
+            },
+            onclick: move |_| {
+                toggle(());
             },
             row {
                 percent_width: 1.0,
@@ -193,68 +187,60 @@ fn select_overlay_content(
     let left = placement.x.max(0.0);
 
     rsx! {
-        column {
+        // Full-screen hit plane; panel uses absolute position so left/top match
+        // trigger coordinates in overlay-local vp space (no padding/margin skew).
+        stack {
             percent_width: 1.0,
             percent_height: 1.0,
-            align_items: "start",
-            padding_top: top,
             background_color: FLOATING_CAPTURE_COLOR,
             hit_test_behavior: HIT_TEST_DEFAULT,
             onclick: move |_| on_dismiss.call(()),
-            row {
-                percent_width: 1.0,
+            column {
+                position: format!("{left},{top}"),
+                width: panel_width,
                 align_items: "start",
-                arkit_animation::MountTransition {
-                    preset: Some(arkit_animation::TransitionPreset::SlideUp),
-                    duration_ms: Some(120),
-                    column {
-                        onclick: move |evt| evt.stop_propagation(),
-                        margin_left: left,
-                        width: panel_width,
-                        align_items: "start",
-                        background_color: colors.popover,
-                        border_radius: theme.radii.md,
-                        border_width: 1.0,
-                        border_color: colors.border,
-                        shadow: SHADOW_SM,
-                        padding_top: spacing::XXS,
-                        padding_right: spacing::XXS,
-                        padding_bottom: spacing::XXS,
-                        padding_left: spacing::XXS,
-                        row {
+                onclick: move |evt| evt.stop_propagation(),
+                background_color: colors.popover,
+                border_radius: theme.radii.md,
+                border_width: 1.0,
+                border_color: colors.border,
+                shadow: SHADOW_SM,
+                padding_top: spacing::XXS,
+                padding_right: spacing::XXS,
+                padding_bottom: spacing::XXS,
+                padding_left: spacing::XXS,
+                row {
+                    percent_width: 1.0,
+                    padding_top: 8.0,
+                    padding_right: spacing::SM,
+                    padding_bottom: 8.0,
+                    padding_left: spacing::SM,
+                    text {
+                        font_size: typography::XS,
+                        font_color: colors.muted_foreground,
+                        line_height: 16.0,
+                        max_lines: SELECT_TEXT_MAX_LINES,
+                        text_overflow: SELECT_TEXT_OVERFLOW_ELLIPSIS,
+                        "Fruits"
+                    }
+                }
+                if scroll_list {
+                    scroll {
+                        percent_width: 1.0,
+                        height: SELECT_PANEL_SCROLL_HEIGHT,
+                        scroll_enabled: true,
+                        column {
                             percent_width: 1.0,
-                            padding_top: 8.0,
-                            padding_right: spacing::SM,
-                            padding_bottom: 8.0,
-                            padding_left: spacing::SM,
-                            text {
-                                font_size: typography::XS,
-                                font_color: colors.muted_foreground,
-                                line_height: 16.0,
-                                max_lines: SELECT_TEXT_MAX_LINES,
-                                text_overflow: SELECT_TEXT_OVERFLOW_ELLIPSIS,
-                                "Fruits"
+                            for option in options.iter() {
+                                {select_option_row(option, selected.as_str(), &theme, set_selected, on_dismiss)}
                             }
                         }
-                        if scroll_list {
-                            scroll {
-                                percent_width: 1.0,
-                                height: SELECT_PANEL_SCROLL_HEIGHT,
-                                scroll_enabled: true,
-                                column {
-                                    percent_width: 1.0,
-                                    for option in options.iter() {
-                                        {select_option_row(option, selected.as_str(), &theme, set_selected, on_dismiss)}
-                                    }
-                                }
-                            }
-                        } else {
-                            column {
-                                percent_width: 1.0,
-                                for option in options.iter() {
-                                    {select_option_row(option, selected.as_str(), &theme, set_selected, on_dismiss)}
-                                }
-                            }
+                    }
+                } else {
+                    column {
+                        percent_width: 1.0,
+                        for option in options.iter() {
+                            {select_option_row(option, selected.as_str(), &theme, set_selected, on_dismiss)}
                         }
                     }
                 }
@@ -317,22 +303,6 @@ fn select_option_row(
     }
 }
 
-fn select_panel_width(
-    pointer: Option<dioxus_elements::event::PointerPayload>,
-    trigger: arkit_hooks::LayoutFrame,
-) -> f32 {
-    let ratio = display_vp_ratio();
-    if let Some(pointer) = pointer {
-        if pointer.has_target_bounds() && pointer.target_width > 0.0 {
-            return pointer.target_width / ratio;
-        }
-    }
-    if trigger.is_measured() {
-        return trigger.width / ratio;
-    }
-    SELECT_PANEL_FALLBACK_WIDTH
-}
-
 fn select_panel_estimated_height(option_count: usize) -> f32 {
     (spacing::XXS * 2.0)
         + SELECT_PANEL_HEADER_HEIGHT
@@ -341,13 +311,4 @@ fn select_panel_estimated_height(option_count: usize) -> f32 {
         } else {
             (option_count as f32) * SELECT_OPTION_HEIGHT
         }
-}
-
-fn display_vp_ratio() -> f32 {
-    let ratio = ohos_display_binding::default_display_virtual_pixel_ratio();
-    if ratio.is_finite() && ratio > 0.0 {
-        ratio
-    } else {
-        1.0
-    }
 }

@@ -112,12 +112,22 @@ pub fn ToggleGroup(props: ToggleGroupProps) -> Element {
             },
             &theme,
         );
+        // Selection chrome is painted on the segment shell; the inner surface
+        // stays clear for rectangular corners. Both layers use hit-testable
+        // fills so presses land even when the segment is inactive/clear.
+        // Inactive segments stay canvas-colored (opaque + hit-testable); active
+        // segments use the accent/secondary fill from `toggle_visual_style`.
+        let shell_background = if (item_background & 0xFF00_0000) == 0 {
+            theme.colors.background
+        } else {
+            item_background
+        };
         items.push(if stretched {
             rsx! {
                 row {
                     layout_weight: 1.0,
                     height: size_style.height,
-                    background_color: item_background,
+                    background_color: shell_background,
                     {surface}
                 }
             }
@@ -125,7 +135,7 @@ pub fn ToggleGroup(props: ToggleGroupProps) -> Element {
             rsx! {
                 row {
                     height: size_style.height,
-                    background_color: item_background,
+                    background_color: shell_background,
                     {surface}
                 }
             }
