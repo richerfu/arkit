@@ -39,8 +39,8 @@ fn Home() -> Element {
     rsx! {
         RouteTransition::<Route> {
             column {
-                percent_width: 1.0,
-                percent_height: 1.0,
+                width: "100%",
+                height: "100%",
                 align_items: "center",
                 justify_content: "center",
                 background_color: "#fffef3c7",
@@ -60,8 +60,8 @@ fn Settings() -> Element {
     rsx! {
         RouteTransition::<Route> {
             column {
-                percent_width: 1.0,
-                percent_height: 1.0,
+                width: "100%",
+                height: "100%",
                 align_items: "center",
                 justify_content: "center",
                 background_color: "#ffe0f2fe",
@@ -80,8 +80,8 @@ fn Users(id: u32) -> Element {
     rsx! {
         RouteTransition::<Route> {
             column {
-                percent_width: 1.0,
-                percent_height: 1.0,
+                width: "100%",
+                height: "100%",
                 align_items: "center",
                 justify_content: "center",
                 background_color: "#fffdf2f8",

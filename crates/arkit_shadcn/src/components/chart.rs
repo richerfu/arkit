@@ -41,12 +41,12 @@ pub fn Chart(props: ChartProps) -> Element {
             let margin_top = if idx == 0 { 0.0 } else { spacing::XXL };
             rsx! {
                 row {
-                    percent_width: 1.0,
+                    width: "100%",
                     margin_top: margin_top,
                     column {
-                        percent_width: 1.0,
+                        width: "100%",
                         row {
-                            percent_width: 1.0,
+                            width: "100%",
                             align_items: "center",
                             justify_content: "space_between",
                             text {
@@ -82,12 +82,12 @@ pub fn Chart(props: ChartProps) -> Element {
 
     rsx! {
         column {
-            percent_width: 1.0,
+            width: "100%",
             background_color: theme.colors.card,
             border_width: 1.0,
             border_color: theme.colors.border,
             border_radius: theme.radii.xl,
-            shadow: 1,
+            shadow: "sm",
             padding_top: 0.0,
             padding_right: spacing::XXL,
             padding_bottom: 0.0,
@@ -111,12 +111,12 @@ pub fn ChartCard(props: ChartCardProps) -> Element {
     let title = props.title.clone();
     rsx! {
         column {
-            percent_width: 1.0,
+            width: "100%",
             background_color: theme.colors.card,
             border_width: 1.0,
             border_color: theme.colors.border,
             border_radius: theme.radii.xl,
-            shadow: 1,
+            shadow: "sm",
             padding_top: 0.0,
             padding_right: spacing::XXL,
             padding_bottom: 0.0,
@@ -129,7 +129,7 @@ pub fn ChartCard(props: ChartCardProps) -> Element {
                 line_height: 20.0,
             }
             row {
-                percent_width: 1.0,
+                width: "100%",
                 margin_top: spacing::XXL,
                 Chart { values: props.values }
             }

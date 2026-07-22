@@ -33,9 +33,9 @@ pub(crate) fn EasingLab() -> Element {
             title: "Easing matrix",
             description: "Six easing families run over the same duration and distance: built-in, spring, steps, cubic Bézier, linear points and deterministic irregular easing.",
             column {
-                percent_width: 1.0,
+                width: "100%",
                 padding: 10.0,
-                background_color: 0xfff8fafcu32,
+                background_color: "#FFF8FAFC",
                 border_radius: 12.0,
                 for (name, label, tint) in LANES {
                     EasingLane { name, label, tint }
@@ -43,7 +43,7 @@ pub(crate) fn EasingLab() -> Element {
             }
             flex {
                 margin_top: 12.0,
-                percent_width: 1.0,
+                width: "100%",
                 flex_wrap: "wrap",
                 ActionButton {
                     label: "Run all",
@@ -88,15 +88,15 @@ fn EasingLane(name: &'static str, label: &'static str, tint: u32) -> Element {
     rsx! {
         row {
             margin_bottom: 7.0,
-            percent_width: 1.0,
+            width: "100%",
             align_items: "center",
-            text { width: 90.0, font_size: 11.0, font_color: 0xff475569u32, "{label}" }
+            text { width: 90.0, font_size: 11.0, font_color: "#FF475569", "{label}" }
             column {
                 layout_weight: 1.0,
                 height: 28.0,
                 align_items: "start",
                 justify_content: "center",
-                background_color: 0xffe2e8f0u32,
+                background_color: "#FFE2E8F0",
                 border_radius: 14.0,
                 clip: false,
                 EasingChip { name, tint }
@@ -196,7 +196,7 @@ fn StaggerDemo() -> Element {
             }
             flex {
                 margin_top: 12.0,
-                percent_width: 1.0,
+                width: "100%",
                 flex_wrap: "wrap",
                 for (candidate, label) in [
                     (StaggerMode::Radial, "Radial"),
@@ -228,7 +228,7 @@ fn StaggerDemo() -> Element {
             text {
                 margin_top: 6.0,
                 font_size: 10.0,
-                font_color: 0xff64748bu32,
+                font_color: "#FF64748B",
                 "delays(ms): {delay_summary}"
             }
         }
@@ -257,7 +257,7 @@ fn StaggerDot(index: usize) -> Element {
             justify_content: "center",
             background_color: tint,
             border_radius: 14.0,
-            text { font_size: 11.0, font_weight: 700, font_color: 0xffffffffu32, "{index}" }
+            text { font_size: 11.0, font_weight: 700, font_color: "#FFFFFFFF", "{index}" }
         }
     }
 }

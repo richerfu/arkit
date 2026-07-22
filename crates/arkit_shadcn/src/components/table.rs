@@ -80,7 +80,7 @@ pub fn Table(props: TableProps) -> Element {
             rsx! {
                 row {
                     key: "{index}",
-                    percent_width: 1.0,
+                    width: "100%",
                     align_items: "center",
                     border_width: border_width,
                     border_color: theme.colors.border,
@@ -92,14 +92,14 @@ pub fn Table(props: TableProps) -> Element {
 
     rsx! {
         column {
-            percent_width: 1.0,
+            width: "100%",
             border_width: 1.0,
             border_color: theme.colors.border,
             border_radius: theme.radii.sm,
             background_color: theme.colors.card,
             clip: true,
             row {
-                percent_width: 1.0,
+                width: "100%",
                 border_width: "0,0,1,0",
                 border_color: theme.colors.border,
                 {header_cells.into_iter()}

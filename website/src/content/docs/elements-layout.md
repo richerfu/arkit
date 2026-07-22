@@ -1,83 +1,177 @@
 ---
 title: 元素与布局
-description: "ArkUI 元素、尺寸、Flex 与滚动布局。"
+description: "ArkUI 元素与 CSS 风格 RSX 属性。"
 ---
 
 # 元素与布局
 
-`arkit::prelude::*` re-export ArkUI element registry。RSX tag 会创建对应原生节点，不经过 HTML 或 WebView。
+`arkit::prelude::*` re-export ArkUI element registry。RSX tag 创建原生节点。
 
-## 27 个元素
+**属性值按 CSS 语义编码**：长度用 vp 或 `"N%"`，盒模型支持简写，枚举类属性使用字符串关键字。
 
-| 分类     | RSX tag                                           |
-| -------- | ------------------------------------------------- |
-| 布局     | `column`、`row`、`stack`、`flex`                  |
-| 绘制     | `custom`                                          |
-| 内容     | `text`、`image`                                   |
-| 输入     | `button`、`checkbox`、`toggle`、`radio`、`slider` |
-| 状态     | `progress`、`loadingprogress`                     |
-| 滚动     | `scroll`、`swiper`、`refresh`                     |
-| 大数据   | `list`、`listitem`、`grid`、`griditem`            |
-| 瀑布流   | `waterflow`、`flowitem`                           |
-| 日期     | `calendar`、`datepicker`                          |
-| 文本输入 | `textinput`、`textarea`                           |
+## 元素一览
 
-## 基础布局
+| 分类 | RSX tag                                                                      |
+| ---- | ---------------------------------------------------------------------------- |
+| 布局 | `column` `row` `stack` `flex`                                                |
+| 内容 | `text` `image` `button`                                                      |
+| 输入 | `textinput` `textarea` `checkbox` `toggle` `radio` `slider`                  |
+| 滚动 | `scroll` `list` `grid` `waterflow` `swiper` `refresh`                        |
+| 其它 | `progress` `loadingprogress` `calendar` `datepicker` `custom` `xcomponent` … |
+
+## 长度与百分比
+
+| 写法                                         | 结果                                      |
+| -------------------------------------------- | ----------------------------------------- |
+| `12` / `12.0` / `"12"` / `"12px"` / `"12vp"` | 绝对 vp                                   |
+| `"50%"` / `"100%"`                           | 相对父级（`100%` → ArkUI fraction `1.0`） |
+
+`width` / `height` 写百分比时映射为 ArkUI `WidthPercent` / `HeightPercent`。
+
+```rust
+column {
+    width: "100%",
+    height: "100%",
+    padding: "16 20",
+}
+```
+
+## margin / padding
+
+### 简写（CSS box，1–4 值，空格或逗号）
+
+| 输入          | `[top, right, bottom, left]` |
+| ------------- | ---------------------------- |
+| `8` / `"8px"` | 全 8                         |
+| `"8 16"`      | 上下 8、左右 16              |
+| `"8 16 12"`   | 上 8、左右 16、下 12         |
+| `"8 16 12 4"` | 四边                         |
+
+### 拆分与轴
+
+| 属性                                  | 含义 |
+| ------------------------------------- | ---- |
+| `*_top` `*_right` `*_bottom` `*_left` | 单边 |
+| `*_x` / `*_horizontal`                | 左右 |
+| `*_y` / `*_vertical`                  | 上下 |
+
+**合并顺序**：简写 → 轴 → 单边（后者覆盖前者）。
+
+```rust
+column {
+    margin: "12 0",
+    margin_top: 8.0,
+    padding_horizontal: 16.0,
+    padding_y: "8px",
+}
+```
+
+### 约束
+
+`min_width` / `max_width` / `min_height` / `max_height`（及 `constraint_size` / `max_width_constraint`）合并为 ArkUI `ConstraintSize`。
+
+## 关键字总表
+
+枚举类属性使用 **字符串关键字**（或文档中写明的布尔写法）。`font_weight` 另接受 CSS 数字权重 `100`–`900`。
+
+### 排版 / 文本
+
+| 属性                                           | 关键字                                                        |
+| ---------------------------------------------- | ------------------------------------------------------------- |
+| `text_align`                                   | `start`/`left` · `center` · `end`/`right` · `justify`         |
+| `font_weight`                                  | `thin`…`black` / `normal` / `medium` / `bold`，或 `400`/`700` |
+| `font_style`                                   | `normal` · `italic`                                           |
+| `text_decoration`                              | `none` · `underline` · `overline` · `line-through`            |
+| `text_overflow`                                | `none` · `clip` · `ellipsis` · `marquee`                      |
+| `font_size` / `line_height` / `letter_spacing` | 长度（可带 `px`/`vp`）                                        |
+
+### 布局
+
+| 属性                            | 关键字                                                                                      |
+| ------------------------------- | ------------------------------------------------------------------------------------------- |
+| `align_items`                   | `start`/`top` · `center` · `end`/`bottom`（column/row）；flex 另支持 `stretch` `baseline`   |
+| `justify_content`               | `start` · `center` · `end` · `space-between` · `space-around` · `space-evenly`              |
+| `flex_direction`                | `row` · `column` · `row-reverse` · `column-reverse`                                         |
+| `flex_wrap`                     | `nowrap` · `wrap` · `wrap-reverse`                                                          |
+| `align_self` / `item_alignment` | `auto` · `start` · `center` · `end` · `stretch` · `baseline`                                |
+| `alignment`（stack）            | `center` · `top` · `bottom` · `start`/`left` · `end`/`right` · `top-start` · `bottom-end` … |
+| `position`                      | `"x y"` 或单值（可带单位）                                                                  |
+| `opacity`                       | `0..=1` 或 `"50%"`                                                                          |
+
+### 视觉
+
+| 属性                             | 关键字                                                        |
+| -------------------------------- | ------------------------------------------------------------- |
+| 颜色类                           | `#rgb` `#rrggbb` `#aarrggbb`；或 `0xAARRGGBB`                 |
+| `border_style`                   | `solid` · `dashed` · `dotted`                                 |
+| `border_width` / `border_radius` | 盒模型简写（1–4 值）                                          |
+| `visibility`                     | `visible` · `hidden` · `none`                                 |
+| `object_fit`                     | `contain` · `cover` · `fill` · `scale-down` · `none` · `auto` |
+| `shadow`                         | `none` · `xs` · `sm` · `md` · `lg` · `floating-sm` …          |
+| `hit_test_behavior`              | `default`/`auto` · `block` · `transparent` · `none`           |
+| `clip` / `enabled` / `focusable` | `true`/`false` 或 `"on"`/`"off"`                              |
+
+### 滚动 / 列表 / 输入 / 控件
+
+| 属性                                       | 关键字                                                           |
+| ------------------------------------------ | ---------------------------------------------------------------- |
+| `scroll_bar`（scroll/list/grid/waterflow） | `off`/`false` · `auto` · `on`/`true`                             |
+| `scroll_edge_effect`                       | `spring`/`bounce` · `fade` · `none`                              |
+| `scroll_enabled`                           | bool / `"on"`/`"off"`                                            |
+| `list_sticky`                              | `none` · `header` · `footer` · `both`                            |
+| `input_type`                               | `text` · `number` · `phone` · `email` · `password` · `decimal` … |
+| `progress_type`                            | `linear`/`bar` · `ring` · `eclipse` · `scale-ring` · `capsule`   |
+| `button_type`                              | `normal` · `capsule` · `circle`                                  |
+| `swiper_curve`                             | `linear` · `ease` · `ease-in` · `ease-out` · `ease-in-out` · …   |
+| `swiper_*` 开关                            | bool / `"on"`/`"off"`                                            |
+
+## 示例
 
 ```rust
 rsx! {
     column {
-        percent_width: 1.0,
-        percent_height: 1.0,
-        padding: 16.0,
+        width: "100%",
+        height: "100%",
+        padding: "16 20",
         align_items: "stretch",
-        row {
-            percent_width: 1.0,
-            justify_content: "space-between",
-            text { "标题" }
-            button { "操作" }
+        background_color: "#fafafa",
+
+        scroll {
+            width: "100%",
+            height: "100%",
+            scroll_bar: "off",
+            scroll_edge_effect: "spring",
+
+            text {
+                font_size: "17px",
+                font_weight: "semibold",
+                text_align: "center",
+                text_decoration: "none",
+                "标题"
+            }
+
+            image {
+                width: "100%",
+                height: 180.0,
+                object_fit: "cover",
+                border_radius: "12 12 0 0",
+                src: url,
+            }
+
+            button {
+                margin_top: 12.0,
+                button_type: "capsule",
+                "操作"
+            }
         }
     }
 }
 ```
 
-`column`/`row` 负责主轴排列，`stack` 负责叠放和 alignment，`flex` 暴露更完整的 direction/wrap 语义。复杂页面先建立清晰容器层级，再使用绝对定位。
+## 编码规则
 
-## 尺寸与盒模型
-
-- `width`/`height` 默认是 vp 的 `f32`。
-- `percent_width`/`percent_height` 使用 `0.0..=1.0`。
-- `padding`/`margin` 可统一设置，也可用四向属性覆盖。
-- `constraint_size`、`aspect_ratio`、`layout_weight` 用于约束和剩余空间分配。
-
-```rust
-row {
-    width: 320.0,
-    min_height: 48.0,
-    padding_horizontal: 12.0,
-    margin_bottom: 8.0,
-}
-```
-
-属性是否存在以具体 tag descriptor 为准；不要假设所有节点拥有相同的 ArkUI attribute。
-
-## 滚动内容
-
-```rust
-scroll {
-    percent_width: 1.0,
-    percent_height: 1.0,
-    scroll_bar: true,
-    column {
-        for index in 0..100 {
-            text { key: "{index}", padding: 12.0, "Item {index}" }
-        }
-    }
-}
-```
-
-几十个轻量 item 可以直接声明；数百个以上或 item 构建昂贵时使用虚拟列表章节的 NodeAdapter。
-
-## 布局排查
-
-先确认父容器给出了可用尺寸，再检查百分比、主轴与交叉轴对齐。ArkUI 不会因为 child 设置 `percent_height: 1.0` 就替一个无确定高度的 parent 推导高度。
+- 长度：数字 vp（`padding: 16.0`）或带单位字符串（`"16px"` / `"12vp"`）。
+- 百分比尺寸：`width` / `height` 写 `"N%"`。
+- 枚举：关键字字符串（`text_align: "center"`、`shadow: "sm"`、`visibility: "hidden"`）。
+- 无法识别的关键字不写入 native。
+- 虚拟列表等场景常用 `scroll_bar: false` / `"off"`。

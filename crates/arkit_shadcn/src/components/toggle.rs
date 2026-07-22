@@ -56,7 +56,7 @@ pub(crate) struct ToggleSurfaceStyle {
     pub(crate) border_width: f32,
     pub(crate) border_radius: String,
     pub(crate) shadow: Option<bool>,
-    pub(crate) percent_width: Option<f32>,
+    pub(crate) width: Option<String>,
     /// Overrides the surface fill. Toggle groups pass a clear fill and paint
     /// selection on the rectangular segment shell so corners stay square.
     pub(crate) background: Option<u32>,
@@ -186,10 +186,10 @@ pub(crate) fn toggle_surface(
     let background = paint_or_hit_fill(style.background.unwrap_or(visual.background));
     let shadow_on = style.shadow.unwrap_or(visual.shadow);
     let mut on_click = on_click;
-    // Prefer explicit width when provided (icon-only); optional percent width
-    // for stretched group segments. Avoid always emitting `width: Option`.
+    // Prefer CSS width when provided (stretched group segments); otherwise
+    // explicit size width (icon-only). Avoid always emitting `width: Option`.
     let fixed_width = style.size.width;
-    let percent_width = style.percent_width;
+    let css_width = style.width;
     rsx! {
         row {
             border_radius: style.border_radius,
@@ -197,7 +197,7 @@ pub(crate) fn toggle_surface(
             border_style: ARKUI_BORDER_STYLE_SOLID,
             border_width: style.border_width,
             border_color: border_color,
-            align_self: 1,
+            align_self: "start",
             align_items: "center",
             justify_content: "center",
             padding_top: pt,
@@ -206,13 +206,16 @@ pub(crate) fn toggle_surface(
             padding_left: pl,
             background_color: background,
             height: height,
-            width: if let Some(w) = fixed_width { w },
-            percent_width: if let Some(w) = percent_width { w },
-            shadow: if shadow_on { 1 },
+            width: if let Some(w) = css_width {
+                w
+            } else if let Some(w) = fixed_width {
+                format!("{w}")
+            },
+            shadow: if shadow_on { "sm" },
             // HitTestMode::Block — this node takes the hit; children (Image/Text)
             // are excluded so icon content cannot absorb the press without
             // bubbling `onclick` to the surface.
-            hit_test_behavior: 1,
+            hit_test_behavior: "block",
             onclick: move |_| on_click(),
             {content}
         }
@@ -286,7 +289,7 @@ pub fn Toggle(props: ToggleProps) -> Element {
                 border_width,
                 border_radius: radius,
                 shadow: None,
-                percent_width: None,
+                width: None,
                 background: None,
             },
             move || {

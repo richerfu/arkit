@@ -24,11 +24,11 @@ fn TransitionPresets() -> Element {
             title: "Mount transitions",
             description: "All public TransitionPreset variants use the same Timeline/Controls path. Selecting the active preset also replays it.",
             column {
-                percent_width: 1.0,
+                width: "100%",
                 height: 190.0,
                 align_items: "center",
                 justify_content: "center",
-                background_color: 0xffe2e8f0u32,
+                background_color: "#FFE2E8F0",
                 border_radius: 14.0,
                 MountTransition {
                     preset: Some(selected),
@@ -39,15 +39,15 @@ fn TransitionPresets() -> Element {
                         height: 104.0,
                         align_items: "center",
                         justify_content: "center",
-                        background_color: 0xff4f46e5u32,
+                        background_color: "#FF4F46E5",
                         border_radius: 20.0,
-                        text { font_size: 15.0, font_weight: 700, font_color: 0xffffffffu32, "{selected:?}" }
+                        text { font_size: 15.0, font_weight: 700, font_color: "#FFFFFFFF", "{selected:?}" }
                     }
                 }
             }
             flex {
                 margin_top: 12.0,
-                percent_width: 1.0,
+                width: "100%",
                 flex_wrap: "wrap",
                 for (candidate, label) in [
                     (TransitionPreset::Fade, "Fade"),
@@ -84,7 +84,7 @@ fn PresenceDemo() -> Element {
             title: "AnimatePresence lifecycle",
             description: "Sync, Wait and PopLayout retain leaving nodes until the real exit timeline reaches its terminal event; there is no timeout-based cleanup.",
             flex {
-                percent_width: 1.0,
+                width: "100%",
                 flex_wrap: "wrap",
                 for (candidate, label) in [
                     (PresenceMode::Sync, "Sync"),
@@ -108,7 +108,7 @@ fn KeyedPresenceBoard(mode: PresenceMode) -> Element {
     rsx! {
         column {
             key: "{mode:?}",
-            percent_width: 1.0,
+            width: "100%",
             PresenceBoard { mode }
         }
     }
@@ -129,13 +129,13 @@ fn PresenceBoard(mode: PresenceMode) -> Element {
     rsx! {
         column {
             margin_top: 8.0,
-            percent_width: 1.0,
+            width: "100%",
             flex {
-                percent_width: 1.0,
+                width: "100%",
                 height: 126.0,
                 padding: 10.0,
                 flex_wrap: "wrap",
-                background_color: 0xfff8fafcu32,
+                background_color: "#FFF8FAFC",
                 border_radius: 12.0,
                 for entry in entries {
                     PresenceTile {
@@ -158,7 +158,7 @@ fn PresenceBoard(mode: PresenceMode) -> Element {
             }
             flex {
                 margin_top: 10.0,
-                percent_width: 1.0,
+                width: "100%",
                 flex_wrap: "wrap",
                 ActionButton {
                     label: "Add",
@@ -232,8 +232,8 @@ fn PresenceTile(
             justify_content: "center",
             background_color: if popped { 0xfff97316u32 } else { 0xff0f766eu32 },
             border_radius: 18.0,
-            text { font_size: 18.0, font_weight: 700, font_color: 0xffffffffu32, "{value}" }
-            text { margin_top: 3.0, font_size: 9.0, font_color: 0xffccfbf1u32, "{phase:?}" }
+            text { font_size: 18.0, font_weight: 700, font_color: "#FFFFFFFF", "{value}" }
+            text { margin_top: 3.0, font_size: 9.0, font_color: "#FFCCFBF1", "{phase:?}" }
         }
     }
 }
@@ -305,18 +305,18 @@ fn LayoutDemo() -> Element {
             title: "FLIP layout projection",
             description: "LayoutEngine compares typed old/new snapshots, classifies the delta, and compiles inverse position/scale into the same animation Timeline.",
             row {
-                percent_width: 1.0,
+                width: "100%",
                 height: 150.0,
                 align_items: "center",
                 justify_content: if is_expanded { "end" } else { "start" },
                 padding: 12.0,
-                background_color: 0xffe2e8f0u32,
+                background_color: "#FFE2E8F0",
                 border_radius: 14.0,
                 LayoutTarget { expanded: is_expanded }
             }
             flex {
                 margin_top: 12.0,
-                percent_width: 1.0,
+                width: "100%",
                 flex_wrap: "wrap",
                 ActionButton {
                     label: "Toggle layout",
@@ -382,7 +382,7 @@ fn LayoutTarget(expanded: bool) -> Element {
             justify_content: "center",
             background_color: if expanded { 0xff7c3aedu32 } else { 0xff0891b2u32 },
             border_radius: if expanded { 28.0 } else { 14.0 },
-            text { font_size: 13.0, font_weight: 700, font_color: 0xffffffffu32, if expanded { "Expanded" } else { "Compact" } }
+            text { font_size: 13.0, font_weight: 700, font_color: "#FFFFFFFF", if expanded { "Expanded" } else { "Compact" } }
         }
     }
 }

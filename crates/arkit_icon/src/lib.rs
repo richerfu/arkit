@@ -130,7 +130,7 @@ pub fn icon_with_stroke(
         image {
             key: "{element_key}",
             src: dioxus_core::AttributeValue::any_value(source),
-            object_fit: 1,
+            object_fit: "cover",
             width: edge,
             height: edge,
         }

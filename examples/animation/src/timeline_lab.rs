@@ -55,11 +55,11 @@ pub(crate) fn TimelineLab() -> Element {
             title: "Multi-target timeline",
             description: "Labels, relative positions, nested timelines, set/call nodes, keyframes, alternate iterations and one root clock.",
             column {
-                percent_width: 1.0,
+                width: "100%",
                 height: 210.0,
                 align_items: "center",
                 justify_content: "center",
-                background_color: 0xffeef2ffu32,
+                background_color: "#FFEEF2FF",
                 border_radius: 14.0,
                 row {
                     align_items: "center",
@@ -69,7 +69,7 @@ pub(crate) fn TimelineLab() -> Element {
             }
             flex {
                 margin_top: 12.0,
-                percent_width: 1.0,
+                width: "100%",
                 flex_wrap: "wrap",
                 ActionButton {
                     label: "Play forward",
@@ -105,7 +105,7 @@ pub(crate) fn TimelineLab() -> Element {
             title: "Seek and runtime controls",
             description: "The same instance is scrubbed, stretched, rate-adjusted and switched between alternate/non-alternate playback without a component timer.",
             flex {
-                percent_width: 1.0,
+                width: "100%",
                 flex_wrap: "wrap",
                 ActionButton { label: "Seek 0%", on_press: { let controls = controls.clone(); move |_| controls.seek(TimePoint::ZERO) } }
                 ActionButton {
@@ -180,7 +180,7 @@ pub(crate) fn TimelineLab() -> Element {
             }
             flex {
                 margin_top: 6.0,
-                percent_width: 1.0,
+                width: "100%",
                 flex_wrap: "wrap",
                 TimelineRuntimeMetrics { controls: controls.clone(), last_event: event() }
                 TimelineResolutionMetrics { controls: controls.clone() }
@@ -193,7 +193,7 @@ pub(crate) fn TimelineLab() -> Element {
             title: "Lifecycle callbacks",
             description: "begin / render / loop / complete / cancel and Timeline::call are observable independently from Dioxus rendering.",
             flex {
-                percent_width: 1.0,
+                width: "100%",
                 flex_wrap: "wrap",
                 Metric { label: "Begin", value: begin_count().to_string() }
                 Metric { label: "Loops", value: loop_count().to_string() }
@@ -236,7 +236,7 @@ fn TimelinePlanReadout(controls: AnimationControls) -> Element {
         text {
             margin_top: 4.0,
             font_size: 11.0,
-            font_color: 0xff475569u32,
+            font_color: "#FF475569",
             "{plan}"
         }
     }
@@ -283,10 +283,10 @@ fn TimelineCard() -> Element {
             height: 112.0,
             align_items: "center",
             justify_content: "center",
-            background_color: 0xff4f46e5u32,
+            background_color: "#FF4F46E5",
             border_radius: 22.0,
-            text { font_size: 17.0, font_weight: 700, font_color: 0xffffffffu32, "Timeline" }
-            text { margin_top: 5.0, font_size: 11.0, font_color: 0xffe0e7ffu32, "keyframes + color" }
+            text { font_size: 17.0, font_weight: 700, font_color: "#FFFFFFFF", "Timeline" }
+            text { margin_top: 5.0, font_size: 11.0, font_color: "#FFE0E7FF", "keyframes + color" }
         }
     }
 }
@@ -301,10 +301,10 @@ fn TimelineBadge() -> Element {
             height: 74.0,
             align_items: "center",
             justify_content: "center",
-            background_color: 0xff0f766eu32,
+            background_color: "#FF0F766E",
             border_radius: 37.0,
-            text { font_size: 12.0, font_weight: 700, font_color: 0xffffffffu32, "label" }
-            text { font_size: 10.0, font_color: 0xffccfbf1u32, "+180ms" }
+            text { font_size: 12.0, font_weight: 700, font_color: "#FFFFFFFF", "label" }
+            text { font_size: 10.0, font_color: "#FFCCFBF1", "+180ms" }
         }
     }
 }

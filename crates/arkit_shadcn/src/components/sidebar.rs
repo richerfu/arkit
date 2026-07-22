@@ -24,14 +24,14 @@ pub fn Sidebar(props: SidebarProps) -> Element {
     let theme = use_theme();
     rsx! {
         row {
-            percent_width: 1.0,
+            width: "100%",
             column {
                 width: SIDEBAR_WIDTH,
                 background_color: theme.colors.popover,
                 border_width: 1.0,
                 border_color: theme.colors.border,
                 border_radius: theme.radii.md,
-                shadow: 1,
+                shadow: "sm",
                 {props.sidebar}
             }
             {props.children}

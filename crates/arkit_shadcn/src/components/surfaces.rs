@@ -10,8 +10,7 @@
 use std::time::Duration;
 use std::{fmt, rc::Rc};
 
-use super::floating_layer::SHADOW_SM;
-use super::{Spinner, ARKUI_BORDER_STYLE_SOLID, ARKUI_BUTTON_TYPE_NORMAL};
+use super::{Spinner, ARKUI_BORDER_STYLE_SOLID};
 use crate::icon::icon_placeholder;
 use crate::theme::*;
 use arkit_prelude::*;
@@ -119,7 +118,8 @@ pub struct ToastStyle {
     pub action_foreground_color: Option<u32>,
     pub border_radius: Option<f32>,
     pub min_height: Option<f32>,
-    pub shadow: Option<i32>,
+    /// When `Some(true)` / `None`, apply small outer shadow; `Some(false)` disables it.
+    pub shadow: Option<bool>,
 }
 
 /// Layout and card styling for the viewport-level toaster.
@@ -407,7 +407,7 @@ pub fn Toast(props: ToastProps) -> Element {
         } else {
             DEFAULT_MIN_HEIGHT
         });
-    let shadow = props.style.shadow.unwrap_or(SHADOW_SM);
+    let show_shadow = props.style.shadow.unwrap_or(true);
     let show_description = !is_minimal && !stacked_back && props.description.is_some();
     let show_action = !is_minimal && !stacked_back && props.action_label.is_some();
     let show_close = !is_minimal && !stacked_back && props.dismissible;
@@ -444,9 +444,9 @@ pub fn Toast(props: ToastProps) -> Element {
                 border_color: palette.border,
                 border_style: ARKUI_BORDER_STYLE_SOLID,
                 border_radius,
-                shadow,
+                shadow: if show_shadow { "sm" },
                 clip: true,
-                hit_test_behavior: HIT_TEST_DEFAULT,
+                hit_test_behavior: "default",
                 on_touch: move |event| {
                     handle_toast_touch(
                         event,
@@ -485,7 +485,7 @@ pub fn Toast(props: ToastProps) -> Element {
                     font_color: palette.foreground,
                     line_height: 20.0,
                     max_lines: 1_i32,
-                    text_overflow: 2_i32,
+                    text_overflow: "ellipsis",
                 }
             }
         };
@@ -497,23 +497,23 @@ pub fn Toast(props: ToastProps) -> Element {
     if stacked_back {
         return rsx! {
             row {
-                percent_width: 1.0,
+                width: "100%",
                 height: min_height,
                 background_color: palette.background,
                 border_width: 1.0,
                 border_color: palette.border,
                 border_style: ARKUI_BORDER_STYLE_SOLID,
                 border_radius,
-                shadow,
+                shadow: if show_shadow { "sm" },
                 clip: true,
-                hit_test_behavior: HIT_TEST_NONE,
+                hit_test_behavior: "none",
             }
         };
     }
 
     rsx! {
         row {
-            percent_width: 1.0,
+            width: "100%",
             constraint_size: format!("0,100000,{min_height},100000"),
             align_items: "center",
             justify_content: "start",
@@ -526,12 +526,12 @@ pub fn Toast(props: ToastProps) -> Element {
             border_color: palette.border,
             border_style: ARKUI_BORDER_STYLE_SOLID,
             border_radius,
-            shadow,
+            shadow: if show_shadow { "sm" },
             clip: true,
             // The Sonner layer is intentionally pass-through. Re-enable hit
             // testing on the card itself so ArkUI delivers touch sequences to
             // the swipe recognizer while the empty overlay remains inert.
-            hit_test_behavior: HIT_TEST_DEFAULT,
+            hit_test_behavior: "default",
             on_touch: move |event| {
                 handle_toast_touch(
                     event,
@@ -568,27 +568,27 @@ pub fn Toast(props: ToastProps) -> Element {
                 align_items: "start",
                 justify_content: "center",
                 text {
-                    percent_width: 1.0,
+                    width: "100%",
                     content: props.message,
                     font_size: typography::SM,
                     font_weight: title_weight,
                     font_color: palette.foreground,
                     line_height: 20.0,
                     max_lines: 2_i32,
-                    text_overflow: 2_i32,
+                    text_overflow: "ellipsis",
                 }
                 if show_description {
                     if let Some(description) = props.description.clone() {
                         row { height: spacing::XXS }
                         text {
-                            percent_width: 1.0,
+                            width: "100%",
                             content: description,
                             font_size: typography::XS,
                             font_weight: 400_i32,
                             font_color: palette.description,
                             line_height: 18.0,
                             max_lines: 3_i32,
-                            text_overflow: 2_i32,
+                            text_overflow: "ellipsis",
                         }
                     }
                 }
@@ -597,7 +597,7 @@ pub fn Toast(props: ToastProps) -> Element {
                 if let Some(action_label) = props.action_label.clone() {
                     row { width: spacing::SM }
                     button {
-                        button_type: ARKUI_BUTTON_TYPE_NORMAL,
+                        button_type: "normal",
                         height: TOAST_ACTION_HEIGHT,
                         padding_top: 0.0,
                         padding_right: spacing::MD,
@@ -610,7 +610,7 @@ pub fn Toast(props: ToastProps) -> Element {
                         border_radius: theme.radii.md,
                         focusable: false,
                         focus_on_touch: false,
-                        alignment: 4_i32,
+                        alignment: "center",
                         onclick: move |event| {
                             event.stop_propagation();
                             if let Some(handler) = on_action {
@@ -629,17 +629,17 @@ pub fn Toast(props: ToastProps) -> Element {
             }
             if show_close {
                 button {
-                    button_type: ARKUI_BUTTON_TYPE_NORMAL,
+                    button_type: "normal",
                     width: TOAST_CLOSE_SIZE,
                     height: TOAST_CLOSE_SIZE,
                     padding: 0.0,
-                    background_color: 0x00000000,
+                    background_color: "#00000000",
                     border_width: 0.0,
                     border_style: ARKUI_BORDER_STYLE_SOLID,
                     border_radius: theme.radii.md,
                     focusable: false,
                     focus_on_touch: false,
-                    alignment: 4_i32,
+                    alignment: "center",
                     onclick: move |event| {
                         event.stop_propagation();
                         if let Some(handler) = on_dismiss {
@@ -837,18 +837,18 @@ fn SonnerLayer(
 
     rsx! {
         column {
-            percent_width: 1.0,
-            percent_height: 1.0,
+            width: "100%",
+            height: "100%",
             padding_top: safe_area.top + style.offset,
             padding_right: safe_area.right + style.inset,
             padding_bottom: safe_area.bottom + style.offset,
             padding_left: safe_area.left + style.inset,
-            hit_test_behavior: HIT_TEST_NONE,
+            hit_test_behavior: "none",
             if !is_top {
                 row {
-                    percent_width: 1.0,
+                    width: "100%",
                     layout_weight: 1.0,
-                    hit_test_behavior: HIT_TEST_NONE,
+                    hit_test_behavior: "none",
                 }
             }
             // Minimal chips sit above notifications when bottom-anchored so the
@@ -856,22 +856,22 @@ fn SonnerLayer(
             if is_top {
                 {render_minimal_row(minimals.clone(), horizontal, rich_colors, style.toast, theme, on_dismiss, swipe_direction)}
                 if has_minimals && has_notifications {
-                    row { height: spacing::SM, hit_test_behavior: HIT_TEST_NONE }
+                    row { height: spacing::SM, hit_test_behavior: "none" }
                 }
             }
             row {
-                percent_width: 1.0,
+                width: "100%",
                 align_items: if is_top { "start" } else { "end" },
-                hit_test_behavior: HIT_TEST_NONE,
+                hit_test_behavior: "none",
                 if horizontal != HorizontalPosition::Left {
-                    row { layout_weight: 1.0, hit_test_behavior: HIT_TEST_NONE }
+                    row { layout_weight: 1.0, hit_test_behavior: "none" }
                 }
                 if has_notifications {
                     stack {
                         width: notification_width,
                         height: stack_height,
                         alignment: stack_alignment,
-                        hit_test_behavior: HIT_TEST_NONE,
+                        hit_test_behavior: "none",
                         for (index, toast) in painted {
                             {
                                 let entry_key = format!("{}:{}", toast.id, toast.revision);
@@ -921,20 +921,20 @@ fn SonnerLayer(
                     }
                 }
                 if horizontal != HorizontalPosition::Right {
-                    row { layout_weight: 1.0, hit_test_behavior: HIT_TEST_NONE }
+                    row { layout_weight: 1.0, hit_test_behavior: "none" }
                 }
             }
             if !is_top {
                 if has_minimals && has_notifications {
-                    row { height: spacing::SM, hit_test_behavior: HIT_TEST_NONE }
+                    row { height: spacing::SM, hit_test_behavior: "none" }
                 }
                 {render_minimal_row(minimals, horizontal, rich_colors, style.toast, theme, on_dismiss, swipe_direction)}
             }
             if is_top {
                 row {
-                    percent_width: 1.0,
+                    width: "100%",
                     layout_weight: 1.0,
-                    hit_test_behavior: HIT_TEST_NONE,
+                    hit_test_behavior: "none",
                 }
             }
         }
@@ -1063,22 +1063,22 @@ fn render_minimal_row(
     }
     rsx! {
         row {
-            percent_width: 1.0,
+            width: "100%",
             align_items: "center",
-            hit_test_behavior: HIT_TEST_NONE,
+            hit_test_behavior: "none",
             if horizontal != HorizontalPosition::Left {
-                row { layout_weight: 1.0, hit_test_behavior: HIT_TEST_NONE }
+                row { layout_weight: 1.0, hit_test_behavior: "none" }
             }
             column {
                 align_items: "center",
-                hit_test_behavior: HIT_TEST_NONE,
+                hit_test_behavior: "none",
                 for toast in minimals {
                     {
                         let entry_key = format!("{}:{}", toast.id, toast.revision);
                         rsx! {
                             column {
                                 key: "{entry_key}",
-                                hit_test_behavior: HIT_TEST_DEFAULT,
+                                hit_test_behavior: "default",
                                 SonnerToastEntry {
                                     toast,
                                     rich_colors,
@@ -1099,7 +1099,7 @@ fn render_minimal_row(
                 }
             }
             if horizontal != HorizontalPosition::Right {
-                row { layout_weight: 1.0, hit_test_behavior: HIT_TEST_NONE }
+                row { layout_weight: 1.0, hit_test_behavior: "none" }
             }
         }
     }

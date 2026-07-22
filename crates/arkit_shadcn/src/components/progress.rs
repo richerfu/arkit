@@ -89,19 +89,19 @@ pub fn Progress(props: ProgressProps) -> Element {
 
     rsx! {
         row {
-            percent_width: 1.0,
+            width: "100%",
             height,
             align_items: "start",
             justify_content: "start",
             background_color: track_color,
             border_radius: radius,
             clip: true,
-            hit_test_behavior: 2_i32,
+            hit_test_behavior: "transparent",
             row {
-                percent_width: current,
-                percent_height: 1.0,
+                width: crate::styles::css_percent(current),
+                height: "100%",
                 background_color: indicator_color,
-                hit_test_behavior: 2_i32,
+                hit_test_behavior: "transparent",
             }
         }
     }

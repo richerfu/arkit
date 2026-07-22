@@ -17,7 +17,7 @@ pub struct AspectRatioProps {
 pub fn AspectRatio(props: AspectRatioProps) -> Element {
     rsx! {
         stack {
-            percent_width: 1.0,
+            width: "100%",
             aspect_ratio: props.ratio,
             {props.children}
         }

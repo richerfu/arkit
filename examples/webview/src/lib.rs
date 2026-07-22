@@ -48,13 +48,13 @@ fn app() -> Element {
 
     rsx! {
         column {
-            percent_width: 1.0,
-            percent_height: 1.0,
-            background_color: 0xFFF6F7FBu32,
+            width: "100%",
+            height: "100%",
+            background_color: "#FFF6F7FB",
 
             column {
                 padding: 16.0,
-                background_color: 0xFFFFFFFFu32,
+                background_color: "#FFFFFFFF",
 
                 text {
                     font_size: 24.0,
@@ -66,21 +66,21 @@ fn app() -> Element {
                     margin_top: 8.0,
                     font_size: 14.0,
                     line_height: 18.0,
-                    font_color: 0xFF334155u32,
+                    font_color: "#FF334155",
                     "title: {title_display}"
                 }
                 text {
                     margin_top: 4.0,
                     font_size: 13.0,
                     line_height: 18.0,
-                    font_color: 0xFF64748Bu32,
+                    font_color: "#FF64748B",
                     "url: {url_display}"
                 }
                 text {
                     margin_top: 4.0,
                     font_size: 13.0,
                     line_height: 18.0,
-                    font_color: 0xFF0F766Eu32,
+                    font_color: "#FF0F766E",
                     "status: {status_display}  (zoom {zoom_display:.2})"
                 }
 
@@ -88,7 +88,7 @@ fn app() -> Element {
                     margin_top: 12.0,
                     padding: 10.0,
                     font_size: 14.0,
-                    background_color: 0xFFF1F5F9u32,
+                    background_color: "#FFF1F5F9",
                     border_radius: 8.0,
                     value: url_display.clone(),
                     placeholder: "enter url",
@@ -262,9 +262,9 @@ fn WebviewArea(
 
     rsx! {
         stack {
-            percent_width: 1.0,
+            width: "100%",
             height: 400.0,
-            background_color: 0xFFFFFFFFu32,
+            background_color: "#FFFFFFFF",
         }
     }
 }

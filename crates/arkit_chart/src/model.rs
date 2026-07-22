@@ -560,8 +560,8 @@ impl Default for Tooltip {
             show: true,
             trigger: String::from("item"),
             formatter: None,
-            background_color: 0xE6333333,
-            border_color: 0x00000000,
+            background_color: 0xE633_3333,
+            border_color: 0x0000_0000,
             text_color: 0xFFFFFFFF,
             padding: 8.0,
             axis_pointer: AxisPointer::default(),
@@ -714,8 +714,8 @@ impl Default for VisualStyle {
     fn default() -> Self {
         Self {
             palette: DEFAULT_COLORS.to_vec(),
-            background_color: 0xFFFFFFFF,
-            text_color: 0xFF1F2937,
+            background_color: 0xFFFF_FFFF,
+            text_color: 0xFF1F_2937,
             axis_color: 0xFF94A3B8,
             split_line_color: 0xFFE5E7EB,
         }

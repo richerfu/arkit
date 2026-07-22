@@ -36,7 +36,7 @@ pub fn Switch(props: SwitchProps) -> Element {
             toggle_unselected_color: theme.colors.input,
             toggle_switch_point_color: theme.colors.background,
             border_width: 1.0,
-            border_color: 0x00000000,
+            border_color: 0x0000_0000,
             border_radius: theme.radii.full,
             clip: true,
             width: SWITCH_WIDTH,

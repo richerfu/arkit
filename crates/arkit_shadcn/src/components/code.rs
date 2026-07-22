@@ -85,7 +85,7 @@ pub fn Code(props: CodeProps) -> Element {
 
     rsx! {
         column {
-            percent_width: 1.0,
+            width: "100%",
             align_items: "start",
             padding_top: style.padding,
             padding_right: style.padding,
@@ -136,7 +136,7 @@ pub(crate) fn render_code_body(
                                     font_family: "monospace",
                                     font_color: span.color,
                                     line_height: style.line_height,
-                                    text_align: 0_i32,
+                                    text_align: "start",
                                 }
                             }
                         })
@@ -144,7 +144,7 @@ pub(crate) fn render_code_body(
                     rsx! {
                         row {
                             key: "{line_index}",
-                            percent_width: 1.0,
+                            width: "100%",
                             align_items: "baseline",
                             justify_content: "start",
                             height: style.line_height,
@@ -155,7 +155,7 @@ pub(crate) fn render_code_body(
                 .collect::<Vec<_>>();
             return rsx! {
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     align_items: "start",
                     {rows.into_iter()}
                 }
@@ -166,12 +166,12 @@ pub(crate) fn render_code_body(
     rsx! {
         text {
             content: content.to_string(),
-            percent_width: 1.0,
+            width: "100%",
             font_size: style.font_size,
             font_family: "monospace",
             font_color: style.foreground,
             line_height: style.line_height,
-            text_align: 0_i32,
+            text_align: "start",
         }
     }
 }

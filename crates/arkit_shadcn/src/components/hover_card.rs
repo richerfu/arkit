@@ -8,9 +8,7 @@
 //! `spacing::LG` padding, `md` radius, 1px border, `popover`/`border` tokens,
 //! small outer shadow, start-aligned content. Anchored below the trigger.
 
-use super::floating_layer::{
-    FloatingAlign, FloatingPanelPlacement, FloatingSide, HIT_TEST_DEFAULT, HIT_TEST_NONE, SHADOW_SM,
-};
+use super::floating_layer::{FloatingAlign, FloatingPanelPlacement, FloatingSide};
 use crate::theme::*;
 use arkit_prelude::*;
 use dioxus_core_macro::component;
@@ -127,20 +125,20 @@ fn hover_card_overlay_content(
     let left = placement.x.max(0.0);
     rsx! {
         stack {
-            percent_width: 1.0,
-            percent_height: 1.0,
-            hit_test_behavior: HIT_TEST_NONE,
+            width: "100%",
+            height: "100%",
+            hit_test_behavior: "none",
             column {
                 position: format!("{left},{top}"),
                 width: panel_width,
                 align_items: "start",
-                hit_test_behavior: HIT_TEST_DEFAULT,
+                hit_test_behavior: "default",
                 padding: spacing::LG,
                 border_radius: theme.radii.md,
                 border_width: 1.0,
                 border_color: theme.colors.border,
                 background_color: theme.colors.popover,
-                shadow: SHADOW_SM,
+                shadow: "sm",
                 {children}
             }
         }

@@ -5,7 +5,7 @@ description: "typed builder、JSON、dataset 与数据形状。"
 
 # Option 与数据
 
-`ChartOption` 是图表的受控输入。优先使用 typed builder；兼容已有配置时从 ECharts JSON 解析，二者最终进入同一 model。
+`ChartOption` 是图表的受控输入。可用 typed builder 构造，也可用 ECharts JSON 解析；两条路径进入同一 model。
 
 ## Typed Builder
 

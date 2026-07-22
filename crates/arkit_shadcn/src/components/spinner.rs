@@ -65,7 +65,7 @@ pub fn Spinner(props: SpinnerProps) -> Element {
             height: size,
             loading_progress_color: color,
             loading_progress_enable_loading: props.spinning,
-            hit_test_behavior: 2_i32,
+            hit_test_behavior: "transparent",
         }
     }
 }
@@ -100,7 +100,7 @@ fn CustomSpinnerIcon(
             height: size,
             align_items: "center",
             justify_content: "center",
-            hit_test_behavior: 2_i32,
+            hit_test_behavior: "transparent",
             {arkit_icon::icon_with_stroke(icon, size, color, stroke_width)}
         }
     }

@@ -80,7 +80,7 @@ pub fn Menubar(
             border_width: 1.0,
             border_color: border,
             background_color: background,
-            shadow: 1i32,
+            shadow: "sm",
             onarea: move |evt: dioxus_core::Event<dioxus_elements::event::AreaData>| {
                 let frame = evt.data().frame;
                 if frame.is_measured() {

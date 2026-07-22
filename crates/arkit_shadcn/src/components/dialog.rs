@@ -8,8 +8,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use super::floating_layer::SHADOW_SM;
-use super::{ARKUI_BORDER_STYLE_SOLID, ARKUI_BUTTON_TYPE_NORMAL};
+use super::ARKUI_BORDER_STYLE_SOLID;
 use crate::icon::icon_placeholder;
 use crate::theme::*;
 use arkit_prelude::*;
@@ -17,6 +16,32 @@ use arkit_prelude::*;
 pub(crate) const DIALOG_MAX_WIDTH: f32 = 512.0;
 const DIALOG_VIEWPORT_INSET: f32 = spacing::SM;
 const OVERLAY_BACKDROP_COLOR: u32 = 0x80000000;
+
+/// Close handle for dialog / alert-dialog content rendered inside the overlay
+/// portal. Buttons in `cancel` / `action` slots (or custom footer content)
+/// should call this so uncontrolled dialogs can dismiss without a parent
+/// `open` signal.
+#[derive(Clone)]
+pub struct DialogClose(pub EventHandler<()>);
+
+impl DialogClose {
+    pub fn call(&self) {
+        self.0.call(());
+    }
+}
+
+/// Resolve the active dialog close handle, if the caller is inside a dialog
+/// panel (including overlay-mounted content).
+pub fn use_dialog_close() -> Option<DialogClose> {
+    try_use_context::<DialogClose>()
+}
+
+/// Provide [`DialogClose`] to overlay-mounted panel content.
+#[component]
+pub(crate) fn DialogCloseProvider(close: EventHandler<()>, children: Element) -> Element {
+    use_context_provider(|| DialogClose(close));
+    rsx! { {children} }
+}
 
 pub(crate) fn use_dialog_overlay(open: bool, panel: Element, on_dismiss: EventHandler<()>) {
     let overlay = arkit_hooks::use_overlay();
@@ -93,46 +118,49 @@ pub fn Dialog(
     });
 
     let panel = rsx! {
-        stack {
-            percent_width: 1.0,
-            max_width_constraint: DIALOG_MAX_WIDTH,
-            alignment: 0_i32,
-            border_radius: theme.radii.lg,
-            border_width: 1.0,
-            border_color: theme.colors.border,
-            background_color: theme.colors.background,
-            shadow: SHADOW_SM,
-            column {
-                percent_width: 1.0,
-                align_items: "start",
-                padding_top: spacing::XXL,
-                padding_right: spacing::XXL,
-                padding_bottom: spacing::XXL,
-                padding_left: spacing::XXL,
-                {children}
-            }
-            row {
-                percent_width: 1.0,
-                justify_content: "end",
-                padding_top: 14.0,
-                padding_right: 14.0,
-                hit_test_behavior: 2_i32,
-                button {
-                    button_type: ARKUI_BUTTON_TYPE_NORMAL,
-                    width: 28.0,
-                    height: 28.0,
-                    padding: 0.0,
-                    background_color: 0x00000000,
-                    border_width: 0.0,
-                    border_style: ARKUI_BORDER_STYLE_SOLID,
-                    border_radius: theme.radii.sm,
-                    clip: true,
-                    focusable: false,
-                    focus_on_touch: false,
-                    alignment: 4,
-                    opacity: 0.7_f32,
-                    onclick: move |_| close.call(()),
-                    {icon_placeholder("x", 18.0, theme.colors.muted_foreground)}
+        DialogCloseProvider {
+            close,
+            stack {
+                width: "100%",
+                max_width: DIALOG_MAX_WIDTH,
+                alignment: "top-start",
+                border_radius: theme.radii.lg,
+                border_width: 1.0,
+                border_color: theme.colors.border,
+                background_color: theme.colors.background,
+                shadow: "sm",
+                column {
+                    width: "100%",
+                    align_items: "start",
+                    padding_top: spacing::XXL,
+                    padding_right: spacing::XXL,
+                    padding_bottom: spacing::XXL,
+                    padding_left: spacing::XXL,
+                    {children}
+                }
+                row {
+                    width: "100%",
+                    justify_content: "end",
+                    padding_top: 14.0,
+                    padding_right: 14.0,
+                    hit_test_behavior: "transparent",
+                    button {
+                        button_type: "normal",
+                        width: 28.0,
+                        height: 28.0,
+                        padding: 0.0,
+                        background_color: "#00000000",
+                        border_width: 0.0,
+                        border_style: ARKUI_BORDER_STYLE_SOLID,
+                        border_radius: theme.radii.sm,
+                        clip: true,
+                        focusable: false,
+                        focus_on_touch: false,
+                        alignment: "center",
+                        opacity: 0.7_f32,
+                        onclick: move |_| close.call(()),
+                        {icon_placeholder("x", 18.0, theme.colors.muted_foreground)}
+                    }
                 }
             }
         }
@@ -150,26 +178,26 @@ pub fn DialogHeader(title: String, description: Option<String>) -> Element {
 
     rsx! {
         column {
-            percent_width: 1.0,
+            width: "100%",
             align_items: "start",
             text {
-                percent_width: 1.0,
+                width: "100%",
                 font_size: typography::XL,
                 font_weight: 600_i32,
                 font_color: theme.colors.foreground,
                 line_height: 20.0,
-                text_align: 0,
+                text_align: "start",
                 "{title}"
             }
             if let Some(description) = description.as_ref() {
                 if !description.is_empty() {
                     text {
-                        percent_width: 1.0,
+                        width: "100%",
                         margin_top: spacing::XS,
                         font_size: typography::MD,
                         font_color: theme.colors.muted_foreground,
                         line_height: 20.0,
-                        text_align: 0,
+                        text_align: "start",
                         "{description}"
                     }
                 }
@@ -185,7 +213,7 @@ pub fn DialogHeader(title: String, description: Option<String>) -> Element {
 pub fn DialogFooter(children: Element) -> Element {
     rsx! {
         row {
-            percent_width: 1.0,
+            width: "100%",
             margin_top: spacing::LG,
             align_items: "center",
             justify_content: "end",

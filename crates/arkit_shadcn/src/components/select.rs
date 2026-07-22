@@ -8,7 +8,6 @@
 
 use super::floating_layer::{
     trigger_width_vp, FloatingAlign, FloatingPanelPlacement, FloatingSide, FLOATING_CAPTURE_COLOR,
-    HIT_TEST_DEFAULT, SHADOW_SM,
 };
 use crate::theme::*;
 use arkit_prelude::*;
@@ -19,7 +18,7 @@ const SELECT_PANEL_HEADER_HEIGHT: f32 = 32.0;
 const SELECT_PANEL_SCROLL_HEIGHT: f32 = 208.0;
 const SELECT_OPTION_HEIGHT: f32 = 36.0;
 const SELECT_TEXT_MAX_LINES: i32 = 1;
-const SELECT_TEXT_OVERFLOW_ELLIPSIS: i32 = 2;
+const SELECT_TEXT_OVERFLOW_ELLIPSIS: &str = "ellipsis";
 
 #[component]
 pub fn Select(
@@ -123,7 +122,7 @@ pub fn Select(
 
     rsx! {
         row {
-            percent_width: 1.0,
+            width: "100%",
             // Measure the full control (same width as the painted chrome).
             onarea: move |evt: dioxus_core::Event<dioxus_elements::event::AreaData>| {
                 let frame = evt.data().frame;
@@ -140,7 +139,7 @@ pub fn Select(
                 toggle(());
             },
             row {
-                percent_width: 1.0,
+                width: "100%",
                 height: 40.0,
                 background_color: colors.background,
                 padding_top: 8.0,
@@ -152,12 +151,12 @@ pub fn Select(
                 border_radius: md,
                 border_width: 1.0,
                 border_color: colors.border,
-                shadow: 1i32,
+                shadow: "sm",
                 row {
                     layout_weight: 1.0,
                     clip: true,
                     text {
-                        percent_width: 1.0,
+                        width: "100%",
                         font_size: typography::SM,
                         font_color: label_color,
                         line_height: 20.0,
@@ -190,10 +189,10 @@ fn select_overlay_content(
         // Full-screen hit plane; panel uses absolute position so left/top match
         // trigger coordinates in overlay-local vp space (no padding/margin skew).
         stack {
-            percent_width: 1.0,
-            percent_height: 1.0,
+            width: "100%",
+            height: "100%",
             background_color: FLOATING_CAPTURE_COLOR,
-            hit_test_behavior: HIT_TEST_DEFAULT,
+            hit_test_behavior: "default",
             onclick: move |_| on_dismiss.call(()),
             column {
                 position: format!("{left},{top}"),
@@ -204,13 +203,13 @@ fn select_overlay_content(
                 border_radius: theme.radii.md,
                 border_width: 1.0,
                 border_color: colors.border,
-                shadow: SHADOW_SM,
+                shadow: "sm",
                 padding_top: spacing::XXS,
                 padding_right: spacing::XXS,
                 padding_bottom: spacing::XXS,
                 padding_left: spacing::XXS,
                 row {
-                    percent_width: 1.0,
+                    width: "100%",
                     padding_top: 8.0,
                     padding_right: spacing::SM,
                     padding_bottom: 8.0,
@@ -226,11 +225,11 @@ fn select_overlay_content(
                 }
                 if scroll_list {
                     scroll {
-                        percent_width: 1.0,
+                        width: "100%",
                         height: SELECT_PANEL_SCROLL_HEIGHT,
                         scroll_enabled: true,
                         column {
-                            percent_width: 1.0,
+                            width: "100%",
                             for option in options.iter() {
                                 {select_option_row(option, selected.as_str(), &theme, set_selected, on_dismiss)}
                             }
@@ -238,7 +237,7 @@ fn select_overlay_content(
                     }
                 } else {
                     column {
-                        percent_width: 1.0,
+                        width: "100%",
                         for option in options.iter() {
                             {select_option_row(option, selected.as_str(), &theme, set_selected, on_dismiss)}
                         }
@@ -267,7 +266,7 @@ fn select_option_row(
 
     rsx! {
         row {
-            percent_width: 1.0,
+            width: "100%",
             height: SELECT_OPTION_HEIGHT,
             align_items: "center",
             justify_content: "space_between",
@@ -285,7 +284,7 @@ fn select_option_row(
                 layout_weight: 1.0,
                 clip: true,
                 text {
-                    percent_width: 1.0,
+                    width: "100%",
                     font_size: typography::SM,
                     font_color: fg,
                     line_height: 20.0,

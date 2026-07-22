@@ -15,7 +15,7 @@ description: "List、Grid、WaterFlow 的 NodeAdapter。"
 | `Grid`        | `grid`      | GridItem     |
 | `WaterFlow`   | `waterflow` | FlowItem     |
 
-List、Grid 和 WaterFlow 统一使用 `use_virtual_node_adapter`。容器差异只由 `VirtualKind` 表达，不再为每种容器或更新策略增加重复 hook。
+List、Grid 和 WaterFlow 统一使用 `use_virtual_node_adapter`。容器差异只由 `VirtualKind` 表达，一套 hook 覆盖三种容器与更新策略。
 
 ## 基本用法
 
@@ -47,8 +47,8 @@ fn VirtualList() -> Element {
 
     rsx! {
         list {
-            percent_width: 1.0,
-            percent_height: 1.0,
+            width: "100%",
+            height: "100%",
         }
     }
 }
@@ -62,8 +62,8 @@ adapter 只负责 item 生命周期；列模板和间距仍在声明式 host 上
 
 ```rust
 grid {
-    percent_width: 1.0,
-    percent_height: 1.0,
+    width: "100%",
+    height: "100%",
     grid_column_template: "1fr 1fr",
 }
 ```
@@ -81,8 +81,8 @@ let adapter = use_virtual_node_adapter(
 
 rsx! {
     waterflow {
-        percent_width: 1.0,
-        percent_height: 1.0,
+        width: "100%",
+        height: "100%",
         padding: 12.0,
         water_flow_column_template: "repeat(auto-fill, 104vp)",
         water_flow_column_gap: 12.0,

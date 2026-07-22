@@ -29,12 +29,12 @@ fn app() -> Element {
 
     rsx! {
         column {
-            percent_width: 1.0,
-            percent_height: 1.0,
+            width: "100%",
+            height: "100%",
             background_color: "#fff8fafc",
 
             row {
-                percent_width: 1.0,
+                width: "100%",
                 padding: 16.0,
                 button {
                     font_size: 14.0,
@@ -87,8 +87,8 @@ fn VirtualCaseView(kind: VirtualKind, active: bool) -> Element {
     let mut status = use_signal(|| "点击更新只会重建目标 item".to_string());
     let target_index = target();
     let target_revision = revisions.borrow()[target_index as usize];
-    let height = if active { 1.0 } else { 0.0 };
-    let visibility = if active { 0 } else { 1 };
+    let height = if active { "100%" } else { "0%" };
+    let visibility = if active { "visible" } else { "hidden" };
     let opacity = if active { 1.0 } else { 0.0 };
     let kind_label = virtual_kind_label(kind);
 
@@ -120,26 +120,26 @@ fn VirtualCaseView(kind: VirtualKind, active: bool) -> Element {
 
     rsx! {
         column {
-            percent_width: 1.0,
-            percent_height: height,
-            visibility,
+            width: "100%",
+            height: height,
+            visibility: visibility,
             opacity,
             column {
-                percent_width: 1.0,
+                width: "100%",
                 height: 88.0,
                 padding: 8.0,
                 background_color: "#fff1f5f9",
                 text {
-                    percent_width: 1.0,
+                    width: "100%",
                     height: 34.0,
                     font_size: 12.0,
                     font_color: "#ff475569",
                     "{kind_label} #{target_index:05} · rev {target_revision}\n{status}"
                 }
                 row {
-                    percent_width: 1.0,
+                    width: "100%",
                     height: 38.0,
-                    alignment: 1,
+                    alignment: "top",
                     button {
                         font_size: 12.0,
                         padding: 8.0,
@@ -179,21 +179,25 @@ fn VirtualHost(kind: VirtualKind, adapter: VirtualNodeAdapter) -> Element {
     match kind {
         VirtualKind::List => rsx! {
             list {
-                percent_width: 1.0,
+                width: "100%",
                 layout_weight: 1.0,
+                // Virtual lists: hide scrollbar so it does not steal hit area.
+                scroll_bar: "off",
             }
         },
         VirtualKind::Grid => rsx! {
             grid {
-                percent_width: 1.0,
+                width: "100%",
                 layout_weight: 1.0,
                 grid_column_template: "1fr 1fr",
+                scroll_bar: "off",
             }
         },
         VirtualKind::WaterFlow => rsx! {
             waterflow {
-                percent_width: 1.0,
+                width: "100%",
                 layout_weight: 1.0,
+                scroll_bar: "off",
                 padding: 12.0,
                 water_flow_column_template: "repeat(auto-fill, 104vp)",
                 water_flow_column_gap: 12.0,

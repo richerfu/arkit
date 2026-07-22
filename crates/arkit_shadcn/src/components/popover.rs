@@ -9,8 +9,7 @@
 //! content.
 
 use super::floating_layer::{
-    FloatingAlign, FloatingPanelPlacement, FloatingSide, FLOATING_CAPTURE_COLOR, HIT_TEST_DEFAULT,
-    SHADOW_SM,
+    FloatingAlign, FloatingPanelPlacement, FloatingSide, FLOATING_CAPTURE_COLOR,
 };
 use crate::theme::*;
 use arkit_prelude::*;
@@ -109,10 +108,10 @@ fn popover_overlay_content(
     let left = placement.x.max(0.0);
     rsx! {
         stack {
-            percent_width: 1.0,
-            percent_height: 1.0,
+            width: "100%",
+            height: "100%",
             background_color: FLOATING_CAPTURE_COLOR,
-            hit_test_behavior: HIT_TEST_DEFAULT,
+            hit_test_behavior: "default",
             onclick: move |_| on_dismiss.call(()),
             column {
                 position: format!("{left},{top}"),
@@ -124,7 +123,7 @@ fn popover_overlay_content(
                 border_width: 1.0,
                 border_color: theme.colors.border,
                 background_color: theme.colors.popover,
-                shadow: SHADOW_SM,
+                shadow: "sm",
                 {children}
             }
         }

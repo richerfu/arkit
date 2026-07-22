@@ -58,8 +58,8 @@ let mode = CameraMode::Photo(CameraPhotoModeConfiguration {
 rsx! {
     CameraView {
         mode,
-        percent_width: 1.0,
-        percent_height: Some(1.0),
+        width: "100%",
+        height: "100%",
     }
 }
 ```
@@ -79,14 +79,14 @@ fn app() -> Element {
 
     rsx! {
         stack {
-            percent_width: 1.0,
-            percent_height: 1.0,
+            width: "100%",
+            height: "100%",
 
             CameraPreview {
                 controller: Some(controller.clone()),
                 position: position(),
-                percent_width: 1.0,
-                percent_height: Some(1.0),
+                width: "100%",
+                height: "100%",
                 on_status_change: move |next| status.set(next),
                 on_photo: move |photo: CapturedPhoto| {
                     println!("{} bytes, {}×{}", photo.bytes().len(), photo.size.width, photo.size.height);

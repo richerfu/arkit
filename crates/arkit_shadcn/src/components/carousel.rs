@@ -9,7 +9,7 @@ use crate::icon::icon_placeholder;
 use crate::theme::*;
 use arkit_prelude::*;
 
-use super::{ARKUI_BORDER_STYLE_SOLID, ARKUI_BUTTON_TYPE_NORMAL};
+use super::ARKUI_BORDER_STYLE_SOLID;
 
 const TRANSPARENT: u32 = 0x00000000;
 const MIN_TOUCH_TARGET: f32 = 40.0;
@@ -69,7 +69,8 @@ pub struct CarouselStyle {
     pub viewport_border_color: Option<u32>,
     pub viewport_border_width: f32,
     pub viewport_radius: Option<f32>,
-    pub viewport_shadow: i32,
+    /// Whether the viewport draws the small elevation shadow.
+    pub viewport_shadow: bool,
     pub controls_background: Option<u32>,
     pub controls_height: f32,
     pub controls_gap: f32,
@@ -91,7 +92,7 @@ impl Default for CarouselStyle {
             viewport_border_color: None,
             viewport_border_width: 0.0,
             viewport_radius: None,
-            viewport_shadow: 1,
+            viewport_shadow: true,
             controls_background: None,
             controls_height: 48.0,
             controls_gap: spacing::SM,
@@ -114,7 +115,7 @@ struct ResolvedCarouselStyle {
     viewport_border_color: u32,
     viewport_border_width: f32,
     viewport_radius: f32,
-    viewport_shadow: i32,
+    viewport_shadow: bool,
     controls_background: u32,
     controls_height: f32,
     controls_gap: f32,
@@ -136,7 +137,7 @@ impl CarouselStyle {
             viewport_border_color: self.viewport_border_color.unwrap_or(theme.colors.border),
             viewport_border_width: self.viewport_border_width.max(0.0),
             viewport_radius: self.viewport_radius.unwrap_or(theme.radii.xl),
-            viewport_shadow: self.viewport_shadow.max(0),
+            viewport_shadow: self.viewport_shadow,
             controls_background: self.controls_background.unwrap_or_else(|| match placement {
                 CarouselControlsPlacement::Below => TRANSPARENT,
                 CarouselControlsPlacement::Overlay => with_alpha(theme.colors.surface, 0xE8),
@@ -272,8 +273,8 @@ pub fn Carousel(props: CarouselProps) -> Element {
         rsx! {
             column {
                 key: "{index}",
-                percent_width: 1.0,
-                percent_height: 1.0,
+                width: "100%",
+                height: "100%",
                 align_items: "center",
                 justify_content: "center",
                 {slide}
@@ -327,7 +328,7 @@ pub fn Carousel(props: CarouselProps) -> Element {
 
     let viewport = rsx! {
         swiper {
-            percent_width: 1.0,
+            width: "100%",
             height: props.height.max(1.0),
             swiper_index: active_index_i32,
             swiper_swipe_to_index: active_index_i32,
@@ -347,7 +348,7 @@ pub fn Carousel(props: CarouselProps) -> Element {
             border_width: style.viewport_border_width,
             border_color: style.viewport_border_color,
             border_radius: style.viewport_radius,
-            shadow: style.viewport_shadow,
+            shadow: if style.viewport_shadow { "sm" },
             clip: true,
             on_swiper_change: move |event| {
                 let index = usize::try_from(event.data().index).unwrap_or_default();
@@ -433,7 +434,7 @@ pub fn Carousel(props: CarouselProps) -> Element {
         (false, _) => viewport,
         (true, CarouselControlsPlacement::Below) => rsx! {
             column {
-                percent_width: 1.0,
+                width: "100%",
                 {viewport}
                 row { height: style.controls_gap }
                 {controls}
@@ -441,35 +442,35 @@ pub fn Carousel(props: CarouselProps) -> Element {
         },
         (true, CarouselControlsPlacement::Overlay) => rsx! {
             stack {
-                percent_width: 1.0,
+                width: "100%",
                 height: props.height.max(1.0),
                 {viewport}
                 column {
-                    percent_width: 1.0,
-                    percent_height: 1.0,
+                    width: "100%",
+                    height: "100%",
                     align_items: "center",
                     justify_content: "end",
                     padding_right: spacing::MD,
                     padding_bottom: spacing::MD,
                     padding_left: spacing::MD,
-                    hit_test_behavior: 2_i32,
+                    hit_test_behavior: "transparent",
                     {controls}
                 }
             }
         },
         (true, CarouselControlsPlacement::OverlayCenter) => rsx! {
             stack {
-                percent_width: 1.0,
+                width: "100%",
                 height: props.height.max(1.0),
                 {viewport}
                 column {
-                    percent_width: 1.0,
-                    percent_height: 1.0,
+                    width: "100%",
+                    height: "100%",
                     align_items: "center",
                     justify_content: "center",
                     padding_right: spacing::MD,
                     padding_left: spacing::MD,
-                    hit_test_behavior: 2_i32,
+                    hit_test_behavior: "transparent",
                     {controls}
                 }
             }
@@ -541,7 +542,7 @@ fn render_controls(
 
     rsx! {
         row {
-            percent_width: 1.0,
+            width: "100%",
             height: style.controls_height,
             align_items: "center",
             justify_content: "center",
@@ -583,7 +584,7 @@ fn CarouselNavigationButton(
     let theme = use_theme();
     rsx! {
         button {
-            button_type: ARKUI_BUTTON_TYPE_NORMAL,
+            button_type: "normal",
             focusable: false,
             focus_on_touch: false,
             enabled: !disabled,
@@ -593,7 +594,7 @@ fn CarouselNavigationButton(
             padding_right: 0.0,
             padding_bottom: 0.0,
             padding_left: 0.0,
-            alignment: 4_i32,
+            alignment: "center",
             background_color: style.navigation_background,
             border_style: ARKUI_BORDER_STYLE_SOLID,
             border_width: 0.0,

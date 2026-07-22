@@ -20,14 +20,27 @@ pub struct SurfaceStyle {
     pub border_color: u32,
     pub border_width: f32,
     pub radius: f32,
-    pub shadow: i32,
+    pub shadow: bool,
     pub padding: Padding4,
 }
 
-/// `shadow-sm` — the legacy `ShadowStyle::OuterDefaultSm`. In the rsx renderer
-/// `shadow: 1` maps to `OuterDefaultSm`; `shadow: 0` is none.
-pub fn shadow_sm() -> i32 {
-    1
+/// `shadow-sm` CSS keyword for the `shadow` attribute.
+pub fn shadow_sm() -> &'static str {
+    "sm"
+}
+
+/// Convert a 0..=1 fraction into a CSS percentage width string (`"100%"`, `"50%"`).
+pub fn css_percent(fraction: f32) -> String {
+    let pct = (fraction * 100.0).clamp(0.0, 100.0);
+    if (pct - 100.0).abs() < 0.05 {
+        "100%".to_string()
+    } else if (pct - pct.round()).abs() < 0.05 {
+        format!("{}%", pct.round() as i32)
+    } else {
+        // trim trailing zeros
+        let s = format!("{pct:.4}");
+        format!("{}%", s.trim_end_matches('0').trim_end_matches('.'))
+    }
 }
 
 /// `card_surface` — `shadow_sm` + `rounded(lg)` + 1px `border` + `bg=card` +
@@ -39,7 +52,7 @@ pub fn card_surface(theme: &Theme) -> SurfaceStyle {
         border_color: theme.colors.border,
         border_width: 1.0,
         radius: theme.radii.lg,
-        shadow: shadow_sm(),
+        shadow: true,
         padding: [0.0, 0.0, 0.0, 0.0],
     }
 }
@@ -54,7 +67,7 @@ pub fn input_surface(theme: &Theme) -> SurfaceStyle {
         border_color: theme.colors.border,
         border_width: 1.0,
         radius: theme.radii.md,
-        shadow: shadow_sm(),
+        shadow: true,
         padding: [spacing::XXS, spacing::MD, spacing::XXS, spacing::MD],
     }
 }
@@ -68,7 +81,7 @@ pub fn panel_surface(theme: &Theme) -> SurfaceStyle {
         border_color: theme.colors.border,
         border_width: 1.0,
         radius: theme.radii.md,
-        shadow: shadow_sm(),
+        shadow: true,
         padding: [0.0, 0.0, 0.0, 0.0],
     }
 }
@@ -83,7 +96,7 @@ pub fn title_text(content: impl Into<String>, theme: &Theme) -> Element {
             font_weight: 600,
             font_color: theme.colors.foreground,
             line_height: 20.0,
-            text_align: 0,
+            text_align: "start",
         }
     }
 }
@@ -98,7 +111,7 @@ pub fn body_text(content: impl Into<String>, theme: &Theme) -> Element {
             font_weight: 500,
             font_color: theme.colors.foreground,
             line_height: 20.0,
-            text_align: 0,
+            text_align: "start",
         }
     }
 }
@@ -113,7 +126,7 @@ pub fn body_text_regular(content: impl Into<String>, theme: &Theme) -> Element {
             font_size: typography::MD,
             font_color: theme.colors.foreground,
             line_height: 20.0,
-            text_align: 0,
+            text_align: "start",
         }
     }
 }
@@ -128,7 +141,7 @@ pub fn muted_text(content: impl Into<String>, theme: &Theme) -> Element {
             font_size: typography::SM,
             font_color: theme.colors.muted_foreground,
             line_height: 20.0,
-            text_align: 0,
+            text_align: "start",
         }
     }
 }

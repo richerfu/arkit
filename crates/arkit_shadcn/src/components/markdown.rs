@@ -19,15 +19,14 @@ use crate::theme::{spacing, typography, use_theme, Theme};
 use super::Code;
 use super::ARKUI_BORDER_STYLE_SOLID;
 
-const TEXT_DECORATION_NONE: i32 = 0;
-const TEXT_DECORATION_UNDERLINE: i32 = 1;
-const TEXT_DECORATION_LINE_THROUGH: i32 = 3;
+const TEXT_DECORATION_NONE: &str = "none";
+const TEXT_DECORATION_UNDERLINE: &str = "underline";
+const TEXT_DECORATION_LINE_THROUGH: &str = "line-through";
 const MAX_RENDER_DEPTH: usize = 32;
 const LIST_MARKER_WIDTH: f32 = 28.0;
 const TASK_MARKER_SIZE: f32 = 18.0;
 const TASK_MARKER_ICON_SIZE: f32 = 14.0;
 const TASK_MARKER_RADIUS: f32 = 4.0;
-const ALIGN_CENTER: i32 = 4;
 
 /// CommonMark extension switches used by [`Markdown`].
 ///
@@ -213,7 +212,7 @@ pub fn Markdown(props: MarkdownProps) -> Element {
 
     rsx! {
         column {
-            percent_width: 1.0,
+            width: "100%",
             align_items: "start",
             {blocks.into_iter()}
         }
@@ -891,7 +890,7 @@ fn render_code_block(
         let language_label = language.map(|value| value.to_string());
         rsx! {
             column {
-                percent_width: 1.0,
+                width: "100%",
                 align_items: "start",
                 padding_top: style.code_padding,
                 padding_right: style.code_padding,
@@ -912,12 +911,12 @@ fn render_code_block(
                 }
                 text {
                     content: content.to_string(),
-                    percent_width: 1.0,
+                    width: "100%",
                     font_size: style.code_font_size,
                     font_family: "monospace",
                     font_color: style.foreground,
                     line_height: style.code_line_height,
-                    text_align: 0_i32,
+                    text_align: "start",
                 }
             }
         }
@@ -977,7 +976,7 @@ fn render_blocks(
             rsx! {
                 column {
                     key: "{key}",
-                    percent_width: 1.0,
+                    width: "100%",
                     align_items: "start",
                     margin_top: if index == 0 { 0.0 } else { style.block_spacing },
                     {content}
@@ -1038,7 +1037,7 @@ fn render_block(
             let label = kind.and_then(admonition_label);
             rsx! {
                 row {
-                    percent_width: 1.0,
+                    width: "100%",
                     align_items: "start",
                     row {
                         width: 3.0,
@@ -1086,7 +1085,7 @@ fn render_block(
                     rsx! {
                         row {
                             key: "{nested_key}",
-                            percent_width: 1.0,
+                            width: "100%",
                             align_items: "start",
                             margin_top: if index == 0 { 0.0 } else { style.list_item_spacing },
                             {marker}
@@ -1101,7 +1100,7 @@ fn render_block(
                 .collect::<Vec<_>>();
             rsx! {
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     align_items: "start",
                     {rows.into_iter()}
                 }
@@ -1124,7 +1123,7 @@ fn render_block(
             );
             rsx! {
                 row {
-                    percent_width: 1.0,
+                    width: "100%",
                     align_items: "start",
                     text {
                         content: format!("[{}]", label.as_ref()),
@@ -1144,7 +1143,7 @@ fn render_block(
         }
         Block::Rule => rsx! {
             row {
-                percent_width: 1.0,
+                width: "100%",
                 height: 1.0,
                 background_color: style.table_border,
             }
@@ -1224,7 +1223,7 @@ fn render_table(
             rsx! {
                 row {
                     key: "{row_key}",
-                    percent_width: 1.0,
+                    width: "100%",
                     align_items: "start",
                     border_width: if row_index + 1 == rows.len() { "0,0,0,0" } else { "0,0,1,0" },
                     border_color: style.table_border,
@@ -1236,14 +1235,14 @@ fn render_table(
 
     rsx! {
         column {
-            percent_width: 1.0,
+            width: "100%",
             border_width: 1.0,
             border_color: style.table_border,
             border_radius: style.radius,
             clip: true,
             if !header_cells.is_empty() {
                 row {
-                    percent_width: 1.0,
+                    width: "100%",
                     align_items: "start",
                     border_width: if body_rows.is_empty() { "0,0,0,0" } else { "0,0,1,0" },
                     border_color: style.table_border,
@@ -1333,7 +1332,7 @@ fn render_inlines(
 
     rsx! {
         flex {
-            percent_width: 1.0,
+            width: "100%",
             flex_direction: "row",
             flex_wrap: "wrap",
             align_items: "baseline",
@@ -1471,16 +1470,16 @@ fn render_image_span(
         rsx! {
             column {
                 key: "{key}",
-                percent_width: 1.0,
+                width: "100%",
                 height: style.image_height,
                 border_radius: style.radius,
                 clip: true,
                 onclick: move |_| handler.call(destination.clone()),
                 image {
                     src: source,
-                    percent_width: 1.0,
-                    percent_height: 1.0,
-                    object_fit: 1_i32,
+                    width: "100%",
+                    height: "100%",
+                    object_fit: "cover",
                 }
             }
         }
@@ -1488,15 +1487,15 @@ fn render_image_span(
         rsx! {
             column {
                 key: "{key}",
-                percent_width: 1.0,
+                width: "100%",
                 height: style.image_height,
                 border_radius: style.radius,
                 clip: true,
                 image {
                     src: source,
-                    percent_width: 1.0,
-                    percent_height: 1.0,
-                    object_fit: 1_i32,
+                    width: "100%",
+                    height: "100%",
+                    object_fit: "cover",
                 }
             }
         }
@@ -1507,7 +1506,7 @@ fn render_depth_limit(block: &Block, style: &MarkdownStyle) -> Element {
     rsx! {
         text {
             content: block_plain_text(block),
-            percent_width: 1.0,
+            width: "100%",
             font_size: style.body_font_size,
             font_color: style.foreground,
             line_height: style.body_line_height,
@@ -1609,14 +1608,14 @@ fn render_list_marker(
                 stack {
                     width: TASK_MARKER_SIZE,
                     height: TASK_MARKER_SIZE,
-                    alignment: ALIGN_CENTER,
+                    alignment: "center",
                     border_width: 1.0,
                     border_style: ARKUI_BORDER_STYLE_SOLID,
                     border_color,
                     border_radius: TASK_MARKER_RADIUS,
                     background_color,
                     clip: true,
-                    hit_test_behavior: 2_i32,
+                    hit_test_behavior: "transparent",
                     if checked {
                         {arkit_icon::icon(
                             "check",
@@ -1639,7 +1638,7 @@ fn render_list_marker(
             font_size: style.body_font_size,
             font_color: style.muted_foreground,
             line_height: style.body_line_height,
-            text_align: 0_i32,
+            text_align: "start",
         }
     }
 }

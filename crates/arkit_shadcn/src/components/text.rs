@@ -58,7 +58,7 @@ pub fn Text(props: TextProps) -> Element {
                 font_size: typography::MD,
                 font_color: theme.colors.foreground,
                 line_height: 24.0,
-                text_align: 0,
+                text_align: "start",
             }
         },
         TextVariant::H1 => rsx! {
@@ -69,12 +69,12 @@ pub fn Text(props: TextProps) -> Element {
                 font_color: theme.colors.foreground,
                 line_height: 40.0,
                 text_letter_spacing: TRACKING_TIGHT,
-                text_align: 1,
+                text_align: "center",
             }
         },
         TextVariant::H2 => rsx! {
             column {
-                percent_width: 1.0,
+                width: "100%",
                 text {
                     content: content,
                     font_size: 30.0,
@@ -82,10 +82,10 @@ pub fn Text(props: TextProps) -> Element {
                     font_color: theme.colors.foreground,
                     line_height: 36.0,
                     text_letter_spacing: TRACKING_TIGHT,
-                    text_align: 0,
+                    text_align: "start",
                 }
                 row {
-                    percent_width: 1.0,
+                    width: "100%",
                     height: 1.0,
                     margin_top: 8.0,
                     background_color: theme.colors.border,
@@ -100,7 +100,7 @@ pub fn Text(props: TextProps) -> Element {
                 font_color: theme.colors.foreground,
                 line_height: 32.0,
                 text_letter_spacing: TRACKING_TIGHT,
-                text_align: 0,
+                text_align: "start",
             }
         },
         TextVariant::P => rsx! {
@@ -109,12 +109,12 @@ pub fn Text(props: TextProps) -> Element {
                 font_size: typography::MD,
                 font_color: theme.colors.foreground,
                 line_height: 28.0,
-                text_align: 0,
+                text_align: "start",
             }
         },
         TextVariant::Blockquote => rsx! {
             row {
-                percent_width: 1.0,
+                width: "100%",
                 align_items: "start",
                 column {
                     width: 2.0,
@@ -125,9 +125,9 @@ pub fn Text(props: TextProps) -> Element {
                     content: content,
                     font_size: typography::MD,
                     font_color: theme.colors.foreground,
-                    font_style: 1,
+                    font_style: "italic",
                     line_height: 24.0,
-                    text_align: 0,
+                    text_align: "start",
                 }
             }
         },
@@ -155,7 +155,7 @@ pub fn Text(props: TextProps) -> Element {
                 font_size: typography::XL,
                 font_color: theme.colors.muted_foreground,
                 line_height: 28.0,
-                text_align: 0,
+                text_align: "start",
             }
         },
         TextVariant::Large => rsx! {
@@ -166,7 +166,7 @@ pub fn Text(props: TextProps) -> Element {
                 font_color: theme.colors.foreground,
                 line_height: 28.0,
                 text_letter_spacing: TRACKING_TIGHT,
-                text_align: 0,
+                text_align: "start",
             }
         },
         TextVariant::Small => rsx! {
@@ -176,7 +176,7 @@ pub fn Text(props: TextProps) -> Element {
                 font_weight: 500,
                 font_color: theme.colors.foreground,
                 line_height: 14.0,
-                text_align: 0,
+                text_align: "start",
             }
         },
         TextVariant::Muted => rsx! {
@@ -185,7 +185,7 @@ pub fn Text(props: TextProps) -> Element {
                 font_size: typography::SM,
                 font_color: theme.colors.muted_foreground,
                 line_height: 20.0,
-                text_align: 0,
+                text_align: "start",
             }
         },
     }

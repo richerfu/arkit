@@ -8,9 +8,7 @@
 //! `popover_foreground` text at native text-base size. Anchored above the
 //! trigger.
 
-use super::floating_layer::{
-    FloatingAlign, FloatingPanelPlacement, FloatingSide, HIT_TEST_DEFAULT, HIT_TEST_NONE,
-};
+use super::floating_layer::{FloatingAlign, FloatingPanelPlacement, FloatingSide};
 use crate::theme::*;
 use arkit_prelude::*;
 use dioxus_core_macro::component;
@@ -124,15 +122,15 @@ fn tooltip_overlay_content(
     let left = placement.x.max(0.0);
     rsx! {
         stack {
-            percent_width: 1.0,
-            percent_height: 1.0,
-            hit_test_behavior: HIT_TEST_NONE,
+            width: "100%",
+            height: "100%",
+            hit_test_behavior: "none",
             row {
                 position: format!("{left},{top}"),
                 width: panel_width,
                 align_items: "center",
                 justify_content: "center",
-                hit_test_behavior: HIT_TEST_DEFAULT,
+                hit_test_behavior: "default",
                 padding_top: 6.0,
                 padding_right: 12.0,
                 padding_bottom: 6.0,

@@ -50,11 +50,11 @@ fn app() -> Element {
 
     rsx! {
         column {
-            percent_width: 1.0,
-            percent_height: 1.0,
+            width: "100%",
+            height: "100%",
             background_color: BACKGROUND,
             column {
-                percent_width: 1.0,
+                width: "100%",
                 padding_top: 16.0,
                 padding_right: 16.0,
                 padding_bottom: 12.0,
@@ -74,11 +74,11 @@ fn app() -> Element {
                 }
                 row {
                     margin_top: 12.0,
-                    percent_width: 1.0,
+                    width: "100%",
                     for (target, label) in ShowcasePage::ALL {
                         button {
                             margin_right: 6.0,
-                            percent_width: 0.19,
+                            width: "19%",
                             height: 38.0,
                             padding: 0.0,
                             font_size: 12.0,
@@ -92,15 +92,15 @@ fn app() -> Element {
             }
             column {
                 key: "{selected:?}",
-                percent_width: 1.0,
+                width: "100%",
                 layout_weight: 1.0,
                 scroll {
-                    percent_width: 1.0,
-                    percent_height: 1.0,
-                    scroll_bar: true,
+                    width: "100%",
+                    height: "100%",
+                    scroll_bar: "on",
                     scroll_offset: "{scroll_reset}",
                     column {
-                        percent_width: 1.0,
+                        width: "100%",
                         padding: 14.0,
                         if selected == ShowcasePage::Timeline {
                             TimelineLab {}
@@ -133,7 +133,7 @@ pub(crate) fn Section(
     rsx! {
         column {
             margin_bottom: 14.0,
-            percent_width: 1.0,
+            width: "100%",
             padding: 14.0,
             background_color: SURFACE,
             border_width: 1.0,
@@ -189,7 +189,7 @@ pub(crate) fn Metric(label: &'static str, value: String) -> Element {
             padding_right: 10.0,
             padding_bottom: 8.0,
             padding_left: 10.0,
-            background_color: 0xfff1f5f9u32,
+            background_color: "#FFF1F5F9",
             border_radius: 10.0,
             text { font_size: 10.0, font_color: MUTED, "{label}" }
             text { margin_top: 2.0, font_size: 12.0, font_weight: 700, font_color: TEXT, "{value}" }

@@ -20,12 +20,12 @@ pub fn Label(props: LabelProps) -> Element {
     rsx! {
         text {
             content: props.content.clone(),
-            percent_width: 1.0,
+            width: "100%",
             font_size: typography::SM,
             font_weight: 500,
             font_color: theme.colors.foreground,
             line_height: 14.0,
-            text_align: 0,
+            text_align: "start",
         }
     }
 }

@@ -9,7 +9,7 @@
 //! `muted_foreground` at 0.4 opacity) that dismisses on tap.
 
 use super::dialog::DialogHeader;
-use super::floating_layer::{side_alignment, side_from_name, OVERLAY_BACKDROP, SHADOW_SM};
+use super::floating_layer::{side_alignment, side_from_name, OVERLAY_BACKDROP};
 use crate::theme::*;
 use arkit_prelude::*;
 use dioxus_core_macro::component;
@@ -51,15 +51,15 @@ pub fn Drawer(
 
     rsx! {
         stack {
-            percent_width: 1.0,
-            percent_height: 1.0,
+            width: "100%",
+            height: "100%",
             background_color: OVERLAY_BACKDROP,
             alignment: alignment,
             onclick: move |_| close.call(()),
             stack {
                 onclick: move |evt| { evt.stop_propagation(); },
-                percent_width: 1.0,
-                width: DRAWER_MAX_WIDTH,
+                width: "100%",
+                max_width: DRAWER_MAX_WIDTH,
                 padding_top: spacing::LG,
                 padding_right: spacing::XXL,
                 padding_bottom: spacing::XXL,
@@ -68,11 +68,11 @@ pub fn Drawer(
                 border_width: 1.0,
                 border_color: theme.colors.border,
                 background_color: theme.colors.background,
-                shadow: SHADOW_SM,
+                shadow: "sm",
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     row {
-                        percent_width: 1.0,
+                        width: "100%",
                         height: 24.0,
                         justify_content: "center",
                         align_items: "center",
@@ -86,7 +86,7 @@ pub fn Drawer(
                         }
                     }
                     column {
-                        percent_width: 1.0,
+                        width: "100%",
                         margin_top: spacing::LG,
                         DialogHeader {
                             title: title,
@@ -94,7 +94,7 @@ pub fn Drawer(
                         }
                     }
                     column {
-                        percent_width: 1.0,
+                        width: "100%",
                         margin_top: spacing::LG,
                         {children}
                     }
