@@ -141,8 +141,9 @@ pub use slider::{
 };
 pub use spinner::{Spinner, SpinnerProps};
 pub use surfaces::{
-    Sonner, SonnerPosition, SonnerProps, SonnerStyle, SonnerToast, Toast, ToastDestructive,
-    ToastDestructiveProps, ToastProps, ToastStyle, ToastSwipeDirection, ToastVariant,
+    Sonner, SonnerPosition, SonnerProps, SonnerStyle, SonnerToast, Toast, ToastAppearance,
+    ToastDestructive, ToastDestructiveProps, ToastProps, ToastStyle, ToastSwipeDirection,
+    ToastVariant,
 };
 pub use switch::{Switch, SwitchProps};
 pub use table::{Table, TableProps};
