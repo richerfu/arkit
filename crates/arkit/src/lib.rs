@@ -2,13 +2,12 @@
 //!
 //! The default facade exports Dioxus core (`rsx!`, `use_signal`, `Element`),
 //! the ArkUI element registry, renderer, runtime, and host hooks. Domain
-//! libraries are opt-in through the `animation`, `camera`, `chart`, `code`,
-//! `i18n`, `icon`, `lottie`, `markdown`, `router`, and `shadcn` features (or
-//! `full`). The standalone `Code` component and tree-sitter highlighting use
-//! the `code` feature (no Markdown required). Markdown fenced highlighting
-//! needs both `markdown` and `code` (or the `markdown-highlight` alias). The
-//! `#[entry]` macro mounts a `fn() -> Element` root component into a NodeContent
-//! slot.
+//! libraries are opt-in through the `animation`, `barcode`, `camera`, `chart`,
+//! `code`, `i18n`, `icon`, `lottie`, `markdown`, `router`, and `shadcn` features
+//! (or `full`). Barcode/QR generation is the `barcode` feature (no camera).
+//! Code highlighting uses `code`; Markdown fences need `markdown` + `code`.
+//! The `#[entry]` macro mounts a `fn() -> Element` root component into a
+//! NodeContent slot.
 
 // --- Entry macro ---
 pub use arkit_derive::entry;
@@ -94,6 +93,16 @@ pub use arkit_animation::{
     BORDER_COLOR, BORDER_RADIUS, BORDER_WIDTH, BRIGHTNESS, CONTRAST, FONT_COLOR, FONT_SIZE,
     FOREGROUND_COLOR, GRAYSCALE, HEIGHT, INVERT, LETTER_SPACING, LINE_HEIGHT, OPACITY, POSITION_X,
     POSITION_Y, ROTATION, SATURATION, SCALE_X, SCALE_Y, SEPIA, TRANSLATE_X, TRANSLATE_Y, WIDTH,
+};
+
+// --- Barcode / QR generation ---
+#[cfg(feature = "barcode")]
+pub use arkit_barcode as barcode;
+#[cfg(feature = "barcode")]
+pub use arkit_barcode::{
+    encode_barcode, use_barcode, Barcode, BarcodeArtifact, BarcodeBitmap, BarcodeError,
+    BarcodeErrorKind, BarcodeFormat, BarcodeHandle, BarcodeOptions, BarcodePhase, BarcodeProps,
+    BarcodeRequest, BarcodeResult, QrEcLevel, DEFAULT_MARGIN, MAX_BARCODE_EDGE,
 };
 
 // --- Native CameraKit preview and capture ---
@@ -344,6 +353,13 @@ pub mod prelude {
         LabelLayoutOptions, LabelStyle, Legend, LineStyle, LinkData, MapFeature, MapOptions,
         MapPolygon, MapSeries, NodeData, SankeySeries, Series, SeriesOptions, Title, Tooltip,
         VisualStyle,
+    };
+
+    #[cfg(feature = "barcode")]
+    pub use crate::{
+        encode_barcode, use_barcode, Barcode, BarcodeArtifact, BarcodeBitmap, BarcodeError,
+        BarcodeErrorKind, BarcodeFormat, BarcodeHandle, BarcodeOptions, BarcodePhase, BarcodeProps,
+        BarcodeRequest, BarcodeResult, QrEcLevel,
     };
 
     #[cfg(feature = "camera")]

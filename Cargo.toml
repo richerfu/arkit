@@ -16,12 +16,14 @@ members = [
     "crates/arkit_animation_core",
     "crates/arkit_chart",
     "crates/arkit_camera",
+    "crates/arkit_barcode",
     "crates/arkit_icon",
     "examples/counter",
     "examples/async_task",
     "examples/animation",
     "examples/chart",
     "examples/camera",
+    "examples/barcode",
     "examples/complex_cases",
     "examples/i18n",
     "examples/lottie",
@@ -60,6 +62,7 @@ arkit_animation = { path = "crates/arkit_animation" }
 arkit_animation_core = { path = "crates/arkit_animation_core" }
 arkit_chart = { path = "crates/arkit_chart" }
 arkit_camera = { path = "crates/arkit_camera" }
+arkit_barcode = { path = "crates/arkit_barcode" }
 arkit_derive = { path = "crates/arkit_derive" }
 arkit_icon = { path = "crates/arkit_icon" }
 arkit_i18n = { path = "crates/arkit_i18n" }
@@ -77,7 +80,9 @@ tokio = { version = "1.52", features = ["rt-multi-thread", "sync", "time"] }
 # Reqwest 0.12 exposes a WebPKI-root feature that avoids relying on platform
 # certificate-store discovery, which is not portable to the OHOS target.
 reqwest = { version = "0.12.28", default-features = false, features = ["brotli", "deflate", "gzip", "rustls-tls-webpki-roots"] }
-rxing = { version = "0.9.1", default-features = false, features = ["decoders", "encoding_rs", "full_barcode_format_support"] }
+rxing = { version = "0.9.1", default-features = false, features = ["decoders", "encoders", "encoding_rs", "full_barcode_format_support"] }
+png = "0.17"
+base64 = "0.22"
 
 # Dioxus 0.7 — reuse its VirtualDom, diff/reconcile, signals, hooks, and router
 # directly rather than maintaining parallel framework primitives.
