@@ -2,8 +2,11 @@
 //!
 //! The default facade exports Dioxus core (`rsx!`, `use_signal`, `Element`),
 //! the ArkUI element registry, renderer, runtime, and host hooks. Domain
-//! libraries are opt-in through the `animation`, `camera`, `chart`, `i18n`,
-//! `icon`, `lottie`, `markdown`, `router`, and `shadcn` features (or `full`). The
+//! libraries are opt-in through the `animation`, `camera`, `chart`, `code`,
+//! `i18n`, `icon`, `lottie`, `markdown`, `router`, and `shadcn` features (or
+//! `full`). The standalone `Code` component and tree-sitter highlighting use
+//! the `code` feature (no Markdown required). Markdown fenced highlighting
+//! needs both `markdown` and `code` (or the `markdown-highlight` alias). The
 //! `#[entry]` macro mounts a `fn() -> Element` root component into a NodeContent
 //! slot.
 

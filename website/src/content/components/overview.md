@@ -7,7 +7,11 @@ description: "安装、导入、组件边界与完整索引。"
 
 `arkit_shadcn` 是基于 Dioxus、ArkUI element、Arkit Animation 与 OverlayRoot 实现的原生组件库。启用 `shadcn` feature 后即可使用，且会自动启用 `animation` 与 `icon`。
 
-`Markdown` 是独立的可选能力。使用该组件时启用 `markdown` feature；它会自动启用 `shadcn`，并且仅在此时引入 Markdown 解析依赖。
+`Markdown` 与 `Code` 是独立的可选能力：
+
+- `markdown`：CommonMark/GFM 原生渲染（自动启用 `shadcn`）
+- `code`：独立语法高亮代码块 + tree-sitter 注册（可不依赖 Markdown）
+- 两者同时启用时，Markdown 围栏块复用 Code 管线；`markdown-highlight` 是二者的便捷别名
 
 ## 安装与导入
 
@@ -16,10 +20,23 @@ description: "安装、导入、组件边界与完整索引。"
 arkit = { version = "*", features = ["shadcn"] }
 ```
 
-仅使用 Markdown 时可以直接写：
+仅 Markdown：
 
 ```toml
 arkit = { version = "*", features = ["markdown"] }
+```
+
+仅代码高亮组件：
+
+```toml
+arkit = { version = "*", features = ["code"] }
+```
+
+Markdown 围栏也要高亮：
+
+```toml
+arkit = { version = "*", features = ["markdown", "code"] }
+# 或: features = ["markdown-highlight"]
 ```
 
 ```rust
