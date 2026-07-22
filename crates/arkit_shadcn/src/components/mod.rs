@@ -23,6 +23,15 @@ mod card;
 mod carousel;
 mod chart;
 mod checkbox;
+/// Standalone syntax-highlighted code block (`code` feature).
+#[cfg(feature = "code")]
+mod code;
+/// Tree-sitter highlight engine and language registry (`code` feature).
+///
+/// Independent of Markdown. Prefer the flat re-exports below, or
+/// `arkit::shadcn::components::code_highlight::register_language`.
+#[cfg(feature = "code")]
+pub mod code_highlight;
 mod collapsible;
 mod combobox;
 mod command;
@@ -91,6 +100,15 @@ pub use carousel::{
 };
 pub use chart::{Chart, ChartCard, ChartCardProps, ChartProps};
 pub use checkbox::{Checkbox, CheckboxProps};
+#[cfg(feature = "code")]
+pub use code::{Code, CodeProps, CodeStyle};
+#[cfg(feature = "code")]
+pub use code_highlight::{
+    highlight_code, is_language_registered, register_highlight_configuration, register_language,
+    reset_language_registry, supported_languages, unregister_language, CodeHighlightPalette,
+    HighlightConfiguration, HighlightLine, HighlightSpan, Language, RegisterLanguageError,
+    HIGHLIGHT_NAMES,
+};
 pub use collapsible::{Collapsible, CollapsibleProps};
 pub use combobox::{Combobox, ComboboxProps};
 pub use command::{Command, CommandProps};

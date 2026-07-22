@@ -12,7 +12,7 @@ use arkit::shadcn::components::{
     AlertVariant, AspectRatio, Avatar, AvatarFallback, Badge, BadgeVariant, BottomNavigation,
     BottomNavigationItem, BottomSheet, BottomSheetTextInput, Button, ButtonSize, ButtonVariant,
     Calendar, Card, CardContent, CardFooter, CardHeader, Carousel, CarouselControlsPlacement,
-    CarouselIndicatorVariant, CarouselStyle, Checkbox, Collapsible, ContextMenu, DatePicker,
+    CarouselIndicatorVariant, CarouselStyle, Checkbox, Code, Collapsible, ContextMenu, DatePicker,
     Dialog, DialogFooter, DialogHeader, DropdownMenu, Field, FieldContent, FieldDescription,
     FieldError, FieldGroup, FieldOrientation, FieldSeparator, FieldSet, FieldTitle, Form, FormItem,
     HoverCard, Input, InputOtp, InputOtpMode, InputOtpSeparator, Label, Markdown, MenuEntry,
@@ -30,6 +30,52 @@ const HOME_HEADER_HEIGHT: f32 = 80.0;
 const DETAIL_HEADER_HEIGHT: f32 = 48.0;
 const TRACKING_TIGHT: f32 = -0.35;
 const MARKDOWN_STREAM_INTERVAL_MS: u64 = 500;
+
+/// Static sample for tree-sitter fenced-code highlighting (`markdown` + `code`).
+const MARKDOWN_HIGHLIGHT_SAMPLE: &str = r#"## Syntax highlighting
+
+Fenced blocks reuse the standalone `Code` pipeline when the `code` feature is enabled. Unknown languages fall back to plain monospace.
+
+```rust
+fn fib(n: u32) -> u32 {
+    match n {
+        0 | 1 => n,
+        _ => fib(n - 1) + fib(n - 2),
+    }
+}
+```
+
+```python
+def greet(name: str) -> str:
+    # theme-aware token colors
+    return f"hello, {name}"
+```
+
+```json
+{
+  "feature": "code",
+  "languages": ["rust", "python", "json", "bash"]
+}
+```
+
+```bash
+ohrs build --arch aarch
+./app/run.sh shadcn_showcase all
+```
+"#;
+
+const CODE_STANDALONE_RUST: &str = r#"pub fn answer() -> i32 {
+    // standalone Code component
+    42
+}
+"#;
+
+const CODE_STANDALONE_JSON: &str = r#"{
+  "component": "Code",
+  "feature": "code",
+  "highlight": true
+}
+"#;
 
 const MARKDOWN_STREAM_CHUNKS: &[&str] = &[
     "# Live deployment briefing\n\n",
@@ -180,6 +226,10 @@ const COMPONENTS: &[ComponentSpec] = &[
     ComponentSpec {
         slug: "label",
         name: "Label",
+    },
+    ComponentSpec {
+        slug: "code",
+        name: "Code",
     },
     ComponentSpec {
         slug: "markdown",
@@ -901,7 +951,7 @@ fn demo_canvas_policy(slug: &str) -> DemoCanvasPolicy {
             fill_height: true,
             padding: [spacing::XXL, spacing::LG, spacing::XXL, spacing::LG],
         },
-        "markdown" => DemoCanvasPolicy {
+        "code" | "markdown" => DemoCanvasPolicy {
             center_x: true,
             center_y: false,
             fill_height: false,
@@ -2377,6 +2427,40 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 Label { content: "Accept terms and conditions".to_string() }
             }
         },
+        "code" => rsx! {
+            fixed_width {
+                width: 640.0,
+                column {
+                    percent_width: 1.0,
+                    align_items: "start",
+                    Text {
+                        content: "Standalone Code (feature = code)".to_string(),
+                        variant: TextVariant::Small,
+                    }
+                    v_gap { height: spacing::SM }
+                    Text {
+                        content: "No Markdown required. Toggle theme to compare palettes.".to_string(),
+                        variant: TextVariant::Muted,
+                    }
+                    v_gap { height: spacing::MD }
+                    Code {
+                        source: CODE_STANDALONE_RUST.to_string(),
+                        language: Some("rust".to_string()),
+                    }
+                    v_gap { height: spacing::LG }
+                    Code {
+                        source: CODE_STANDALONE_JSON.to_string(),
+                        language: Some("json".to_string()),
+                    }
+                    v_gap { height: spacing::LG }
+                    Code {
+                        source: "plain monospace without highlighting".to_string(),
+                        language: None,
+                        highlight: false,
+                    }
+                }
+            }
+        },
         "markdown" => {
             let chunk_index = markdown_chunk_index();
             let complete = chunk_index == MARKDOWN_STREAM_CHUNKS.len();
@@ -2413,6 +2497,27 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     column {
                         percent_width: 1.0,
                         align_items: "start",
+                        Text {
+                            content: "Tree-sitter highlight".to_string(),
+                            variant: TextVariant::Small,
+                        }
+                        v_gap { height: spacing::SM }
+                        Text {
+                            content: "Static fences (rust / python / json / bash). Toggle theme to compare palettes.".to_string(),
+                            variant: TextVariant::Muted,
+                        }
+                        v_gap { height: spacing::MD }
+                        Markdown {
+                            source: MARKDOWN_HIGHLIGHT_SAMPLE.to_string(),
+                        }
+                        v_gap { height: spacing::XL }
+                        Separator {}
+                        v_gap { height: spacing::XL }
+                        Text {
+                            content: "Streaming document".to_string(),
+                            variant: TextVariant::Small,
+                        }
+                        v_gap { height: spacing::SM }
                         Text { content: status, variant: TextVariant::Muted }
                         v_gap { height: spacing::SM }
                         Progress {

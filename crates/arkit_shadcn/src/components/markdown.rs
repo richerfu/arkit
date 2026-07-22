@@ -15,6 +15,8 @@ use smallvec::SmallVec;
 
 use crate::theme::{spacing, typography, use_theme, Theme};
 
+#[cfg(feature = "code")]
+use super::Code;
 use super::ARKUI_BORDER_STYLE_SOLID;
 
 const TEXT_DECORATION_NONE: i32 = 0;
@@ -40,6 +42,14 @@ pub struct MarkdownOptions {
     pub footnotes: bool,
     pub gfm_admonitions: bool,
     pub smart_punctuation: bool,
+    /// When `true` (default), fenced code blocks use the standalone
+    /// [`super::Code`] pipeline (tree-sitter) for built-in and
+    /// [`register_language`](super::register_language)-installed languages.
+    ///
+    /// Only present when the `code` feature is enabled alongside `markdown`.
+    /// Without `code`, fences always render as plain monospace.
+    #[cfg(feature = "code")]
+    pub code_highlight: bool,
 }
 
 impl Default for MarkdownOptions {
@@ -51,6 +61,8 @@ impl Default for MarkdownOptions {
             footnotes: true,
             gfm_admonitions: true,
             smart_punctuation: false,
+            #[cfg(feature = "code")]
+            code_highlight: true,
         }
     }
 }
@@ -107,6 +119,10 @@ pub struct MarkdownStyle {
     pub code_padding: f32,
     pub image_height: f32,
     pub radius: f32,
+    /// Token colors for tree-sitter highlighting (`code` feature).
+    /// Ignored when `code` is off or `MarkdownOptions::code_highlight` is false.
+    #[cfg(feature = "code")]
+    pub code_highlight: super::code_highlight::CodeHighlightPalette,
 }
 
 impl MarkdownStyle {
@@ -132,6 +148,15 @@ impl MarkdownStyle {
             code_padding: spacing::LG,
             image_height: 200.0,
             radius: theme.radii.md,
+            #[cfg(feature = "code")]
+            code_highlight: match theme.mode {
+                crate::theme::ThemeMode::Dark => {
+                    super::code_highlight::CodeHighlightPalette::dark()
+                }
+                crate::theme::ThemeMode::Light => {
+                    super::code_highlight::CodeHighlightPalette::light()
+                }
+            },
         }
     }
 }
@@ -177,7 +202,14 @@ pub fn Markdown(props: MarkdownProps) -> Element {
         MarkdownDocument::parse(&source, options)
     }));
     let document = document.read();
-    let blocks = render_blocks(&document.blocks, &style, props.on_link_click, "markdown", 0);
+    let blocks = render_blocks(
+        &document.blocks,
+        &style,
+        props.on_link_click,
+        "markdown",
+        0,
+        options_code_highlight_enabled(&options),
+    );
 
     rsx! {
         column {
@@ -810,6 +842,88 @@ fn code_language(kind: CodeBlockKind<'_>) -> Option<Arc<str>> {
     }
 }
 
+/// Whether fenced-code tree-sitter highlighting is active for this document.
+///
+/// Always `false` unless the `code` feature is enabled.
+fn options_code_highlight_enabled(options: &MarkdownOptions) -> bool {
+    #[cfg(feature = "code")]
+    {
+        options.code_highlight
+    }
+    #[cfg(not(feature = "code"))]
+    {
+        let _ = options;
+        false
+    }
+}
+
+fn render_code_block(
+    language: Option<&str>,
+    content: &str,
+    style: &MarkdownStyle,
+    code_highlight: bool,
+) -> Element {
+    #[cfg(feature = "code")]
+    {
+        let code_style = super::code::code_style_from_markdown(
+            style.foreground,
+            style.muted_foreground,
+            style.code_background,
+            style.code_font_size,
+            style.code_line_height,
+            style.code_padding,
+            style.radius,
+            style.code_highlight,
+        );
+        return rsx! {
+            Code {
+                source: content.to_string(),
+                language: language.map(|value| value.to_string()),
+                highlight: code_highlight,
+                style: Some(code_style),
+            }
+        };
+    }
+
+    #[cfg(not(feature = "code"))]
+    {
+        let _ = code_highlight;
+        let language_label = language.map(|value| value.to_string());
+        rsx! {
+            column {
+                percent_width: 1.0,
+                align_items: "start",
+                padding_top: style.code_padding,
+                padding_right: style.code_padding,
+                padding_bottom: style.code_padding,
+                padding_left: style.code_padding,
+                background_color: style.code_background,
+                border_radius: style.radius,
+                clip: true,
+                if let Some(language) = language_label {
+                    text {
+                        content: language,
+                        font_size: 11.0,
+                        font_weight: 600_i32,
+                        font_color: style.muted_foreground,
+                        line_height: 16.0,
+                        margin_bottom: spacing::SM,
+                    }
+                }
+                text {
+                    content: content.to_string(),
+                    percent_width: 1.0,
+                    font_size: style.code_font_size,
+                    font_family: "monospace",
+                    font_color: style.foreground,
+                    line_height: style.code_line_height,
+                    text_align: 0_i32,
+                }
+            }
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 struct TextMetrics {
     font_size: f32,
@@ -841,6 +955,7 @@ fn render_blocks(
     on_link_click: Option<EventHandler<String>>,
     key_prefix: &str,
     depth: usize,
+    code_highlight: bool,
 ) -> Vec<Element> {
     blocks
         .iter()
@@ -850,7 +965,14 @@ fn render_blocks(
             let content = if depth >= MAX_RENDER_DEPTH {
                 render_depth_limit(block, style)
             } else {
-                render_block(block, style, on_link_click, key.as_str(), depth)
+                render_block(
+                    block,
+                    style,
+                    on_link_click,
+                    key.as_str(),
+                    depth,
+                    code_highlight,
+                )
             };
             rsx! {
                 column {
@@ -871,6 +993,7 @@ fn render_block(
     on_link_click: Option<EventHandler<String>>,
     key_prefix: &str,
     depth: usize,
+    code_highlight: bool,
 ) -> Element {
     match block {
         Block::Paragraph(content) => render_inlines(
@@ -904,7 +1027,14 @@ fn render_block(
         }
         Block::Quote { kind, blocks } => {
             let nested_key = format!("{key_prefix}-quote");
-            let nested = render_blocks(blocks, style, on_link_click, &nested_key, depth + 1);
+            let nested = render_blocks(
+                blocks,
+                style,
+                on_link_click,
+                &nested_key,
+                depth + 1,
+                code_highlight,
+            );
             let label = kind.and_then(admonition_label);
             rsx! {
                 row {
@@ -936,40 +1066,7 @@ fn render_block(
             }
         }
         Block::Code { language, content } => {
-            let language = language.as_ref().map(|value| value.to_string());
-            let content = content.to_string();
-            rsx! {
-                column {
-                    percent_width: 1.0,
-                    align_items: "start",
-                    padding_top: style.code_padding,
-                    padding_right: style.code_padding,
-                    padding_bottom: style.code_padding,
-                    padding_left: style.code_padding,
-                    background_color: style.code_background,
-                    border_radius: style.radius,
-                    clip: true,
-                    if let Some(language) = language {
-                        text {
-                            content: language,
-                            font_size: 11.0,
-                            font_weight: 600_i32,
-                            font_color: style.muted_foreground,
-                            line_height: 16.0,
-                            margin_bottom: spacing::SM,
-                        }
-                    }
-                    text {
-                        content,
-                        percent_width: 1.0,
-                        font_size: style.code_font_size,
-                        font_family: "monospace",
-                        font_color: style.foreground,
-                        line_height: style.code_line_height,
-                        text_align: 0_i32,
-                    }
-                }
-            }
+            render_code_block(language.as_deref(), content.as_ref(), style, code_highlight)
         }
         Block::List { start, items } => {
             let rows = items
@@ -978,8 +1075,14 @@ fn render_block(
                 .map(|(index, item)| {
                     let marker = render_list_marker(*start, index, item.checked, style);
                     let nested_key = format!("{key_prefix}-item-{index}");
-                    let nested =
-                        render_blocks(&item.blocks, style, on_link_click, &nested_key, depth + 1);
+                    let nested = render_blocks(
+                        &item.blocks,
+                        style,
+                        on_link_click,
+                        &nested_key,
+                        depth + 1,
+                        code_highlight,
+                    );
                     rsx! {
                         row {
                             key: "{nested_key}",
@@ -1011,7 +1114,14 @@ fn render_block(
         } => render_table(alignments, header, rows, style, on_link_click, key_prefix),
         Block::Footnote { label, blocks } => {
             let nested_key = format!("{key_prefix}-footnote");
-            let nested = render_blocks(blocks, style, on_link_click, &nested_key, depth + 1);
+            let nested = render_blocks(
+                blocks,
+                style,
+                on_link_click,
+                &nested_key,
+                depth + 1,
+                code_highlight,
+            );
             rsx! {
                 row {
                     percent_width: 1.0,

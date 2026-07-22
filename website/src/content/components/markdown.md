@@ -7,11 +7,19 @@ description: "高性能原生 CommonMark/GFM 渲染。"
 
 `Markdown` 把 CommonMark/GFM 内容直接渲染为原生 ArkUI 节点，不经过 HTML 或 WebView。默认支持标题、段落、强调、链接、图片、引用、嵌套列表、代码块、分隔线、表格、任务列表和脚注。
 
-Markdown 解析器及其辅助数据结构由独立的 `markdown` feature 引入；只启用 `shadcn` 不会链接这些依赖。
+Markdown 解析器由独立的 `markdown` feature 引入；只启用 `shadcn` 不会链接这些依赖。
 
 ```toml
 [dependencies]
 arkit = { version = "*", features = ["markdown"] }
+```
+
+围栏代码语法高亮由 **`code` feature** 提供（可与 Markdown 独立使用）。两者一起启用时，Markdown 的 fenced block 会复用 [`Code`](./code) 组件管线：
+
+```toml
+[dependencies]
+# 等价写法：features = ["markdown-highlight"]
+arkit = { version = "*", features = ["markdown", "code"] }
 ```
 
 ```rust
@@ -34,6 +42,7 @@ See the [migration guide](https://example.com).
 - 解析结果会压缩为面向 ArkUI 的 block/inline 快照；相邻且样式相同的文本会合并，减少原生节点数。
 - `source` 与 `options` 未变化时复用 Dioxus memo。主题切换和链接回调更新只重绘，不重复解析 Markdown。
 - 大段普通文本通常对应一个 native `text`；只有强调、代码和链接等真实样式边界才拆分节点。
+- 启用 `code` 后，已知语言的围栏块在渲染期走 tree-sitter；未知语言或失败时回退普通等宽。
 
 组件不主动创建滚动容器。页面应在外层放置 `scroll`，让 Markdown 可以参与已有页面布局。
 
@@ -57,8 +66,32 @@ style.image_height = 240.0;
 rsx! { Markdown { source, style: Some(style) } }
 ```
 
+## 代码高亮（依赖 `code`）
+
+高亮能力属于 **`code` feature**（独立 `Code` 组件、registry、tree-sitter 依赖），不绑死在 Markdown 上。
+
+| 项                                | 说明                                                      |
+| --------------------------------- | --------------------------------------------------------- |
+| `MarkdownOptions::code_highlight` | 仅当启用 `code` 时字段存在，默认 `true`                   |
+| `MarkdownStyle::code_highlight`   | `CodeHighlightPalette`；`from_theme` 按 light/dark 选预设 |
+| 渲染                              | 有 `code` 时委托给 `Code` 组件；否则纯等宽                |
+
+内置语言、自定义 `register_language`、palette 细节见 [Code](./code)。
+
+关闭某一篇文档的高亮（需已启用 `code`）：
+
+```rust
+Markdown {
+    source,
+    options: MarkdownOptions {
+        code_highlight: false,
+        ..MarkdownOptions::default()
+    },
+}
+```
+
 ## 扩展与安全边界
 
-`MarkdownOptions` 分别控制 `tables`、`task_lists`、`strikethrough`、`footnotes`、`gfm_admonitions` 和 `smart_punctuation`。智能标点会改变展示文本，因此默认关闭。
+`MarkdownOptions` 分别控制 `tables`、`task_lists`、`strikethrough`、`footnotes`、`gfm_admonitions`、`smart_punctuation`，以及在启用 `code` 时的 `code_highlight`。智能标点会改变展示文本，因此默认关闭。
 
 原始 HTML 和 metadata block 会被忽略。`Markdown` 是原生内容组件，不是 HTML 执行环境；需要完整 HTML/CSS/JavaScript 语义时应使用 WebView。
