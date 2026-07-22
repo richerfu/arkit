@@ -9,7 +9,7 @@ description: "尺寸、SafeArea、OverlayRoot 与键盘。"
 
 ## 尺寸与对齐
 
-- `percent_width: 1.0` 表示填满父宽。
+- `width: "100%"` 表示填满父宽。
 - 固定 width/height 默认使用 vp。
 - Text 换行前必须有可用宽度。
 - Row/Column 的默认对齐不替代组件显式布局，页面自定义 children 需要时设置 `align_items`。

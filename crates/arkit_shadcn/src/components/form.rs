@@ -38,14 +38,14 @@ pub fn Form(props: FormProps) -> Element {
 
     rsx! {
         column {
-            percent_width: 1.0,
+            width: "100%",
             align_items: "start",
             background_color: if props.surface { theme.colors.card } else { 0x00000000 },
             foreground_color: theme.colors.card_foreground,
             border_width: if props.surface { 1.0 } else { 0.0 },
             border_color: if props.surface { theme.colors.border } else { 0x00000000 },
             border_radius: if props.surface { theme.radii.xl } else { 0.0 },
-            shadow: if props.surface { 1_i32 } else { 0_i32 },
+            shadow: if props.surface { "sm" },
             padding_top: padding,
             padding_right: padding,
             padding_bottom: padding,
@@ -53,10 +53,10 @@ pub fn Form(props: FormProps) -> Element {
             {props.children}
             if !submit_label.is_empty() {
                 row {
-                    percent_width: 1.0,
+                    width: "100%",
                     Button {
                         variant: ButtonVariant::Default,
-                        percent_width: Some(1.0),
+                        width: "100%",
                         disabled: Some(props.submit_disabled),
                         onclick: move |_| {
                             if let Some(handler) = on_submit {
@@ -109,7 +109,7 @@ pub fn Field(props: FieldProps) -> Element {
     match props.orientation {
         FieldOrientation::Vertical => rsx! {
             column {
-                percent_width: 1.0,
+                width: "100%",
                 align_items: "start",
                 margin_bottom: spacing::XL,
                 opacity: if props.disabled { 0.5 } else { 1.0 },
@@ -119,7 +119,7 @@ pub fn Field(props: FieldProps) -> Element {
         },
         FieldOrientation::Horizontal => rsx! {
             row {
-                percent_width: 1.0,
+                width: "100%",
                 align_items: "center",
                 justify_content: "space_between",
                 margin_bottom: spacing::XL,
@@ -173,13 +173,13 @@ pub fn FieldLabel(props: FieldLabelProps) -> Element {
     rsx! {
         text {
             content,
-            percent_width: 1.0,
+            width: "100%",
             margin_bottom: spacing::SM,
             font_size: typography::SM,
             font_weight: 500_i32,
             font_color: if props.invalid { theme.colors.destructive } else { theme.colors.foreground },
             line_height: 20.0,
-            text_align: 0_i32,
+            text_align: "start",
         }
     }
 }
@@ -197,12 +197,12 @@ pub fn FieldTitle(props: FieldTitleProps) -> Element {
     rsx! {
         text {
             content: props.content.clone(),
-            percent_width: 1.0,
+            width: "100%",
             font_size: typography::SM,
             font_weight: 500_i32,
             font_color: theme.colors.foreground,
             line_height: 20.0,
-            text_align: 0_i32,
+            text_align: "start",
         }
     }
 }
@@ -223,12 +223,12 @@ pub fn FieldDescription(props: FieldDescriptionProps) -> Element {
     rsx! {
         text {
             content: props.content.clone(),
-            percent_width: 1.0,
+            width: "100%",
             margin_top: if props.inset { spacing::XS } else { 0.0 },
             font_size: typography::XS,
             font_color: theme.colors.muted_foreground,
             line_height: 18.0,
-            text_align: 0_i32,
+            text_align: "start",
         }
     }
 }
@@ -255,19 +255,19 @@ pub fn FieldError(props: FieldErrorProps) -> Element {
     rsx! {
         if !messages.is_empty() {
             column {
-                percent_width: 1.0,
+                width: "100%",
                 align_items: "start",
                 margin_top: spacing::XS,
                 for (index, message) in messages.iter().enumerate() {
                     text {
                         content: if messages.len() > 1 { format!("• {message}") } else { message.clone() },
-                        percent_width: 1.0,
+                        width: "100%",
                         margin_top: if index == 0 { 0.0 } else { spacing::XXS },
                         font_size: typography::XS,
                         font_weight: 500_i32,
                         font_color: theme.colors.destructive,
                         line_height: 18.0,
-                        text_align: 0_i32,
+                        text_align: "start",
                     }
                 }
             }
@@ -286,7 +286,7 @@ pub struct FieldGroupProps {
 pub fn FieldGroup(props: FieldGroupProps) -> Element {
     rsx! {
         column {
-            percent_width: 1.0,
+            width: "100%",
             align_items: "start",
             {props.children}
         }
@@ -304,7 +304,7 @@ pub struct FieldSetProps {
 pub fn FieldSet(props: FieldSetProps) -> Element {
     rsx! {
         column {
-            percent_width: 1.0,
+            width: "100%",
             align_items: "start",
             {props.children}
         }
@@ -341,13 +341,13 @@ pub fn FieldLegend(props: FieldLegendProps) -> Element {
     rsx! {
         text {
             content: props.content.clone(),
-            percent_width: 1.0,
+            width: "100%",
             margin_bottom: spacing::XS,
             font_size,
             font_weight,
             font_color: theme.colors.foreground,
             line_height,
-            text_align: 0_i32,
+            text_align: "start",
         }
     }
 }
@@ -367,7 +367,7 @@ pub fn FieldSeparator(props: FieldSeparatorProps) -> Element {
 
     rsx! {
         row {
-            percent_width: 1.0,
+            width: "100%",
             align_items: "center",
             margin_top: spacing::XXS,
             margin_bottom: spacing::XL,

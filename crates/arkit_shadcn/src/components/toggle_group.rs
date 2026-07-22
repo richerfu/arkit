@@ -31,10 +31,10 @@ pub struct ToggleGroupProps {
     /// Allow multiple selections.
     #[props(default)]
     pub multi: bool,
-    /// Optional group width. When provided, the items share the available
-    /// width evenly, which is useful for mobile mode selectors.
+    /// Optional group CSS width (`"100%"`). When provided, the items share the
+    /// available width evenly, which is useful for mobile mode selectors.
     #[props(default)]
-    pub percent_width: Option<f32>,
+    pub width: Option<String>,
     /// Override the outline group's default small elevation.
     #[props(default)]
     pub shadow: Option<bool>,
@@ -57,7 +57,7 @@ pub fn ToggleGroup(props: ToggleGroupProps) -> Element {
     let total = props.options.len();
     let multi = props.multi;
     let icons = props.icons;
-    let stretched = props.percent_width.is_some();
+    let stretched = props.width.is_some();
     let group_shadow = props.shadow.unwrap_or(true);
     let on_change = props.on_change;
     let size_style = if icons {
@@ -90,7 +90,7 @@ pub fn ToggleGroup(props: ToggleGroupProps) -> Element {
                 border_width: 0.0,
                 border_radius: "0".to_owned(),
                 shadow: Some(false),
-                percent_width: if stretched { Some(1.0) } else { None },
+                width: if stretched { Some("100%".into()) } else { None },
                 background: Some(0x00000000),
             },
             move || {
@@ -153,7 +153,7 @@ pub fn ToggleGroup(props: ToggleGroupProps) -> Element {
 
     rsx! {
         row {
-            percent_width: if let Some(width) = props.percent_width { width },
+            width: if let Some(width) = props.width { width },
             align_items: "center",
             justify_content: "start",
             border_style: ARKUI_BORDER_STYLE_SOLID,
@@ -161,7 +161,7 @@ pub fn ToggleGroup(props: ToggleGroupProps) -> Element {
             border_color: theme.colors.input,
             border_radius: theme.radii.md,
             clip: true,
-            shadow: if group_shadow { 1 },
+            shadow: if group_shadow { "sm" },
             {items.into_iter()}
         }
     }

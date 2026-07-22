@@ -94,8 +94,8 @@ pub struct TabsContentProps {
 pub fn TabsContent(props: TabsContentProps) -> Element {
     rsx! {
         column {
-            percent_width: 1.0,
-            visibility: if props.active { 0 } else { 2 },
+            width: "100%",
+            visibility: if props.active { "visible" } else { "none" },
             {props.children}
         }
     }
@@ -163,14 +163,14 @@ pub fn Tabs(props: TabsProps) -> Element {
 
     rsx! {
         column {
-            percent_width: 1.0,
+            width: "100%",
             TabsList {
                 {triggers.into_iter()}
             }
             row {
                 margin_top: spacing::SM,
                 stack {
-                    percent_width: 1.0,
+                    width: "100%",
                     {panels.into_iter()}
                 }
             }

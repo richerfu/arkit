@@ -14,7 +14,6 @@ use arkit_prelude::*;
 const CHECKBOX_SIZE: f32 = 16.0;
 const CHECKBOX_BORDER_WIDTH: f32 = 1.0;
 const CHECKBOX_ICON_SIZE: f32 = 16.0;
-const ALIGN_CENTER: i32 = 4;
 
 /// Props for [`Checkbox`].
 #[derive(Props, Clone, PartialEq)]
@@ -64,7 +63,7 @@ pub fn Checkbox(props: CheckboxProps) -> Element {
             stack {
                 width: CHECKBOX_SIZE,
                 height: CHECKBOX_SIZE,
-                alignment: ALIGN_CENTER,
+                alignment: "center",
                 border_radius: theme.radii.sm,
                 border_width: CHECKBOX_BORDER_WIDTH,
                 border_style: ARKUI_BORDER_STYLE_SOLID,
@@ -91,7 +90,7 @@ pub fn Checkbox(props: CheckboxProps) -> Element {
                         font_size: typography::SM,
                         font_weight: 500,
                         font_color: theme.colors.foreground,
-                        text_align: 0,
+                        text_align: "start",
                     }
                 }
             }

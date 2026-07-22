@@ -5,8 +5,7 @@
 //! typography/shadow) but renders via dioxus elements instead of the old
 //! `Component`/`Element` builder.
 
-pub(crate) const ARKUI_BUTTON_TYPE_NORMAL: i32 = 0;
-pub(crate) const ARKUI_BORDER_STYLE_SOLID: i32 = 0;
+pub(crate) const ARKUI_BORDER_STYLE_SOLID: &str = "solid";
 
 mod accordion;
 mod alert;
@@ -79,7 +78,7 @@ pub use alert::{
     Alert, AlertDescription, AlertDescriptionProps, AlertList, AlertListProps, AlertProps,
     AlertTitle, AlertTitleProps, AlertVariant,
 };
-pub use alert_dialog::{AlertDialog, AlertDialogProps};
+pub use alert_dialog::{AlertDialog, AlertDialogAction, AlertDialogActionProps, AlertDialogProps};
 pub use aspect_ratio::{AspectRatio, AspectRatioProps};
 pub use avatar::{Avatar, AvatarFallback, AvatarFallbackProps, AvatarProps};
 pub use badge::{Badge, BadgeProps, BadgeVariant};
@@ -115,7 +114,8 @@ pub use command::{Command, CommandProps};
 pub use context_menu::{ContextMenu, ContextMenuEntry, ContextMenuProps};
 pub use date_picker::{DatePicker, DatePickerProps};
 pub use dialog::{
-    Dialog, DialogFooter, DialogFooterProps, DialogHeader, DialogHeaderProps, DialogProps,
+    use_dialog_close, Dialog, DialogClose, DialogFooter, DialogFooterProps, DialogHeader,
+    DialogHeaderProps, DialogProps,
 };
 pub use drawer::{Drawer, DrawerProps};
 pub use dropdown_menu::{DropdownMenu, DropdownMenuEntry, DropdownMenuProps};

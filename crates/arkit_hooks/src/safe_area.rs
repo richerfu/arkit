@@ -134,9 +134,9 @@ pub fn SafeArea(props: SafeAreaProps) -> Element {
     let insets = props.edges.select(use_safe_area());
     rsx! {
         stack {
-            percent_width: 1.0,
-            percent_height: 1.0,
-            alignment: 0,
+            width: "100%",
+            height: "100%",
+            alignment: "top-start",
             padding_top: insets.top,
             padding_right: insets.right,
             padding_bottom: insets.bottom,

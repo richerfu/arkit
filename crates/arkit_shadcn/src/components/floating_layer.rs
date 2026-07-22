@@ -23,19 +23,18 @@ pub(crate) const OVERLAY_BACKDROP: u32 = 0x80000000u32;
 /// concrete on all supported ArkUI versions. It is an interaction mask, not a
 /// visible backdrop.
 pub(crate) const FLOATING_CAPTURE_COLOR: u32 = 0x01000000u32;
-/// ArkUI `HitTestMode::Default`: this node and its children own the hit.
-pub(crate) const HIT_TEST_DEFAULT: i32 = 0;
-/// ArkUI `HitTestMode::None`: this node is skipped but its children can hit.
-pub(crate) const HIT_TEST_NONE: i32 = 3;
-/// ArkUI `ShadowType::OuterDefaultSm` (small outer shadow).
-pub(crate) const SHADOW_SM: i32 = 1;
+/// CSS-style hit-test keywords for the `hit_test_behavior` attribute.
+pub(crate) const HIT_TEST_DEFAULT: &str = "default";
+/// Skip this node in hit testing; children may still receive hits.
+pub(crate) const HIT_TEST_NONE: &str = "none";
+/// Small outer shadow preset (`shadow: "sm"`).
+pub(crate) const SHADOW_SM: &str = "sm";
 
-// ArkUI `Alignment` enum values (used as the `alignment` int attribute on
-// `stack`).
-pub(crate) const ALIGN_TOP: i32 = 1;
-pub(crate) const ALIGN_START: i32 = 3;
-pub(crate) const ALIGN_END: i32 = 5;
-pub(crate) const ALIGN_BOTTOM: i32 = 7;
+// CSS-style stack `alignment` keywords.
+pub(crate) const ALIGN_TOP: &str = "top";
+pub(crate) const ALIGN_START: &str = "start";
+pub(crate) const ALIGN_END: &str = "end";
+pub(crate) const ALIGN_BOTTOM: &str = "bottom";
 
 /// Side of the trigger the floating panel anchors to.
 ///
@@ -58,8 +57,8 @@ pub enum FloatingAlign {
     End,
 }
 
-/// Resolve a [`FloatingSide`] to its ArkUI `Alignment` int.
-pub(crate) fn side_alignment(side: FloatingSide) -> i32 {
+/// Resolve a [`FloatingSide`] to a CSS `alignment` keyword.
+pub(crate) fn side_alignment(side: FloatingSide) -> &'static str {
     match side {
         FloatingSide::Top => ALIGN_TOP,
         FloatingSide::Bottom => ALIGN_BOTTOM,
@@ -292,10 +291,10 @@ pub fn FloatingLayer(
 
     rsx! {
         stack {
-            percent_width: 1.0,
-            percent_height: 1.0,
-            alignment: ALIGN_TOP,
-            hit_test_behavior: HIT_TEST_NONE,
+            width: "100%",
+            height: "100%",
+            alignment: "top",
+            hit_test_behavior: "none",
             if hover {
                 row {
                     onclick: move |_| toggle.call(()),
@@ -311,19 +310,19 @@ pub fn FloatingLayer(
             if current {
                 if hover {
                     stack {
-                        percent_width: 1.0,
-                        percent_height: 1.0,
+                        width: "100%",
+                        height: "100%",
                         alignment: alignment,
-                        hit_test_behavior: HIT_TEST_NONE,
+                        hit_test_behavior: "none",
                         {children}
                     }
                 } else {
                     stack {
-                        percent_width: 1.0,
-                        percent_height: 1.0,
+                        width: "100%",
+                        height: "100%",
                         background_color: FLOATING_CAPTURE_COLOR,
                         alignment: alignment,
-                        hit_test_behavior: HIT_TEST_DEFAULT,
+                        hit_test_behavior: "default",
                         onclick: move |_| close.call(()),
                         stack {
                             onclick: move |evt| evt.stop_propagation(),
@@ -356,8 +355,8 @@ mod tests {
 
     #[test]
     fn pass_through_mode_skips_only_the_layout_shell() {
-        assert_eq!(HIT_TEST_DEFAULT, 0);
-        assert_eq!(HIT_TEST_NONE, 3);
+        assert_eq!(HIT_TEST_DEFAULT, "default");
+        assert_eq!(HIT_TEST_NONE, "none");
     }
 
     #[test]

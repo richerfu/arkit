@@ -28,33 +28,33 @@ fn app() -> Element {
 
     rsx! {
         column {
-            percent_width: 1.0,
-            percent_height: 1.0,
+            width: "100%",
+            height: "100%",
             padding: 20.0,
-            background_color: 0xFF07111Fu32,
-            text { font_size: 26.0, font_weight: 700, font_color: 0xFFF8FAFCu32, "Native Lottie" }
+            background_color: "#FF07111F",
+            text { font_size: 26.0, font_weight: 700, font_color: "#FFF8FAFC", "Native Lottie" }
             text {
                 margin_top: 4.0,
                 font_size: 12.0,
-                font_color: 0xFF94A3B8u32,
+                font_color: "#FF94A3B8",
                 "XComponent · async URL loading · native-window zero-copy"
             }
             column {
                 margin_top: 16.0,
-                percent_width: 1.0,
+                width: "100%",
                 layout_weight: 1.0,
                 border_radius: 20.0,
                 clip: true,
-                background_color: 0xFF0F172Au32,
+                background_color: "#FF0F172A",
                 LottiePlayer {
                     source,
                     controller: Some(controller.clone()),
                     repeat: repeat(),
                     speed: speed(),
                     fit: fit(),
-                    percent_width: 1.0,
-                    percent_height: Some(1.0),
-                    background_color: 0xFF0F172Au32,
+                    width: "100%",
+                    height: "100%",
+                    background_color: 0xFF0F_172A_u32,
                     on_status_change: move |next| status.set(next),
                     on_frame: move |next| frame.set(next),
                 }
@@ -62,35 +62,35 @@ fn app() -> Element {
             text {
                 margin_top: 12.0,
                 font_size: 12.0,
-                font_color: 0xFFCBD5E1u32,
+                font_color: "#FFCBD5E1",
                 "{status():?} · frame {frame().frame:.1} · {progress_percent:.0}% · {speed():.2}x · {source_label}"
             }
             button {
                 margin_top: 10.0,
-                percent_width: 1.0,
+                width: "100%",
                 height: 40.0,
                 onclick: move |_| use_network.toggle(),
                 if use_network() { "切换到内嵌动画" } else { "加载网络 URL 动画" }
             }
             row {
                 margin_top: 10.0,
-                percent_width: 1.0,
+                width: "100%",
                 button {
-                    percent_width: 0.32,
+                    width: "32%",
                     height: 40.0,
                     onclick: move |_| { let _ = toggle_controller.toggle(); },
                     if playing { "暂停" } else { "播放" }
                 }
                 button {
                     margin_left: 8.0,
-                    percent_width: 0.32,
+                    width: "32%",
                     height: 40.0,
                     onclick: move |_| { let _ = stop_controller.stop(); },
                     "停止"
                 }
                 button {
                     margin_left: 8.0,
-                    percent_width: 0.32,
+                    width: "32%",
                     height: 40.0,
                     onclick: move |_| { let _ = seek_controller.seek(0.5); },
                     "50%"
@@ -98,16 +98,16 @@ fn app() -> Element {
             }
             row {
                 margin_top: 8.0,
-                percent_width: 1.0,
+                width: "100%",
                 button {
-                    percent_width: 0.32,
+                    width: "32%",
                     height: 38.0,
                     onclick: move |_| speed.set(if speed() >= 2.0 { 0.5 } else { speed() + 0.5 }),
                     "速度"
                 }
                 button {
                     margin_left: 8.0,
-                    percent_width: 0.32,
+                    width: "32%",
                     height: 38.0,
                     onclick: move |_| repeat.set(match repeat() {
                         LottieRepeatMode::Loop => LottieRepeatMode::Reverse,
@@ -118,7 +118,7 @@ fn app() -> Element {
                 }
                 button {
                     margin_left: 8.0,
-                    percent_width: 0.32,
+                    width: "32%",
                     height: 38.0,
                     onclick: move |_| fit.set(match fit() {
                         LottieFit::Contain => LottieFit::Cover,

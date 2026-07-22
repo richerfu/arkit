@@ -47,6 +47,7 @@ pub use dioxus_elements::event::{
     ScrollIndexPayload, ScrollOffsetPayload,
 };
 
+mod css_value;
 mod native;
 use native::parse_color;
 pub use native::{canonical_tag, create_node, create_node_by_tag, kind_from_tag, NodeKind};

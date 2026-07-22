@@ -9,7 +9,7 @@
 use crate::theme::*;
 use arkit_prelude::*;
 
-use super::{ARKUI_BORDER_STYLE_SOLID, ARKUI_BUTTON_TYPE_NORMAL};
+use super::ARKUI_BORDER_STYLE_SOLID;
 
 const TRANSPARENT: u32 = 0x00000000;
 
@@ -44,7 +44,7 @@ pub fn Pagination(props: PaginationProps) -> Element {
     let on_prev = on_page_change;
     items.push(rsx! {
         button {
-            button_type: ARKUI_BUTTON_TYPE_NORMAL,
+            button_type: "normal",
             focusable: false,
             focus_on_touch: false,
             background_color: TRANSPARENT,
@@ -56,7 +56,7 @@ pub fn Pagination(props: PaginationProps) -> Element {
             padding_right: 0.0,
             padding_bottom: 10.0,
             padding_left: 0.0,
-            alignment: 4,
+            alignment: "center",
             onclick: move |_| on_prev.call(prev_target),
             text {
                 content: "Prev",
@@ -101,11 +101,10 @@ pub fn Pagination(props: PaginationProps) -> Element {
         } else {
             TRANSPARENT
         };
-        let shadow = if is_active { 1 } else { 0 };
         let on_page = on_page_change;
         items.push(rsx! {
             button {
-                button_type: ARKUI_BUTTON_TYPE_NORMAL,
+                button_type: "normal",
                 focusable: false,
                 focus_on_touch: false,
                 width: 36.0,
@@ -119,8 +118,8 @@ pub fn Pagination(props: PaginationProps) -> Element {
                 border_width: border_width,
                 border_color: border_color,
                 border_radius: theme.radii.md,
-                alignment: 4,
-                shadow: shadow,
+                alignment: "center",
+                shadow: if is_active { "sm" },
                 onclick: move |_| on_page.call(number),
                 text {
                     content: number.to_string(),
@@ -139,7 +138,7 @@ pub fn Pagination(props: PaginationProps) -> Element {
     let on_next = on_page_change;
     items.push(rsx! {
         button {
-            button_type: ARKUI_BUTTON_TYPE_NORMAL,
+            button_type: "normal",
             focusable: false,
             focus_on_touch: false,
             background_color: TRANSPARENT,
@@ -151,7 +150,7 @@ pub fn Pagination(props: PaginationProps) -> Element {
             padding_right: 0.0,
             padding_bottom: 10.0,
             padding_left: 0.0,
-            alignment: 4,
+            alignment: "center",
             onclick: move |_| on_next.call(next_target),
             text {
                 content: "Next",
@@ -178,7 +177,7 @@ pub fn Pagination(props: PaginationProps) -> Element {
 
     rsx! {
         row {
-            percent_width: 1.0,
+            width: "100%",
             align_items: "center",
             {inlined.into_iter()}
         }

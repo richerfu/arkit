@@ -13,7 +13,7 @@
 use crate::theme::*;
 use arkit_prelude::*;
 
-use super::floating_layer::{FLOATING_CAPTURE_COLOR, HIT_TEST_DEFAULT, HIT_TEST_NONE};
+use super::floating_layer::FLOATING_CAPTURE_COLOR;
 
 pub(crate) const TRANSPARENT: u32 = 0x00000000;
 const MENU_PANEL_HORIZONTAL_PADDING: f32 = spacing::XXS * 2.0;
@@ -21,7 +21,7 @@ const MENU_PANEL_VERTICAL_PADDING: f32 = spacing::XXS * 2.0;
 const MENU_ROW_HEIGHT: f32 = 38.0;
 const MENU_SEPARATOR_HEIGHT: f32 = 9.0;
 const MENU_TEXT_MAX_LINES: i32 = 1;
-const MENU_TEXT_OVERFLOW_ELLIPSIS: i32 = 2;
+const MENU_TEXT_OVERFLOW_ELLIPSIS: &str = "ellipsis";
 const MENU_TRAILING_GAP: f32 = spacing::SM;
 const MENU_VIEWPORT_PADDING: f32 = spacing::LG;
 const MENU_ICON_SIZE: f32 = 14.0;
@@ -637,7 +637,7 @@ fn MenuContentPanel(
             border_color: colors.border,
             clip: true,
             background_color: colors.popover,
-            shadow: 1i32,
+            shadow: "sm",
             for (index, entry) in entries.iter().enumerate() {
                 {
                     render_menu_entry(
@@ -676,54 +676,54 @@ pub(crate) fn menu_overlay_content(
     let backdrop_top_padding = (top - reserved_above_panel).max(0.0);
     rsx! {
         column {
-            percent_width: 1.0,
-            percent_height: 1.0,
+            width: "100%",
+            height: "100%",
             align_items: "start",
-            hit_test_behavior: HIT_TEST_NONE,
+            hit_test_behavior: "none",
             if let Some(region) = pass_through_region {
                 if region.top() > 0.0 {
                     row {
-                        percent_width: 1.0,
+                        width: "100%",
                         height: region.top(),
                         background_color: FLOATING_CAPTURE_COLOR,
-                        hit_test_behavior: HIT_TEST_DEFAULT,
+                        hit_test_behavior: "default",
                         onclick: move |_| on_dismiss.call(()),
                     }
                 }
                 row {
-                    percent_width: 1.0,
+                    width: "100%",
                     height: region.height,
-                    hit_test_behavior: HIT_TEST_NONE,
+                    hit_test_behavior: "none",
                     if region.x > 0.0 {
                         row {
                             width: region.x,
-                            percent_height: 1.0,
+                            height: "100%",
                             background_color: FLOATING_CAPTURE_COLOR,
-                            hit_test_behavior: HIT_TEST_DEFAULT,
+                            hit_test_behavior: "default",
                             onclick: move |_| on_dismiss.call(()),
                         }
                     }
                     row {
                         width: region.width,
-                        percent_height: 1.0,
-                        hit_test_behavior: HIT_TEST_NONE,
+                        height: "100%",
+                        hit_test_behavior: "none",
                     }
                     row {
                         layout_weight: 1.0,
-                        percent_height: 1.0,
+                        height: "100%",
                         background_color: FLOATING_CAPTURE_COLOR,
-                        hit_test_behavior: HIT_TEST_DEFAULT,
+                        hit_test_behavior: "default",
                         onclick: move |_| on_dismiss.call(()),
                     }
                 }
             }
             column {
-                percent_width: 1.0,
+                width: "100%",
                 layout_weight: 1.0,
                 align_items: "start",
                 padding_top: backdrop_top_padding,
                 background_color: FLOATING_CAPTURE_COLOR,
-                hit_test_behavior: HIT_TEST_DEFAULT,
+                hit_test_behavior: "default",
                 onclick: move |_| on_dismiss.call(()),
                 // Keep horizontal anchor via absolute position (margin_left was
                 // sensitive to intermediate row shrink-wrapping).
@@ -940,7 +940,7 @@ fn render_submenu_entry(
                         border_color: colors.border,
                         clip: true,
                         background_color: colors.popover,
-                        shadow: 1_i32,
+                        shadow: "sm",
                         for (child_index, child) in entry.items.iter().enumerate() {
                             {
                                 render_menu_entry(
@@ -1134,7 +1134,7 @@ fn menu_item_text(content: String, color: u32, weight: i32) -> Element {
             layout_weight: 1.0,
             clip: true,
             text {
-                percent_width: 1.0,
+                width: "100%",
                 font_size: typography::LG,
                 font_weight: weight,
                 font_color: color,
@@ -1153,7 +1153,7 @@ fn menu_label_text(content: String, color: u32) -> Element {
             layout_weight: 1.0,
             clip: true,
             text {
-                percent_width: 1.0,
+                width: "100%",
                 font_size: typography::MD,
                 font_weight: 600_i32,
                 font_color: color,

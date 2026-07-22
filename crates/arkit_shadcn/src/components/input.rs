@@ -18,7 +18,8 @@ pub struct InputProps {
     pub value: Option<String>,
     #[props(default)]
     pub height: Option<f32>,
-    pub percent_width: Option<f32>,
+    /// CSS width (`"100%"`, `"50%"`). Unset leaves the field content-sized.
+    pub width: Option<String>,
     /// Uses the destructive border treatment for validation failures.
     #[props(default)]
     pub invalid: bool,
@@ -54,7 +55,7 @@ pub fn Input(props: InputProps) -> Element {
             padding_right: spacing::MD,
             padding_bottom: spacing::XXS,
             padding_left: spacing::MD,
-            percent_width: if let Some(w) = props.percent_width { w },
+            width: if let Some(w) = props.width { w },
             on_change: move |evt| {
                 if !props.disabled {
                     if let Some(handler) = on_change {

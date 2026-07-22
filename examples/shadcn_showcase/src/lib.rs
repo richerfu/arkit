@@ -8,18 +8,18 @@ use arkit::entry;
 use arkit::prelude::*;
 use arkit::shadcn as arkit_shadcn;
 use arkit::shadcn::components::{
-    Accordion, AccordionItemSpec, Alert, AlertDescription, AlertDialog, AlertList, AlertTitle,
-    AlertVariant, AspectRatio, Avatar, AvatarFallback, Badge, BadgeVariant, BottomNavigation,
-    BottomNavigationItem, BottomSheet, BottomSheetTextInput, Button, ButtonSize, ButtonVariant,
-    Calendar, Card, CardContent, CardFooter, CardHeader, Carousel, CarouselControlsPlacement,
-    CarouselIndicatorVariant, CarouselStyle, Checkbox, Code, Collapsible, ContextMenu, DatePicker,
-    Dialog, DialogFooter, DialogHeader, DropdownMenu, Field, FieldContent, FieldDescription,
-    FieldError, FieldGroup, FieldOrientation, FieldSeparator, FieldSet, FieldTitle, Form, FormItem,
-    HoverCard, Input, InputOtp, InputOtpMode, InputOtpSeparator, Label, Markdown, MenuEntry,
-    Menubar, MenubarMenuSpec, MultiSlider, Popover, Progress, RadioGroup, RangeSlider, Select,
-    Separator, Skeleton, Slider, SliderOrientation, SliderStyle, Sonner, SonnerPosition,
-    SonnerToast, Spinner, Switch, Table, Tabs, Text, TextVariant, Textarea, ToastAppearance,
-    Toggle, ToggleGroup, ToggleVariant, Tooltip,
+    Accordion, AccordionItemSpec, Alert, AlertDescription, AlertDialog, AlertDialogAction,
+    AlertList, AlertTitle, AlertVariant, AspectRatio, Avatar, AvatarFallback, Badge, BadgeVariant,
+    BottomNavigation, BottomNavigationItem, BottomSheet, BottomSheetTextInput, Button, ButtonSize,
+    ButtonVariant, Calendar, Card, CardContent, CardFooter, CardHeader, Carousel,
+    CarouselControlsPlacement, CarouselIndicatorVariant, CarouselStyle, Checkbox, Code,
+    Collapsible, ContextMenu, DatePicker, Dialog, DialogFooter, DialogHeader, DropdownMenu, Field,
+    FieldContent, FieldDescription, FieldError, FieldGroup, FieldOrientation, FieldSeparator,
+    FieldSet, FieldTitle, Form, FormItem, HoverCard, Input, InputOtp, InputOtpMode,
+    InputOtpSeparator, Label, Markdown, MenuEntry, Menubar, MenubarMenuSpec, MultiSlider, Popover,
+    Progress, RadioGroup, RangeSlider, Select, Separator, Skeleton, Slider, SliderOrientation,
+    SliderStyle, Sonner, SonnerPosition, SonnerToast, Spinner, Switch, Table, Tabs, Text,
+    TextVariant, Textarea, ToastAppearance, Toggle, ToggleGroup, ToggleVariant, Tooltip,
 };
 use arkit::shadcn::icon::icon_placeholder;
 use arkit::shadcn::theme::{
@@ -327,8 +327,8 @@ fn app() -> Element {
         ThemeProvider {
             theme,
             column {
-                percent_width: 1.0,
-                percent_height: 1.0,
+                width: "100%",
+                height: "100%",
                 background_color: theme.colors.background,
                 if let Some(slug) = selected_slug {
                     MountTransition {
@@ -474,16 +474,16 @@ fn HomeView(
             on_custom,
         }
         column {
-            percent_width: 1.0,
+            width: "100%",
             layout_weight: 1.0,
             background_color: theme.colors.background,
             scroll {
-                percent_width: 1.0,
-                percent_height: 1.0,
-                alignment: 0_i32,
+                width: "100%",
+                height: "100%",
+                alignment: "top-start",
                 background_color: theme.colors.background,
             column {
-                percent_width: 1.0,
+                width: "100%",
                 background_color: theme.colors.background,
                 align_items: "center",
                 justify_content: "start",
@@ -492,14 +492,14 @@ fn HomeView(
                 padding_bottom: spacing::XXL,
                 padding_left: spacing::LG,
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     max_width_constraint: 512.0,
                     align_items: "start",
                     justify_content: "start",
                     Input {
                         placeholder: Some("Search UI...".to_string()),
                         value: Some(query),
-                        percent_width: Some(1.0),
+                        width: "100%",
                         on_change: move |value| on_query.call(value),
                     }
                     row { height: spacing::LG }
@@ -512,7 +512,7 @@ fn HomeView(
                         }
                     } else {
                         column {
-                            percent_width: 1.0,
+                            width: "100%",
                             align_items: "start",
                             justify_content: "start",
                             for (index, item) in items.iter().enumerate() {
@@ -591,7 +591,7 @@ fn NavBar(
 
     rsx! {
         row {
-            percent_width: 1.0,
+            width: "100%",
             height: header_height,
             background_color: theme.colors.background,
             padding_top: if back { 4.0 } else { 18.0 },
@@ -732,14 +732,14 @@ fn ThemeMenu(
                     layout_weight: 1.0,
                     clip: true,
                     text {
-                        percent_width: 1.0,
+                        width: "100%",
                         content: active_theme_label.to_string(),
                         font_size: typography::SM,
                         font_weight: 500_i32,
                         font_color: theme.colors.secondary_foreground,
                         line_height: 18.0,
                         max_lines: 1_i32,
-                        text_overflow: 2_i32,
+                        text_overflow: "ellipsis",
                     }
                 }
                 row { width: spacing::XS }
@@ -769,7 +769,7 @@ fn ComponentListItem(
 
     rsx! {
         row {
-            percent_width: 1.0,
+            width: "100%",
             height: 56.0,
             align_items: "center",
             justify_content: "space_between",
@@ -780,7 +780,7 @@ fn ComponentListItem(
             background_color: row_background,
             border_width: border_width,
             border_color: row_border,
-            border_style: 0_i32,
+            border_style: "solid",
             border_radius: radius_value,
             clip: true,
             onclick: move |_| on_select.call(spec.slug),
@@ -812,17 +812,17 @@ fn DemoCanvas(slug: &'static str) -> Element {
     if policy.fill_height {
         rsx! {
             column {
-                percent_width: 1.0,
+                width: "100%",
                 layout_weight: 1.0,
                 background_color: theme.colors.surface,
                 scroll {
-                    percent_width: 1.0,
-                    percent_height: 1.0,
+                    width: "100%",
+                    height: "100%",
                     background_color: theme.colors.surface,
                     scroll_enabled: true,
                     column {
-                        percent_width: 1.0,
-                        percent_height: 1.0,
+                        width: "100%",
+                        height: "100%",
                         background_color: theme.colors.surface,
                         align_items: if policy.center_x { "center" } else { "start" },
                         justify_content: if policy.center_y { "center" } else { "start" },
@@ -838,16 +838,16 @@ fn DemoCanvas(slug: &'static str) -> Element {
     } else {
         rsx! {
             column {
-                percent_width: 1.0,
+                width: "100%",
                 layout_weight: 1.0,
                 background_color: theme.colors.surface,
                 scroll {
-                    percent_width: 1.0,
-                    percent_height: 1.0,
+                    width: "100%",
+                    height: "100%",
                     background_color: theme.colors.surface,
                     scroll_enabled: true,
                     column {
-                        percent_width: 1.0,
+                        width: "100%",
                         background_color: theme.colors.surface,
                         align_items: if policy.center_x { "center" } else { "start" },
                         justify_content: if policy.center_y { "center" } else { "start" },
@@ -1103,7 +1103,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
             fixed_width {
                 width: 512.0,
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     demo_mode_label {
                         title: "Controlled".to_string(),
                         detail: Some(format!("value = {:?}", accordion_value())),
@@ -1134,7 +1134,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
             fixed_width {
                 width: 576.0,
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     Alert {
                         icon: "circle-check".to_string(),
                         AlertTitle { content: "Success! Your changes have been saved".to_string() }
@@ -1185,14 +1185,14 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 cancel: rsx! {
                     Button {
                         variant: ButtonVariant::Outline,
-                        percent_width: Some(1.0),
+                        width: "100%",
                         onclick: move |_| alert_open.set(false),
                         "Cancel"
                     }
                 },
                 action: rsx! {
                     Button {
-                        percent_width: Some(1.0),
+                        width: "100%",
                         onclick: move |_| alert_open.set(false),
                         "Continue"
                     }
@@ -1201,7 +1201,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
             {demo_mode_divider()}
             demo_mode_label {
                 title: "Uncontrolled".to_string(),
-                detail: Some("default_open via remount key (open is otherwise parent-driven)".to_string()),
+                detail: Some("default_open + internal state; actions call use_dialog_close".to_string()),
             }
             Button {
                 variant: ButtonVariant::Outline,
@@ -1212,21 +1212,19 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 AlertDialog {
                     key: "{alert_uc_gen()}",
                     title: "Uncontrolled dialog".to_string(),
-                    description: "Opened with default_open; close uses internal state.".to_string(),
+                    description: "Opened with default_open. Cancel/OK and backdrop dismiss via internal close.".to_string(),
                     default_open: Some(true),
                     on_close: move |_| {},
                     cancel: rsx! {
-                        Button {
-                            percent_width: Some(1.0),
+                        AlertDialogAction {
+                            width: "100%",
                             variant: ButtonVariant::Outline,
-                            onclick: move |_| {},
                             "Cancel"
                         }
                     },
                     action: rsx! {
-                        Button {
-                            percent_width: Some(1.0),
-                            onclick: move |_| {},
+                        AlertDialogAction {
+                            width: "100%",
                             "OK"
                         }
                     },
@@ -1235,14 +1233,14 @@ fn ComponentDemo(slug: &'static str) -> Element {
         },
         "aspect-ratio" => rsx! {
             column {
-                percent_width: 1.0,
+                width: "100%",
                 AspectRatio {
                     ratio: 16.0 / 9.0,
                     image {
                         src: "https://images.unsplash.com/photo-1672758247442-82df22f5899e".to_string(),
-                        percent_width: 1.0,
-                        percent_height: 1.0,
-                        object_fit: 1_i32,
+                        width: "100%",
+                        height: "100%",
+                        object_fit: "cover",
                         border_radius: theme.radii.md,
                         clip: true,
                     }
@@ -1312,11 +1310,11 @@ fn ComponentDemo(slug: &'static str) -> Element {
 
             rsx! {
                 column {
-                    percent_width: 1.0,
-                    percent_height: 1.0,
+                    width: "100%",
+                    height: "100%",
                     background_color: theme.colors.card,
                     column {
-                        percent_width: 1.0,
+                        width: "100%",
                         layout_weight: 1.0,
                         align_items: "center",
                         justify_content: "center",
@@ -1368,7 +1366,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 default_open: Some(false),
                 on_close: move |_| bottom_sheet_open.set(false),
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     Label { content: "Name".to_string() }
                     v_gap { height: 10.0 }
                     BottomSheetTextInput {
@@ -1384,7 +1382,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     v_gap { height: spacing::XL }
                     Button {
-                        percent_width: Some(1.0),
+                        width: "100%",
                         onclick: move |_| bottom_sheet_open.set(false),
                         "Save Changes"
                     }
@@ -1415,8 +1413,8 @@ fn ComponentDemo(slug: &'static str) -> Element {
         },
         "button" => rsx! {
             column {
-                percent_width: 1.0,
-                percent_height: 1.0,
+                width: "100%",
+                height: "100%",
                 align_items: "center",
                 justify_content: "center",
                 Button { onclick: move |_| {}, "Default" }
@@ -1438,7 +1436,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
         },
         "calendar" => rsx! {
             column {
-                percent_width: 1.0,
+                width: "100%",
                 Calendar {
                     selected: calendar_selected(),
                     on_day_press: move |date| calendar_selected.set(Some(date)),
@@ -1505,8 +1503,8 @@ fn ComponentDemo(slug: &'static str) -> Element {
             .map(|(index, (icon, title, description))| {
                 rsx! {
                     column {
-                        percent_width: 1.0,
-                        percent_height: 1.0,
+                        width: "100%",
+                        height: "100%",
                         align_items: "center",
                         justify_content: "center",
                         padding_top: spacing::XXL,
@@ -1522,7 +1520,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                             font_weight: 600_i32,
                             font_color: theme.colors.card_foreground,
                             line_height: 28.0,
-                            text_align: 1_i32,
+                            text_align: "center",
                         }
                         v_gap { height: spacing::SM }
                         text {
@@ -1530,7 +1528,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                             font_size: typography::SM,
                             font_color: theme.colors.muted_foreground,
                             line_height: 20.0,
-                            text_align: 1_i32,
+                            text_align: "center",
                         }
                         v_gap { height: spacing::XL }
                         text {
@@ -1551,8 +1549,8 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     .map(|(index, label)| {
                         rsx! {
                             column {
-                                percent_width: 1.0,
-                                percent_height: 1.0,
+                                width: "100%",
+                                height: "100%",
                                 align_items: "center",
                                 justify_content: "center",
                                 background_color: theme.colors.muted,
@@ -1583,7 +1581,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 fixed_width {
                     width: 336.0,
                     column {
-                        percent_width: 1.0,
+                        width: "100%",
                         demo_mode_label {
                             title: "Controlled".to_string(),
                             detail: Some(format!(
@@ -1647,7 +1645,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
             fixed_width {
                 width: 384.0,
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     demo_mode_label {
                         title: "Controlled".to_string(),
                         detail: Some(format!(
@@ -1670,7 +1668,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     v_gap { height: spacing::LG }
                     row {
-                        percent_width: 1.0,
+                        width: "100%",
                         align_items: "start",
                         padding: 12.0,
                         border_width: 1.0,
@@ -1720,7 +1718,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
             fixed_width {
                 width: 350.0,
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     demo_mode_label {
                         title: "Controlled".to_string(),
                         detail: Some(format!("open = {}", collapsible_open())),
@@ -1730,7 +1728,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         open: Some(collapsible_open()),
                         on_open_change: EventHandler::new(move |value| collapsible_open.set(value)),
                         column {
-                            percent_width: 1.0,
+                            width: "100%",
                             repo_row { name: "@radix-ui/primitives".to_string() }
                             v_gap { height: spacing::SM }
                             repo_row { name: "@radix-ui/react".to_string() }
@@ -1750,7 +1748,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                             collapsible_uc_note.set(format!("on_open_change = {value}"));
                         }),
                         column {
-                            percent_width: 1.0,
+                            width: "100%",
                             repo_row { name: "@radix-ui/primitives".to_string() }
                             v_gap { height: spacing::SM }
                             repo_row { name: "@radix-ui/react".to_string() }
@@ -1765,7 +1763,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
             fixed_width {
                 width: 300.0,
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     demo_mode_label {
                         title: "Controlled".to_string(),
                         detail: Some(format!("open = {}", context_open())),
@@ -1786,11 +1784,11 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         stack {
                             width: 300.0,
                             height: 120.0,
-                            alignment: 4_i32,
+                            alignment: "center",
                             border_width: 1.0,
                             border_color: theme.colors.foreground,
                             border_radius: theme.radii.md,
-                            border_style: 1_i32,
+                            border_style: "dashed",
                             clip: true,
                             text {
                                 content: "Long press (controlled)".to_string(),
@@ -1803,7 +1801,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     v_gap { height: spacing::MD }
                     Button {
                         variant: ButtonVariant::Outline,
-                        percent_width: Some(1.0),
+                        width: "100%",
                         onclick: move |_| context_outside_clicks += 1,
                         "Outside click · {context_outside_clicks()}"
                     }
@@ -1829,11 +1827,11 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         stack {
                             width: 300.0,
                             height: 100.0,
-                            alignment: 4_i32,
+                            alignment: "center",
                             border_width: 1.0,
                             border_color: theme.colors.border,
                             border_radius: theme.radii.md,
-                            border_style: 1_i32,
+                            border_style: "dashed",
                             clip: true,
                             text {
                                 content: "Long press (uncontrolled)".to_string(),
@@ -1903,7 +1901,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     description: Some("Make changes to your profile here. Click save when you're done.".to_string()),
                 }
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     align_items: "start",
                     margin_top: spacing::XL,
                     Label { content: "Name".to_string() }
@@ -1911,7 +1909,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     Input {
                         value: Some(dialog_name()),
                         placeholder: Some("Your name".to_string()),
-                        percent_width: Some(1.0),
+                        width: "100%",
                         on_change: move |value| dialog_name.set(value),
                     }
                     v_gap { height: spacing::LG }
@@ -1920,7 +1918,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     Input {
                         value: Some(dialog_username()),
                         placeholder: Some("@username".to_string()),
-                        percent_width: Some(1.0),
+                        width: "100%",
                         on_change: move |value| dialog_username.set(value),
                     }
                 }
@@ -1969,7 +1967,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
             fixed_width {
                 width: 384.0,
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     demo_mode_label {
                         title: "Controlled".to_string(),
                         detail: Some(format!("open = {}", menu_open())),
@@ -2003,26 +2001,26 @@ fn ComponentDemo(slug: &'static str) -> Element {
             fixed_width {
                 width: 440.0,
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     height: 1110.0,
                     align_items: "start",
                     text {
                         content: "Account settings".to_string(),
-                        percent_width: 1.0,
+                        width: "100%",
                         font_size: typography::XXL,
                         font_weight: 700_i32,
                         font_color: theme.colors.foreground,
                         line_height: 32.0,
-                        text_align: 0_i32,
+                        text_align: "start",
                     }
                     v_gap { height: spacing::SM }
                     text {
                         content: "Update your public profile and communication preferences.".to_string(),
-                        percent_width: 1.0,
+                        width: "100%",
                         font_size: typography::SM,
                         font_color: theme.colors.muted_foreground,
                         line_height: 20.0,
-                        text_align: 0_i32,
+                        text_align: "start",
                     }
                     v_gap { height: spacing::XXL }
                     Form {
@@ -2052,7 +2050,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                                     Input {
                                         value: Some(form_name()),
                                         placeholder: Some("Your name".to_string()),
-                                        percent_width: Some(1.0),
+                                        width: "100%",
                                         invalid: form_name_invalid,
                                         on_change: move |value| {
                                             form_name.set(value);
@@ -2068,7 +2066,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                                     Input {
                                         value: Some(form_email()),
                                         placeholder: Some("name@example.com".to_string()),
-                                        percent_width: Some(1.0),
+                                        width: "100%",
                                         invalid: form_email_invalid,
                                         on_change: move |value| {
                                             form_email.set(value);
@@ -2083,7 +2081,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                                         value: Some(form_bio()),
                                         placeholder: Some("Tell people a little about yourself.".to_string()),
                                         height: Some(96.0),
-                                        percent_width: Some(1.0),
+                                        width: "100%",
                                         on_change: move |value| {
                                             form_bio.set(value);
                                             form_status.set(None);
@@ -2121,7 +2119,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                                 },
                             }
                             row {
-                                percent_width: 1.0,
+                                width: "100%",
                                 margin_top: spacing::XS,
                                 padding_left: spacing::XXL,
                                 FieldDescription {
@@ -2136,7 +2134,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         }
                         if let Some(success) = form_status() {
                             row {
-                                percent_width: 1.0,
+                                width: "100%",
                                 align_items: "center",
                                 justify_content: "start",
                                 margin_bottom: spacing::LG,
@@ -2163,12 +2161,12 @@ fn ComponentDemo(slug: &'static str) -> Element {
                                         } else {
                                             "Review the highlighted fields and try again.".to_string()
                                         },
-                                        percent_width: 1.0,
+                                        width: "100%",
                                         font_size: typography::XS,
                                         font_weight: 500_i32,
                                         font_color: if success { theme.colors.chart_2 } else { theme.colors.destructive },
                                         line_height: 18.0,
-                                        text_align: 0_i32,
+                                        text_align: "start",
                                     }
                                 }
                             }
@@ -2181,7 +2179,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
             fixed_width {
                 width: 320.0,
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     demo_mode_label {
                         title: "Controlled".to_string(),
                         detail: Some(format!("open = {}", hover_open())),
@@ -2194,7 +2192,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         width: Some(320.0),
                         trigger: rsx! { Button { variant: ButtonVariant::Link, onclick: move |_| {}, "@expo" } },
                         row {
-                            percent_width: 1.0,
+                            width: "100%",
                             align_items: "start",
                             {demo_avatar("https://github.com/expo.png", "E", false, None)}
                             h_gap { width: spacing::LG }
@@ -2267,7 +2265,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
             fixed_width {
                 width: 384.0,
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     demo_mode_label {
                         title: "Controlled".to_string(),
                         detail: Some(format!("value = {:?}", input_controlled())),
@@ -2275,7 +2273,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     Input {
                         placeholder: Some("Email".to_string()),
                         value: Some(input_controlled()),
-                        percent_width: Some(1.0),
+                        width: "100%",
                         on_change: Some(EventHandler::new(move |value| input_controlled.set(value))),
                     }
                     {demo_mode_divider()}
@@ -2285,7 +2283,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     Input {
                         placeholder: Some("Uncontrolled input".to_string()),
-                        percent_width: Some(1.0),
+                        width: "100%",
                     }
                 }
             }
@@ -2294,10 +2292,10 @@ fn ComponentDemo(slug: &'static str) -> Element {
             fixed_width {
                 width: 420.0,
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     align_items: "start",
                     text {
-                        percent_width: 1.0,
+                        width: "100%",
                         content: "Verify your email".to_string(),
                         font_size: typography::XXL,
                         font_weight: 700_i32,
@@ -2306,7 +2304,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     v_gap { height: spacing::SM }
                     text {
-                        percent_width: 1.0,
+                        width: "100%",
                         content: "Enter the verification code sent to m@example.com.".to_string(),
                         font_size: typography::SM,
                         font_weight: 400_i32,
@@ -2337,7 +2335,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     v_gap { height: spacing::SM }
                     text {
-                        percent_width: 1.0,
+                        width: "100%",
                         content: otp_status(),
                         font_size: typography::XS,
                         font_weight: 400_i32,
@@ -2350,7 +2348,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     v_gap { height: spacing::XL }
                     Button {
-                        percent_width: Some(1.0),
+                        width: "100%",
                         disabled: Some(otp_value().chars().count() != 6),
                         onclick: move |_| {
                             if otp_value() == "246810" {
@@ -2364,7 +2362,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     Button {
                         variant: ButtonVariant::Link,
-                        percent_width: Some(1.0),
+                        width: "100%",
                         onclick: move |_| {
                             otp_value.set(String::new());
                             otp_invalid.set(false);
@@ -2431,7 +2429,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
             fixed_width {
                 width: 640.0,
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     align_items: "start",
                     Text {
                         content: "Standalone Code (feature = code)".to_string(),
@@ -2495,7 +2493,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 fixed_width {
                     width: 640.0,
                     column {
-                        percent_width: 1.0,
+                        width: "100%",
                         align_items: "start",
                         Text {
                             content: "Tree-sitter highlight".to_string(),
@@ -2571,7 +2569,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
         }
         "menubar" => rsx! {
             column {
-                percent_width: 1.0,
+                width: "100%",
                 demo_mode_label {
                     title: "Controlled".to_string(),
                     detail: Some(format!("active = {:?}", menubar_active())),
@@ -2625,7 +2623,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     width: Some(320.0),
                     trigger: rsx! { Button { variant: ButtonVariant::Outline, onclick: move |_| {}, "Open popover" } },
                     column {
-                        percent_width: 1.0,
+                        width: "100%",
                         text {
                             content: "Dimensions".to_string(),
                             font_size: typography::MD,
@@ -2686,7 +2684,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
             fixed_width {
                 width: 420.0,
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     align_items: "start",
                     padding_top: spacing::XL,
                     padding_right: spacing::XL,
@@ -2697,7 +2695,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     border_color: theme.colors.border,
                     border_radius: theme.radii.xl,
                     row {
-                        percent_width: 1.0,
+                        width: "100%",
                         align_items: "center",
                         justify_content: "start",
                         row {
@@ -2730,7 +2728,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     v_gap { height: spacing::XL }
                     row {
-                        percent_width: 1.0,
+                        width: "100%",
                         align_items: "center",
                         justify_content: "space_between",
                         text {
@@ -2756,15 +2754,15 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     v_gap { height: spacing::SM }
                     text {
                         content: format!("{:.0} MB of 100 MB", upload_progress()),
-                        percent_width: 1.0,
+                        width: "100%",
                         font_size: typography::XS,
                         font_color: theme.colors.muted_foreground,
                         line_height: 18.0,
-                        text_align: 0_i32,
+                        text_align: "start",
                     }
                     v_gap { height: spacing::XL }
                     row {
-                        percent_width: 1.0,
+                        width: "100%",
                         align_items: "center",
                         justify_content: "end",
                         Button {
@@ -2796,7 +2794,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
             fixed_width {
                 width: 384.0,
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     demo_mode_label {
                         title: "Controlled".to_string(),
                         detail: Some(format!("selected = {}", radio_choice())),
@@ -2823,7 +2821,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
         },
         "select" => rsx! {
             column {
-                percent_width: 1.0,
+                width: "100%",
                 demo_mode_label {
                     title: "Controlled".to_string(),
                     detail: Some(format!(
@@ -2871,10 +2869,10 @@ fn ComponentDemo(slug: &'static str) -> Element {
             fixed_width {
                 width: 320.0,
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     align_items: "start",
                     column {
-                        percent_width: 1.0,
+                        width: "100%",
                         align_items: "start",
                         Text { content: "Radix Primitives".to_string(), variant: TextVariant::Small }
                         v_gap { height: 4.0 }
@@ -2906,7 +2904,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
             fixed_width {
                 width: 320.0,
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     padding: spacing::LG,
                     background_color: theme.colors.background,
                     border_radius: theme.radii.lg,
@@ -2930,11 +2928,11 @@ fn ComponentDemo(slug: &'static str) -> Element {
             fixed_width {
                 width: 420.0,
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     height: 1064.0,
                     align_items: "start",
                     text {
-                        percent_width: 1.0,
+                        width: "100%",
                         content: "Sound & haptics".to_string(),
                         font_size: typography::XXL,
                         font_weight: 700_i32,
@@ -2943,7 +2941,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     v_gap { height: spacing::SM }
                     text {
-                        percent_width: 1.0,
+                        width: "100%",
                         content: "Tune playback, output levels, and channel balance.".to_string(),
                         font_size: typography::SM,
                         font_color: theme.colors.muted_foreground,
@@ -2952,16 +2950,16 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     v_gap { height: spacing::XXL }
 
                     column {
-                        percent_width: 1.0,
+                        width: "100%",
                         align_items: "start",
                         padding: spacing::LG,
                         background_color: theme.colors.card,
-                        border_style: 0_i32,
+                        border_style: "solid",
                         border_width: 1.0,
                         border_color: theme.colors.border,
                         border_radius: theme.radii.xl,
                         row {
-                            percent_width: 1.0,
+                            width: "100%",
                             align_items: "center",
                             justify_content: "start",
                             row {
@@ -3002,7 +3000,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                             on_change: move |value| playback_position.set(value),
                         }
                         row {
-                            percent_width: 1.0,
+                            width: "100%",
                             align_items: "center",
                             justify_content: "space_between",
                             text {
@@ -3022,7 +3020,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
 
                     v_gap { height: spacing::XXL }
                     row {
-                        percent_width: 1.0,
+                        width: "100%",
                         align_items: "center",
                         justify_content: "space_between",
                         text {
@@ -3049,7 +3047,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
 
                     v_gap { height: spacing::XL }
                     row {
-                        percent_width: 1.0,
+                        width: "100%",
                         align_items: "center",
                         justify_content: "space_between",
                         column {
@@ -3090,7 +3088,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
 
                     v_gap { height: spacing::XL }
                     row {
-                        percent_width: 1.0,
+                        width: "100%",
                         align_items: "center",
                         justify_content: "space_between",
                         column {
@@ -3131,7 +3129,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
 
                     v_gap { height: spacing::XL }
                     row {
-                        percent_width: 1.0,
+                        width: "100%",
                         align_items: "center",
                         justify_content: "space_between",
                         text {
@@ -3167,7 +3165,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         line_height: 20.0,
                     }
                     text {
-                        percent_width: 1.0,
+                        width: "100%",
                         content: "Vertical controls keep minimum at the bottom.".to_string(),
                         font_size: typography::XS,
                         font_color: theme.colors.muted_foreground,
@@ -3175,7 +3173,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     v_gap { height: spacing::MD }
                     row {
-                        percent_width: 1.0,
+                        width: "100%",
                         height: 220.0,
                         align_items: "center",
                         justify_content: "center",
@@ -3240,7 +3238,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
 
                     v_gap { height: spacing::XL }
                     row {
-                        percent_width: 1.0,
+                        width: "100%",
                         align_items: "center",
                         justify_content: "space_between",
                         column {
@@ -3280,10 +3278,10 @@ fn ComponentDemo(slug: &'static str) -> Element {
             fixed_width {
                 width: 420.0,
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     align_items: "start",
                     text {
-                        percent_width: 1.0,
+                        width: "100%",
                         content: "Notifications".to_string(),
                         font_size: typography::XXL,
                         font_weight: 700_i32,
@@ -3292,7 +3290,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     v_gap { height: spacing::SM }
                     text {
-                        percent_width: 1.0,
+                        width: "100%",
                         content: "Bottom-center Sonner stack (official peeks). Swipe up to expand, down to collapse/dismiss. Minimal is a compact chip.".to_string(),
                         font_size: typography::SM,
                         font_weight: 400_i32,
@@ -3302,13 +3300,13 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     v_gap { height: spacing::LG }
                     Button {
                         variant: ButtonVariant::Outline,
-                        percent_width: Some(1.0),
+                        width: "100%",
                         onclick: move |_| sonner_background_clicks += 1,
                         "Background click test · {sonner_background_clicks()}"
                     }
                     v_gap { height: spacing::XXL }
                     text {
-                        percent_width: 1.0,
+                        width: "100%",
                         content: "Notification".to_string(),
                         font_size: typography::SM,
                         font_weight: 600_i32,
@@ -3317,10 +3315,10 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     v_gap { height: spacing::MD }
                     row {
-                        percent_width: 1.0,
+                        width: "100%",
                         Button {
                             variant: ButtonVariant::Outline,
-                            percent_width: Some(0.48),
+                            width: "48%",
                             onclick: move |_| enqueue_sonner_toast(
                                 sonner_toasts,
                                 sonner_next_id,
@@ -3337,7 +3335,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         }
                         row { layout_weight: 1.0 }
                         Button {
-                            percent_width: Some(0.48),
+                            width: "48%",
                             onclick: move |_| enqueue_sonner_toast(
                                 sonner_toasts,
                                 sonner_next_id,
@@ -3350,10 +3348,10 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     v_gap { height: spacing::MD }
                     row {
-                        percent_width: 1.0,
+                        width: "100%",
                         Button {
                             variant: ButtonVariant::Secondary,
-                            percent_width: Some(0.48),
+                            width: "48%",
                             onclick: move |_| enqueue_sonner_toast(
                                 sonner_toasts,
                                 sonner_next_id,
@@ -3366,7 +3364,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         row { layout_weight: 1.0 }
                         Button {
                             variant: ButtonVariant::Outline,
-                            percent_width: Some(0.48),
+                            width: "48%",
                             onclick: move |_| enqueue_sonner_toast(
                                 sonner_toasts,
                                 sonner_next_id,
@@ -3379,10 +3377,10 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     v_gap { height: spacing::MD }
                     row {
-                        percent_width: 1.0,
+                        width: "100%",
                         Button {
                             variant: ButtonVariant::Destructive,
-                            percent_width: Some(0.48),
+                            width: "48%",
                             onclick: move |_| enqueue_sonner_toast(
                                 sonner_toasts,
                                 sonner_next_id,
@@ -3395,7 +3393,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         row { layout_weight: 1.0 }
                         Button {
                             variant: ButtonVariant::Outline,
-                            percent_width: Some(0.48),
+                            width: "48%",
                             onclick: move |_| enqueue_sonner_toast(
                                 sonner_toasts,
                                 sonner_next_id,
@@ -3408,7 +3406,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     v_gap { height: spacing::MD }
                     Button {
                         variant: ButtonVariant::Secondary,
-                        percent_width: Some(1.0),
+                        width: "100%",
                         onclick: move |_| {
                             for (title, description) in [
                                 ("Alice", "Free this afternoon?"),
@@ -3430,7 +3428,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     v_gap { height: spacing::XXL }
                     text {
-                        percent_width: 1.0,
+                        width: "100%",
                         content: "Minimal".to_string(),
                         font_size: typography::SM,
                         font_weight: 600_i32,
@@ -3439,7 +3437,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     v_gap { height: spacing::SM }
                     text {
-                        percent_width: 1.0,
+                        width: "100%",
                         content: "Compact chip — short copy only.".to_string(),
                         font_size: typography::XS,
                         font_weight: 400_i32,
@@ -3448,10 +3446,10 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     v_gap { height: spacing::MD }
                     row {
-                        percent_width: 1.0,
+                        width: "100%",
                         Button {
                             variant: ButtonVariant::Outline,
-                            percent_width: Some(0.31),
+                            width: "31%",
                             onclick: move |_| enqueue_sonner_toast(
                                 sonner_toasts,
                                 sonner_next_id,
@@ -3461,7 +3459,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         }
                         row { layout_weight: 1.0 }
                         Button {
-                            percent_width: Some(0.31),
+                            width: "31%",
                             onclick: move |_| enqueue_sonner_toast(
                                 sonner_toasts,
                                 sonner_next_id,
@@ -3475,7 +3473,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         row { layout_weight: 1.0 }
                         Button {
                             variant: ButtonVariant::Destructive,
-                            percent_width: Some(0.31),
+                            width: "31%",
                             onclick: move |_| enqueue_sonner_toast(
                                 sonner_toasts,
                                 sonner_next_id,
@@ -3489,7 +3487,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     v_gap { height: spacing::XL }
                     text {
-                        percent_width: 1.0,
+                        width: "100%",
                         content: sonner_status(),
                         font_size: typography::XS,
                         font_weight: 400_i32,
@@ -3509,7 +3507,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
             fixed_width {
                 width: 320.0,
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     align_items: "center",
                     text {
                         content: "Sizes".to_string(),
@@ -3585,7 +3583,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
         },
         "tabs" => rsx! {
             column {
-                percent_width: 1.0,
+                width: "100%",
                 max_width_constraint: 384.0,
                 demo_mode_label {
                     title: "Controlled".to_string(),
@@ -3647,7 +3645,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
             fixed_width {
                 width: 384.0,
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     demo_mode_label {
                         title: "Controlled".to_string(),
                         detail: Some(format!("value.len = {}", textarea_controlled().chars().count())),
@@ -3655,7 +3653,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     Textarea {
                         placeholder: Some("Type your message here.".to_string()),
                         value: Some(textarea_controlled()),
-                        percent_width: Some(1.0),
+                        width: "100%",
                         on_change: Some(EventHandler::new(move |value| textarea_controlled.set(value))),
                     }
                     {demo_mode_divider()}
@@ -3665,7 +3663,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     Textarea {
                         placeholder: Some("Uncontrolled textarea".to_string()),
-                        percent_width: Some(1.0),
+                        width: "100%",
                     }
                 }
             }
@@ -3800,10 +3798,10 @@ fn fixed_width(width: f32, children: Element) -> Element {
     // longer depends on this wrapper using an absolute width.
     rsx! {
         column {
-            percent_width: 1.0,
+            width: "100%",
             align_items: "center",
             column {
-                percent_width: 1.0,
+                width: "100%",
                 max_width_constraint: width,
                 align_items: "stretch",
                 {children}
@@ -3818,7 +3816,7 @@ fn demo_mode_label(title: String, detail: Option<String>) -> Element {
     let theme = arkit_shadcn::theme::use_theme();
     rsx! {
         column {
-            percent_width: 1.0,
+            width: "100%",
             align_items: "start",
             text {
                 content: title,
@@ -3844,7 +3842,7 @@ fn demo_mode_label(title: String, detail: Option<String>) -> Element {
 fn demo_mode_divider() -> Element {
     rsx! {
         column {
-            percent_width: 1.0,
+            width: "100%",
             v_gap { height: spacing::XL }
             Separator {}
             v_gap { height: spacing::XL }
@@ -3859,7 +3857,7 @@ fn accordion_demo_items() -> Vec<AccordionItemSpec> {
             "item-1",
             rsx! {
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     Text {
                         content: "Our flagship product combines cutting-edge technology with sleek design.".to_string(),
                         variant: TextVariant::Muted,
@@ -3872,7 +3870,7 @@ fn accordion_demo_items() -> Vec<AccordionItemSpec> {
             "item-2",
             rsx! {
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     Text {
                         content: "Standard delivery takes 3-5 business days worldwide.".to_string(),
                         variant: TextVariant::Muted,
@@ -3885,7 +3883,7 @@ fn accordion_demo_items() -> Vec<AccordionItemSpec> {
             "item-3",
             rsx! {
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     Text {
                         content: "30-day returns with free shipping on eligible orders.".to_string(),
                         variant: TextVariant::Muted,
@@ -3960,7 +3958,7 @@ fn IconTile(name: String, color: u32, size: Option<f32>) -> Element {
             stack {
                 width: 48.0,
                 height: 48.0,
-                alignment: 4_i32,
+                alignment: "center",
                 border_radius: theme.radii.md,
                 border_width: 1.0,
                 border_color: theme.colors.border,
@@ -3978,7 +3976,7 @@ fn repo_row(name: String) -> Element {
     let theme = arkit_shadcn::theme::use_theme();
     rsx! {
         row {
-            percent_width: 1.0,
+            width: "100%",
             align_self: "start",
             padding_top: spacing::SM,
             padding_right: spacing::LG,
@@ -3997,7 +3995,7 @@ fn repo_row(name: String) -> Element {
 fn popover_form_row(label: String, value: String) -> Element {
     rsx! {
         row {
-            percent_width: 1.0,
+            width: "100%",
             align_self: "start",
             align_items: "center",
             justify_content: "start",
@@ -4012,7 +4010,7 @@ fn popover_form_row(label: String, value: String) -> Element {
                     placeholder: Some(value.clone()),
                     value: Some(value),
                     height: Some(32.0),
-                    percent_width: Some(1.0),
+                    width: "100%",
                 }
             }
         }
@@ -4032,24 +4030,24 @@ fn carousel_frame(
 
     rsx! {
         stack {
-            percent_width: 1.0,
-            percent_height: 1.0,
+            width: "100%",
+            height: "100%",
             row {
-                percent_width: 1.0,
-                percent_height: 1.0,
+                width: "100%",
+                height: "100%",
                 align_items: "center",
                 justify_content: "center",
                 padding_bottom: if reserve_bottom_controls { 48.0 + spacing::LG } else { 0.0 },
                 {preview}
             }
             column {
-                percent_width: 1.0,
-                percent_height: 1.0,
+                width: "100%",
+                height: "100%",
                 align_items: "center",
                 justify_content: "end",
-                hit_test_behavior: 2_i32,
+                hit_test_behavior: "transparent",
                 row {
-                    percent_width: 1.0,
+                    width: "100%",
                     height: 48.0,
                     align_items: "center",
                     justify_content: "center",
@@ -4086,10 +4084,10 @@ fn carousel_button(icon: String, disabled: bool, onclick: EventHandler<()>) -> E
             border_radius: theme.radii.md,
             border_width: 1.0,
             border_color: theme.colors.border,
-            border_style: 0_i32,
+            border_style: "solid",
             clip: true,
             opacity: if disabled { 0.5 } else { 1.0 },
-            shadow: 1_i32,
+            shadow: "sm",
             onclick: move |_| {
                 if !disabled {
                     onclick.call(());
@@ -4169,10 +4167,10 @@ fn text_carousel(page: i32, on_page: EventHandler<i32>) -> Element {
             fixed_width {
                 width: 512.0,
                 scroll {
-                    percent_width: 1.0,
-                    percent_height: 1.0,
+                    width: "100%",
+                    height: "100%",
                     column {
-                        percent_width: 1.0,
+                        width: "100%",
                         padding_top: spacing::XXL,
                         padding_right: spacing::XXL,
                         padding_bottom: 72.0,

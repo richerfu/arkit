@@ -5,7 +5,7 @@ description: "原生 renderer、支持范围和阅读路径。"
 
 # 图表总览
 
-启用 `chart` 后，`arkit::echarts` 提供 ECharts-compatible typed/JSON model，以及 ArkUI Custom + Drawing 原生 renderer。它不嵌 WebView；`chart` 自动启用 root `animation`。
+启用 `chart` 后，`arkit::echarts` 提供 ECharts 语义的 typed / JSON model，以及 ArkUI Custom + Drawing 原生 renderer。它不嵌 WebView；`chart` 自动启用 root `animation`。
 
 ## 接入
 
@@ -31,8 +31,8 @@ let option = ChartOption::new()
 rsx! {
     ECharts {
         option,
-        percent_width: 1.0,
-        height: 320.0,
+        width: "100%",
+        height: "320",
     }
 }
 ```
@@ -41,14 +41,13 @@ rsx! {
 
 ## ECharts Props
 
-| Prop                               | 说明                                 |
-| ---------------------------------- | ------------------------------------ |
-| `option`                           | 完整受控 `ChartOption`               |
-| `width` / `height`                 | 固定 vp                              |
-| `percent_width` / `percent_height` | 相对尺寸                             |
-| `on_select`                        | point/bar/sector/node/region 选择    |
-| `on_event`                         | pointer 与 component action 统一事件 |
-| `controller`                       | imperative action/query handle       |
+| Prop               | 说明                                 |
+| ------------------ | ------------------------------------ |
+| `option`           | 完整受控 `ChartOption`               |
+| `width` / `height` | CSS 尺寸（vp 数字字符串或 `"N%"`）   |
+| `on_select`        | point/bar/sector/node/region 选择    |
+| `on_event`         | pointer 与 component action 统一事件 |
+| `controller`       | imperative action/query handle       |
 
 option 变化进入同一 model/layout/render path；Controller 适合命令和查询，不替代受控 option。
 

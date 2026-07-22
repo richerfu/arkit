@@ -20,9 +20,9 @@ use super::ARKUI_BORDER_STYLE_SOLID;
 const DEFAULT_CELL_SIZE: f32 = 48.0;
 const MIN_CELL_SIZE: f32 = 44.0;
 const DEFAULT_SEPARATOR_WIDTH: f32 = 28.0;
-const NATIVE_INPUT_TYPE_NORMAL: i32 = 0;
-const NATIVE_INPUT_TYPE_NUMBER: i32 = 2;
-const NATIVE_INPUT_TYPE_ONE_TIME_CODE: i32 = 14;
+const NATIVE_INPUT_TYPE_NORMAL: &str = "text";
+const NATIVE_INPUT_TYPE_NUMBER: &str = "number";
+const NATIVE_INPUT_TYPE_ONE_TIME_CODE: &str = "otp";
 const CARET_BLINK_DURATION_MS: u64 = 1_000;
 
 thread_local! {
@@ -43,7 +43,7 @@ pub enum InputOtpMode {
 }
 
 impl InputOtpMode {
-    const fn native_input_type(self) -> i32 {
+    const fn native_input_type(self) -> &'static str {
         match self {
             Self::Numeric => NATIVE_INPUT_TYPE_NUMBER,
             Self::Alphanumeric => NATIVE_INPUT_TYPE_NORMAL,
@@ -186,7 +186,7 @@ pub fn InputOtp(props: InputOtpProps) -> Element {
                     height: cell_size,
                     align_items: "center",
                     justify_content: "center",
-                    hit_test_behavior: 2_i32,
+                    hit_test_behavior: "transparent",
                     {icon_placeholder("minus", 16.0, theme.colors.muted_foreground)}
                 }
             });
@@ -224,14 +224,14 @@ pub fn InputOtp(props: InputOtpProps) -> Element {
                 key: "slot-{index}",
                 width: cell_size,
                 height: cell_size,
-                alignment: 4_i32,
+                alignment: "center",
                 background_color: background,
                 border_style: ARKUI_BORDER_STYLE_SOLID,
                 border_width: slot_border_width,
                 border_color: if is_active { active_border } else { border },
                 border_radius: slot_radius,
                 clip: true,
-                hit_test_behavior: 2_i32,
+                hit_test_behavior: "transparent",
                 if let Some(displayed) = displayed {
                     text {
                         content: displayed,
@@ -239,8 +239,8 @@ pub fn InputOtp(props: InputOtpProps) -> Element {
                         font_weight: 500_i32,
                         font_color: foreground,
                         line_height: 24.0,
-                        text_align: 1_i32,
-                        hit_test_behavior: 2_i32,
+                        text_align: "center",
+                        hit_test_behavior: "transparent",
                     }
                 } else if show_caret {
                     InputOtpCaret {
@@ -263,14 +263,14 @@ pub fn InputOtp(props: InputOtpProps) -> Element {
         stack {
             width: total_width,
             height: cell_size,
-            alignment: 4_i32,
+            alignment: "center",
             opacity: if props.disabled { 0.5_f32 } else { 1.0_f32 },
             row {
                 width: total_width,
                 height: cell_size,
                 align_items: "center",
                 justify_content: "center",
-                hit_test_behavior: 2_i32,
+                hit_test_behavior: "transparent",
                 {slots.into_iter()}
             }
             // One native field owns all input. Keeping it nearly transparent
@@ -285,12 +285,12 @@ pub fn InputOtp(props: InputOtpProps) -> Element {
                 height: cell_size,
                 padding: 0.0,
                 font_size: typography::LG,
-                font_color: 0x00000000_u32,
-                caret_color: 0x00000000_u32,
-                background_color: 0x00000000_u32,
+                font_color: "#00000000",
+                caret_color: "#00000000",
+                background_color: "#00000000",
                 border_width: 0.0,
                 border_style: ARKUI_BORDER_STYLE_SOLID,
-                text_align: 1_i32,
+                text_align: "center",
                 opacity: 0.01_f32,
                 enabled: !props.disabled,
                 on_focus: move |event| focused.set(event.data().focused),
@@ -334,7 +334,7 @@ fn InputOtpCaret(color: u32, radius: f32) -> Element {
             opacity: 1.0_f32,
             border_radius: radius,
             background_color: color,
-            hit_test_behavior: 2_i32,
+            hit_test_behavior: "transparent",
         }
     }
 }
@@ -445,13 +445,13 @@ mod tests {
     fn mobile_defaults_use_native_numeric_input() {
         let style = InputOtpStyle::default();
         assert_eq!(style.cell_size, 48.0);
-        assert_eq!(InputOtpMode::default().native_input_type(), 2);
+        assert_eq!(InputOtpMode::default().native_input_type(), "number");
         assert_eq!(InputOtpMode::default().native_input_filter(), "[0-9]");
         assert_eq!(
             InputOtpMode::Alphanumeric.native_input_filter(),
             "[0-9A-Za-z]"
         );
-        assert_eq!(InputOtpMode::OneTimeCode.native_input_type(), 14);
+        assert_eq!(InputOtpMode::OneTimeCode.native_input_type(), "otp");
         assert_eq!(InputOtpSeparator::default(), InputOtpSeparator::Dash);
     }
 

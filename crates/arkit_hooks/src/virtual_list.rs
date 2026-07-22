@@ -41,7 +41,7 @@ use arkit_arkui::{RenderItem, VirtualKind, VirtualNodeAdapter};
 ///             let _ = adapter.attach(&node.borrow());
 ///         }
 ///     });
-///     rsx! { list { percent_width: 1.0, percent_height: 1.0 } }
+///     rsx! { list { width: "100%", height: "100%" } }
 /// }
 /// ```
 #[track_caller]

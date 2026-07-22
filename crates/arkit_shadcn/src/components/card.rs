@@ -24,7 +24,7 @@ pub fn Card(props: CardProps) -> Element {
     let shadow = props.shadow.unwrap_or(true);
     rsx! {
         column {
-            percent_width: 1.0,
+            width: "100%",
             align_items: "start",
             background_color: theme.colors.card,
             foreground_color: theme.colors.card_foreground,
@@ -35,7 +35,7 @@ pub fn Card(props: CardProps) -> Element {
             border_width: 1.0,
             border_color: theme.colors.border,
             border_radius: theme.radii.lg,
-            shadow: if shadow { 1 },
+            shadow: if shadow { "sm" },
             {props.children}
         }
     }
@@ -54,17 +54,17 @@ pub fn CardHeader(props: CardHeaderProps) -> Element {
     let theme = use_theme();
     rsx! {
         row {
-            percent_width: 1.0,
+            width: "100%",
             justify_content: "start",
             column {
-                percent_width: 1.0,
+                width: "100%",
                 align_items: "start",
                 padding_top: spacing::XXL,
                 padding_right: spacing::XXL,
                 padding_bottom: spacing::XXL,
                 padding_left: spacing::XXL,
                 row {
-                    percent_width: 1.0,
+                    width: "100%",
                     justify_content: "start",
                     text {
                         content: props.title.clone(),
@@ -73,11 +73,11 @@ pub fn CardHeader(props: CardHeaderProps) -> Element {
                         font_color: theme.colors.card_foreground,
                         line_height: 24.0,
                         text_letter_spacing: -0.35,
-                        text_align: 0,
+                        text_align: "start",
                     }
                 }
                 row {
-                    percent_width: 1.0,
+                    width: "100%",
                     margin_top: spacing::XS,
                     justify_content: "start",
                     text {
@@ -85,7 +85,7 @@ pub fn CardHeader(props: CardHeaderProps) -> Element {
                         font_size: typography::SM,
                         font_color: theme.colors.muted_foreground,
                         line_height: 20.0,
-                        text_align: 0,
+                        text_align: "start",
                     }
                 }
             }
@@ -111,7 +111,7 @@ pub fn CardTitle(props: CardTitleProps) -> Element {
             font_color: theme.colors.card_foreground,
             line_height: 24.0,
             text_letter_spacing: -0.35,
-            text_align: 0,
+            text_align: "start",
         }
     }
 }
@@ -132,7 +132,7 @@ pub fn CardDescription(props: CardDescriptionProps) -> Element {
             font_size: typography::SM,
             font_color: theme.colors.muted_foreground,
             line_height: 20.0,
-            text_align: 0,
+            text_align: "start",
         }
     }
 }
@@ -148,14 +148,14 @@ pub struct CardContentProps {
 pub fn CardContent(props: CardContentProps) -> Element {
     rsx! {
         column {
-            percent_width: 1.0,
+            width: "100%",
             align_items: "start",
             padding_top: 0.0,
             padding_right: spacing::XXL,
             padding_bottom: spacing::XXL,
             padding_left: spacing::XXL,
             row {
-                percent_width: 1.0,
+                width: "100%",
                 justify_content: "start",
                 {props.children}
             }
@@ -174,7 +174,7 @@ pub struct CardFooterProps {
 pub fn CardFooter(props: CardFooterProps) -> Element {
     rsx! {
         row {
-            percent_width: 1.0,
+            width: "100%",
             align_items: "center",
             justify_content: "start",
             padding_top: 0.0,

@@ -32,14 +32,12 @@ pub struct CameraViewProps {
     pub position: CameraPosition,
     #[props(default = true)]
     pub active: bool,
+    /// CSS width (`"100%"`, `"320"`). Defaults to `"100%"`.
+    #[props(default = "100%".to_string())]
+    pub width: String,
+    /// CSS height (`"100%"`, `"480"`). Defaults to `"100%"` when unset.
     #[props(default)]
-    pub width: Option<f32>,
-    #[props(default)]
-    pub height: Option<f32>,
-    #[props(default = 1.0)]
-    pub percent_width: f32,
-    #[props(default)]
-    pub percent_height: Option<f32>,
+    pub height: Option<String>,
     #[props(default)]
     pub on_position_change: Option<EventHandler<CameraPosition>>,
     #[props(default)]
@@ -122,8 +120,8 @@ pub fn CameraView(props: CameraViewProps) -> Element {
             active: props.active,
             profiles: profiles(),
             scan: scan_configuration,
-            percent_width: 1.0,
-            percent_height: Some(1.0),
+            width: "100%",
+            height: "100%",
             on_status_change: move |next: CameraStatus| {
                 status.set(next.clone());
                 if let Some(handler) = status_change { handler.call(next); }
@@ -154,8 +152,8 @@ pub fn CameraView(props: CameraViewProps) -> Element {
             position: current_position(),
             active: props.active,
             profiles: profiles(),
-            percent_width: 1.0,
-            percent_height: Some(1.0),
+            width: "100%",
+            height: "100%",
             on_status_change: move |next: CameraStatus| {
                 status.set(next.clone());
                 if let Some(handler) = status_change { handler.call(next); }
@@ -238,21 +236,20 @@ pub fn CameraView(props: CameraViewProps) -> Element {
         }
     };
 
+    let height = props.height.clone().unwrap_or_else(|| "100%".into());
     rsx! {
         stack {
-            width: props.width,
-            height: props.height,
-            percent_width: props.percent_width,
-            percent_height: props.percent_height,
-            background_color: 0xFF000000u32,
+            width: props.width.clone(),
+            height: height,
+            background_color: "#FF000000",
 
             {preview}
 
             column {
-                percent_width: 1.0,
-                percent_height: 1.0,
+                width: "100%",
+                height: "100%",
                 justify_content: "space-between",
-                hit_test_behavior: 0,
+                hit_test_behavior: "default",
                 ontouch: move |event: dioxus_core::Event<dioxus_elements::event::PointerData>| {
                     let Some(pointer) = event.data().pointer else {
                         return;
@@ -361,7 +358,7 @@ fn camera_icon_button(
             border_width: 0.0,
             border_radius: size / 2.0,
             background_color,
-            alignment: 4,
+            alignment: "center",
             focusable: false,
             focus_on_touch: false,
             enabled,
@@ -431,7 +428,7 @@ fn camera_zoom_slider(
         stack {
             width,
             height: TOUCH_HEIGHT,
-            alignment: 0_i32,
+            alignment: "top-start",
             enabled: spec.enabled,
             ontouch: move |event: dioxus_core::Event<dioxus_elements::event::PointerData>| {
                 event.stop_propagation();
@@ -462,7 +459,7 @@ fn camera_zoom_slider(
                 height: TRACK_HEIGHT,
                 border_radius: TRACK_HEIGHT / 2.0,
                 background_color: spec.track_color,
-                hit_test_behavior: 2,
+                hit_test_behavior: "transparent",
             }
             if selected_width > f32::EPSILON {
                 row {
@@ -471,7 +468,7 @@ fn camera_zoom_slider(
                     height: TRACK_HEIGHT,
                     border_radius: TRACK_HEIGHT / 2.0,
                     background_color: spec.selected_color,
-                    hit_test_behavior: 2,
+                    hit_test_behavior: "transparent",
                 }
             }
             row {
@@ -482,7 +479,7 @@ fn camera_zoom_slider(
                 border_color: spec.thumb_border_color,
                 border_radius: THUMB_SIZE / 2.0,
                 background_color: spec.thumb_color,
-                hit_test_behavior: 2,
+                hit_test_behavior: "transparent",
             }
         }
     }
@@ -530,15 +527,15 @@ fn CameraScanLine(
             position: format!("{x},{y}"),
             width: width.max(1.0),
             height: glow_height,
-            alignment: 0_i32,
+            alignment: "top-start",
             opacity: 0.0_f32,
-            hit_test_behavior: 2_i32,
+            hit_test_behavior: "transparent",
             row {
                 width: width.max(1.0),
                 height: glow_height,
                 border_radius: glow_height / 2.0,
                 background_color: glow_color,
-                hit_test_behavior: 2_i32,
+                hit_test_behavior: "transparent",
             }
             row {
                 position: format!("0,{glow_y}"),
@@ -546,7 +543,7 @@ fn CameraScanLine(
                 height: line_height,
                 border_radius: line_height / 2.0,
                 background_color: color,
-                hit_test_behavior: 2_i32,
+                hit_test_behavior: "transparent",
             }
         }
     }
@@ -625,7 +622,7 @@ fn camera_pill_button(
             border_width: 0.0,
             border_radius: style.height / 2.0,
             background_color: style.background_color,
-            alignment: 4,
+            alignment: "center",
             focusable: false,
             focus_on_touch: false,
             enabled,
@@ -883,11 +880,11 @@ fn PhotoToolbar(
 
     rsx! {
         column {
-            percent_width: 1.0,
-            percent_height: 1.0,
+            width: "100%",
+            height: "100%",
             layout_weight: 1.0,
             row {
-                percent_width: 1.0,
+                width: "100%",
                 height: top_bar_height,
                 padding_top: 6.0 + configuration.top_inset.max(0.0),
                 padding_right: 12.0,
@@ -903,27 +900,27 @@ fn PhotoToolbar(
                 }
                 row {
                     layout_weight: 1.0,
-                    hit_test_behavior: 2,
+                    hit_test_behavior: "transparent",
                 }
                 if configuration.show_preview_resolution {
                     {preview_button}
                 }
                 if configuration.show_photo_resolution {
-                    row { width: 8.0, hit_test_behavior: 2 }
+                    row { width: 8.0, hit_test_behavior: "transparent" }
                     {photo_button}
                 }
             }
 
             if let Some(picker_kind) = current_picker {
                 row {
-                    percent_width: 1.0,
+                    width: "100%",
                     height: picker_height,
                     padding_right: 12.0,
-                    background_color: 0x33000000u32,
+                    background_color: "#33000000",
                     ontouch: move |event: dioxus_core::Event<dioxus_elements::event::PointerData>| {
                         event.stop_propagation();
                     },
-                    row { layout_weight: 1.0, hit_test_behavior: 2 }
+                    row { layout_weight: 1.0, hit_test_behavior: "transparent" }
                     column {
                         width: 184.0,
                         height: picker_height,
@@ -932,9 +929,9 @@ fn PhotoToolbar(
                         padding_bottom: 6.0,
                         padding_left: 6.0,
                         border_radius: 16.0,
-                        background_color: 0xF22C2C2Eu32,
+                        background_color: "#F22C2C2E",
                         row {
-                            percent_width: 1.0,
+                            width: "100%",
                             height: 36.0,
                             padding_left: 10.0,
                             align_items: "center",
@@ -944,7 +941,7 @@ fn PhotoToolbar(
                                 font_color: configuration.foreground_color,
                                 "{picker_title}"
                             }
-                            row { layout_weight: 1.0, hit_test_behavior: 2 }
+                            row { layout_weight: 1.0, hit_test_behavior: "transparent" }
                             button {
                                 width: 32.0,
                                 height: 32.0,
@@ -954,20 +951,20 @@ fn PhotoToolbar(
                                 padding_left: 0.0,
                                 border_width: 0.0,
                                 border_radius: 16.0,
-                                background_color: 0x00000000u32,
+                                background_color: "#00000000",
                                 onclick: move |_| profile_picker.set(None),
                                 {arkit_icon::icon("x", 17.0, configuration.foreground_color)}
                             }
                         }
                         scroll {
-                            percent_width: 1.0,
+                            width: "100%",
                             height: picker_height - 48.0,
                             scroll_enabled: picker_options.len() > 6,
                             column {
-                                percent_width: 1.0,
+                                width: "100%",
                                 for size in picker_options.iter().copied() {
                                     button {
-                                        percent_width: 1.0,
+                                        width: "100%",
                                         height: 42.0,
                                         margin_top: 2.0,
                                         border_width: 0.0,
@@ -1009,13 +1006,13 @@ fn PhotoToolbar(
             // full-height Column. Let ArkUI measure the remaining preview
             // height and assign it to a real flex child instead.
             row {
-                percent_width: 1.0,
+                width: "100%",
                 layout_weight: 1.0,
-                hit_test_behavior: 2,
+                hit_test_behavior: "transparent",
             }
 
             column {
-                percent_width: 1.0,
+                width: "100%",
                 height: bottom_bar_height,
                 padding_top: 10.0,
                 padding_right: 18.0,
@@ -1057,13 +1054,13 @@ fn PhotoToolbar(
                     }
                 }
                 row {
-                    percent_width: 1.0,
+                    width: "100%",
                     height: shutter_size,
                     align_items: "center",
                     row {
                         layout_weight: 1.0,
                         height: control_size,
-                        hit_test_behavior: 2,
+                        hit_test_behavior: "transparent",
                     }
                     if configuration.show_shutter {
                         button {
@@ -1077,7 +1074,7 @@ fn PhotoToolbar(
                             border_width: 5.0,
                             border_color: configuration.shutter_color,
                             background_color: 0x0000_0000u32,
-                            alignment: 4,
+                            alignment: "center",
                             focusable: false,
                             focus_on_touch: false,
                             enabled: shutter_enabled,
@@ -1091,14 +1088,14 @@ fn PhotoToolbar(
                                 height: shutter_size - 14.0,
                                 border_radius: (shutter_size - 14.0) / 2.0,
                                 background_color: configuration.shutter_color,
-                                hit_test_behavior: 2,
+                                hit_test_behavior: "transparent",
                             }
                         }
                     } else {
                         row {
                             width: shutter_size,
                             height: shutter_size,
-                            hit_test_behavior: 2,
+                            hit_test_behavior: "transparent",
                         }
                     }
                     row {
@@ -1107,7 +1104,7 @@ fn PhotoToolbar(
                         align_items: "center",
                         row {
                             layout_weight: 1.0,
-                            hit_test_behavior: 2,
+                            hit_test_behavior: "transparent",
                         }
                         if configuration.show_camera_switch {
                             {switch_button}
@@ -1236,11 +1233,11 @@ fn ScanToolbar(
 
     rsx! {
         column {
-            percent_width: 1.0,
-            percent_height: 1.0,
+            width: "100%",
+            height: "100%",
             layout_weight: 1.0,
             row {
-                percent_width: 1.0,
+                width: "100%",
                 height: top_bar_height,
                 padding_top: 6.0 + configuration.top_inset.max(0.0),
                 padding_right: 12.0,
@@ -1253,7 +1250,7 @@ fn ScanToolbar(
                 },
                 row {
                     layout_weight: 1.0,
-                    hit_test_behavior: 2,
+                    hit_test_behavior: "transparent",
                 }
                 if configuration.show_camera_switch {
                     {switch_button}
@@ -1261,26 +1258,26 @@ fn ScanToolbar(
             }
 
         row {
-            percent_width: 1.0,
+            width: "100%",
             layout_weight: 1.0,
-            hit_test_behavior: 2,
+            hit_test_behavior: "transparent",
         }
 
         column {
-            percent_width: 1.0,
+            width: "100%",
             align_items: "center",
             if configuration.show_reticle {
                 stack {
                     width: reticle_size,
                     height: reticle_size,
-                    alignment: 0_i32,
+                    alignment: "top-start",
                     row {
                         width: reticle_size,
                         height: reticle_size,
                         border_width: 1.0,
                         border_color: reticle_outline_color,
                         border_radius: reticle_radius,
-                        hit_test_behavior: 2,
+                        hit_test_behavior: "transparent",
                     }
                     if configuration.show_reticle_scan_line {
                         CameraScanLine {
@@ -1302,7 +1299,7 @@ fn ScanToolbar(
                         height: reticle_stroke,
                         border_radius: line_radius,
                         background_color: configuration.accent_color,
-                        hit_test_behavior: 2,
+                        hit_test_behavior: "transparent",
                     }
                     row {
                         position: "0,0",
@@ -1310,7 +1307,7 @@ fn ScanToolbar(
                         height: corner_length,
                         border_radius: line_radius,
                         background_color: configuration.accent_color,
-                        hit_test_behavior: 2,
+                        hit_test_behavior: "transparent",
                     }
 
                     // Top-right corner.
@@ -1320,7 +1317,7 @@ fn ScanToolbar(
                         height: reticle_stroke,
                         border_radius: line_radius,
                         background_color: configuration.accent_color,
-                        hit_test_behavior: 2,
+                        hit_test_behavior: "transparent",
                     }
                     row {
                         position: format!("{reticle_end},0"),
@@ -1328,7 +1325,7 @@ fn ScanToolbar(
                         height: corner_length,
                         border_radius: line_radius,
                         background_color: configuration.accent_color,
-                        hit_test_behavior: 2,
+                        hit_test_behavior: "transparent",
                     }
 
                     // Bottom-left corner.
@@ -1338,7 +1335,7 @@ fn ScanToolbar(
                         height: reticle_stroke,
                         border_radius: line_radius,
                         background_color: configuration.accent_color,
-                        hit_test_behavior: 2,
+                        hit_test_behavior: "transparent",
                     }
                     row {
                         position: format!("0,{reticle_corner_start}"),
@@ -1346,7 +1343,7 @@ fn ScanToolbar(
                         height: corner_length,
                         border_radius: line_radius,
                         background_color: configuration.accent_color,
-                        hit_test_behavior: 2,
+                        hit_test_behavior: "transparent",
                     }
 
                     // Bottom-right corner.
@@ -1356,7 +1353,7 @@ fn ScanToolbar(
                         height: reticle_stroke,
                         border_radius: line_radius,
                         background_color: configuration.accent_color,
-                        hit_test_behavior: 2,
+                        hit_test_behavior: "transparent",
                     }
                     row {
                         position: format!("{reticle_end},{reticle_corner_start}"),
@@ -1364,7 +1361,7 @@ fn ScanToolbar(
                         height: corner_length,
                         border_radius: line_radius,
                         background_color: configuration.accent_color,
-                        hit_test_behavior: 2,
+                        hit_test_behavior: "transparent",
                     }
                 }
             }
@@ -1410,14 +1407,14 @@ fn ScanToolbar(
         }
 
             row {
-                percent_width: 1.0,
+                width: "100%",
                 layout_weight: 1.0,
-                hit_test_behavior: 2,
+                hit_test_behavior: "transparent",
             }
 
             if configuration.show_footer {
                 row {
-                    percent_width: 1.0,
+                    width: "100%",
                     height: bottom_bar_height,
                     padding_bottom: configuration.bottom_inset.max(0.0),
                     align_items: "center",
@@ -1436,9 +1433,9 @@ fn ScanToolbar(
                 }
             } else {
                 row {
-                    percent_width: 1.0,
+                    width: "100%",
                     height: configuration.bottom_inset.max(0.0),
-                    hit_test_behavior: 2,
+                    hit_test_behavior: "transparent",
                 }
             }
         }

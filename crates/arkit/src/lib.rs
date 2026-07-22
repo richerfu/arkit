@@ -231,14 +231,14 @@ fn arkit_entry_root(props: EntryRootProps) -> Element {
 
     rsx! {
         stack {
-            percent_width: 1.0,
-            percent_height: 1.0,
-            alignment: 0,
+            width: "100%",
+            height: "100%",
+            alignment: "top-start",
             clip: false,
             stack {
-                percent_width: 1.0,
-                percent_height: 1.0,
-                alignment: 0,
+                width: "100%",
+                height: "100%",
+                alignment: "top-start",
                 padding_top: safe_area.top,
                 padding_right: safe_area.right,
                 padding_bottom: safe_area.bottom,

@@ -84,7 +84,7 @@ pub fn Barcode(props: BarcodeProps) -> Element {
             rsx! {
                 image {
                     src: dioxus_core::AttributeValue::any_value(source),
-                    object_fit: 1_i32,
+                    object_fit: "cover",
                     width: layout_w,
                     height: layout_h,
                 }
@@ -94,14 +94,14 @@ pub fn Barcode(props: BarcodeProps) -> Element {
             column {
                 width: layout_w,
                 height: layout_h,
-                background_color: 0xFFF4F4F5_u32,
+                background_color: "#FFF4F4F5",
                 border_radius: 8.0,
                 align_items: "center",
                 justify_content: "center",
                 text {
                     content: "Encoding…".to_string(),
                     font_size: 12.0,
-                    font_color: 0xFF71717A_u32,
+                    font_color: "#FF71717A",
                 }
             }
         },
@@ -109,14 +109,14 @@ pub fn Barcode(props: BarcodeProps) -> Element {
             column {
                 width: layout_w,
                 height: layout_h,
-                background_color: 0xFFF4F4F5_u32,
+                background_color: "#FFF4F4F5",
                 border_radius: 8.0,
                 align_items: "center",
                 justify_content: "center",
                 text {
                     content: "Enter content".to_string(),
                     font_size: 12.0,
-                    font_color: 0xFF71717A_u32,
+                    font_color: "#FF71717A",
                 }
             }
         },
@@ -124,7 +124,7 @@ pub fn Barcode(props: BarcodeProps) -> Element {
             column {
                 width: layout_w,
                 height: layout_h,
-                background_color: 0xFFFEF2F2_u32,
+                background_color: "#FFFEF2F2",
                 border_radius: 8.0,
                 align_items: "center",
                 justify_content: "center",
@@ -133,8 +133,8 @@ pub fn Barcode(props: BarcodeProps) -> Element {
                 text {
                     content: error.message().to_string(),
                     font_size: 11.0,
-                    font_color: 0xFFB91C1C_u32,
-                    text_align: 1_i32,
+                    font_color: "#FFB91C1C",
+                    text_align: "center",
                 }
             }
         },

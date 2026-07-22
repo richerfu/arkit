@@ -18,6 +18,6 @@ let route = LineSegment {
 let series = Series::lines("航线", vec![route]);
 ```
 
-`LineSegment` 字段为 `name`、`from`、`to`、`coords` 和 `value`；coords 可保存完整路径，from/to 保持 typed API 兼容。Lines 是 `appendData` 支持的另一类增量 series。
+`LineSegment` 字段为 `name`、`from`、`to`、`coords` 和 `value`。`coords` 保存完整路径；`from`/`to` 是两端点的 typed 写法。Lines 支持 `appendData` 增量更新。
 
 大量动态路径应降低 effect、symbol 和透明叠加成本，并按视口或时间窗口裁剪。坐标系、投影与数据单位必须一致。

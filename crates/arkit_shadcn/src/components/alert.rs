@@ -83,7 +83,7 @@ pub fn Alert(props: AlertProps) -> Element {
     };
     rsx! {
         stack {
-            percent_width: 1.0,
+            width: "100%",
             border_radius: theme.radii.lg,
             border_width: ALERT_BORDER_WIDTH,
             border_color,
@@ -97,7 +97,7 @@ pub fn Alert(props: AlertProps) -> Element {
                 {arkit_icon::icon(icon, ALERT_ICON_SIZE, tone.icon_color)}
             }
             column {
-                percent_width: 1.0,
+                width: "100%",
                 align_items: "start",
                 padding_top: ALERT_PADDING_TOP,
                 padding_right: ALERT_PADDING_RIGHT,
@@ -125,13 +125,13 @@ pub fn AlertTitle(props: AlertTitleProps) -> Element {
     rsx! {
         text {
             content: props.content.clone(),
-            percent_width: 1.0,
+            width: "100%",
             font_size: typography::SM,
             font_weight: 500,
             font_color: tone.title_color,
             line_height: ALERT_TITLE_LINE_HEIGHT,
             text_letter_spacing: ALERT_TRACKING_TIGHT,
-            text_align: 0,
+            text_align: "start",
             margin_top: 0.0,
             margin_right: 0.0,
             margin_bottom: ALERT_TITLE_BOTTOM,
@@ -157,11 +157,11 @@ pub fn AlertDescription(props: AlertDescriptionProps) -> Element {
     rsx! {
         text {
             content: props.content.clone(),
-            percent_width: 1.0,
+            width: "100%",
             font_size: typography::SM,
             font_color: tone.description_color,
             line_height: ALERT_DESCRIPTION_LINE_HEIGHT,
-            text_align: 0,
+            text_align: "start",
             margin_top: 0.0,
             margin_right: 0.0,
             margin_bottom: 0.0,
@@ -199,26 +199,26 @@ pub fn AlertList(props: AlertListProps) -> Element {
                 rsx! {
                     text {
                         content: text,
-                        percent_width: 1.0,
+                        width: "100%",
                         font_size: typography::SM,
                         font_color: title_color,
                         line_height: ALERT_LIST_LINE_HEIGHT,
-                        text_align: 0,
+                        text_align: "start",
                     }
                 }
             } else {
                 rsx! {
                     row {
-                        percent_width: 1.0,
+                        width: "100%",
                         align_items: "start",
                         margin_top: 2.0,
                         text {
                             content: text,
-                            percent_width: 1.0,
+                            width: "100%",
                             font_size: typography::SM,
                             font_color: title_color,
                             line_height: ALERT_LIST_LINE_HEIGHT,
-                            text_align: 0,
+                            text_align: "start",
                         }
                     }
                 }
@@ -227,7 +227,7 @@ pub fn AlertList(props: AlertListProps) -> Element {
         .collect();
     rsx! {
         column {
-            percent_width: 1.0,
+            width: "100%",
             align_items: "start",
             margin_top: 0.0,
             margin_right: 0.0,

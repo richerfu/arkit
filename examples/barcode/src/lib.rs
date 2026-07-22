@@ -37,42 +37,43 @@ fn app() -> Element {
 
     rsx! {
         scroll {
-            percent_width: 1.0,
-            percent_height: 1.0,
+            width: "100%",
+            height: "100%",
+            scroll_bar: "off",
             column {
-                percent_width: 1.0,
+                width: "100%",
                 padding_top: 48.0,
                 padding_right: 20.0,
                 padding_bottom: 40.0,
                 padding_left: 20.0,
                 align_items: "center",
-                background_color: 0xFFFAFAFA_u32,
+                background_color: "#FFFAFAFA",
 
                 text {
                     content: "Barcode".to_string(),
                     font_size: 28.0,
                     font_weight: 700_i32,
-                    font_color: 0xFF18181B_u32,
+                    font_color: "#FF18181B",
                     line_height: 34.0,
                 }
                 text {
                     content: "arkit feature = barcode · encode · SVG preview · PNG export"
                         .to_string(),
                     font_size: 13.0,
-                    font_color: 0xFF71717A_u32,
+                    font_color: "#FF71717A",
                     margin_top: 6.0,
                     line_height: 18.0,
-                    text_align: 1_i32,
+                    text_align: "center",
                 }
 
                 column {
                     margin_top: 28.0,
-                    percent_width: 1.0,
+                    width: "100%",
                     padding_top: 20.0,
                     padding_right: 16.0,
                     padding_bottom: 20.0,
                     padding_left: 16.0,
-                    background_color: 0xFFFFFFFF_u32,
+                    background_color: "#FFFFFFFF",
                     border_radius: 16.0,
                     align_items: "center",
 
@@ -80,7 +81,7 @@ fn app() -> Element {
                         content: format_label,
                         font_size: 12.0,
                         font_weight: 600_i32,
-                        font_color: 0xFF71717A_u32,
+                        font_color: "#FF71717A",
                         margin_bottom: 12.0,
                     }
 
@@ -95,31 +96,31 @@ fn app() -> Element {
                     text {
                         content: phase_label,
                         font_size: 11.0,
-                        font_color: 0xFFA1A1AA_u32,
+                        font_color: "#FFA1A1AA",
                         margin_top: 14.0,
-                        text_align: 1_i32,
+                        text_align: "center",
                     }
                 }
 
                 column {
                     margin_top: 24.0,
-                    percent_width: 1.0,
+                    width: "100%",
                     align_items: "start",
                     text {
                         content: "Contents".to_string(),
                         font_size: 13.0,
                         font_weight: 600_i32,
-                        font_color: 0xFF3F3F46_u32,
+                        font_color: "#FF3F3F46",
                         margin_bottom: 8.0,
                     }
                     textinput {
-                        percent_width: 1.0,
+                        width: "100%",
                         height: 44.0,
                         value: contents(),
                         placeholder: sample_placeholder(format).to_string(),
                         font_size: 14.0,
-                        font_color: 0xFF18181B_u32,
-                        background_color: 0xFFFFFFFF_u32,
+                        font_color: "#FF18181B",
+                        background_color: "#FFFFFFFF",
                         border_radius: 10.0,
                         padding_left: 12.0,
                         padding_right: 12.0,
@@ -132,7 +133,7 @@ fn app() -> Element {
                     text {
                         content: sample_hint(format).to_string(),
                         font_size: 11.0,
-                        font_color: 0xFFA1A1AA_u32,
+                        font_color: "#FFA1A1AA",
                         margin_top: 6.0,
                         line_height: 15.0,
                     }
@@ -140,18 +141,18 @@ fn app() -> Element {
 
                 column {
                     margin_top: 20.0,
-                    percent_width: 1.0,
+                    width: "100%",
                     align_items: "start",
                     text {
                         content: format!("Format ({}/{})", format_index() + 1, FORMATS.len()),
                         font_size: 13.0,
                         font_weight: 600_i32,
-                        font_color: 0xFF3F3F46_u32,
+                        font_color: "#FF3F3F46",
                         margin_bottom: 8.0,
                     }
                     // Full-width list rows — no flex wrap (unreliable hit targets on device).
                     column {
-                        percent_width: 1.0,
+                        width: "100%",
                         align_items: "stretch",
                         for (index, item) in FORMATS.iter().copied().enumerate() {
                             {
@@ -160,7 +161,7 @@ fn app() -> Element {
                                 rsx! {
                                     button {
                                         key: "{index}",
-                                        percent_width: 1.0,
+                                        width: "100%",
                                         height: 44.0,
                                         margin_bottom: 8.0,
                                         border_radius: 10.0,
@@ -198,22 +199,22 @@ fn app() -> Element {
 
                 column {
                     margin_top: 12.0,
-                    percent_width: 1.0,
+                    width: "100%",
                     align_items: "stretch",
                     text {
                         content: "Export".to_string(),
                         font_size: 13.0,
                         font_weight: 600_i32,
-                        font_color: 0xFF3F3F46_u32,
+                        font_color: "#FF3F3F46",
                         margin_bottom: 8.0,
                     }
                     button {
-                        percent_width: 1.0,
+                        width: "100%",
                         height: 44.0,
                         margin_bottom: 8.0,
                         border_radius: 10.0,
-                        background_color: 0xFF2563EB_u32,
-                        font_color: 0xFFFFFFFF_u32,
+                        background_color: "#FF2563EB",
+                        font_color: "#FFFFFFFF",
                         font_size: 14.0,
                         onclick: move |_| {
                             status.set("Encoding PNG off UI thread…".to_string());
@@ -235,12 +236,12 @@ fn app() -> Element {
                         "PNG → base64"
                     }
                     button {
-                        percent_width: 1.0,
+                        width: "100%",
                         height: 44.0,
                         margin_bottom: 8.0,
                         border_radius: 10.0,
-                        background_color: 0xFF18181B_u32,
-                        font_color: 0xFFFFFFFF_u32,
+                        background_color: "#FF18181B",
+                        font_color: "#FFFFFFFF",
                         font_size: 14.0,
                         onclick: move |_| {
                             status.set("Encoding PNG off UI thread…".to_string());
@@ -256,12 +257,12 @@ fn app() -> Element {
                         "PNG bytes"
                     }
                     button {
-                        percent_width: 1.0,
+                        width: "100%",
                         height: 44.0,
                         margin_bottom: 8.0,
                         border_radius: 10.0,
-                        background_color: 0xFF059669_u32,
-                        font_color: 0xFFFFFFFF_u32,
+                        background_color: "#FF059669",
+                        font_color: "#FFFFFFFF",
                         font_size: 14.0,
                         onclick: move |_| {
                             let path = std::env::temp_dir().join("arkit-barcode-demo.png");
@@ -281,24 +282,24 @@ fn app() -> Element {
 
                 column {
                     margin_top: 24.0,
-                    percent_width: 1.0,
+                    width: "100%",
                     padding_top: 16.0,
                     padding_right: 16.0,
                     padding_bottom: 16.0,
                     padding_left: 16.0,
-                    background_color: 0xFFFFFFFF_u32,
+                    background_color: "#FFFFFFFF",
                     border_radius: 12.0,
                     align_items: "start",
                     text {
                         content: "Pure encode_barcode".to_string(),
                         font_size: 13.0,
                         font_weight: 600_i32,
-                        font_color: 0xFF3F3F46_u32,
+                        font_color: "#FF3F3F46",
                     }
                     text {
                         content: pure_encode_summary(&contents()),
                         font_size: 12.0,
-                        font_color: 0xFF52525B_u32,
+                        font_color: "#FF52525B",
                         margin_top: 8.0,
                         line_height: 17.0,
                     }
@@ -307,18 +308,18 @@ fn app() -> Element {
                 text {
                     content: status(),
                     font_size: 12.0,
-                    font_color: 0xFF2563EB_u32,
+                    font_color: "#FF2563EB",
                     margin_top: 20.0,
-                    text_align: 1_i32,
+                    text_align: "center",
                     line_height: 17.0,
                 }
                 if !base64_preview().is_empty() {
                     text {
                         content: base64_preview(),
                         font_size: 10.0,
-                        font_color: 0xFF71717A_u32,
+                        font_color: "#FF71717A",
                         margin_top: 8.0,
-                        text_align: 1_i32,
+                        text_align: "center",
                         line_height: 14.0,
                     }
                 }

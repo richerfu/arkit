@@ -71,12 +71,17 @@ fn render_item(index: u32) -> ArkUIResult<ArkUINode> {
 }
 ```
 
-提供的 convenience methods：
+`NodeBuilder` 直接操作 ArkUI 属性（非 RSX 编码器）：
 
-- `percent_width`、`percent_height`、`width`、`height`
-- `background_color`、`font_size`、`font_color`、`text_content`
-- `padding`、`margin`、`child`
-- `attr`：传入 canonical `ArkUINodeAttributeType`
+| 方法                                                             | 含义                                       |
+| ---------------------------------------------------------------- | ------------------------------------------ |
+| `width` / `height`                                               | 固定尺寸（vp）                             |
+| `percent_width` / `percent_height`                               | 相对父级，取值 `0.0`–`1.0`（`1.0` = 100%） |
+| `background_color` / `font_size` / `font_color` / `text_content` | 常用外观与文本                             |
+| `padding` / `margin` / `child`                                   | 盒模型与子节点                             |
+| `attr`                                                           | 任意 `ArkUINodeAttributeType`              |
+
+声明式 RSX 使用 CSS 写法（`width: "100%"`、`height: 48.0`）；`NodeBuilder` 是 render cycle 外的命令式路径，二者面向不同边界。
 
 builder 在 `build` 前持有 native cleanup guard。任一步返回错误或 builder 被提前 drop，已创建 node 会被 dispose；`build` 后所有权转移给调用方。
 

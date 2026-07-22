@@ -18,7 +18,7 @@ use crate::safe_area::use_safe_area;
 // event descriptors into scope for `rsx!`.
 use arkit_prelude::*;
 
-const STACK_ALIGN_CENTER: i32 = 4;
+const STACK_ALIGN_CENTER: &str = "center";
 
 /// Stable overlay planes rendered together by [`crate::OverlayRoot`].
 ///
@@ -277,13 +277,17 @@ fn ModalOverlayLayer(props: ModalOverlayLayerProps) -> Element {
     let inset_bottom = spec.viewport_inset + safe_area.bottom;
     let inset_left = spec.viewport_inset + safe_area.left;
     let backdrop_dismiss = dismiss.clone();
+    // Match the pre-migration interaction tree: full-screen shells carry
+    // dismiss `onclick`, and the panel wrapper only stops propagation. Do not
+    // force hit_test modes here — OverlayRoot already uses `"none"` for the
+    // portal, and experimental modes on these shells broke panel button hits.
     let overlay_panel = match spec.presentation {
         ModalPresentation::CenteredDialog => {
             let outside_dismiss = dismiss.clone();
             rsx! {
                 stack {
-                    percent_width: 1.0,
-                    percent_height: 1.0,
+                    width: "100%",
+                    height: "100%",
                     alignment: STACK_ALIGN_CENTER,
                     padding_top: inset_top,
                     padding_right: inset_right,
@@ -294,6 +298,7 @@ fn ModalOverlayLayer(props: ModalOverlayLayerProps) -> Element {
                         dismiss_if_allowed(spec, &outside_dismiss);
                     },
                     stack {
+                        width: "100%",
                         clip: false,
                         onclick: move |evt| evt.stop_propagation(),
                         {panel}
@@ -305,8 +310,8 @@ fn ModalOverlayLayer(props: ModalOverlayLayerProps) -> Element {
             let outside_dismiss = dismiss.clone();
             rsx! {
                 row {
-                    percent_width: 1.0,
-                    percent_height: 1.0,
+                    width: "100%",
+                    height: "100%",
                     justify_content: "end",
                     padding_top: inset_top,
                     padding_right: inset_right,
@@ -317,7 +322,7 @@ fn ModalOverlayLayer(props: ModalOverlayLayerProps) -> Element {
                         dismiss_if_allowed(spec, &outside_dismiss);
                     },
                     column {
-                        percent_height: 1.0,
+                        height: "100%",
                         stack {
                             clip: false,
                             onclick: move |evt| evt.stop_propagation(),
@@ -331,8 +336,8 @@ fn ModalOverlayLayer(props: ModalOverlayLayerProps) -> Element {
             let outside_dismiss = dismiss.clone();
             rsx! {
                 column {
-                    percent_width: 1.0,
-                    percent_height: 1.0,
+                    width: "100%",
+                    height: "100%",
                     padding_top: inset_top,
                     padding_right: inset_right,
                     // Bottom-anchored surfaces own their internal safe-area
@@ -348,11 +353,11 @@ fn ModalOverlayLayer(props: ModalOverlayLayerProps) -> Element {
                     // the measured remaining height and pins the intrinsic
                     // sheet to the bottom without needing to know its height.
                     row {
-                        percent_width: 1.0,
+                        width: "100%",
                         layout_weight: 1.0,
                     }
                     column {
-                        percent_width: 1.0,
+                        width: "100%",
                         clip: false,
                         onclick: move |evt| evt.stop_propagation(),
                         {panel}
@@ -364,13 +369,13 @@ fn ModalOverlayLayer(props: ModalOverlayLayerProps) -> Element {
 
     rsx! {
         stack {
-            percent_width: 1.0,
-            percent_height: 1.0,
-            alignment: 0,
+            width: "100%",
+            height: "100%",
+            alignment: "top-start",
             clip: false,
             row {
-                percent_width: 1.0,
-                percent_height: 1.0,
+                width: "100%",
+                height: "100%",
                 background_color: spec.backdrop_color,
                 onclick: move |evt| {
                     evt.stop_propagation();

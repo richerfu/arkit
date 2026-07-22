@@ -42,7 +42,7 @@ let toast = SonnerToast::success(2, "Saved")
 | 属性             | 默认值         | 说明                                                           |
 | ---------------- | -------------- | -------------------------------------------------------------- |
 | `toasts`         | 空             | 结构化 `SonnerToast` 列表                                      |
-| `messages`       | 空             | 兼容用纯文本列表，新代码优先 toasts                            |
+| `messages`       | 空             | 纯文本列表；需要标题/操作/时长时用 `toasts`                    |
 | `position`       | `BottomCenter` | 上/下 × 左/中/右六种位置                                       |
 | `visible_toasts` | `3`            | 重叠栈中同时露出的最大数量，至少 1                             |
 | `rich_colors`    | `false`        | 语义强化配色                                                   |

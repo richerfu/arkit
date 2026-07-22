@@ -40,8 +40,8 @@ fn app() -> Element {
 
     rsx! {
         column {
-            percent_width: 1.0,
-            percent_height: 1.0,
+            width: "100%",
+            height: "100%",
             align_items: "center",
             justify_content: "center",
             padding: 24.0,

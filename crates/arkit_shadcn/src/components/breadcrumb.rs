@@ -55,7 +55,7 @@ pub fn Breadcrumb(props: BreadcrumbProps) -> Element {
 
     rsx! {
         row {
-            percent_width: 1.0,
+            width: "100%",
             align_items: "center",
             {rows.into_iter()}
         }

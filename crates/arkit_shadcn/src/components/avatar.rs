@@ -44,7 +44,7 @@ pub fn Avatar(props: AvatarProps) -> Element {
             border_radius: radius,
             border_width,
             border_color,
-            alignment: 4_i32,
+            alignment: "center",
             clip: true,
             if let Some(fallback) = props.fallback {
                 {fallback}
@@ -55,7 +55,7 @@ pub fn Avatar(props: AvatarProps) -> Element {
                     width: AVATAR_SIZE,
                     height: AVATAR_SIZE,
                     border_radius: radius,
-                    object_fit: 1_i32,
+                    object_fit: "cover",
                     clip: true,
                 }
             }
@@ -73,13 +73,13 @@ pub fn AvatarFallback(content: String) -> Element {
             width: AVATAR_SIZE,
             height: AVATAR_SIZE,
             background_color: theme.colors.muted,
-            alignment: 4_i32,
+            alignment: "center",
             text {
                 content,
                 font_size: typography::SM,
                 font_color: theme.colors.muted_foreground,
                 line_height: 20.0,
-                text_align: 0,
+                text_align: "start",
             }
         }
     }

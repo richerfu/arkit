@@ -90,14 +90,12 @@ pub struct CameraPreviewProps {
     #[cfg(feature = "scan")]
     #[props(default)]
     pub scan: Option<CameraScanConfiguration>,
+    /// CSS width (`"100%"`, `"320"`). Defaults to `"100%"`.
+    #[props(default = "100%".to_string())]
+    pub width: String,
+    /// CSS height (`"360"`, `"100%"`). Defaults to `"360"` when unset.
     #[props(default)]
-    pub width: Option<f32>,
-    #[props(default)]
-    pub height: Option<f32>,
-    #[props(default = 1.0)]
-    pub percent_width: f32,
-    #[props(default)]
-    pub percent_height: Option<f32>,
+    pub height: Option<String>,
     #[props(default)]
     pub on_status_change: Option<EventHandler<CameraStatus>>,
     #[props(default)]
@@ -329,18 +327,12 @@ pub fn CameraPreview(props: CameraPreviewProps) -> Element {
         drop_runtime.shutdown();
     });
 
-    let default_height = if props.height.is_none() && props.percent_height.is_none() {
-        Some(360.0)
-    } else {
-        props.height
-    };
+    let height = props.height.clone().unwrap_or_else(|| "360".into());
     rsx! {
         xcomponent {
-            percent_width: props.percent_width,
-            width: props.width,
-            height: default_height,
-            percent_height: props.percent_height,
-            background_color: 0xFF000000u32,
+            width: props.width.clone(),
+            height: height,
+            background_color: "#FF000000",
         }
     }
 }

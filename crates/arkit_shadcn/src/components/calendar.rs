@@ -12,7 +12,7 @@ use crate::icon::icon_placeholder;
 use crate::theme::{typography, use_theme, Theme, ThemeMode};
 use arkit_prelude::*;
 
-use super::{ARKUI_BORDER_STYLE_SOLID, ARKUI_BUTTON_TYPE_NORMAL};
+use super::ARKUI_BORDER_STYLE_SOLID;
 
 const TRANSPARENT: u32 = 0x00000000;
 const LIGHT_SELECTION: u32 = 0xFF0284C7;
@@ -122,7 +122,7 @@ pub fn Calendar(props: CalendarProps) -> Element {
                     align_items: "center",
                     justify_content: "center",
                     button {
-                        button_type: ARKUI_BUTTON_TYPE_NORMAL,
+                        button_type: "normal",
                         focusable: false,
                         focus_on_touch: false,
                         width: DAY_SIZE,
@@ -131,7 +131,7 @@ pub fn Calendar(props: CalendarProps) -> Element {
                         padding_right: 0.0,
                         padding_bottom: 0.0,
                         padding_left: 0.0,
-                        alignment: 4_i32,
+                        alignment: "center",
                         background_color: background,
                         border_style: ARKUI_BORDER_STYLE_SOLID,
                         border_width: 0.0,
@@ -158,7 +158,7 @@ pub fn Calendar(props: CalendarProps) -> Element {
 
         rsx! {
             row {
-                percent_width: 1.0,
+                width: "100%",
                 height: WEEK_ROW_HEIGHT,
                 align_items: "center",
                 {cells}
@@ -168,20 +168,20 @@ pub fn Calendar(props: CalendarProps) -> Element {
 
     rsx! {
         column {
-            percent_width: 1.0,
+            width: "100%",
             background_color: theme.colors.card,
             border_width: if embedded { 0.0 } else { 1.0 },
             border_color: theme.colors.border,
             border_style: ARKUI_BORDER_STYLE_SOLID,
             border_radius: if embedded { 0.0 } else { theme.radii.lg },
-            shadow: if embedded { 0_i32 } else { 1_i32 },
+            shadow: if !embedded { "sm" },
             clip: true,
             padding_top: CALENDAR_PADDING,
             padding_right: CALENDAR_PADDING,
             padding_bottom: CALENDAR_PADDING,
             padding_left: CALENDAR_PADDING,
             row {
-                percent_width: 1.0,
+                width: "100%",
                 height: 40.0,
                 align_items: "center",
                 CalendarNavigationButton {
@@ -209,7 +209,7 @@ pub fn Calendar(props: CalendarProps) -> Element {
             }
             row { height: 4.0 }
             row {
-                percent_width: 1.0,
+                width: "100%",
                 height: 28.0,
                 align_items: "center",
                 for weekday in WEEKDAYS {
@@ -237,7 +237,7 @@ pub fn Calendar(props: CalendarProps) -> Element {
 fn CalendarNavigationButton(icon: String, accent: u32, onclick: EventHandler<()>) -> Element {
     rsx! {
         button {
-            button_type: ARKUI_BUTTON_TYPE_NORMAL,
+            button_type: "normal",
             focusable: false,
             focus_on_touch: false,
             width: 36.0,
@@ -246,7 +246,7 @@ fn CalendarNavigationButton(icon: String, accent: u32, onclick: EventHandler<()>
             padding_right: 0.0,
             padding_bottom: 0.0,
             padding_left: 0.0,
-            alignment: 4_i32,
+            alignment: "center",
             background_color: TRANSPARENT,
             border_style: ARKUI_BORDER_STYLE_SOLID,
             border_width: 0.0,

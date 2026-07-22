@@ -8,8 +8,8 @@
 //! 1px border, `background`/`border` tokens, small outer shadow.
 
 use super::dialog::DialogHeader;
-use super::floating_layer::{side_alignment, side_from_name, OVERLAY_BACKDROP, SHADOW_SM};
-use super::{ARKUI_BORDER_STYLE_SOLID, ARKUI_BUTTON_TYPE_NORMAL};
+use super::floating_layer::{side_alignment, side_from_name, OVERLAY_BACKDROP};
+use super::ARKUI_BORDER_STYLE_SOLID;
 use crate::icon::icon_placeholder;
 use crate::theme::*;
 use arkit_prelude::*;
@@ -52,15 +52,15 @@ pub fn Sheet(
 
     rsx! {
         stack {
-            percent_width: 1.0,
-            percent_height: 1.0,
+            width: "100%",
+            height: "100%",
             background_color: OVERLAY_BACKDROP,
             alignment: alignment,
             onclick: move |_| close.call(()),
             stack {
                 onclick: move |evt| { evt.stop_propagation(); },
                 width: SHEET_WIDTH,
-                percent_height: 1.0,
+                height: "100%",
                 padding_top: spacing::XXL,
                 padding_right: spacing::XXL,
                 padding_bottom: spacing::XXL,
@@ -69,37 +69,37 @@ pub fn Sheet(
                 border_width: 1.0,
                 border_color: theme.colors.border,
                 background_color: theme.colors.background,
-                shadow: SHADOW_SM,
+                shadow: "sm",
                 column {
-                    percent_width: 1.0,
-                    percent_height: 1.0,
+                    width: "100%",
+                    height: "100%",
                     DialogHeader {
                         title: title,
                         description: String::new(),
                     }
                     column {
-                        percent_width: 1.0,
+                        width: "100%",
                         margin_top: spacing::LG,
                         {children}
                     }
                 }
                 row {
-                    percent_width: 1.0,
+                    width: "100%",
                     position: 0.0,
                     justify_content: "end",
                     button {
-                        button_type: ARKUI_BUTTON_TYPE_NORMAL,
+                        button_type: "normal",
                         width: 28.0,
                         height: 28.0,
                         padding: 0.0,
-                        background_color: 0x00000000,
+                        background_color: "#00000000",
                         border_width: 0.0,
                         border_style: ARKUI_BORDER_STYLE_SOLID,
                         border_radius: theme.radii.md,
                         clip: true,
                         focusable: false,
                         focus_on_touch: false,
-                        alignment: 4,
+                        alignment: "center",
                         opacity: 0.7_f32,
                         onclick: move |_| close.call(()),
                         {icon_placeholder("x", 16.0, theme.colors.foreground)}

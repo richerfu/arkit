@@ -7,6 +7,8 @@ description: "类型约定、颜色、单位与条件样式。"
 
 Arkit element 的属性是编译期 descriptor。RSX 更新后 renderer 只提交变化的 attribute；删除条件属性会恢复对应 native 默认值或清除状态。
 
+属性值按 **CSS 语义** 编码：长度用 vp / `"N%"`，枚举用关键字字符串。完整关键字表见 [元素与布局](/docs/elements-layout)。
+
 ## 常用属性族
 
 | 属性族 | 示例                                                                 |
@@ -20,7 +22,7 @@ Arkit element 的属性是编译期 descriptor。RSX 更新后 renderer 只提�
 
 ## 颜色与单位
 
-颜色接受 renderer 支持的 ARGB `u32` 或颜色字符串：
+颜色接受 ARGB `u32` 或 hex 字符串：
 
 ```rust
 text {
@@ -31,7 +33,17 @@ text {
 }
 ```
 
-尺寸值默认是 vp。需要物理像素或窗口换算时从 `WindowMetrics` 读取 scale，不在业务中写设备常量。
+尺寸默认是 vp。百分比写在 `width` / `height` 上：
+
+```rust
+column {
+    width: "100%",
+    height: "50%",
+    padding: "12 16",
+}
+```
+
+需要物理像素或窗口换算时从 `WindowMetrics` 读取 scale，不在业务中写设备常量。
 
 ## 条件样式
 
@@ -44,6 +56,7 @@ rsx! {
     button {
         background_color: if active() { 0xFF16A34Au32 } else { 0xFF334155u32 },
         opacity: if active() { 1.0 } else { 0.72 },
+        shadow: if active() { "sm" },
         "状态"
     }
 }
@@ -53,7 +66,7 @@ rsx! {
 
 ## 封装设计 Token
 
-带枚举语义的底层属性可能接受整数或字符串编码。项目应在组件层集中定义 color、spacing、radius、typography 和 ArkUI enum 映射，避免 magic number 散落在页面。
+在组件层集中定义 color、spacing、radius、typography 与关键字常量，页面只消费 token，不散落硬编码色值与尺寸。
 
 需要完整主题系统时使用顶部“组件”中的 ThemeProvider。基础 element 本身不依赖 shadcn feature。
 
@@ -62,7 +75,7 @@ rsx! {
 ```rust
 text {
     max_lines: 2,
-    text_overflow: 1,
+    text_overflow: "ellipsis",
     line_height: 22.0,
     "最多显示两行"
 }

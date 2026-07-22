@@ -12,7 +12,6 @@ use arkit_prelude::*;
 const RADIO_SIZE: f32 = 16.0;
 const RADIO_DOT_SIZE: f32 = 8.0;
 const RADIO_BORDER_WIDTH: f32 = 1.0;
-const ALIGN_CENTER: i32 = 4;
 
 /// Render the radio indicator ring (with a primary dot when `checked`).
 fn radio_indicator(checked: bool, theme: &Theme) -> Element {
@@ -20,7 +19,7 @@ fn radio_indicator(checked: bool, theme: &Theme) -> Element {
         stack {
             width: RADIO_SIZE,
             height: RADIO_SIZE,
-            alignment: ALIGN_CENTER,
+            alignment: "center",
             border_radius: theme.radii.full,
             border_width: RADIO_BORDER_WIDTH,
             border_style: ARKUI_BORDER_STYLE_SOLID,
@@ -78,7 +77,7 @@ pub fn RadioGroup(props: RadioGroupProps) -> Element {
             let top_margin = if index == 0 { 0.0 } else { spacing::MD };
             let row = rsx! {
                 row {
-                    percent_width: 1.0,
+                    width: "100%",
                     align_items: "center",
                     justify_content: "start",
                     margin_top: top_margin,
@@ -96,7 +95,7 @@ pub fn RadioGroup(props: RadioGroupProps) -> Element {
                             font_size: typography::SM,
                             font_weight: 500,
                             font_color: label_color,
-                            text_align: 0,
+                            text_align: "start",
                         }
                     }
                 }
@@ -107,7 +106,7 @@ pub fn RadioGroup(props: RadioGroupProps) -> Element {
 
     rsx! {
         column {
-            percent_width: 1.0,
+            width: "100%",
             {rows.into_iter()}
         }
     }

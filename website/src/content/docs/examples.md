@@ -63,7 +63,7 @@ ohrs build --arch aarch
 
 ## chart
 
-展示全部 series family 和 ECharts-compatible instance operations。除画面外检查 tooltip/hit-test、legend/dataZoom、selection state、realtime transition、appendData、coordinate conversion 和图片导出。
+展示全部 series family 与图表 instance operations。除画面外检查 tooltip/hit-test、legend/dataZoom、selection state、realtime transition、appendData、coordinate conversion 和图片导出。
 
 ## camera
 

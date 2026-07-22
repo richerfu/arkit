@@ -56,13 +56,13 @@ fn app() -> Element {
 
     rsx! {
         column {
-            percent_width: 1.0,
-            percent_height: 1.0,
-            background_color: 0xFFF1F5F9u32,
+            width: "100%",
+            height: "100%",
+            background_color: "#FFF1F5F9",
 
             column {
                 padding: 16.0,
-                background_color: 0xFFFFFFFFu32,
+                background_color: "#FFFFFFFF",
                 text {
                     font_size: 24.0,
                     line_height: 30.0,
@@ -73,14 +73,14 @@ fn app() -> Element {
                     margin_top: 4.0,
                     font_size: 13.0,
                     line_height: 18.0,
-                    font_color: 0xFF475569u32,
+                    font_color: "#FF475569",
                     "Dioxus props + native ArkUI canvas; live tick #{tick}"
                 }
                 text {
                     margin_top: 6.0,
                     font_size: 13.0,
                     line_height: 18.0,
-                    font_color: 0xFF2563EBu32,
+                    font_color: "#FF2563EB",
                     "{selected_label}"
                 }
                 row {
@@ -178,14 +178,14 @@ fn app() -> Element {
             }
 
             column {
-                percent_width: 1.0,
+                width: "100%",
                 layout_weight: 1.0,
                 scroll {
-                    percent_width: 1.0,
-                    percent_height: 1.0,
-                    scroll_bar: true,
+                    width: "100%",
+                    height: "100%",
+                    scroll_bar: "on",
                     column {
-                        percent_width: 1.0,
+                        width: "100%",
                         padding: 12.0,
                         DemoChart {
                             title: "Realtime line / bar / scatter",
@@ -235,24 +235,24 @@ struct DemoChartProps {
 fn DemoChart(props: DemoChartProps) -> Element {
     rsx! {
         column {
-            percent_width: 1.0,
+            width: "100%",
             margin_bottom: 12.0,
             padding: 10.0,
-            background_color: 0xFFFFFFFFu32,
+            background_color: "#FFFFFFFF",
             border_width: 1.0,
-            border_color: 0xFFE2E8F0u32,
+            border_color: "#FFE2E8F0",
             border_radius: 10.0,
             text {
                 margin_bottom: 6.0,
                 font_size: 15.0,
                 line_height: 20.0,
                 font_weight: 600,
-                font_color: 0xFF0F172Au32,
+                font_color: "#FF0F172A",
                 "{props.title}"
             }
             ECharts {
                 option: props.option,
-                height: 300.0,
+                height: "300",
                 on_select: props.on_select,
                 controller: props.controller,
                 on_event: props.on_event,
