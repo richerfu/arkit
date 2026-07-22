@@ -14,7 +14,7 @@ workspace = true
 crate-type = ["cdylib"]
 
 [dependencies]
-arkit = { workspace = true, features = ["shadcn", "markdown"] }
+arkit = { workspace = true, features = ["shadcn", "markdown", "code"] }
 tokio = { workspace = true, features = ["time"] }
 napi-ohos.workspace = true
 napi-derive-ohos.workspace = true

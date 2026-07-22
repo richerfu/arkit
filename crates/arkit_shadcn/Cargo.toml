@@ -11,7 +11,22 @@ workspace = true
 
 [features]
 default = []
+# Standalone syntax-highlighted code blocks (tree-sitter). Independent of markdown.
+code = [
+    "dep:tree-sitter",
+    "dep:tree-sitter-highlight",
+    "dep:tree-sitter-rust",
+    "dep:tree-sitter-javascript",
+    "dep:tree-sitter-typescript",
+    "dep:tree-sitter-python",
+    "dep:tree-sitter-json",
+    "dep:tree-sitter-bash",
+    "dep:tree-sitter-go",
+    "dep:tree-sitter-c",
+]
 markdown = ["dep:pulldown-cmark", "dep:smallvec"]
+# Convenience alias: Markdown + Code (fenced-code highlighting in Markdown).
+markdown-highlight = ["markdown", "code"]
 
 [dependencies]
 arkit_animation = { workspace = true }
@@ -20,8 +35,19 @@ arkit_icon = { workspace = true }
 arkit_hooks = { workspace = true }
 arkit_runtime = { workspace = true }
 ohos-display-binding = { workspace = true }
+ohos-hilog-binding = { workspace = true }
 tokio = { workspace = true }
 pulldown-cmark = { workspace = true, optional = true }
 smallvec = { workspace = true, optional = true }
+tree-sitter = { workspace = true, optional = true }
+tree-sitter-highlight = { workspace = true, optional = true }
+tree-sitter-rust = { workspace = true, optional = true }
+tree-sitter-javascript = { workspace = true, optional = true }
+tree-sitter-typescript = { workspace = true, optional = true }
+tree-sitter-python = { workspace = true, optional = true }
+tree-sitter-json = { workspace = true, optional = true }
+tree-sitter-bash = { workspace = true, optional = true }
+tree-sitter-go = { workspace = true, optional = true }
+tree-sitter-c = { workspace = true, optional = true }
 
 [lib]

@@ -8,9 +8,7 @@
 //! `popover_foreground` text at native text-base size. Anchored above the
 //! trigger.
 
-use super::floating_layer::{
-    FloatingAlign, FloatingPanelPlacement, FloatingSide, HIT_TEST_DEFAULT, HIT_TEST_NONE,
-};
+use super::floating_layer::{FloatingAlign, FloatingPanelPlacement, FloatingSide};
 use crate::theme::*;
 use arkit_prelude::*;
 use dioxus_core_macro::component;
@@ -57,45 +55,26 @@ pub fn Tooltip(
     });
 
     let show_overlay = overlay.clone();
-    let show_tooltip = EventHandler::new(
-        move |pointer: Option<dioxus_elements::event::PointerPayload>| {
-            if current {
-                return;
-            }
-            set_open.call(true);
-            let label = content.clone();
-            let frame = *trigger_frame.read();
-            let viewport = show_overlay.viewport();
-            let placement = if let Some(placement) = pointer.and_then(|pointer| {
-                FloatingPanelPlacement::from_pointer(
-                    pointer,
-                    viewport,
-                    panel_width,
-                    TOOLTIP_ESTIMATED_HEIGHT,
-                    FloatingSide::Top,
-                    FloatingAlign::Center,
-                    spacing::XXS,
-                )
-            }) {
-                placement
-            } else if frame.is_measured() {
-                FloatingPanelPlacement::from_trigger(
-                    frame,
-                    viewport,
-                    panel_width,
-                    TOOLTIP_ESTIMATED_HEIGHT,
-                    FloatingSide::Top,
-                    FloatingAlign::Center,
-                    spacing::XXS,
-                )
-            } else {
-                FloatingPanelPlacement::fallback(viewport)
-            };
-            show_overlay.show_floating(move || {
-                tooltip_overlay_content(theme, panel_width, placement, label)
-            });
-        },
-    );
+    let show_tooltip = EventHandler::new(move |_: ()| {
+        if current {
+            return;
+        }
+        set_open.call(true);
+        let label = content.clone();
+        let frame = *trigger_frame.read();
+        let viewport = show_overlay.viewport();
+        let placement = FloatingPanelPlacement::resolve(
+            frame,
+            viewport,
+            panel_width,
+            TOOLTIP_ESTIMATED_HEIGHT,
+            FloatingSide::Top,
+            FloatingAlign::Center,
+            spacing::XXS,
+        );
+        show_overlay
+            .show_floating(move || tooltip_overlay_content(theme, panel_width, placement, label));
+    });
 
     let leave_overlay = overlay.clone();
     let close_tooltip = EventHandler::new(move |_: ()| {
@@ -107,23 +86,23 @@ pub fn Tooltip(
     });
 
     let toggle_overlay = overlay.clone();
-    let toggle = move |pointer: Option<dioxus_elements::event::PointerPayload>| {
+    let toggle = move |_| {
         if current {
             set_open.call(false);
             toggle_overlay.dismiss();
         } else {
-            show_tooltip.call(pointer);
+            show_tooltip.call(());
         }
     };
 
     rsx! {
         row {
-            onclick: move |evt: dioxus_core::Event<dioxus_elements::event::ClickData>| {
-                toggle(evt.data().pointer);
+            onclick: move |_| {
+                toggle(());
             },
             on_hover: move |evt| {
                 if evt.data().is_hovering {
-                    show_tooltip.call(None);
+                    show_tooltip.call(());
                 } else {
                     close_tooltip.call(());
                 }
@@ -142,43 +121,31 @@ fn tooltip_overlay_content(
     let top = placement.y.max(0.0);
     let left = placement.x.max(0.0);
     rsx! {
-        column {
-            percent_width: 1.0,
-            percent_height: 1.0,
-            align_items: "start",
-            padding_top: top,
-            hit_test_behavior: HIT_TEST_NONE,
+        stack {
+            width: "100%",
+            height: "100%",
+            hit_test_behavior: "none",
             row {
-                percent_width: 1.0,
-                align_items: "start",
-                hit_test_behavior: HIT_TEST_NONE,
-                arkit_animation::MountTransition {
-                    preset: Some(arkit_animation::TransitionPreset::SlideDown),
-                    duration_ms: Some(120),
-                    row {
-                        onclick: move |evt| evt.stop_propagation(),
-                        margin_left: left,
-                        width: panel_width,
-                        align_items: "center",
-                        justify_content: "center",
-                        hit_test_behavior: HIT_TEST_DEFAULT,
-                        padding_top: 6.0,
-                        padding_right: 12.0,
-                        padding_bottom: 6.0,
-                        padding_left: 12.0,
-                        border_radius: theme.radii.md,
-                        border_width: 1.0,
-                        border_color: theme.colors.border,
-                        background_color: theme.colors.popover,
-                        shadow: super::floating_layer::SHADOW_SM,
-                        text {
-                            content: content,
-                            font_size: typography::MD,
-                            font_color: theme.colors.popover_foreground,
-                            line_height: 20.0,
-                            max_lines: 1,
-                        }
-                    }
+                position: format!("{left},{top}"),
+                width: panel_width,
+                align_items: "center",
+                justify_content: "center",
+                hit_test_behavior: "default",
+                padding_top: 6.0,
+                padding_right: 12.0,
+                padding_bottom: 6.0,
+                padding_left: 12.0,
+                border_radius: theme.radii.md,
+                border_width: 1.0,
+                border_color: theme.colors.border,
+                background_color: theme.colors.popover,
+                shadow: super::floating_layer::SHADOW_SM,
+                text {
+                    content: content,
+                    font_size: typography::MD,
+                    font_color: theme.colors.popover_foreground,
+                    line_height: 20.0,
+                    max_lines: 1,
                 }
             }
         }

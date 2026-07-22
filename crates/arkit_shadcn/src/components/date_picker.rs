@@ -106,7 +106,7 @@ pub fn DatePicker(props: DatePickerProps) -> Element {
             show_header: Some(false),
             on_close: move |_| set_open.call(false),
             column {
-                percent_width: 1.0,
+                width: "100%",
                 padding_right: DATE_PICKER_CONTENT_INSET,
                 padding_left: DATE_PICKER_CONTENT_INSET,
                 Calendar {
@@ -118,7 +118,7 @@ pub fn DatePicker(props: DatePickerProps) -> Element {
                 row { height: spacing::LG }
                 Button {
                     size: ButtonSize::Sm,
-                    percent_width: Some(1.0),
+                    width: "100%",
                     onclick: move |_| set_open.call(false),
                     "Close"
                 }

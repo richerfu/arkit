@@ -53,19 +53,19 @@ fn ScopedTarget() -> Element {
     });
     rsx! {
         column {
-            percent_width: 1.0,
+            width: "100%",
             row {
-                percent_width: 1.0,
+                width: "100%",
                 height: 170.0,
                 align_items: "center",
                 justify_content: "center",
-                background_color: 0xffe2e8f0u32,
+                background_color: "#FFE2E8F0",
                 border_radius: 14.0,
                 ScopeVisual { controls: controls.clone() }
             }
             flex {
                 margin_top: 12.0,
-                percent_width: 1.0,
+                width: "100%",
                 flex_wrap: "wrap",
                 ActionButton {
                     label: "play()",
@@ -136,10 +136,10 @@ fn ScopeVisual(controls: AnimationControls) -> Element {
             height: 88.0,
             align_items: "center",
             justify_content: "center",
-            background_color: 0xff4f46e5u32,
+            background_color: "#FF4F46E5",
             border_radius: 22.0,
-            text { font_size: 22.0, font_weight: 700, font_color: 0xffffffffu32, "Scope" }
-            text { margin_top: 3.0, font_size: 9.0, font_color: 0xffe0e7ffu32, "{state}" }
+            text { font_size: 22.0, font_weight: 700, font_color: "#FFFFFFFF", "Scope" }
+            text { margin_top: 3.0, font_size: 9.0, font_color: "#FFE0E7FF", "{state}" }
         }
     }
 }
@@ -166,18 +166,18 @@ fn PropertyDemo() -> Element {
             title: "Typed property schema",
             description: "Transform, layout, paint, filter, border and typography properties are resolved through typed Property<T> descriptors and one dirty-write batch.",
             column {
-                percent_width: 1.0,
+                width: "100%",
                 height: 190.0,
                 align_items: "center",
                 justify_content: "center",
-                background_color: 0xffe2e8f0u32,
+                background_color: "#FFE2E8F0",
                 border_radius: 14.0,
                 PropertyCard {}
                 TypographyTarget {}
             }
             flex {
                 margin_top: 12.0,
-                percent_width: 1.0,
+                width: "100%",
                 flex_wrap: "wrap",
                 ActionButton {
                     label: "Animate schema",
@@ -213,13 +213,13 @@ fn PropertyCard() -> Element {
             height: 82.0,
             align_items: "center",
             justify_content: "center",
-            background_color: 0xff0f766eu32,
+            background_color: "#FF0F766E",
             border_width: 2.0,
-            border_color: 0xffffffffu32,
+            border_color: "#FFFFFFFF",
             border_radius: 12.0,
             // Leave headroom for the additive opacity contribution below.
             opacity: 0.7,
-            text { font_size: 12.0, font_weight: 700, font_color: 0xffffffffu32, "Paint + layout" }
+            text { font_size: 12.0, font_weight: 700, font_color: "#FFFFFFFF", "Paint + layout" }
         }
     }
 }
@@ -231,7 +231,7 @@ fn TypographyTarget() -> Element {
         text {
             margin_top: 18.0,
             font_size: 16.0,
-            font_color: 0xff312e81u32,
+            font_color: "#FF312E81",
             "Typed typography"
         }
     }
@@ -329,7 +329,7 @@ fn CapabilityDemo() -> Element {
             title: "Capability lowering and conditions",
             description: "ExecutionPolicy is checked against a typed capability contract. Unsupported native semantics produce explicit rejection details before sampled fallback.",
             flex {
-                percent_width: 1.0,
+                width: "100%",
                 flex_wrap: "wrap",
                 Metric { label: "Requested", value: format!("{:?}", report.requested) }
                 Metric { label: "Selected", value: format!("{:?}", report.selected) }
@@ -340,7 +340,7 @@ fn CapabilityDemo() -> Element {
             text {
                 margin_top: 6.0,
                 font_size: 10.0,
-                font_color: 0xff64748bu32,
+                font_color: "#FF64748B",
                 "Required: seek, pause, reverse, callbacks, composition and custom easing"
             }
         }

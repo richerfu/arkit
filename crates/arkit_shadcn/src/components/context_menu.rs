@@ -81,27 +81,33 @@ pub fn ContextMenu(
                     let frame = *trigger_frame.read();
                     let viewport = overlay.viewport();
                     let panel_height = menu_closed_panel_height(&entries);
-                    let pointer = evt.data().pointer;
-                    let placement = if let Some(placement) = pointer.and_then(|pointer| {
-                        MenuOverlayPlacement::from_pointer(
+                    // Context menus anchor to the press point (cursor), not the
+                    // trigger root — matching OS/shadcn context-menu behavior.
+                    let placement = if let Some(pointer) = evt.data().pointer {
+                        MenuOverlayPlacement::from_cursor(
                             pointer,
                             viewport,
                             style.width,
                             panel_height,
                             style.side_offset_vp,
                         )
-                    }) {
-                        placement
-                    } else if frame.is_measured() {
-                        MenuOverlayPlacement::from_trigger(
+                        .unwrap_or_else(|| {
+                            MenuOverlayPlacement::resolve(
+                                frame,
+                                viewport,
+                                style.width,
+                                panel_height,
+                                style.side_offset_vp,
+                            )
+                        })
+                    } else {
+                        MenuOverlayPlacement::resolve(
                             frame,
                             viewport,
                             style.width,
                             panel_height,
                             style.side_offset_vp,
                         )
-                    } else {
-                        MenuOverlayPlacement::fallback(viewport)
                     };
                     let session = MenuOverlaySession::new(placement, None);
                     overlay_session.set(Some(session));

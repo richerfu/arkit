@@ -2,10 +2,12 @@
 //!
 //! The default facade exports Dioxus core (`rsx!`, `use_signal`, `Element`),
 //! the ArkUI element registry, renderer, runtime, and host hooks. Domain
-//! libraries are opt-in through the `animation`, `camera`, `chart`, `i18n`,
-//! `canvas`, `icon`, `lottie`, `markdown`, `router`, and `shadcn` features (or `full`). The
-//! `#[entry]` macro mounts a `fn() -> Element` root component into a NodeContent
-//! slot.
+//! libraries are opt-in through the `animation`, `barcode`, `camera`, `canvas`,
+//! `chart`, `code`, `i18n`, `icon`, `lottie`, `markdown`, `router`, and `shadcn`
+//! features (or `full`). Barcode/QR generation is the `barcode` feature (no
+//! camera). Code highlighting uses `code`; Markdown fences need `markdown` +
+//! `code`. The `#[entry]` macro mounts a `fn() -> Element` root component into
+//! a NodeContent slot.
 
 // --- Entry macro ---
 pub use arkit_derive::entry;
@@ -23,7 +25,8 @@ pub use arkit_runtime::{
 // --- Renderer + native node primitives ---
 pub use arkit_arkui::{
     canonical_tag, create_node, create_node_by_tag, kind_from_tag, ArkUIRenderer, EventSink,
-    NodeBuilder, NodeKind, VirtualKind, VirtualNodeAdapter,
+    NativeNodeEvent, NodeBuilder, NodeEventType, NodeKind, PreDragStatus, VirtualKind,
+    VirtualNodeAdapter,
 };
 
 // --- Hooks (escape hatches: overlay / layout / virtual range / ark node) ---
@@ -32,9 +35,10 @@ pub use arkit_hooks::{
     use_app_foreground, use_application_lifecycle, use_application_lifecycle_event,
     use_ark_host_provider, use_ark_node, use_component_lifecycle, use_component_visibility,
     use_layout_frame, use_layout_frame_node, use_layout_size, use_overlay, use_safe_area,
-    use_safe_area_policy, use_virtual_node_adapter, use_virtual_range, use_window_metrics, ArkHost,
-    ArkNodeRef, ComponentLifecycleState, HitTestMode, LayoutFrame, LayoutSize, OverlayLayer,
-    OverlayRoot, OverlayViewport, SafeArea, SafeAreaEdges, SafeAreaProps, VirtualVisibleRange,
+    use_safe_area_policy, use_virtual_node_adapter, use_virtual_node_adapter_items_keyed,
+    use_virtual_range, use_window_metrics, ArkHost, ArkNodeRef, ComponentLifecycleState,
+    HitTestMode, LayoutFrame, LayoutSize, OverlayLayer, OverlayRoot, OverlayViewport, SafeArea,
+    SafeAreaEdges, SafeAreaProps, VirtualVisibleRange,
 };
 
 // --- i18n ---
@@ -89,6 +93,16 @@ pub use arkit_animation::{
     BORDER_COLOR, BORDER_RADIUS, BORDER_WIDTH, BRIGHTNESS, CONTRAST, FONT_COLOR, FONT_SIZE,
     FOREGROUND_COLOR, GRAYSCALE, HEIGHT, INVERT, LETTER_SPACING, LINE_HEIGHT, OPACITY, POSITION_X,
     POSITION_Y, ROTATION, SATURATION, SCALE_X, SCALE_Y, SEPIA, TRANSLATE_X, TRANSLATE_Y, WIDTH,
+};
+
+// --- Barcode / QR generation ---
+#[cfg(feature = "barcode")]
+pub use arkit_barcode as barcode;
+#[cfg(feature = "barcode")]
+pub use arkit_barcode::{
+    encode_barcode, use_barcode, Barcode, BarcodeArtifact, BarcodeBitmap, BarcodeError,
+    BarcodeErrorKind, BarcodeFormat, BarcodeHandle, BarcodeOptions, BarcodePhase, BarcodeProps,
+    BarcodeRequest, BarcodeResult, QrEcLevel, DEFAULT_MARGIN, MAX_BARCODE_EDGE,
 };
 
 // --- Native CameraKit preview and capture ---
@@ -236,14 +250,14 @@ fn arkit_entry_root(props: EntryRootProps) -> Element {
 
     rsx! {
         stack {
-            percent_width: 1.0,
-            percent_height: 1.0,
-            alignment: 0,
+            width: "100%",
+            height: "100%",
+            alignment: "top-start",
             clip: false,
             stack {
-                percent_width: 1.0,
-                percent_height: 1.0,
-                alignment: 0,
+                width: "100%",
+                height: "100%",
+                alignment: "top-start",
                 padding_top: safe_area.top,
                 padding_right: safe_area.right,
                 padding_bottom: safe_area.bottom,
@@ -281,8 +295,8 @@ pub mod prelude {
 
     // Native node primitives + virtual container builder.
     pub use crate::{
-        canonical_tag, create_node, create_node_by_tag, kind_from_tag, NodeBuilder, NodeKind,
-        VirtualKind, VirtualNodeAdapter,
+        canonical_tag, create_node, create_node_by_tag, kind_from_tag, NativeNodeEvent,
+        NodeBuilder, NodeEventType, NodeKind, PreDragStatus, VirtualKind, VirtualNodeAdapter,
     };
 
     // Escape-hatch hooks.
@@ -290,10 +304,10 @@ pub mod prelude {
         use_app_foreground, use_application_lifecycle, use_application_lifecycle_event,
         use_ark_host_provider, use_ark_node, use_component_lifecycle, use_component_visibility,
         use_layout_frame, use_layout_frame_node, use_layout_size, use_overlay, use_safe_area,
-        use_safe_area_policy, use_virtual_node_adapter, use_virtual_range, use_window_metrics,
-        ArkHost, ArkNodeRef, ComponentLifecycleState, HitTestMode, LayoutFrame, LayoutSize,
-        OverlayLayer, OverlayRoot, OverlayViewport, SafeArea, SafeAreaEdges, SafeAreaProps,
-        VirtualVisibleRange,
+        use_safe_area_policy, use_virtual_node_adapter, use_virtual_node_adapter_items_keyed,
+        use_virtual_range, use_window_metrics, ArkHost, ArkNodeRef, ComponentLifecycleState,
+        HitTestMode, LayoutFrame, LayoutSize, OverlayLayer, OverlayRoot, OverlayViewport, SafeArea,
+        SafeAreaEdges, SafeAreaProps, VirtualVisibleRange,
     };
 
     #[cfg(feature = "i18n")]
@@ -374,6 +388,13 @@ pub mod prelude {
         DomMatrix2D, FillRule, Float16, GlobalCompositeOperation, ImageData, ImageDataArray,
         ImageDataPixelFormat, ImageDataSettings, IntoCanvasFont, IntoCanvasRadii, IntoCanvasStyle,
         OffscreenCanvas, Path2D,
+    };
+
+    #[cfg(feature = "barcode")]
+    pub use crate::{
+        encode_barcode, use_barcode, Barcode, BarcodeArtifact, BarcodeBitmap, BarcodeError,
+        BarcodeErrorKind, BarcodeFormat, BarcodeHandle, BarcodeOptions, BarcodePhase, BarcodeProps,
+        BarcodeRequest, BarcodeResult, QrEcLevel,
     };
 
     #[cfg(feature = "camera")]

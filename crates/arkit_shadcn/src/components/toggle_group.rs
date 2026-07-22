@@ -12,6 +12,7 @@ use super::toggle::{
     toggle_content_row, toggle_default_size, toggle_icon_size, toggle_surface, toggle_visual_style,
     ToggleSurfaceStyle, ToggleVariant,
 };
+use super::ARKUI_BORDER_STYLE_SOLID;
 
 const TOGGLE_GROUP_VARIANT: ToggleVariant = ToggleVariant::Outline;
 
@@ -30,6 +31,13 @@ pub struct ToggleGroupProps {
     /// Allow multiple selections.
     #[props(default)]
     pub multi: bool,
+    /// Optional group CSS width (`"100%"`). When provided, the items share the
+    /// available width evenly, which is useful for mobile mode selectors.
+    #[props(default)]
+    pub width: Option<String>,
+    /// Override the outline group's default small elevation.
+    #[props(default)]
+    pub shadow: Option<bool>,
     #[props(default)]
     pub on_change: EventHandler<Vec<String>>,
 }
@@ -49,6 +57,8 @@ pub fn ToggleGroup(props: ToggleGroupProps) -> Element {
     let total = props.options.len();
     let multi = props.multi;
     let icons = props.icons;
+    let stretched = props.width.is_some();
+    let group_shadow = props.shadow.unwrap_or(true);
     let on_change = props.on_change;
     let size_style = if icons {
         toggle_icon_size()
@@ -56,70 +66,102 @@ pub fn ToggleGroup(props: ToggleGroupProps) -> Element {
         toggle_default_size()
     };
 
-    let items: Vec<Element> = props
-        .options
-        .iter()
-        .enumerate()
-        .map(|(index, option)| {
-            let active = selected.contains(option);
-            let foreground = toggle_visual_style(TOGGLE_GROUP_VARIANT, active, &theme).foreground;
-            let label_opt = if icons { None } else { Some(option.clone()) };
-            let icon_opt = if icons { Some(option.clone()) } else { None };
-            let content = toggle_content_row(label_opt, icon_opt, foreground, size_style.icon_size);
+    let mut items: Vec<Element> = Vec::with_capacity(total.saturating_mul(2).saturating_sub(1));
+    for (index, option) in props.options.iter().enumerate() {
+        let active = selected.contains(option);
+        let visual = toggle_visual_style(TOGGLE_GROUP_VARIANT, active, &theme);
+        let foreground = visual.foreground;
+        let item_background = visual.background;
+        let label_opt = if icons { None } else { Some(option.clone()) };
+        let icon_opt = if icons { Some(option.clone()) } else { None };
+        let content = toggle_content_row(label_opt, icon_opt, foreground, size_style.icon_size);
 
-            let item_radius = {
-                // [top, right, bottom, left] = [left_radius, right_radius, left_radius, right_radius]
-                let left_radius = if index == 0 { theme.radii.md } else { 0.0 };
-                let right_radius = if index + 1 == total {
-                    theme.radii.md
-                } else {
-                    0.0
-                };
-                format!("{left_radius},{right_radius},{left_radius},{right_radius}")
-            };
-
-            let click_value = option.clone();
-            let current_selected = selected.clone();
-            let mut local = local;
-            toggle_surface(
-                content,
-                ToggleSurfaceStyle {
-                    active,
-                    variant: TOGGLE_GROUP_VARIANT,
-                    size: size_style,
-                    border_width: 1.0,
-                    border_radius: item_radius,
-                    shadow: Some(false),
-                },
-                move || {
-                    let next = if multi {
-                        let mut v = current_selected.clone();
-                        if let Some(pos) = v.iter().position(|value| value == &click_value) {
-                            v.remove(pos);
-                        } else {
-                            v.push(click_value.clone());
-                        }
-                        v
+        let click_value = option.clone();
+        let current_selected = selected.clone();
+        let mut local = local;
+        let surface = toggle_surface(
+            content,
+            ToggleSurfaceStyle {
+                active,
+                variant: TOGGLE_GROUP_VARIANT,
+                size: size_style,
+                // The group owns its outline. Per-item outlines create
+                // doubled seams and fractional gaps on dense screens.
+                border_width: 0.0,
+                border_radius: "0".to_owned(),
+                shadow: Some(false),
+                width: if stretched { Some("100%".into()) } else { None },
+                background: Some(0x00000000),
+            },
+            move || {
+                let next = if multi {
+                    let mut v = current_selected.clone();
+                    if let Some(pos) = v.iter().position(|value| value == &click_value) {
+                        v.remove(pos);
                     } else {
-                        vec![click_value.clone()]
-                    };
-                    if !controlled {
-                        local.set(next.clone());
+                        v.push(click_value.clone());
                     }
-                    on_change.call(next);
-                },
-                &theme,
-            )
-        })
-        .collect();
+                    v
+                } else {
+                    vec![click_value.clone()]
+                };
+                if !controlled {
+                    local.set(next.clone());
+                }
+                on_change.call(next);
+            },
+            &theme,
+        );
+        // Selection chrome is painted on the segment shell; the inner surface
+        // stays clear for rectangular corners. Both layers use hit-testable
+        // fills so presses land even when the segment is inactive/clear.
+        // Inactive segments stay canvas-colored (opaque + hit-testable); active
+        // segments use the accent/secondary fill from `toggle_visual_style`.
+        let shell_background = if (item_background & 0xFF00_0000) == 0 {
+            theme.colors.background
+        } else {
+            item_background
+        };
+        items.push(if stretched {
+            rsx! {
+                row {
+                    layout_weight: 1.0,
+                    height: size_style.height,
+                    background_color: shell_background,
+                    {surface}
+                }
+            }
+        } else {
+            rsx! {
+                row {
+                    height: size_style.height,
+                    background_color: shell_background,
+                    {surface}
+                }
+            }
+        });
+        if index + 1 < total {
+            items.push(rsx! {
+                row {
+                    width: 1.0,
+                    height: size_style.height,
+                    background_color: theme.colors.input,
+                }
+            });
+        }
+    }
 
     rsx! {
         row {
+            width: if let Some(width) = props.width { width },
             align_items: "center",
             justify_content: "start",
+            border_style: ARKUI_BORDER_STYLE_SOLID,
+            border_width: 1.0,
+            border_color: theme.colors.input,
             border_radius: theme.radii.md,
             clip: true,
-            shadow: 1,
+            shadow: if group_shadow { "sm" },
             {items.into_iter()}
         }
     }

@@ -21,7 +21,7 @@ pub fn Resizable(props: ResizableProps) -> Element {
     let theme = use_theme();
     rsx! {
         row {
-            percent_width: 1.0,
+            width: "100%",
             {props.left}
             row { width: spacing::SM }
             column {

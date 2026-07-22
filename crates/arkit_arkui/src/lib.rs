@@ -37,7 +37,6 @@ use ohos_arkui_binding::event::inner_event::Event as ArkNativeEvent;
 use ohos_arkui_binding::gesture::gesture_data::GestureEventData;
 use ohos_arkui_binding::gesture::inner_gesture::Gesture;
 use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
-use ohos_arkui_binding::types::event::NodeEventType;
 use ohos_arkui_binding::types::gesture_event::GestureEventAction;
 use rustc_hash::FxHashMap;
 // Re-export the shared event-payload types (owned by `arkit_elements`, whose
@@ -48,6 +47,7 @@ pub use dioxus_elements::event::{
     ScrollIndexPayload, ScrollOffsetPayload,
 };
 
+mod css_value;
 mod native;
 use native::parse_color;
 pub use native::{canonical_tag, create_node, create_node_by_tag, kind_from_tag, NodeKind};
@@ -59,7 +59,7 @@ pub mod virtual_adapter;
 pub use virtual_adapter::{RenderItem, VirtualKind, VirtualNodeAdapter};
 
 pub mod node_builder;
-pub use node_builder::NodeBuilder;
+pub use node_builder::{NativeNodeEvent, NodeBuilder, NodeEventType, PreDragStatus};
 
 mod attributes;
 use attributes::{AttrMutation, DesiredAttrs};
@@ -1634,9 +1634,6 @@ fn register_event(
 
     let mut borrowed = node.borrow_mut();
     let mut event_node = EventNode(&mut borrowed);
-    if event_type == NodeEventType::OnClick {
-        event_node.on_event(NodeEventType::OnClickEvent, |_| {});
-    }
     let node_for_payload = node.clone();
     let active = Rc::new(std::cell::Cell::new(true));
     let callback_active = active.clone();
@@ -1756,12 +1753,25 @@ fn extract_payload(
         SwiperEventOnChange | SwiperEventOnAnimationEnd => {
             ArkEventPayload::Int(event.i32_value(0).unwrap_or(0))
         }
-        // Hover: i32(0) is the is-hovering boolean (1 = entered, 0 = exited).
+        // Legacy hover stores an integer; API 17+ hover stores a UIInputEvent.
         OnHover => ArkEventPayload::Bool(event.i32_value(0).unwrap_or(0) != 0),
-        OnClick | OnClickEvent | TouchEvent | OnHoverMove | OnDragStart | OnDragMove
-        | OnDragEnd | OnDragEnter | OnDragLeave => extract_pointer_payload(event)
+        // `OnClickEvent` is a valid UIInputEvent, but it does not necessarily
+        // carry a `UI_TOUCH_EVENT_ACTION`. The current upstream input binding
+        // parses that field eagerly and panics on the platform's sentinel
+        // value, so clicks remain payload-free rather than crashing dispatch.
+        OnClickEvent => ArkEventPayload::None,
+        TouchEvent => extract_pointer_payload(event)
             .map(ArkEventPayload::Pointer)
             .unwrap_or_default(),
+        // These are non-touch UIInputEvents. Keep delivery intact without
+        // asking the upstream wrapper to interpret their action as touch.
+        OnHoverEvent | OnHoverMove | OnMouse => ArkEventPayload::None,
+        // Drag callbacks carry ArkUI_DragEvent, not ArkUI_UIInputEvent. The
+        // binding intentionally exposes that object as an opaque pointer, so
+        // dispatch the lifecycle event without inventing pointer coordinates.
+        OnDragStart | OnDragMove | OnDragEnd | OnDragEnter | OnDragLeave | OnDrop => {
+            ArkEventPayload::None
+        }
         _ => ArkEventPayload::None,
     }
 }
@@ -1808,9 +1818,12 @@ fn extract_pointer_payload(event: &ArkNativeEvent) -> Option<PointerPayload> {
 fn extract_layout_payload(node: &NodeRef) -> Option<LayoutPayload> {
     let n = node.borrow();
     let size = n.layout_size().ok()?;
+    // Prefer layout position (window, no graphic translate). Translate-inclusive
+    // coords accumulate ancestor matrix offsets and mis-anchor floating panels
+    // (Select same-width start align was ~48vp too far right on device).
     let position = n
-        .position_with_translate_in_window()
-        .or_else(|_| n.layout_position_in_window())
+        .layout_position_in_window()
+        .or_else(|_| n.position_with_translate_in_window())
         .ok()?;
     Some(LayoutPayload {
         x: position.x as f32,
@@ -1831,7 +1844,7 @@ fn event_type_for_name(name: &str, tag: &str) -> Option<NodeEventType> {
     use NodeEventType::*;
     let kind = classify_event_name(name)?;
     Some(match (kind, tag) {
-        (ArkEventKind::Click, _) => OnClick,
+        (ArkEventKind::Click, _) => OnClickEvent,
 
         // Value change — component-specific.
         (ArkEventKind::Change, "checkbox") => CheckboxEventOnChange,
@@ -1869,6 +1882,8 @@ fn event_type_for_name(name: &str, tag: &str) -> Option<NodeEventType> {
         // Refresh trigger.
         (ArkEventKind::Refresh, "refresh") => RefreshOnRefresh,
 
+        // Keep the numeric hover variant until the upstream input binding can
+        // parse non-touch input actions without panicking.
         (ArkEventKind::Hover, _) => OnHover,
         (ArkEventKind::HoverMove, _) => OnHoverMove,
 
@@ -1892,6 +1907,14 @@ mod event_tests {
 
     #[test]
     fn component_events_use_their_typed_native_event() {
+        assert_eq!(
+            event_type_for_name("click", "row"),
+            Some(NodeEventType::OnClickEvent)
+        );
+        assert_eq!(
+            event_type_for_name("hover", "row"),
+            Some(NodeEventType::OnHover)
+        );
         assert_eq!(
             event_type_for_name("change", "toggle"),
             Some(NodeEventType::ToggleOnChange)

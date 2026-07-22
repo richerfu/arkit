@@ -66,7 +66,7 @@ pub fn Accordion(
 
     rsx! {
         column {
-            percent_width: 1.0,
+            width: "100%",
             align_items: "start",
             for item in items.iter() {
                 {
@@ -83,9 +83,9 @@ pub fn Accordion(
                     let border = colors.border;
                     rsx! {
                         column {
-                            percent_width: 1.0,
+                            width: "100%",
                             row {
-                                percent_width: 1.0,
+                                width: "100%",
                                 align_items: "start",
                                 justify_content: "start",
                                 padding_top: spacing::LG,
@@ -122,12 +122,14 @@ pub fn Accordion(
                                 }
                             }
                             if is_open {
+                                // Content-sized only — `fill: true` would stretch the open
+                                // panel to the parent height and push later items off-screen.
                                 arkit_animation::MountTransition {
                                     preset: Some(arkit_animation::TransitionPreset::SlideUp),
                                     duration_ms: Some(140),
-                                    fill: Some(true),
+                                    fill: Some(false),
                                     column {
-                                        percent_width: 1.0,
+                                        width: "100%",
                                         align_items: "start",
                                         padding_bottom: spacing::LG,
                                         {content}
@@ -135,14 +137,14 @@ pub fn Accordion(
                                 }
                             } else {
                                 column {
-                                    percent_width: 1.0,
+                                    width: "100%",
                                     height: 0.0,
                                     opacity: 0.0f32,
-                                    hit_test_behavior: 2i32,
+                                    hit_test_behavior: "transparent",
                                 }
                             }
                             row {
-                                percent_width: 1.0,
+                                width: "100%",
                                 height: 1.0,
                                 background_color: border,
                             }

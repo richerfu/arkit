@@ -89,12 +89,12 @@ fn DragDemo() -> Element {
             title: "Draggable + inertia + snap",
             description: "Touch input is coalesced once per root frame. X/Y outputs follow the pointer independently, then deterministic velocity, bounds, grid snap and spring release stay on the same Engine.",
             column {
-                percent_width: 1.0,
+                width: "100%",
                 height: 210.0,
                 align_items: "start",
                 justify_content: "start",
                 padding: 12.0,
-                background_color: 0xffe2e8f0u32,
+                background_color: "#FFE2E8F0",
                 border_radius: 14.0,
                 clip: false,
                 DragTarget {
@@ -117,7 +117,7 @@ fn DragDemo() -> Element {
             }
             flex {
                 margin_top: 12.0,
-                percent_width: 1.0,
+                width: "100%",
                 flex_wrap: "wrap",
                 ActionButton {
                     label: "Simulate drag",
@@ -179,15 +179,15 @@ fn DragTarget(on_pointer: EventHandler<dioxus_elements::event::PointerPayload>) 
             height: 72.0,
             align_items: "center",
             justify_content: "center",
-            background_color: 0xff4f46e5u32,
+            background_color: "#FF4F46E5",
             border_radius: 20.0,
-            hit_test_behavior: 0,
+            hit_test_behavior: "default",
             ontouch: move |event: dioxus_core::Event<dioxus_elements::event::PointerData>| {
                 if let Some(pointer) = event.data().pointer {
                     on_pointer.call(pointer);
                 }
             },
-            text { font_size: 13.0, font_weight: 700, font_color: 0xffffffffu32, "Drag me" }
+            text { font_size: 13.0, font_weight: 700, font_color: "#FFFFFFFF", "Drag me" }
         }
     }
 }
@@ -254,26 +254,26 @@ fn ScrollDemo() -> Element {
             title: "Scroll-linked scrubbing",
             description: "The slider acts as a platform scroll source: events are coalesced at a frame boundary, typed range/easing maps offset to seek, and direction/velocity callbacks stay observable.",
             column {
-                percent_width: 1.0,
+                width: "100%",
                 height: 150.0,
                 align_items: "start",
                 justify_content: "center",
                 padding: 12.0,
-                background_color: 0xffe2e8f0u32,
+                background_color: "#FFE2E8F0",
                 border_radius: 14.0,
                 clip: false,
                 ScrollTarget {}
             }
             slider {
                 margin_top: 12.0,
-                percent_width: 1.0,
+                width: "100%",
                 slider_value: offset(),
                 slider_min: 0.0,
                 slider_max: 100.0,
                 slider_step: 1.0,
-                selected_color: 0xff4f46e5u32,
-                track_color: 0xffcbd5e1u32,
-                block_color: 0xff312e81u32,
+                selected_color: "#FF4F46E5",
+                track_color: "#FFCBD5E1",
+                block_color: "#FF312E81",
                 on_change: {
                     let observer = observer.clone();
                     let clock = clock.clone();
@@ -284,7 +284,7 @@ fn ScrollDemo() -> Element {
             }
             flex {
                 margin_top: 8.0,
-                percent_width: 1.0,
+                width: "100%",
                 flex_wrap: "wrap",
                 for (value, label) in [(0.0, "0%"), (25.0, "25%"), (50.0, "50%"), (75.0, "75%"), (100.0, "100%")] {
                     ActionButton {
@@ -311,7 +311,7 @@ fn ScrollDemo() -> Element {
                 }
             }
             flex {
-                percent_width: 1.0,
+                width: "100%",
                 flex_wrap: "wrap",
                 Metric { label: "Offset", value: format!("{:.0}", offset()) }
                 Metric { label: "Sample", value: status() }
@@ -330,9 +330,9 @@ fn ScrollTarget() -> Element {
             height: 82.0,
             align_items: "center",
             justify_content: "center",
-            background_color: 0xff0891b2u32,
+            background_color: "#FF0891B2",
             border_radius: 18.0,
-            text { font_size: 13.0, font_weight: 700, font_color: 0xffffffffu32, "Scroll sync" }
+            text { font_size: 13.0, font_weight: 700, font_color: "#FFFFFFFF", "Scroll sync" }
         }
     }
 }
@@ -395,7 +395,7 @@ fn AnimatableDemo() -> Element {
             AnimatableBar { value: value.clone() }
             flex {
                 margin_top: 12.0,
-                percent_width: 1.0,
+                width: "100%",
                 flex_wrap: "wrap",
                 ActionButton { label: "To 1.0", on_press: move |_| to_one.to(1.0) }
                 ActionButton { label: "Retarget 0.35", on_press: move |_| retarget.retarget(0.35, TimeSpan::from_millis(360)) }
@@ -415,15 +415,15 @@ fn AnimatableBar(value: Animatable<f32>) -> Element {
     let current = value.get().clamp(0.0, 1.0);
     rsx! {
         column {
-            percent_width: 1.0,
+            width: "100%",
             height: 28.0,
-            background_color: 0xffe2e8f0u32,
+            background_color: "#FFE2E8F0",
             border_radius: 14.0,
             clip: true,
             column {
-                percent_width: current,
-                percent_height: 1.0,
-                background_color: 0xff4f46e5u32,
+                width: format!("{}%", (current * 100.0).round().clamp(0.0, 100.0) as i32),
+                height: "100%",
+                background_color: "#FF4F46E5",
                 border_radius: 14.0,
             }
         }

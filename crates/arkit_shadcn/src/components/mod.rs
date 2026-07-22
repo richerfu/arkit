@@ -5,8 +5,7 @@
 //! typography/shadow) but renders via dioxus elements instead of the old
 //! `Component`/`Element` builder.
 
-pub(crate) const ARKUI_BUTTON_TYPE_NORMAL: i32 = 0;
-pub(crate) const ARKUI_BORDER_STYLE_SOLID: i32 = 0;
+pub(crate) const ARKUI_BORDER_STYLE_SOLID: &str = "solid";
 
 mod accordion;
 mod alert;
@@ -23,6 +22,15 @@ mod card;
 mod carousel;
 mod chart;
 mod checkbox;
+/// Standalone syntax-highlighted code block (`code` feature).
+#[cfg(feature = "code")]
+mod code;
+/// Tree-sitter highlight engine and language registry (`code` feature).
+///
+/// Independent of Markdown. Prefer the flat re-exports below, or
+/// `arkit::shadcn::components::code_highlight::register_language`.
+#[cfg(feature = "code")]
+pub mod code_highlight;
 mod collapsible;
 mod combobox;
 mod command;
@@ -70,7 +78,7 @@ pub use alert::{
     Alert, AlertDescription, AlertDescriptionProps, AlertList, AlertListProps, AlertProps,
     AlertTitle, AlertTitleProps, AlertVariant,
 };
-pub use alert_dialog::{AlertDialog, AlertDialogProps};
+pub use alert_dialog::{AlertDialog, AlertDialogAction, AlertDialogActionProps, AlertDialogProps};
 pub use aspect_ratio::{AspectRatio, AspectRatioProps};
 pub use avatar::{Avatar, AvatarFallback, AvatarFallbackProps, AvatarProps};
 pub use badge::{Badge, BadgeProps, BadgeVariant};
@@ -91,13 +99,23 @@ pub use carousel::{
 };
 pub use chart::{Chart, ChartCard, ChartCardProps, ChartProps};
 pub use checkbox::{Checkbox, CheckboxProps};
+#[cfg(feature = "code")]
+pub use code::{Code, CodeProps, CodeStyle};
+#[cfg(feature = "code")]
+pub use code_highlight::{
+    highlight_code, is_language_registered, register_highlight_configuration, register_language,
+    reset_language_registry, supported_languages, unregister_language, CodeHighlightPalette,
+    HighlightConfiguration, HighlightLine, HighlightSpan, Language, RegisterLanguageError,
+    HIGHLIGHT_NAMES,
+};
 pub use collapsible::{Collapsible, CollapsibleProps};
 pub use combobox::{Combobox, ComboboxProps};
 pub use command::{Command, CommandProps};
 pub use context_menu::{ContextMenu, ContextMenuEntry, ContextMenuProps};
 pub use date_picker::{DatePicker, DatePickerProps};
 pub use dialog::{
-    Dialog, DialogFooter, DialogFooterProps, DialogHeader, DialogHeaderProps, DialogProps,
+    use_dialog_close, Dialog, DialogClose, DialogFooter, DialogFooterProps, DialogHeader,
+    DialogHeaderProps, DialogProps,
 };
 pub use drawer::{Drawer, DrawerProps};
 pub use dropdown_menu::{DropdownMenu, DropdownMenuEntry, DropdownMenuProps};
@@ -141,8 +159,9 @@ pub use slider::{
 };
 pub use spinner::{Spinner, SpinnerProps};
 pub use surfaces::{
-    Sonner, SonnerPosition, SonnerProps, SonnerStyle, SonnerToast, Toast, ToastDestructive,
-    ToastDestructiveProps, ToastProps, ToastStyle, ToastSwipeDirection, ToastVariant,
+    Sonner, SonnerPosition, SonnerProps, SonnerStyle, SonnerToast, Toast, ToastAppearance,
+    ToastDestructive, ToastDestructiveProps, ToastProps, ToastStyle, ToastSwipeDirection,
+    ToastVariant,
 };
 pub use switch::{Switch, SwitchProps};
 pub use table::{Table, TableProps};

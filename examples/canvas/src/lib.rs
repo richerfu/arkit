@@ -44,8 +44,8 @@ fn app() -> Element {
 
     rsx! {
         column {
-            percent_width: 1.0,
-            percent_height: 1.0,
+            width: "100%",
+            height: "100%",
             background_color: 0xFFF1F5F9u32,
             column {
                 padding: 16.0,
@@ -138,13 +138,13 @@ fn app() -> Element {
                 }
             }
             column {
-                percent_width: 1.0,
+                width: "100%",
                 layout_weight: 1.0,
                 padding: 16.0,
                 Canvas {
                     draw: renderer,
-                    percent_width: 1.0,
-                    percent_height: 1.0,
+                    width: "100%",
+                    height: "100%",
                 }
             }
         }

@@ -11,8 +11,8 @@ AspectRatio 创建全宽 Stack，并用 ArkUI `aspect_ratio` 约束高度。
 AspectRatio {
     ratio: 16.0 / 9.0,
     image {
-        percent_width: 1.0,
-        percent_height: 1.0,
+        width: "100%",
+        height: "100%",
         src: cover,
     }
 }

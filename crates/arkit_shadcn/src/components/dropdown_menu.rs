@@ -73,7 +73,7 @@ pub fn DropdownMenu(
         items.clone(),
     );
 
-    let mut toggle = move |pointer: Option<dioxus_elements::event::PointerPayload>| {
+    let mut toggle = move |_| {
         if current_open {
             dismiss.call(());
         } else {
@@ -82,27 +82,13 @@ pub fn DropdownMenu(
             let frame = *trigger_frame.read();
             let viewport = overlay.viewport();
             let panel_height = menu_closed_panel_height(&entries);
-            let placement = if let Some(placement) = pointer.and_then(|pointer| {
-                MenuOverlayPlacement::from_pointer(
-                    pointer,
-                    viewport,
-                    style.width,
-                    panel_height,
-                    style.side_offset_vp,
-                )
-            }) {
-                placement
-            } else if frame.is_measured() {
-                MenuOverlayPlacement::from_trigger(
-                    frame,
-                    viewport,
-                    style.width,
-                    panel_height,
-                    style.side_offset_vp,
-                )
-            } else {
-                MenuOverlayPlacement::fallback(viewport)
-            };
+            let placement = MenuOverlayPlacement::resolve(
+                frame,
+                viewport,
+                style.width,
+                panel_height,
+                style.side_offset_vp,
+            );
             let session = MenuOverlaySession::new(placement, None);
             overlay_session.set(Some(session));
             session.show(&overlay, style, theme, dismiss, entries);
@@ -111,8 +97,8 @@ pub fn DropdownMenu(
 
     rsx! {
         row {
-            onclick: move |evt: dioxus_core::Event<dioxus_elements::event::ClickData>| {
-                toggle(evt.data().pointer);
+            onclick: move |_| {
+                toggle(());
             },
             {children}
         }

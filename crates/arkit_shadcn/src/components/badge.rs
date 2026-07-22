@@ -43,19 +43,19 @@ fn badge_style(variant: BadgeVariant, theme: &Theme) -> BadgeStyle {
             background: theme.colors.primary,
             foreground: theme.colors.primary_foreground,
             border_width: 1.0,
-            border_color: 0x00000000,
+            border_color: 0x0000_0000,
         },
         BadgeVariant::Secondary => BadgeStyle {
             background: theme.colors.secondary,
             foreground: theme.colors.secondary_foreground,
             border_width: 1.0,
-            border_color: 0x00000000,
+            border_color: 0x0000_0000,
         },
         BadgeVariant::Destructive => BadgeStyle {
             background: theme.colors.destructive,
             foreground: theme.colors.destructive_foreground,
             border_width: 1.0,
-            border_color: 0x00000000,
+            border_color: 0x0000_0000,
         },
         BadgeVariant::Outline => BadgeStyle {
             background: theme.colors.background,
@@ -86,7 +86,7 @@ pub fn Badge(props: BadgeProps) -> Element {
             background,
             foreground,
             border_width: 1.0,
-            border_color: 0x00000000,
+            border_color: 0x0000_0000,
         }
     } else {
         badge_style(props.variant, &theme)

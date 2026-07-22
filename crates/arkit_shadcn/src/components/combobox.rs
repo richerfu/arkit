@@ -54,7 +54,7 @@ pub fn Combobox(
             align_items: "start",
             row {
                 height: 40.0,
-                percent_width: 1.0,
+                width: "100%",
                 background_color: colors.background,
                 padding_top: 8.0,
                 padding_right: spacing::MD,
@@ -65,7 +65,7 @@ pub fn Combobox(
                 border_radius: md,
                 border_width: 1.0,
                 border_color: colors.border,
-                shadow: 1i32,
+                shadow: "sm",
                 onclick: move |_: dioxus_core::Event<_>| {
                     set_open.call(!current_open);
                 },
@@ -91,7 +91,7 @@ pub fn Combobox(
                     border_radius: md,
                     border_width: 1.0,
                     border_color: colors.border,
-                    shadow: 1i32,
+                    shadow: "sm",
                     row {
                         padding_top: 8.0,
                         padding_right: spacing::SM,
@@ -105,7 +105,7 @@ pub fn Combobox(
                         }
                     }
                     column {
-                        percent_width: 1.0,
+                        width: "100%",
                         padding_top: spacing::XXS,
                         padding_right: spacing::XXS,
                         padding_bottom: spacing::XXS,
@@ -118,7 +118,7 @@ pub fn Combobox(
                                 let fg = if active { colors.accent_foreground } else { colors.foreground };
                                 rsx! {
                                     row {
-                                        percent_width: 1.0,
+                                        width: "100%",
                                         height: 36.0,
                                         align_items: "center",
                                         justify_content: "space_between",

@@ -16,7 +16,8 @@ pub struct TextareaProps {
     pub placeholder: Option<String>,
     pub value: Option<String>,
     pub height: Option<f32>,
-    pub percent_width: Option<f32>,
+    /// CSS width (`"100%"`, `"50%"`). Unset leaves the field content-sized.
+    pub width: Option<String>,
     /// Uses the destructive border treatment for validation failures.
     #[props(default)]
     pub invalid: bool,
@@ -45,14 +46,14 @@ pub fn Textarea(props: TextareaProps) -> Element {
             border_width: 1.0,
             border_color: if props.invalid { theme.colors.destructive } else { theme.colors.input },
             border_radius: theme.radii.md,
-            background_color: 0x00000000,
+            background_color: "#00000000",
             opacity: if props.disabled { 0.5 } else { 1.0 },
             enabled: !props.disabled,
             padding_top: spacing::SM,
             padding_right: spacing::MD,
             padding_bottom: spacing::SM,
             padding_left: spacing::MD,
-            percent_width: if let Some(w) = props.percent_width { w },
+            width: if let Some(w) = props.width { w },
             on_change: move |evt| {
                 if !props.disabled {
                     if let Some(handler) = on_change {

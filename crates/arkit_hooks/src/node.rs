@@ -32,10 +32,12 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use crate::layout::LayoutFrame;
 use crate::overlay::OverlayLayer;
 
-// ArkUI `HitTestMode::None`: the portal root itself never becomes a touch
-// target, while interactive descendants keep participating in hit testing.
-// `Transparent` is not equivalent here: it still makes the full-screen node
-// itself part of the hit-test result.
+// ArkUI hit-test modes for documentation and typed API. RSX must pass CSS
+// keywords (`"none"`, `"default"`, …) — raw integers are rejected by the encoder.
+//
+// `None`: the portal root itself is never a touch target; interactive
+// descendants still participate. `Transparent` is not equivalent: it still
+// makes the full-screen node part of the hit-test result.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
 pub enum HitTestMode {
@@ -43,6 +45,18 @@ pub enum HitTestMode {
     Block = 1,
     Transparent = 2,
     None = 3,
+}
+
+impl HitTestMode {
+    /// CSS keyword accepted by the RSX `hit_test_behavior` attribute.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::Block => "block",
+            Self::Transparent => "transparent",
+            Self::None => "none",
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -318,18 +332,19 @@ pub fn OverlayRoot() -> Element {
     let entries = content();
     rsx! {
         stack {
-            percent_width: 1.0,
-            percent_height: 1.0,
-            alignment: 0,
-            hit_test_behavior: HitTestMode::None as i32,
+            width: "100%",
+            height: "100%",
+            alignment: "top-start",
+            // Must be a CSS keyword — raw ArkUI ints are not encoded.
+            hit_test_behavior: "none",
             for entry in entries {
                 stack {
                     key: "{entry.token}",
-                    percent_width: 1.0,
-                    percent_height: 1.0,
-                    alignment: 0,
+                    width: "100%",
+                    height: "100%",
+                    alignment: "top-start",
                     z_index: entry.layer.z_index(),
-                    hit_test_behavior: HitTestMode::None as i32,
+                    hit_test_behavior: "none",
                     {entry.element}
                 }
             }

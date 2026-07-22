@@ -30,7 +30,7 @@ pub fn NavigationMenu(props: NavigationMenuProps) -> Element {
             border_width: 1.0,
             border_color: theme.colors.border,
             background_color: theme.colors.background,
-            shadow: 1,
+            shadow: "sm",
             row {
                 {props.children}
             }

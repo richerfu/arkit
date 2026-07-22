@@ -5,9 +5,15 @@
 //! elements (`column`, `row`, `stack`, `flex`, `text`, `button`, `image`) with
 //! theme tokens from [`crate::theme`].
 //!
-//! The native Markdown renderer is available behind the opt-in `markdown`
-//! feature so its parser dependencies are not linked by the base component
-//! library.
+//! Optional features:
+//! - `markdown` — native CommonMark/GFM [`components::Markdown`] renderer
+//! - `code` — standalone [`components::Code`] + tree-sitter highlighting and
+//!   language registration (no Markdown required)
+//! - `markdown-highlight` — convenience alias for `markdown` + `code` so
+//!   fenced blocks inside Markdown use the Code pipeline
+//!
+//! With only `markdown` enabled, fenced code is plain monospace. Enable
+//! `code` (alone or with Markdown) for syntax highlighting.
 
 pub mod components;
 pub mod icon;

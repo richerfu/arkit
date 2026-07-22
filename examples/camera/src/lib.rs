@@ -114,22 +114,22 @@ fn app() -> Element {
 
     rsx! {
         column {
-            percent_width: 1.0,
-            percent_height: 1.0,
-            background_color: 0xFF020617u32,
+            width: "100%",
+            height: "100%",
+            background_color: "#FF020617",
             padding_top: 48.0,
 
             column {
-                percent_width: 1.0,
+                width: "100%",
                 height: if error_text().is_empty() { 88.0 } else { 108.0 },
                 padding_top: 6.0,
                 padding_right: 10.0,
                 padding_bottom: 6.0,
                 padding_left: 10.0,
-                background_color: 0xFF000000u32,
+                background_color: "#FF000000",
 
                 row {
-                    percent_width: 1.0,
+                    width: "100%",
                     height: 40.0,
                     align_items: "center",
                     button {
@@ -163,13 +163,13 @@ fn app() -> Element {
                         },
                         "扫码"
                     }
-                    row { layout_weight: 1.0, hit_test_behavior: 2 }
+                    row { layout_weight: 1.0, hit_test_behavior: "transparent" }
                     button {
                         width: 68.0,
                         height: 34.0,
                         padding: 0.0,
                         border_radius: 17.0,
-                        background_color: 0xFF2C2C2Eu32,
+                        background_color: "#FF2C2C2E",
                         font_size: 13.0,
                         onclick: move |_| active.toggle(),
                         "{pause_label}"
@@ -177,21 +177,21 @@ fn app() -> Element {
                 }
 
                 row {
-                    percent_width: 1.0,
+                    width: "100%",
                     height: 32.0,
                     align_items: "center",
                     text {
                         font_size: 11.0,
-                        font_color: 0xFFD1D1D6u32,
+                        font_color: "#FFD1D1D6",
                         max_lines: 1,
                         "{status_label}"
                     }
-                    row { width: 8.0, hit_test_behavior: 2 }
+                    row { width: 8.0, hit_test_behavior: "transparent" }
                     row {
                         layout_weight: 1.0,
                         text {
                             font_size: 11.0,
-                            font_color: 0xFF8E8E93u32,
+                            font_color: "#FF8E8E93",
                             max_lines: 1,
                             "{result_text}"
                         }
@@ -201,7 +201,7 @@ fn app() -> Element {
                     text {
                         height: 20.0,
                         font_size: 11.0,
-                        font_color: 0xFFFF453Au32,
+                        font_color: "#FFFF453A",
                         max_lines: 1,
                         "{error_text}"
                     }
@@ -209,15 +209,15 @@ fn app() -> Element {
             }
 
             column {
-                percent_width: 1.0,
+                width: "100%",
                 layout_weight: 1.0,
                 CameraView {
                     controller: Some(controller.clone()),
                     mode,
                     position: position(),
                     active: active(),
-                    percent_width: 1.0,
-                    percent_height: Some(1.0),
+                    width: "100%",
+                    height: "100%",
                     on_position_change: move |next| position.set(next),
                     on_status_change: move |next| status.set(next),
                     on_photo: move |photo: CapturedPhoto| {

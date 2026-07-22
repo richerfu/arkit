@@ -14,7 +14,7 @@ Button {
     variant: ButtonVariant::Outline,
     size: ButtonSize::Sm,
     disabled: Some(false),
-    percent_width: Some(1.0),
+    width: "100%",
     onclick: move |_| save(),
     "保存"
 }
@@ -22,14 +22,14 @@ Button {
 
 ## Props
 
-| Prop            | 类型               | 说明                                                  |
-| --------------- | ------------------ | ----------------------------------------------------- |
-| `variant`       | `ButtonVariant`    | Default、Secondary、Outline、Ghost、Destructive、Link |
-| `size`          | `ButtonSize`       | Default 48vp、Sm 36vp、Lg 56vp、Icon 40×40vp          |
-| `disabled`      | `Option<bool>`     | 禁止 native event，并降低透明度                       |
-| `percent_width` | `Option<f32>`      | 相对父容器宽度                                        |
-| `onclick`       | `EventHandler<()>` | 点击回调                                              |
-| `children`      | `Element`          | 文本、图标或自定义行                                  |
+| Prop       | 类型               | 说明                                                  |
+| ---------- | ------------------ | ----------------------------------------------------- |
+| `variant`  | `ButtonVariant`    | Default、Secondary、Outline、Ghost、Destructive、Link |
+| `size`     | `ButtonSize`       | Default 48vp、Sm 36vp、Lg 56vp、Icon 40×40vp          |
+| `disabled` | `Option<bool>`     | 禁止 native event，并降低透明度                       |
+| `width`    | `Option<String>`   | CSS 宽度（`"100%"`、`"120"`）；未设时走 size 默认     |
+| `onclick`  | `EventHandler<()>` | 点击回调                                              |
+| `children` | `Element`          | 文本、图标或自定义行                                  |
 
 ## 行为
 

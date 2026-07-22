@@ -26,12 +26,12 @@ pub fn Command(
 
     rsx! {
         column {
-            percent_width: 1.0,
+            width: "100%",
             background_color: colors.popover,
             border_radius: md,
             border_width: 1.0,
             border_color: colors.border,
-            shadow: 1i32,
+            shadow: "sm",
             padding_top: spacing::XXS,
             padding_right: spacing::XXS,
             padding_bottom: spacing::XXS,
@@ -53,7 +53,7 @@ pub fn Command(
                 padding_right: 12.0,
                 padding_bottom: 0.0,
                 padding_left: 12.0,
-                percent_width: 1.0,
+                width: "100%",
                 onchange: move |evt| {
                     if let Some(handler) = on_query_change {
                         handler.call(evt.data.string_value.clone());
@@ -68,7 +68,7 @@ pub fn Command(
                     rsx! {
                         if passes {
                             row {
-                                percent_width: 1.0,
+                                width: "100%",
                                 height: 32.0,
                                 align_items: "center",
                                 padding_top: 6.0,

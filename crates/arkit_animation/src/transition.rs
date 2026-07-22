@@ -193,16 +193,19 @@ pub fn MountTransition(
     if fill.unwrap_or(false) {
         rsx! {
             column {
-                percent_width: 1.0,
-                percent_height: 1.0,
+                width: "100%",
+                height: "100%",
                 align_items: "start",
                 {children}
             }
         }
     } else {
+        // Stretch to the modal shell width so descendants can use `width: "100%"`
+        // without collapsing; height stays content-sized for vertical centering.
         rsx! {
             column {
-                align_items: "start",
+                width: "100%",
+                align_items: "stretch",
                 {children}
             }
         }

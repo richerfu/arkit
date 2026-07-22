@@ -337,9 +337,9 @@ fn SliderTrack(props: SliderTrackProps) -> Element {
         SliderOrientation::Horizontal => style.touch_target,
         SliderOrientation::Vertical => DEFAULT_VERTICAL_LENGTH,
     });
-    let percent_width = (props.orientation == SliderOrientation::Horizontal
+    let stretch_width = (props.orientation == SliderOrientation::Horizontal
         && native_width.is_none())
-    .then_some(1.0_f32);
+    .then_some("100%");
     let initial_length = match props.orientation {
         SliderOrientation::Horizontal => native_width.unwrap_or_default(),
         SliderOrientation::Vertical => native_height.max(style.touch_target),
@@ -391,10 +391,13 @@ fn SliderTrack(props: SliderTrackProps) -> Element {
 
     rsx! {
         stack {
-            width: if let Some(width) = native_width { width.max(style.touch_target) },
-            percent_width: if let Some(width) = percent_width { width },
+            width: if let Some(width) = stretch_width {
+                width.to_string()
+            } else if let Some(width) = native_width {
+                format!("{}", width.max(style.touch_target))
+            },
             height: native_height.max(style.touch_target),
-            alignment: 0_i32,
+            alignment: "top-start",
             enabled: !disabled,
             on_layout: move |event| {
                 let frame = event.data().frame;
@@ -560,7 +563,7 @@ fn render_track(
                 height: style.track_thickness,
                 background_color: style.track_color,
                 border_radius: style.track_thickness / 2.0,
-                hit_test_behavior: 2_i32,
+                hit_test_behavior: "transparent",
             }
             if selected_length > f32::EPSILON {
                 row {
@@ -573,7 +576,7 @@ fn render_track(
                     height: style.track_thickness,
                     background_color: style.selected_color,
                     border_radius: style.track_thickness / 2.0,
-                    hit_test_behavior: 2_i32,
+                    hit_test_behavior: "transparent",
                 }
             }
             if let Some(marker_count) = marker_count {
@@ -596,7 +599,7 @@ fn render_track(
                             selected_bounds,
                             style,
                         ),
-                        hit_test_behavior: 2_i32,
+                        hit_test_behavior: "transparent",
                     }
                 }
             }
@@ -612,7 +615,7 @@ fn render_track(
                 height: usable_length,
                 background_color: style.track_color,
                 border_radius: style.track_thickness / 2.0,
-                hit_test_behavior: 2_i32,
+                hit_test_behavior: "transparent",
             }
             if selected_length > f32::EPSILON {
                 column {
@@ -625,7 +628,7 @@ fn render_track(
                     height: selected_length,
                     background_color: style.selected_color,
                     border_radius: style.track_thickness / 2.0,
-                    hit_test_behavior: 2_i32,
+                    hit_test_behavior: "transparent",
                 }
             }
             if let Some(marker_count) = marker_count {
@@ -648,7 +651,7 @@ fn render_track(
                             selected_bounds,
                             style,
                         ),
-                        hit_test_behavior: 2_i32,
+                        hit_test_behavior: "transparent",
                     }
                 }
             }
@@ -696,7 +699,7 @@ fn render_thumb(
             border_width,
             border_color: style.thumb_border_color,
             border_radius: style.thumb_size / 2.0,
-            hit_test_behavior: 2_i32,
+            hit_test_behavior: "transparent",
         }
     }
 }

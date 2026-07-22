@@ -114,4 +114,4 @@ OpenHarmony binding 中部分 node/adapter handle 没有隐式 Drop：
 | 框架贡献：调度/窗口      | `arkit_runtime`                 |
 | 平台无关动画算法         | `arkit_animation_core`          |
 
-业务不要直接依赖内部 renderer tree 或重新实现 host context。公开 facade 是应用兼容边界。
+业务不要直接依赖内部 renderer tree 或重新实现 host context。应用只依赖公开 facade。

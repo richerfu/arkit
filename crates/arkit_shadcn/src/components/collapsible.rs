@@ -36,9 +36,9 @@ pub fn Collapsible(props: CollapsibleProps) -> Element {
 
     rsx! {
         column {
-            percent_width: 1.0,
+            width: "100%",
             row {
-                percent_width: 1.0,
+                width: "100%",
                 align_items: "center",
                 justify_content: "space_between",
                 padding_top: 0.0,
@@ -66,12 +66,12 @@ pub fn Collapsible(props: CollapsibleProps) -> Element {
                     padding_right: 0.0,
                     padding_bottom: 0.0,
                     padding_left: 0.0,
-                    background_color: 0x00000000,
+                    background_color: "#00000000",
                     border_width: 0.0,
                     border_style: ARKUI_BORDER_STYLE_SOLID,
                     focusable: false,
                     focus_on_touch: false,
-                    alignment: 4,
+                    alignment: "center",
                     {arkit_icon::icon("chevrons-up-down".to_string(), 16.0, theme.colors.foreground)}
                 }
             }

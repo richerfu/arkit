@@ -23,19 +23,18 @@ pub(crate) const OVERLAY_BACKDROP: u32 = 0x80000000u32;
 /// concrete on all supported ArkUI versions. It is an interaction mask, not a
 /// visible backdrop.
 pub(crate) const FLOATING_CAPTURE_COLOR: u32 = 0x01000000u32;
-/// ArkUI `HitTestMode::Default`: this node and its children own the hit.
-pub(crate) const HIT_TEST_DEFAULT: i32 = 0;
-/// ArkUI `HitTestMode::None`: this node is skipped but its children can hit.
-pub(crate) const HIT_TEST_NONE: i32 = 3;
-/// ArkUI `ShadowType::OuterDefaultSm` (small outer shadow).
-pub(crate) const SHADOW_SM: i32 = 1;
+/// CSS-style hit-test keywords for the `hit_test_behavior` attribute.
+pub(crate) const HIT_TEST_DEFAULT: &str = "default";
+/// Skip this node in hit testing; children may still receive hits.
+pub(crate) const HIT_TEST_NONE: &str = "none";
+/// Small outer shadow preset (`shadow: "sm"`).
+pub(crate) const SHADOW_SM: &str = "sm";
 
-// ArkUI `Alignment` enum values (used as the `alignment` int attribute on
-// `stack`).
-pub(crate) const ALIGN_TOP: i32 = 1;
-pub(crate) const ALIGN_START: i32 = 3;
-pub(crate) const ALIGN_END: i32 = 5;
-pub(crate) const ALIGN_BOTTOM: i32 = 7;
+// CSS-style stack `alignment` keywords.
+pub(crate) const ALIGN_TOP: &str = "top";
+pub(crate) const ALIGN_START: &str = "start";
+pub(crate) const ALIGN_END: &str = "end";
+pub(crate) const ALIGN_BOTTOM: &str = "bottom";
 
 /// Side of the trigger the floating panel anchors to.
 ///
@@ -58,8 +57,8 @@ pub enum FloatingAlign {
     End,
 }
 
-/// Resolve a [`FloatingSide`] to its ArkUI `Alignment` int.
-pub(crate) fn side_alignment(side: FloatingSide) -> i32 {
+/// Resolve a [`FloatingSide`] to a CSS `alignment` keyword.
+pub(crate) fn side_alignment(side: FloatingSide) -> &'static str {
     match side {
         FloatingSide::Top => ALIGN_TOP,
         FloatingSide::Bottom => ALIGN_BOTTOM,
@@ -86,6 +85,34 @@ pub(crate) struct FloatingPanelPlacement {
 }
 
 impl FloatingPanelPlacement {
+    /// shadcn-style anchor: prefer the measured **trigger root** frame.
+    ///
+    /// Pointer target bounds are intentionally ignored — clicks often hit an
+    /// inner Text/icon node whose rect is narrower/offset from the control.
+    pub(crate) fn resolve(
+        trigger: arkit_hooks::LayoutFrame,
+        viewport: arkit_hooks::OverlayViewport,
+        panel_width: f32,
+        panel_height: f32,
+        side: FloatingSide,
+        align: FloatingAlign,
+        side_offset: f32,
+    ) -> Self {
+        if trigger.is_measured() {
+            Self::from_trigger(
+                trigger,
+                viewport,
+                panel_width,
+                panel_height,
+                side,
+                align,
+                side_offset,
+            )
+        } else {
+            Self::fallback(viewport)
+        }
+    }
+
     pub(crate) fn from_trigger(
         trigger: arkit_hooks::LayoutFrame,
         viewport: arkit_hooks::OverlayViewport,
@@ -95,41 +122,27 @@ impl FloatingPanelPlacement {
         align: FloatingAlign,
         side_offset: f32,
     ) -> Self {
-        let ratio = display_vp_ratio();
+        let scale = viewport_scale(viewport);
         let overlay = viewport.frame;
-        let viewport_width = if overlay.is_measured() {
-            overlay.width / ratio
-        } else {
-            ohos_display_binding::default_display_width() as f32 / ratio
-        }
-        .max(panel_width + (spacing::LG * 2.0));
-        let viewport_height = if overlay.is_measured() {
-            overlay.height / ratio
-        } else {
-            ohos_display_binding::default_display_height() as f32 / ratio
-        }
-        .max(panel_height + (spacing::LG * 2.0));
+        let (overlay_x, overlay_y, viewport_width, viewport_height) =
+            overlay_metrics_vp(overlay, scale, panel_width, panel_height);
 
-        let overlay_x = if overlay.is_measured() {
-            overlay.x
-        } else {
-            0.0
-        };
-        let overlay_y = if overlay.is_measured() {
-            overlay.y
-        } else {
-            0.0
-        };
-        let trigger_x = (trigger.x - overlay_x).max(0.0) / ratio;
-        let trigger_y = (trigger.y - overlay_y).max(0.0) / ratio;
-        let trigger_width = trigger.width / ratio;
-        let trigger_height = trigger.height / ratio;
-        let min_x = viewport.safe_area.left + spacing::LG;
-        let min_y = viewport.safe_area.top + spacing::LG;
+        // Trigger layout frames are physical / window-space; convert into the
+        // overlay-local vp space used by ArkUI width/position attributes.
+        let trigger_x = ((trigger.x - overlay_x).max(0.0)) / scale;
+        let trigger_y = ((trigger.y - overlay_y).max(0.0)) / scale;
+        let trigger_width = trigger.width / scale;
+        let trigger_height = trigger.height / scale;
+
+        // Keep panels on-screen with a small edge pad; do NOT force page-level
+        // LG inset here — that was shifting start-aligned panels off the trigger.
+        let edge = spacing::SM;
+        let min_x = viewport.safe_area.left.max(0.0) + edge;
+        let min_y = viewport.safe_area.top.max(0.0) + edge;
         let max_x =
-            (viewport_width - viewport.safe_area.right - panel_width - spacing::LG).max(min_x);
+            (viewport_width - viewport.safe_area.right.max(0.0) - panel_width - edge).max(min_x);
         let max_y =
-            (viewport_height - viewport.safe_area.bottom - panel_height - spacing::LG).max(min_y);
+            (viewport_height - viewport.safe_area.bottom.max(0.0) - panel_height - edge).max(min_y);
 
         let raw_x = match align {
             FloatingAlign::Start => trigger_x,
@@ -142,64 +155,86 @@ impl FloatingPanelPlacement {
             FloatingSide::Left | FloatingSide::Right => trigger_y,
         };
 
-        Self {
-            x: raw_x.clamp(min_x, max_x),
-            y: raw_y.clamp(min_y, max_y),
-        }
-    }
+        let x = clamp_preserving_start(raw_x, min_x, max_x, align);
+        let y = raw_y.clamp(min_y, max_y);
 
-    pub(crate) fn from_pointer(
-        pointer: dioxus_elements::event::PointerPayload,
-        viewport: arkit_hooks::OverlayViewport,
-        panel_width: f32,
-        panel_height: f32,
-        side: FloatingSide,
-        align: FloatingAlign,
-        side_offset: f32,
-    ) -> Option<Self> {
-        let trigger = if pointer.has_target_bounds() {
-            arkit_hooks::LayoutFrame {
-                x: pointer.target_x,
-                y: pointer.target_y,
-                width: pointer.target_width,
-                height: pointer.target_height,
-            }
-        } else if pointer.has_window_position() {
-            arkit_hooks::LayoutFrame {
-                x: pointer.window_x,
-                y: pointer.window_y,
-                width: 1.0,
-                height: 1.0,
-            }
-        } else {
-            return None;
-        };
-        Some(Self::from_trigger(
-            trigger,
-            viewport,
-            panel_width,
-            panel_height,
-            side,
-            align,
-            side_offset,
-        ))
+        Self { x, y }
     }
 
     pub(crate) fn fallback(viewport: arkit_hooks::OverlayViewport) -> Self {
         Self {
-            x: viewport.safe_area.left + spacing::LG,
-            y: (viewport.safe_area.top + spacing::LG).max(96.0),
+            x: viewport.safe_area.left + spacing::SM,
+            y: (viewport.safe_area.top + spacing::SM).max(96.0),
         }
     }
 }
 
-fn display_vp_ratio() -> f32 {
-    let ratio = ohos_display_binding::default_display_virtual_pixel_ratio();
-    if ratio.is_finite() && ratio > 0.0 {
-        ratio
-    } else {
-        1.0
+/// Clamp horizontal placement while preferring start alignment when possible.
+fn clamp_preserving_start(raw_x: f32, min_x: f32, max_x: f32, align: FloatingAlign) -> f32 {
+    match align {
+        FloatingAlign::Start => {
+            if raw_x < min_x {
+                min_x
+            } else if raw_x > max_x {
+                max_x
+            } else {
+                raw_x
+            }
+        }
+        FloatingAlign::Center | FloatingAlign::End => raw_x.clamp(min_x, max_x),
     }
+}
+
+pub(crate) fn viewport_scale(viewport: arkit_hooks::OverlayViewport) -> f32 {
+    if viewport.scale.is_finite() && viewport.scale > 0.0 {
+        viewport.scale
+    } else {
+        let ratio = ohos_display_binding::default_display_virtual_pixel_ratio();
+        if ratio.is_finite() && ratio > 0.0 {
+            ratio
+        } else {
+            1.0
+        }
+    }
+}
+
+pub(crate) fn overlay_metrics_vp(
+    overlay: arkit_hooks::LayoutFrame,
+    scale: f32,
+    panel_width: f32,
+    panel_height: f32,
+) -> (f32, f32, f32, f32) {
+    let scale = scale.max(f32::EPSILON);
+    if overlay.is_measured() {
+        (
+            overlay.x,
+            overlay.y,
+            (overlay.width / scale).max(panel_width + spacing::SM * 2.0),
+            (overlay.height / scale).max(panel_height + spacing::SM * 2.0),
+        )
+    } else {
+        (
+            0.0,
+            0.0,
+            (ohos_display_binding::default_display_width() as f32 / scale)
+                .max(panel_width + spacing::SM * 2.0),
+            (ohos_display_binding::default_display_height() as f32 / scale)
+                .max(panel_height + spacing::SM * 2.0),
+        )
+    }
+}
+
+/// Trigger width in vp for same-width panels (Select).
+pub(crate) fn trigger_width_vp(
+    trigger: arkit_hooks::LayoutFrame,
+    viewport: arkit_hooks::OverlayViewport,
+    fallback: f32,
+) -> f32 {
+    if !trigger.is_measured() {
+        return fallback;
+    }
+    let scale = viewport_scale(viewport);
+    (trigger.width / scale.max(f32::EPSILON)).max(1.0)
 }
 
 /// Generic floating layer: renders `trigger` and, when open, a capture layer
@@ -256,10 +291,10 @@ pub fn FloatingLayer(
 
     rsx! {
         stack {
-            percent_width: 1.0,
-            percent_height: 1.0,
-            alignment: ALIGN_TOP,
-            hit_test_behavior: HIT_TEST_NONE,
+            width: "100%",
+            height: "100%",
+            alignment: "top",
+            hit_test_behavior: "none",
             if hover {
                 row {
                     onclick: move |_| toggle.call(()),
@@ -275,19 +310,19 @@ pub fn FloatingLayer(
             if current {
                 if hover {
                     stack {
-                        percent_width: 1.0,
-                        percent_height: 1.0,
+                        width: "100%",
+                        height: "100%",
                         alignment: alignment,
-                        hit_test_behavior: HIT_TEST_NONE,
+                        hit_test_behavior: "none",
                         {children}
                     }
                 } else {
                     stack {
-                        percent_width: 1.0,
-                        percent_height: 1.0,
+                        width: "100%",
+                        height: "100%",
                         background_color: FLOATING_CAPTURE_COLOR,
                         alignment: alignment,
-                        hit_test_behavior: HIT_TEST_DEFAULT,
+                        hit_test_behavior: "default",
                         onclick: move |_| close.call(()),
                         stack {
                             onclick: move |evt| evt.stop_propagation(),
@@ -320,8 +355,8 @@ mod tests {
 
     #[test]
     fn pass_through_mode_skips_only_the_layout_shell() {
-        assert_eq!(HIT_TEST_DEFAULT, 0);
-        assert_eq!(HIT_TEST_NONE, 3);
+        assert_eq!(HIT_TEST_DEFAULT, "default");
+        assert_eq!(HIT_TEST_NONE, "none");
     }
 
     #[test]
@@ -339,6 +374,7 @@ mod tests {
                 bottom: 30.0,
                 left: 20.0,
             },
+            scale: 1.0,
         };
         let placement = FloatingPanelPlacement::from_trigger(
             arkit_hooks::LayoutFrame {
@@ -355,7 +391,104 @@ mod tests {
             4.0,
         );
 
-        assert!(placement.x >= 20.0 + spacing::LG);
-        assert!(placement.y >= 40.0 + spacing::LG);
+        assert!(placement.x >= 20.0 + spacing::SM);
+        assert!(placement.y >= 40.0 + spacing::SM);
+    }
+
+    #[test]
+    fn resolve_prefers_measured_trigger_over_fallback() {
+        let viewport = arkit_hooks::OverlayViewport {
+            frame: arkit_hooks::LayoutFrame {
+                x: 0.0,
+                y: 0.0,
+                width: 400.0,
+                height: 800.0,
+            },
+            safe_area: arkit_hooks::EdgeInsets::default(),
+            scale: 1.0,
+        };
+        let trigger = arkit_hooks::LayoutFrame {
+            x: 80.0,
+            y: 120.0,
+            width: 200.0,
+            height: 40.0,
+        };
+        let placement = FloatingPanelPlacement::resolve(
+            trigger,
+            viewport,
+            200.0,
+            100.0,
+            FloatingSide::Bottom,
+            FloatingAlign::Start,
+            4.0,
+        );
+        assert!((placement.x - 80.0).abs() < 0.5);
+        assert!((placement.y - (120.0 + 40.0 + 4.0)).abs() < 0.5);
+    }
+
+    #[test]
+    fn start_align_keeps_trigger_left_when_it_fits() {
+        let viewport = arkit_hooks::OverlayViewport {
+            frame: arkit_hooks::LayoutFrame {
+                x: 0.0,
+                y: 0.0,
+                width: 400.0,
+                height: 800.0,
+            },
+            safe_area: arkit_hooks::EdgeInsets {
+                top: 0.0,
+                right: 0.0,
+                bottom: 0.0,
+                left: 16.0,
+            },
+            scale: 1.0,
+        };
+        let placement = FloatingPanelPlacement::from_trigger(
+            arkit_hooks::LayoutFrame {
+                x: 50.0,
+                y: 100.0,
+                width: 180.0,
+                height: 40.0,
+            },
+            viewport,
+            180.0,
+            80.0,
+            FloatingSide::Bottom,
+            FloatingAlign::Start,
+            4.0,
+        );
+        assert!((placement.x - 50.0).abs() < 0.5);
+    }
+
+    #[test]
+    fn trigger_width_converts_physical_to_vp() {
+        let viewport = arkit_hooks::OverlayViewport {
+            frame: arkit_hooks::LayoutFrame {
+                x: 0.0,
+                y: 0.0,
+                width: 1080.0,
+                height: 2400.0,
+            },
+            safe_area: arkit_hooks::EdgeInsets::default(),
+            scale: 3.0,
+        };
+        let trigger = arkit_hooks::LayoutFrame {
+            x: 100.0,
+            y: 200.0,
+            width: 540.0,
+            height: 120.0,
+        };
+        assert!((trigger_width_vp(trigger, viewport, 180.0) - 180.0).abs() < 0.01);
+        let placement = FloatingPanelPlacement::resolve(
+            trigger,
+            viewport,
+            180.0,
+            80.0,
+            FloatingSide::Bottom,
+            FloatingAlign::Start,
+            4.0,
+        );
+        assert!((placement.x - (100.0 / 3.0)).abs() < 0.01);
+        assert!((placement.y - (200.0 / 3.0 + 120.0 / 3.0 + 4.0)).abs() < 0.01);
     }
 }

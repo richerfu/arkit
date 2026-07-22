@@ -9,7 +9,7 @@
 use crate::theme::*;
 use arkit_prelude::*;
 
-use super::{ARKUI_BORDER_STYLE_SOLID, ARKUI_BUTTON_TYPE_NORMAL};
+use super::ARKUI_BORDER_STYLE_SOLID;
 
 const TRANSPARENT: u32 = 0x00000000;
 
@@ -146,7 +146,12 @@ pub struct ButtonProps {
     #[props(default)]
     pub size: ButtonSize,
     pub disabled: Option<bool>,
-    pub percent_width: Option<f32>,
+    /// CSS width (`"100%"`, `"48%"`, `"120"`). When unset, size defaults apply.
+    pub width: Option<String>,
+    /// Override the variant's default elevation. Passing `false` keeps the
+    /// shadcn geometry and colors while rendering a flat mobile surface.
+    #[props(default)]
+    pub shadow: Option<bool>,
     pub onclick: Option<EventHandler<()>>,
     pub children: Element,
 }
@@ -158,16 +163,20 @@ pub fn Button(props: ButtonProps) -> Element {
     let vs = variant_style(props.variant, &theme);
     let ss = size_style(props.size);
     let disabled = props.disabled.unwrap_or(false);
+    let shadow = props.shadow.unwrap_or(vs.shadow);
     let onclick = props.onclick;
 
     rsx! {
         button {
-            button_type: ARKUI_BUTTON_TYPE_NORMAL,
+            button_type: "normal",
             focusable: false,
             focus_on_touch: false,
             height: ss.height,
-            width: if let Some(w) = ss.width { w },
-            percent_width: if let Some(w) = props.percent_width { w },
+            width: if let Some(w) = props.width {
+                w
+            } else if let Some(w) = ss.width {
+                format!("{w}")
+            },
             padding_top: ss.padding[0],
             padding_right: ss.padding[1],
             padding_bottom: ss.padding[2],
@@ -182,8 +191,8 @@ pub fn Button(props: ButtonProps) -> Element {
             border_color: vs.border_color,
             border_radius: theme.radii.md,
             clip: true,
-            alignment: 4,
-            shadow: if vs.shadow { 1 } else { 0 },
+            alignment: "center",
+            shadow: if shadow { "sm" },
             opacity: if disabled { 0.5 } else { 1.0 },
             enabled: !disabled,
             onclick: move |_| {

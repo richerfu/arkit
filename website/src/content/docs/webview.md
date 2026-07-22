@@ -66,7 +66,7 @@ fn WebViewArea() -> Element {
 
     rsx! {
         stack {
-            percent_width: 1.0,
+            width: "100%",
             height: 400.0,
         }
     }

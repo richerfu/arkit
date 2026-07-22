@@ -78,7 +78,7 @@ pub fn BottomNavigation(props: BottomNavigationProps) -> Element {
                 row {
                     key: "{index}",
                     layout_weight: 1.0,
-                    percent_height: 1.0,
+                    height: "100%",
                     align_items: "center",
                     justify_content: "center",
                     focusable: false,
@@ -101,7 +101,7 @@ pub fn BottomNavigation(props: BottomNavigationProps) -> Element {
                             font_weight: if active { 600_i32 } else { 500_i32 },
                             font_color: foreground,
                             line_height: 14.0,
-                            text_align: 1,
+                            text_align: "center",
                         }
                     }
                 }
@@ -111,7 +111,7 @@ pub fn BottomNavigation(props: BottomNavigationProps) -> Element {
 
     rsx! {
         row {
-            percent_width: 1.0,
+            width: "100%",
             height: BAR_HEIGHT,
             align_items: "center",
             justify_content: "start",

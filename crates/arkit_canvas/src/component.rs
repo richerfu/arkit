@@ -183,16 +183,12 @@ impl PartialEq for CanvasController {
 pub struct CanvasProps {
     /// Synchronous Canvas 2D renderer called from ArkUI's custom draw frame.
     pub draw: CanvasRenderer,
-    /// Fixed logical width in vp. Omit to use `percent_width`.
+    /// CSS width (`"100%"`, `"320"`). Defaults to `"100%"`.
+    #[props(default = "100%".to_string())]
+    pub width: String,
+    /// CSS height (`"300"`, `"100%"`). Defaults to `"300"` when unset.
     #[props(default)]
-    pub width: Option<f32>,
-    /// Fixed logical height in vp. Defaults to 300 when no relative height is supplied.
-    #[props(default)]
-    pub height: Option<f32>,
-    #[props(default = 1.0)]
-    pub percent_width: f32,
-    #[props(default)]
-    pub percent_height: Option<f32>,
+    pub height: Option<String>,
     /// Clear the backing bitmap before invoking `draw`. The clear value is
     /// transparent black for alpha contexts and opaque black otherwise.
     #[props(default = false)]
@@ -362,23 +358,12 @@ pub fn Canvas(props: CanvasProps) -> Element {
         let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
     });
 
-    let fixed_height = if props.height.is_none() && props.percent_height.is_none() {
-        Some(300.0)
-    } else {
-        props.height
-    };
-    let relative_height = if props.height.is_none() {
-        props.percent_height
-    } else {
-        None
-    };
+    let height = props.height.clone().unwrap_or_else(|| "300".into());
     rsx! {
         custom {
-            width: if let Some(width) = props.width { width },
-            height: if let Some(height) = fixed_height { height },
-            percent_width: if props.width.is_none() { props.percent_width },
-            percent_height: if let Some(height) = relative_height { height },
-            hit_test_behavior: 0,
+            width: props.width.clone(),
+            height: height,
+            hit_test_behavior: "default",
         }
     }
 }

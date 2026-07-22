@@ -71,9 +71,13 @@ fn read_layout_size(node: &ArkUINode) -> Option<LayoutSize> {
 }
 
 fn read_layout_frame(node: &ArkUINode, size: LayoutSize) -> Option<LayoutFrame> {
+    // Prefer layout position (no graphic translate). `position_with_translate`
+    // accumulates ancestor translate/matrix offsets that do not match the painted
+    // layout box — that shifted Select/Popover anchors right on device while
+    // width/height stayed correct.
     let IntOffset { x, y } = node
-        .position_with_translate_in_window()
-        .or_else(|_| node.layout_position_in_window())
+        .layout_position_in_window()
+        .or_else(|_| node.position_with_translate_in_window())
         .ok()?;
     Some(LayoutFrame {
         x: x as f32,

@@ -17,6 +17,7 @@ members = [
     "crates/arkit_canvas",
     "crates/arkit_chart",
     "crates/arkit_camera",
+    "crates/arkit_barcode",
     "crates/arkit_icon",
     "examples/counter",
     "examples/async_task",
@@ -24,6 +25,7 @@ members = [
     "examples/canvas",
     "examples/chart",
     "examples/camera",
+    "examples/barcode",
     "examples/complex_cases",
     "examples/i18n",
     "examples/lottie",
@@ -63,6 +65,7 @@ arkit_animation_core = { path = "crates/arkit_animation_core" }
 arkit_canvas = { path = "crates/arkit_canvas" }
 arkit_chart = { path = "crates/arkit_chart" }
 arkit_camera = { path = "crates/arkit_camera" }
+arkit_barcode = { path = "crates/arkit_barcode" }
 arkit_derive = { path = "crates/arkit_derive" }
 arkit_icon = { path = "crates/arkit_icon" }
 arkit_i18n = { path = "crates/arkit_i18n" }
@@ -80,7 +83,8 @@ tokio = { version = "1.52", features = ["rt-multi-thread", "sync", "time"] }
 # Reqwest 0.12 exposes a WebPKI-root feature that avoids relying on platform
 # certificate-store discovery, which is not portable to the OHOS target.
 reqwest = { version = "0.12.28", default-features = false, features = ["brotli", "deflate", "gzip", "rustls-tls-webpki-roots"] }
-rxing = { version = "0.9.1", default-features = false, features = ["decoders", "encoding_rs", "full_barcode_format_support"] }
+rxing = { version = "0.9.1", default-features = false, features = ["decoders", "encoders", "encoding_rs", "full_barcode_format_support"] }
+png = "0.17"
 
 # Dioxus 0.7 — reuse its VirtualDom, diff/reconcile, signals, hooks, and router
 # directly rather than maintaining parallel framework primitives.
@@ -110,6 +114,18 @@ half = { version = "2.7.1", default-features = false }
 csscolorparser = { version = "0.8.3", default-features = false, features = ["named-colors"] }
 pulldown-cmark = { version = "0.13.4", default-features = false }
 base64 = "0.22.1"
+
+# Tree-sitter syntax highlighting for Markdown fenced code (optional feature).
+tree-sitter = "0.25"
+tree-sitter-highlight = "0.25"
+tree-sitter-rust = "0.24"
+tree-sitter-javascript = "0.23"
+tree-sitter-typescript = "0.23"
+tree-sitter-python = "0.23"
+tree-sitter-json = "0.24"
+tree-sitter-bash = "0.23"
+tree-sitter-go = "0.23"
+tree-sitter-c = "0.23"
 
 
 # crates.io 0.3.0 does not include the back intercept and embedded webview

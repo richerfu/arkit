@@ -30,7 +30,7 @@ pub fn Separator(props: SeparatorProps) -> Element {
         None => rsx! {
             row {
                 height: 1.0,
-                percent_width: 1.0,
+                width: "100%",
                 background_color: theme.colors.border,
             }
         },

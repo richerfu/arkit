@@ -80,7 +80,7 @@ pub fn Menubar(
             border_width: 1.0,
             border_color: border,
             background_color: background,
-            shadow: 1i32,
+            shadow: "sm",
             onarea: move |evt: dioxus_core::Event<dioxus_elements::event::AreaData>| {
                 let frame = evt.data().frame;
                 if frame.is_measured() {
@@ -150,7 +150,7 @@ fn MenubarMenu(
 
     let open_overlay = overlay.clone();
 
-    let mut open_menu = move |pointer: Option<dioxus_elements::event::PointerPayload>| {
+    let mut open_menu = move |_| {
         on_active_change.call(Some(index));
         let entries = items.clone();
         let frame = *trigger_frame.read();
@@ -158,27 +158,13 @@ fn MenubarMenu(
         let panel_height = menu_closed_panel_height(&entries);
         let pass_through_region =
             MenuOverlayPassThroughRegion::from_frame(pass_through_frame, viewport.frame);
-        let placement = if let Some(placement) = pointer.and_then(|pointer| {
-            MenuOverlayPlacement::from_pointer(
-                pointer,
-                viewport,
-                style.width,
-                panel_height,
-                style.side_offset_vp,
-            )
-        }) {
-            placement
-        } else if frame.is_measured() {
-            MenuOverlayPlacement::from_trigger(
-                frame,
-                viewport,
-                style.width,
-                panel_height,
-                style.side_offset_vp,
-            )
-        } else {
-            MenuOverlayPlacement::fallback(viewport)
-        };
+        let placement = MenuOverlayPlacement::resolve(
+            frame,
+            viewport,
+            style.width,
+            panel_height,
+            style.side_offset_vp,
+        );
         let session = MenuOverlaySession::new(placement, pass_through_region);
         overlay_session.set(Some(session));
         session.show(&open_overlay, style, theme, dismiss, entries);
@@ -212,11 +198,11 @@ fn MenubarMenu(
                     });
                 }
             },
-            onclick: move |evt: dioxus_core::Event<dioxus_elements::event::ClickData>| {
+            onclick: move |_| {
                 if active {
                     close_menu();
                 } else {
-                    open_menu(evt.data().pointer);
+                    open_menu(());
                 }
             },
             text {

@@ -11,18 +11,24 @@ workspace = true
 
 [features]
 default = []
-full = ["animation", "camera-scan", "canvas", "chart", "i18n", "icon", "lottie-network", "markdown", "router", "shadcn"]
+full = ["animation", "barcode", "camera-scan", "canvas", "chart", "code", "i18n", "icon", "lottie-network", "markdown", "router", "shadcn"]
 animation = ["dep:arkit_animation"]
+# Standalone barcode / QR generation (no camera required).
+barcode = ["dep:arkit_barcode"]
 camera = ["dep:arkit_camera"]
 camera-scan = ["animation", "camera", "arkit_camera/scan"]
 canvas = ["dep:arkit_canvas"]
 chart = ["animation", "dep:arkit_chart"]
+# Standalone Code component + tree-sitter highlighting (no markdown required).
+code = ["shadcn", "arkit_shadcn/code"]
 i18n = ["dep:arkit_i18n"]
 icon = ["dep:arkit_icon"]
 lottie = ["dep:arkit_lottie"]
 lottie-network = ["lottie", "arkit_lottie/network"]
 lottie-expressions = ["lottie", "arkit_lottie/expressions"]
 markdown = ["shadcn", "arkit_shadcn/markdown"]
+# Convenience: Markdown fences use the Code pipeline when both are enabled.
+markdown-highlight = ["markdown", "code"]
 router = ["animation", "dep:arkit_router"]
 shadcn = ["animation", "icon", "dep:arkit_shadcn"]
 
@@ -35,6 +41,7 @@ arkit_hooks.workspace = true
 arkit_i18n = { workspace = true, optional = true }
 arkit_router = { workspace = true, optional = true }
 arkit_animation = { workspace = true, optional = true }
+arkit_barcode = { workspace = true, optional = true }
 arkit_camera = { workspace = true, optional = true }
 arkit_canvas = { workspace = true, optional = true }
 arkit_chart = { workspace = true, optional = true }

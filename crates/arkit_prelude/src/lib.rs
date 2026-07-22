@@ -16,8 +16,8 @@ pub use dioxus_core_macro::{component, rsx, Props};
 
 // Hooks.
 pub use dioxus_hooks::{
-    use_context, use_context_provider, use_coroutine, use_effect, use_future, use_memo,
-    use_reactive, use_resource, use_signal,
+    try_use_context, use_context, use_context_provider, use_coroutine, use_effect, use_future,
+    use_memo, use_reactive, use_resource, use_signal,
 };
 
 // Signals. (`ReadOnlySignal` is deprecated in 0.7 in favor of `ReadSignal`.)

@@ -107,13 +107,12 @@ pub struct LottiePlayerProps {
     #[props(default = 60)]
     pub max_frames_per_second: u16,
     #[props(default)]
-    pub width: Option<f32>,
+    /// CSS width (`"100%"`, `"240"`). Defaults to `"100%"`.
+    #[props(default = "100%".to_string())]
+    pub width: String,
+    /// CSS height (`"240"`, `"100%"`). Defaults to `"240"` when unset.
     #[props(default)]
-    pub height: Option<f32>,
-    #[props(default = 1.0)]
-    pub percent_width: f32,
-    #[props(default)]
-    pub percent_height: Option<f32>,
+    pub height: Option<String>,
     #[props(default = 0x00000000)]
     pub background_color: u32,
     #[props(default)]
@@ -389,17 +388,11 @@ pub fn LottiePlayer(props: LottiePlayerProps) -> Element {
         drop_runtime.shutdown();
     });
 
-    let default_height = if props.height.is_none() && props.percent_height.is_none() {
-        Some(240.0)
-    } else {
-        props.height
-    };
+    let height = props.height.clone().unwrap_or_else(|| "240".into());
     rsx! {
         xcomponent {
-            percent_width: props.percent_width,
-            width: props.width,
-            height: default_height,
-            percent_height: props.percent_height,
+            width: props.width.clone(),
+            height: height,
             background_color: props.background_color,
         }
     }

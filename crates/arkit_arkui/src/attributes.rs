@@ -11,6 +11,10 @@ use ohos_arkui_binding::common::node::ArkUINode;
 use ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
 use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
 
+use crate::css_value::{
+    self, expand_box_shorthand, i32_or_keyword, map_font_weight_to_arkui, object_fit_value,
+    parse_css_color, parse_length, parse_opacity, parse_vp, CssLength,
+};
 use crate::parse_color;
 
 const ROW_ALIGN_CENTER: i32 = 1;
@@ -166,12 +170,13 @@ impl DesiredAttrs {
             // Geometry must be committed before alignment. Dioxus stores
             // static attributes before dynamic ones, so insertion order is
             // unrelated to native layout dependencies (for example a static
-            // `justify_content` can precede a dynamic `percent_height`).
+            // `justify_content` can precede a dynamic height percent).
             for attr in self
                 .attrs
                 .iter()
                 .filter(|attr| attr_group(attr.name()) == group)
                 .filter(|attr| !is_box_attr(attr.name()))
+                .filter(|attr| !is_constraint_attr(attr.name()))
                 .filter(|attr| !is_flex_option_attr(attr.name()))
                 .filter(|attr| !is_alignment_attr(attr.name()))
             {
@@ -179,6 +184,7 @@ impl DesiredAttrs {
             }
             self.apply_box(node, "padding", ArkUINodeAttributeType::Padding);
             self.apply_box(node, "margin", ArkUINodeAttributeType::Margin);
+            self.apply_constraint_size(node);
             if tag == "flex" {
                 self.apply_flex_option(node);
             }
@@ -216,7 +222,7 @@ impl DesiredAttrs {
         let wants_flex = names.iter().any(|name| is_flex_option_attr(name));
         let mut deferred = Vec::new();
         for name in names {
-            if is_box_attr(name) || is_flex_option_attr(name) {
+            if is_box_attr(name) || is_flex_option_attr(name) || is_constraint_attr(name) {
                 continue;
             }
             if let Some(attr) = self.get(name) {
@@ -232,6 +238,20 @@ impl DesiredAttrs {
         }
         if wants_margin {
             self.apply_box(node, "margin", ArkUINodeAttributeType::Margin);
+        }
+        let wants_constraint = names.iter().any(|name| {
+            matches!(
+                *name,
+                "constraint_size"
+                    | "min_width"
+                    | "max_width"
+                    | "min_height"
+                    | "max_height"
+                    | "max_width_constraint"
+            )
+        });
+        if wants_constraint {
+            self.apply_constraint_size(node);
         }
         if wants_flex && tag == "flex" {
             self.apply_flex_option(node);
@@ -301,14 +321,33 @@ impl DesiredAttrs {
     }
 
     fn apply_box(&self, node: &mut ArkUINode, base: &str, ty: ArkUINodeAttributeType) {
+        // Cascade (CSS-like): shorthand → axis (x/y) → individual longhands.
         let mut sides = self
             .get(base)
             .and_then(|attr| match &attr.value {
                 EncodedAttrValue::VecF32(v) if v.len() == 4 => Some([v[0], v[1], v[2], v[3]]),
+                EncodedAttrValue::F32(v) => Some([*v, *v, *v, *v]),
                 _ => None,
             })
             .unwrap_or([0.0, 0.0, 0.0, 0.0]);
         let mut has_any = self.get(base).is_some();
+
+        let axis_x = [format!("{base}_x"), format!("{base}_horizontal")];
+        let axis_y = [format!("{base}_y"), format!("{base}_vertical")];
+        for name in &axis_y {
+            if let Some(v) = self.box_side_f32(name) {
+                sides[0] = v;
+                sides[2] = v;
+                has_any = true;
+            }
+        }
+        for name in &axis_x {
+            if let Some(v) = self.box_side_f32(name) {
+                sides[1] = v;
+                sides[3] = v;
+                has_any = true;
+            }
+        }
 
         for (name, index) in [
             (format!("{base}_top"), 0usize),
@@ -316,16 +355,56 @@ impl DesiredAttrs {
             (format!("{base}_bottom"), 2),
             (format!("{base}_left"), 3),
         ] {
-            if let Some(attr) = self.get(&name) {
-                if let EncodedAttrValue::F32(value) = &attr.value {
-                    sides[index] = *value;
-                    has_any = true;
-                }
+            if let Some(v) = self.box_side_f32(&name) {
+                sides[index] = v;
+                has_any = true;
             }
         }
 
         if has_any {
             let _ = node.set_attribute(ty, vec![sides[0], sides[1], sides[2], sides[3]].into());
+        }
+    }
+
+    fn box_side_f32(&self, name: &str) -> Option<f32> {
+        match &self.get(name)?.value {
+            EncodedAttrValue::F32(v) => Some(*v),
+            EncodedAttrValue::VecF32(v) if v.len() == 1 => Some(v[0]),
+            _ => None,
+        }
+    }
+
+    fn apply_constraint_size(&self, node: &mut ArkUINode) {
+        // ConstraintSize = [minWidth, maxWidth, minHeight, maxHeight]
+        let mut values = [0.0_f32, 100_000.0, 0.0, 100_000.0];
+        let mut has_any = false;
+        if let Some(attr) = self.get("constraint_size") {
+            if let EncodedAttrValue::VecF32(v) = &attr.value {
+                if v.len() == 4 {
+                    values = [v[0], v[1], v[2], v[3]];
+                    has_any = true;
+                }
+            }
+        }
+        for (name, index) in [
+            ("min_width", 0usize),
+            ("max_width", 1),
+            ("min_height", 2),
+            ("max_height", 3),
+            ("max_width_constraint", 1),
+        ] {
+            if let Some(attr) = self.get(name) {
+                if let EncodedAttrValue::F32(v) = attr.value {
+                    values[index] = v;
+                    has_any = true;
+                }
+            }
+        }
+        if has_any {
+            let _ = node.set_attribute(
+                ArkUINodeAttributeType::ConstraintSize,
+                vec![values[0], values[1], values[2], values[3]].into(),
+            );
         }
     }
 
@@ -352,6 +431,128 @@ mod tests {
     use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
 
     use super::{encode_attr, parse_scroll_offset, EncodedAttrValue};
+
+    #[test]
+    fn margin_padding_accept_css_shorthand() {
+        let m = encode_attr("column", "margin", &AttributeValue::Text("8 16".into()))
+            .expect("margin shorthand");
+        assert_eq!(
+            m.value,
+            EncodedAttrValue::VecF32(vec![8.0, 16.0, 8.0, 16.0])
+        );
+        let p = encode_attr(
+            "column",
+            "padding",
+            &AttributeValue::Text("8px 16vp 4 2".into()),
+        )
+        .expect("padding shorthand");
+        assert_eq!(p.value, EncodedAttrValue::VecF32(vec![8.0, 16.0, 4.0, 2.0]));
+        let mx = encode_attr("column", "margin_x", &AttributeValue::Float(12.0)).expect("margin_x");
+        assert_eq!(mx.value, EncodedAttrValue::F32(12.0));
+    }
+
+    #[test]
+    fn width_percent_string_maps_to_width_percent() {
+        let w = encode_attr("column", "width", &AttributeValue::Text("50%".into()))
+            .expect("width percent");
+        assert_eq!(w.ty, ArkUINodeAttributeType::WidthPercent);
+        assert_eq!(w.value, EncodedAttrValue::F32(0.5));
+        let h = encode_attr("column", "height", &AttributeValue::Float(40.0)).expect("height vp");
+        assert_eq!(h.ty, ArkUINodeAttributeType::Height);
+        assert_eq!(h.value, EncodedAttrValue::F32(40.0));
+    }
+
+    #[test]
+    fn text_and_visibility_keywords() {
+        let a = encode_attr("text", "text_align", &AttributeValue::Text("center".into()))
+            .expect("text_align");
+        assert_eq!(a.value, EncodedAttrValue::I32(1));
+        let v = encode_attr(
+            "column",
+            "visibility",
+            &AttributeValue::Text("hidden".into()),
+        )
+        .expect("visibility");
+        assert_eq!(v.value, EncodedAttrValue::I32(1));
+        let fw = encode_attr("text", "font_weight", &AttributeValue::Text("bold".into()))
+            .expect("font_weight bold");
+        assert_eq!(fw.value, EncodedAttrValue::I32(6)); // 700 → index 6
+        let of = encode_attr("image", "object_fit", &AttributeValue::Text("cover".into()))
+            .expect("object_fit");
+        assert_eq!(of.value, EncodedAttrValue::I32(1));
+    }
+
+    #[test]
+    fn remaining_enum_keywords() {
+        let d = encode_attr(
+            "text",
+            "text_decoration",
+            &AttributeValue::Text("underline".into()),
+        )
+        .expect("decoration");
+        assert_eq!(d.value, EncodedAttrValue::I32(1));
+        let al = encode_attr("stack", "alignment", &AttributeValue::Text("center".into()))
+            .expect("alignment");
+        assert_eq!(al.value, EncodedAttrValue::I32(4));
+        let se = encode_attr(
+            "scroll",
+            "scroll_edge_effect",
+            &AttributeValue::Text("none".into()),
+        )
+        .expect("edge effect");
+        assert_eq!(se.value, EncodedAttrValue::I32(2));
+        let it = encode_attr(
+            "textinput",
+            "input_type",
+            &AttributeValue::Text("password".into()),
+        )
+        .expect("input_type");
+        assert_eq!(it.value, EncodedAttrValue::I32(7));
+        let pt = encode_attr(
+            "progress",
+            "progress_type",
+            &AttributeValue::Text("ring".into()),
+        )
+        .expect("progress_type");
+        assert_eq!(pt.value, EncodedAttrValue::I32(1));
+        let bt = encode_attr(
+            "button",
+            "button_type",
+            &AttributeValue::Text("capsule".into()),
+        )
+        .expect("button_type");
+        assert_eq!(bt.value, EncodedAttrValue::I32(1));
+        let op = encode_attr("column", "opacity", &AttributeValue::Text("50%".into()))
+            .expect("opacity percent");
+        assert_eq!(op.value, EncodedAttrValue::F32(0.5));
+        assert!(
+            encode_attr("column", "shadow", &AttributeValue::Text("none".into())).is_none(),
+            "shadow none is no-op"
+        );
+        let sh =
+            encode_attr("column", "shadow", &AttributeValue::Text("sm".into())).expect("shadow sm");
+        assert_eq!(sh.value, EncodedAttrValue::Shadow(1));
+    }
+
+    #[test]
+    fn scroll_bar_accepts_css_keywords_only() {
+        let off =
+            encode_attr("scroll", "scroll_bar", &AttributeValue::Text("off".into())).expect("off");
+        assert_eq!(off.ty, ArkUINodeAttributeType::ScrollBarDisplayMode);
+        assert_eq!(off.value, EncodedAttrValue::I32(0));
+
+        let on = encode_attr("list", "scroll_bar", &AttributeValue::Bool(true)).expect("bool true");
+        assert_eq!(on.value, EncodedAttrValue::I32(2));
+
+        let auto =
+            encode_attr("grid", "scroll_bar", &AttributeValue::Text("auto".into())).expect("auto");
+        assert_eq!(auto.value, EncodedAttrValue::I32(1));
+
+        assert!(
+            encode_attr("scroll", "scroll_bar", &AttributeValue::Int(2)).is_none(),
+            "raw integers are rejected"
+        );
+    }
 
     #[test]
     fn scroll_offset_preserves_float_offsets_and_integer_options() {
@@ -394,10 +595,18 @@ mod tests {
 
     #[test]
     fn text_input_otp_attributes_use_native_types() {
-        let input_type = encode_attr("textinput", "input_type", &AttributeValue::Int(14))
-            .expect("one-time-code input type is supported");
+        let input_type = encode_attr(
+            "textinput",
+            "input_type",
+            &AttributeValue::Text("otp".into()),
+        )
+        .expect("one-time-code input type is supported");
         assert_eq!(input_type.ty, ArkUINodeAttributeType::TextInputType);
         assert_eq!(input_type.value, EncodedAttrValue::I32(14));
+        assert!(
+            encode_attr("textinput", "input_type", &AttributeValue::Int(14)).is_none(),
+            "raw input_type integers are rejected"
+        );
 
         let input_filter = encode_attr(
             "textinput",
@@ -426,11 +635,32 @@ fn is_box_attr(name: &str) -> bool {
             | "padding_right"
             | "padding_bottom"
             | "padding_left"
+            | "padding_x"
+            | "padding_y"
+            | "padding_horizontal"
+            | "padding_vertical"
             | "margin"
             | "margin_top"
             | "margin_right"
             | "margin_bottom"
             | "margin_left"
+            | "margin_x"
+            | "margin_y"
+            | "margin_horizontal"
+            | "margin_vertical"
+    ) || name.starts_with("padding_")
+        || name.starts_with("margin_")
+}
+
+fn is_constraint_attr(name: &str) -> bool {
+    matches!(
+        name,
+        "constraint_size"
+            | "min_width"
+            | "max_width"
+            | "min_height"
+            | "max_height"
+            | "max_width_constraint"
     )
 }
 
@@ -532,11 +762,13 @@ fn attr_group(name: &str) -> AttrGroup {
 }
 
 fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Option<EncodedAttr> {
-    let as_f32 = |v: &dioxus_core::AttributeValue| match v {
-        dioxus_core::AttributeValue::Float(f) => Some(*f as f32),
-        dioxus_core::AttributeValue::Int(i) => Some(*i as f32),
-        dioxus_core::AttributeValue::Text(s) => s.parse::<f32>().ok(),
-        _ => None,
+    let as_f32 = |v: &dioxus_core::AttributeValue| {
+        parse_vp(v).or_else(|| match v {
+            dioxus_core::AttributeValue::Float(f) => Some(*f as f32),
+            dioxus_core::AttributeValue::Int(i) => Some(*i as f32),
+            dioxus_core::AttributeValue::Text(s) => s.parse::<f32>().ok(),
+            _ => None,
+        })
     };
     let as_i32 = |v: &dioxus_core::AttributeValue| match v {
         dioxus_core::AttributeValue::Float(f) => Some(*f as i32),
@@ -547,6 +779,11 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
     let as_bool = |v: &dioxus_core::AttributeValue| match v {
         dioxus_core::AttributeValue::Bool(b) => Some(*b),
         dioxus_core::AttributeValue::Int(i) => Some(*i != 0),
+        dioxus_core::AttributeValue::Text(s) => match css_value::enum_token(s).as_str() {
+            "true" | "yes" | "on" => Some(true),
+            "false" | "no" | "off" => Some(false),
+            _ => None,
+        },
         _ => None,
     };
     let as_string = |v: &dioxus_core::AttributeValue| match v {
@@ -556,31 +793,17 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
         dioxus_core::AttributeValue::Bool(b) => Some(b.to_string()),
         _ => None,
     };
-    let as_color = |v: &dioxus_core::AttributeValue| match v {
-        dioxus_core::AttributeValue::Text(s) => parse_color(s).ok(),
-        dioxus_core::AttributeValue::Int(i) => Some(*i as u32),
-        _ => None,
+    let as_color = |v: &dioxus_core::AttributeValue| {
+        parse_css_color(v).or_else(|| match v {
+            dioxus_core::AttributeValue::Text(s) => parse_color(s).ok(),
+            dioxus_core::AttributeValue::Int(i) => Some(*i as u32),
+            _ => None,
+        })
     };
-    let as_radius_vec = |v: &dioxus_core::AttributeValue| match v {
-        dioxus_core::AttributeValue::Text(s) => parse_f32_list(s).and_then(|values| {
-            if values.len() == 4 {
-                Some(values)
-            } else {
-                None
-            }
-        }),
-        _ => as_f32(v).map(|v| vec![v, v, v, v]),
-    };
-    let as_box_vec = |v: &dioxus_core::AttributeValue| match v {
-        dioxus_core::AttributeValue::Text(s) => parse_f32_list(s).and_then(|values| {
-            if values.len() == 4 {
-                Some(values)
-            } else {
-                None
-            }
-        }),
-        _ => as_f32(v).map(|v| vec![v, v, v, v]),
-    };
+    let as_radius_vec =
+        |v: &dioxus_core::AttributeValue| expand_box_shorthand(v).map(|sides| sides.to_vec());
+    let as_box_vec =
+        |v: &dioxus_core::AttributeValue| expand_box_shorthand(v).map(|sides| sides.to_vec());
 
     if let Some(ty) = color_attr(name, tag) {
         return as_color(value).map(|v| EncodedAttr::new(name, ty, EncodedAttrValue::U32(v)));
@@ -593,22 +816,17 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
             EncodedAttrValue::F32(as_f32(value)?),
         ),
         "font_weight" => {
-            let raw = as_i32(value)?;
-            let mapped = if raw >= 100 {
-                ((raw / 100).saturating_sub(1)).min(8)
-            } else {
-                raw
-            };
+            let raw = css_value::font_weight_value(value)?;
             EncodedAttr::new(
                 name,
                 ArkUINodeAttributeType::FontWeight,
-                EncodedAttrValue::I32(mapped),
+                EncodedAttrValue::I32(map_font_weight_to_arkui(raw)),
             )
         }
         "font_style" => EncodedAttr::new(
             name,
             ArkUINodeAttributeType::FontStyle,
-            EncodedAttrValue::I32(as_i32(value)?),
+            EncodedAttrValue::I32(i32_or_keyword(value, css_value::font_style_keyword)?),
         ),
         "font_family" => EncodedAttr::new(
             name,
@@ -623,7 +841,7 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
         "text_align" => EncodedAttr::new(
             name,
             ArkUINodeAttributeType::TextAlign,
-            EncodedAttrValue::I32(as_i32(value)?),
+            EncodedAttrValue::I32(i32_or_keyword(value, css_value::text_align_keyword)?),
         ),
         "text_letter_spacing" => EncodedAttr::new(
             name,
@@ -633,12 +851,12 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
         "text_decoration" => EncodedAttr::new(
             name,
             ArkUINodeAttributeType::TextDecoration,
-            EncodedAttrValue::I32(as_i32(value)?),
+            EncodedAttrValue::I32(i32_or_keyword(value, css_value::text_decoration_keyword)?),
         ),
         "text_overflow" => EncodedAttr::new(
             name,
             ArkUINodeAttributeType::TextOverflow,
-            EncodedAttrValue::I32(as_i32(value)?),
+            EncodedAttrValue::I32(i32_or_keyword(value, css_value::text_overflow_keyword)?),
         ),
         "max_lines" => EncodedAttr::new(
             name,
@@ -669,7 +887,7 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
         "input_type" if tag == "textinput" => EncodedAttr::new(
             name,
             ArkUINodeAttributeType::TextInputType,
-            EncodedAttrValue::I32(as_i32(value)?),
+            EncodedAttrValue::I32(i32_or_keyword(value, css_value::input_type_keyword)?),
         ),
         "input_filter" if tag == "textinput" => EncodedAttr::new(
             name,
@@ -682,61 +900,74 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
             EncodedAttrValue::I32(as_i32(value)?),
         ),
         "padding" => {
-            let v = as_f32(value)?;
+            let sides = expand_box_shorthand(value)?;
             EncodedAttr::new(
                 name,
                 ArkUINodeAttributeType::Padding,
-                EncodedAttrValue::VecF32(vec![v, v, v, v]),
+                EncodedAttrValue::VecF32(sides.to_vec()),
             )
         }
-        "padding_top" | "padding_right" | "padding_bottom" | "padding_left" => EncodedAttr::new(
+        "padding_top" | "padding_right" | "padding_bottom" | "padding_left" | "padding_x"
+        | "padding_y" | "padding_horizontal" | "padding_vertical" => EncodedAttr::new(
             name,
             ArkUINodeAttributeType::Padding,
             EncodedAttrValue::F32(as_f32(value)?),
         ),
         "margin" => {
-            let v = as_f32(value)?;
+            let sides = expand_box_shorthand(value)?;
             EncodedAttr::new(
                 name,
                 ArkUINodeAttributeType::Margin,
-                EncodedAttrValue::VecF32(vec![v, v, v, v]),
+                EncodedAttrValue::VecF32(sides.to_vec()),
             )
         }
-        "margin_top" | "margin_right" | "margin_bottom" | "margin_left" => EncodedAttr::new(
+        "margin_top" | "margin_right" | "margin_bottom" | "margin_left" | "margin_x"
+        | "margin_y" | "margin_horizontal" | "margin_vertical" => EncodedAttr::new(
             name,
             ArkUINodeAttributeType::Margin,
             EncodedAttrValue::F32(as_f32(value)?),
         ),
-        "percent_width" => EncodedAttr::new(
-            name,
-            ArkUINodeAttributeType::WidthPercent,
-            EncodedAttrValue::F32(as_f32(value)?),
-        ),
-        "percent_height" => EncodedAttr::new(
-            name,
-            ArkUINodeAttributeType::HeightPercent,
-            EncodedAttrValue::F32(as_f32(value)?),
-        ),
-        "width" => EncodedAttr::new(
-            name,
-            ArkUINodeAttributeType::Width,
-            EncodedAttrValue::F32(as_f32(value)?),
-        ),
-        "height" => EncodedAttr::new(
-            name,
-            ArkUINodeAttributeType::Height,
-            EncodedAttrValue::F32(as_f32(value)?),
-        ),
-        "max_width_constraint" => EncodedAttr::new(
-            name,
-            ArkUINodeAttributeType::ConstraintSize,
-            EncodedAttrValue::VecF32(vec![0.0, as_f32(value)?, 0.0, 100_000.0]),
-        ),
+        // CSS-only sizing: use `width`/`height` with vp or `"N%"` — no percent_* attrs.
+        // CSS-like: width: 100 / "100px" → vp; width: "50%" → percent.
+        "width" => match parse_length(value)? {
+            CssLength::Vp(v) => EncodedAttr::new(
+                name,
+                ArkUINodeAttributeType::Width,
+                EncodedAttrValue::F32(v),
+            ),
+            CssLength::Percent(p) => EncodedAttr::new(
+                name,
+                ArkUINodeAttributeType::WidthPercent,
+                EncodedAttrValue::F32(p),
+            ),
+        },
+        "height" => match parse_length(value)? {
+            CssLength::Vp(v) => EncodedAttr::new(
+                name,
+                ArkUINodeAttributeType::Height,
+                EncodedAttrValue::F32(v),
+            ),
+            CssLength::Percent(p) => EncodedAttr::new(
+                name,
+                ArkUINodeAttributeType::HeightPercent,
+                EncodedAttrValue::F32(p),
+            ),
+        },
+        "min_width" | "max_width" | "min_height" | "max_height" | "max_width_constraint" => {
+            EncodedAttr::new(
+                name,
+                ArkUINodeAttributeType::ConstraintSize,
+                EncodedAttrValue::F32(as_f32(value)?),
+            )
+        }
         "constraint_size" => {
-            let values = match value {
-                dioxus_core::AttributeValue::Text(s) => parse_f32_list(s)?,
-                _ => return None,
-            };
+            let values =
+                expand_box_shorthand(value)
+                    .map(|s| s.to_vec())
+                    .or_else(|| match value {
+                        dioxus_core::AttributeValue::Text(s) => parse_f32_list(s),
+                        _ => None,
+                    })?;
             if values.len() != 4 {
                 return None;
             }
@@ -749,7 +980,7 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
         "opacity" => EncodedAttr::new(
             name,
             ArkUINodeAttributeType::Opacity,
-            EncodedAttrValue::F32(as_f32(value)?),
+            EncodedAttrValue::F32(parse_opacity(value).or_else(|| as_f32(value))?),
         ),
         "layout_weight" => EncodedAttr::new(
             name,
@@ -764,8 +995,11 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
         "position" => {
             let values = match value {
                 dioxus_core::AttributeValue::Text(s) => {
-                    let values = parse_f32_list(s)?;
-                    match values.as_slice() {
+                    let parts = css_value::split_css_list(s);
+                    let nums: Option<Vec<f32>> =
+                        parts.into_iter().map(css_value::parse_vp_number).collect();
+                    let nums = nums.or_else(|| parse_f32_list(s))?;
+                    match nums.as_slice() {
                         [value] => vec![*value, *value],
                         [x, y] => vec![*x, *y],
                         _ => return None,
@@ -800,13 +1034,20 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
         "border_style" => EncodedAttr::new(
             name,
             ArkUINodeAttributeType::BorderStyle,
-            EncodedAttrValue::I32(as_i32(value)?),
+            EncodedAttrValue::I32(i32_or_keyword(value, css_value::border_style_keyword)?),
         ),
-        "shadow" => EncodedAttr::new(
-            name,
-            ArkUINodeAttributeType::Shadow,
-            EncodedAttrValue::Shadow(as_i32(value)?),
-        ),
+        "shadow" => {
+            let v = i32_or_keyword(value, css_value::shadow_keyword)?;
+            if v < 0 {
+                // "none" — treat as no-op encode so callers can pass the keyword
+                return None;
+            }
+            EncodedAttr::new(
+                name,
+                ArkUINodeAttributeType::Shadow,
+                EncodedAttrValue::Shadow(v),
+            )
+        }
         "enabled" => EncodedAttr::new(
             name,
             ArkUINodeAttributeType::Enabled,
@@ -820,7 +1061,7 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
         "visibility" => EncodedAttr::new(
             name,
             ArkUINodeAttributeType::Visibility,
-            EncodedAttrValue::I32(as_i32(value)?),
+            EncodedAttrValue::I32(i32_or_keyword(value, css_value::visibility_keyword)?),
         ),
         "focusable" => EncodedAttr::new(
             name,
@@ -835,16 +1076,17 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
         "hit_test_behavior" => EncodedAttr::new(
             name,
             ArkUINodeAttributeType::HitTestBehavior,
-            EncodedAttrValue::I32(as_i32(value)?),
+            EncodedAttrValue::I32(i32_or_keyword(value, css_value::hit_test_keyword)?),
         ),
         "alignment" => EncodedAttr::new(
             name,
             ArkUINodeAttributeType::Alignment,
-            EncodedAttrValue::I32(as_i32(value)?),
+            EncodedAttrValue::I32(i32_or_keyword(value, css_value::alignment_keyword)?),
         ),
         "align_self" | "item_alignment" => {
-            let v = as_i32(value)
-                .or_else(|| as_string(value).and_then(|s| item_alignment_value(&s)))?;
+            let v = i32_or_keyword(value, |s| {
+                css_value::flex_align_items_keyword(s).or_else(|| item_alignment_value(s))
+            })?;
             EncodedAttr::new(
                 name,
                 ArkUINodeAttributeType::AlignSelf,
@@ -853,8 +1095,9 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
         }
         "align_items" => {
             if tag == "flex" {
-                let v = as_i32(value)
-                    .or_else(|| as_string(value).and_then(|s| item_alignment_value(&s)))?;
+                let v = i32_or_keyword(value, |s| {
+                    css_value::flex_align_items_keyword(s).or_else(|| item_alignment_value(s))
+                })?;
                 EncodedAttr::new(
                     name,
                     ArkUINodeAttributeType::FlexOption,
@@ -862,14 +1105,12 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
                 )
             } else {
                 let attr = align_items_attr(tag)?;
-                let v = as_i32(value)
-                    .or_else(|| as_string(value).and_then(|s| align_items_value(tag, &s)))?;
+                let v = i32_or_keyword(value, |s| align_items_value(tag, s))?;
                 EncodedAttr::new(name, attr, EncodedAttrValue::I32(v))
             }
         }
         "justify_content" => {
-            let v = as_i32(value)
-                .or_else(|| as_string(value).and_then(|s| justify_content_value(&s)))?;
+            let v = i32_or_keyword(value, justify_content_value)?;
             if tag == "flex" {
                 EncodedAttr::new(
                     name,
@@ -881,8 +1122,7 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
             }
         }
         "flex_direction" => {
-            let v = as_i32(value)
-                .or_else(|| as_string(value).and_then(|s| flex_direction_value(&s)))?;
+            let v = i32_or_keyword(value, flex_direction_value)?;
             EncodedAttr::new(
                 name,
                 ArkUINodeAttributeType::FlexOption,
@@ -890,7 +1130,7 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
             )
         }
         "flex_wrap" => {
-            let v = as_i32(value).or_else(|| as_string(value).and_then(|s| flex_wrap_value(&s)))?;
+            let v = i32_or_keyword(value, flex_wrap_value)?;
             EncodedAttr::new(
                 name,
                 ArkUINodeAttributeType::FlexOption,
@@ -898,19 +1138,26 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
             )
         }
         "flex_align_content" => {
-            let v = as_i32(value)
-                .or_else(|| as_string(value).and_then(|s| justify_content_value(&s)))?;
+            let v = i32_or_keyword(value, justify_content_value)?;
             EncodedAttr::new(
                 name,
                 ArkUINodeAttributeType::FlexOption,
                 EncodedAttrValue::FlexOptionPart(4, v),
             )
         }
-        "scroll_bar" if tag == "scroll" => EncodedAttr::new(
+        "button_type" if tag == "button" => EncodedAttr::new(
             name,
-            ArkUINodeAttributeType::ScrollBarDisplayMode,
-            EncodedAttrValue::I32(as_i32(value)?),
+            ArkUINodeAttributeType::ButtonType,
+            EncodedAttrValue::I32(i32_or_keyword(value, css_value::button_type_keyword)?),
         ),
+        // ArkUI ScrollBarDisplayMode: Off=0, Auto=1, On=2.
+        "scroll_bar" if matches!(tag, "scroll" | "list" | "grid" | "waterflow") => {
+            EncodedAttr::new(
+                name,
+                ArkUINodeAttributeType::ScrollBarDisplayMode,
+                EncodedAttrValue::I32(scroll_bar_display_mode(value)?),
+            )
+        }
         "scroll_enabled" if tag == "scroll" => EncodedAttr::new(
             name,
             ArkUINodeAttributeType::ScrollEnableScrollInteraction,
@@ -919,7 +1166,10 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
         "scroll_edge_effect" if tag == "scroll" => EncodedAttr::new(
             name,
             ArkUINodeAttributeType::ScrollEdgeEffect,
-            EncodedAttrValue::I32(as_i32(value)?),
+            EncodedAttrValue::I32(i32_or_keyword(
+                value,
+                css_value::scroll_edge_effect_keyword,
+            )?),
         ),
         "scroll_offset" if tag == "scroll" => {
             let text = match value {
@@ -991,7 +1241,7 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
         "swiper_curve" if tag == "swiper" => EncodedAttr::new(
             name,
             ArkUINodeAttributeType::SwiperCurve,
-            EncodedAttrValue::I32(as_i32(value)?),
+            EncodedAttrValue::I32(i32_or_keyword(value, css_value::animation_curve_keyword)?),
         ),
         "swiper_item_space" if tag == "swiper" => EncodedAttr::new(
             name,
@@ -1031,7 +1281,7 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
         "list_sticky" if tag == "list" => EncodedAttr::new(
             name,
             ArkUINodeAttributeType::ListSticky,
-            EncodedAttrValue::I32(as_i32(value)?),
+            EncodedAttrValue::I32(i32_or_keyword(value, css_value::list_sticky_keyword)?),
         ),
         "water_flow_column_template" if tag == "waterflow" => EncodedAttr::new(
             name,
@@ -1076,7 +1326,7 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
         "object_fit" => EncodedAttr::new(
             name,
             ArkUINodeAttributeType::ImageObjectFit,
-            EncodedAttrValue::I32(as_i32(value)?),
+            EncodedAttrValue::I32(i32_or_keyword(value, object_fit_value)?),
         ),
         "src" => EncodedAttr::new(
             name,
@@ -1133,7 +1383,7 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
         "progress_type" => EncodedAttr::new(
             name,
             ArkUINodeAttributeType::ProgressType,
-            EncodedAttrValue::I32(as_i32(value)?),
+            EncodedAttrValue::I32(i32_or_keyword(value, css_value::progress_type_keyword)?),
         ),
         "loading_progress_enable_loading" if tag == "loadingprogress" => EncodedAttr::new(
             name,
@@ -1222,20 +1472,16 @@ fn align_items_attr(tag: &str) -> Option<ArkUINodeAttributeType> {
     }
 }
 
-fn enum_token(s: &str) -> String {
-    s.trim()
-        .trim_matches('"')
-        .trim_matches('\'')
-        .to_ascii_lowercase()
-}
-
 fn align_items_value(tag: &str, s: &str) -> Option<i32> {
-    let lower = enum_token(s);
+    let lower = css_value::enum_token(s);
     match tag {
+        // Column/Row AlignItems enum is distinct from Flex AlignSelf.
         "column" | "row" => match lower.as_str() {
-            "start" | "top" => Some(0),
+            "start" | "top" | "left" | "flex_start" => Some(0),
             "center" => Some(1),
-            "end" | "bottom" => Some(2),
+            "end" | "bottom" | "right" | "flex_end" => Some(2),
+            // stretch not always available; map closest to start for safety
+            "stretch" => Some(0),
             _ => None,
         },
         _ => None,
@@ -1251,10 +1497,10 @@ fn justify_content_attr(tag: &str) -> Option<ArkUINodeAttributeType> {
 }
 
 fn justify_content_value(s: &str) -> Option<i32> {
-    match enum_token(s).as_str() {
-        "start" => Some(1),
+    match css_value::enum_token(s).as_str() {
+        "start" | "flex_start" | "left" | "top" => Some(1),
         "center" => Some(2),
-        "end" => Some(3),
+        "end" | "flex_end" | "right" | "bottom" => Some(3),
         "space_between" | "spacebetween" => Some(6),
         "space_around" | "spacearound" => Some(7),
         "space_evenly" | "spaceevenly" => Some(8),
@@ -1263,21 +1509,13 @@ fn justify_content_value(s: &str) -> Option<i32> {
 }
 
 fn item_alignment_value(s: &str) -> Option<i32> {
-    match enum_token(s).as_str() {
-        "auto" => Some(0),
-        "start" => Some(1),
-        "center" => Some(2),
-        "end" => Some(3),
-        "stretch" => Some(4),
-        "baseline" => Some(5),
-        _ => None,
-    }
+    css_value::flex_align_items_keyword(s)
 }
 
 fn flex_direction_value(s: &str) -> Option<i32> {
-    match enum_token(s).as_str() {
-        "row" => Some(0),
-        "column" => Some(1),
+    match css_value::enum_token(s).as_str() {
+        "row" | "horizontal" => Some(0),
+        "column" | "vertical" => Some(1),
         "row_reverse" | "rowreverse" => Some(2),
         "column_reverse" | "columnreverse" => Some(3),
         _ => None,
@@ -1285,12 +1523,17 @@ fn flex_direction_value(s: &str) -> Option<i32> {
 }
 
 fn flex_wrap_value(s: &str) -> Option<i32> {
-    match enum_token(s).as_str() {
-        "nowrap" | "no_wrap" => Some(0),
-        "wrap" => Some(1),
+    match css_value::enum_token(s).as_str() {
+        "nowrap" | "no_wrap" | "false" | "off" => Some(0),
+        "wrap" | "true" | "on" => Some(1),
         "wrap_reverse" | "wrapreverse" => Some(2),
         _ => None,
     }
+}
+
+/// Map declarative `scroll_bar` values to ArkUI `ScrollBarDisplayMode`.
+fn scroll_bar_display_mode(value: &dioxus_core::AttributeValue) -> Option<i32> {
+    i32_or_keyword(value, css_value::scroll_bar_keyword)
 }
 
 impl DesiredAttrs {
@@ -1317,7 +1560,7 @@ impl DesiredAttrs {
         if tag != "button" {
             return;
         }
-        if !self.has_any(&["height", "percent_height", "constraint_size"]) {
+        if !self.has_any(&["height", "constraint_size"]) {
             let _ =
                 node.set_attribute(ArkUINodeAttributeType::Height, BUTTON_DEFAULT_HEIGHT.into());
         }

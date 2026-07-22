@@ -250,18 +250,12 @@ impl PartialEq for ChartController {
 pub struct EChartsProps {
     /// Complete chart option. Replacing this value triggers a native redraw.
     pub option: ChartOption,
-    /// Fixed width in vp. Omit to use `percent_width`.
+    /// CSS width (`"100%"`, `"320"`). Defaults to `"100%"`.
+    #[props(default = "100%".to_string())]
+    pub width: String,
+    /// CSS height (`"320"`, `"100%"`). Defaults to `"320"` when unset.
     #[props(default)]
-    pub width: Option<f32>,
-    /// Fixed height in vp. Defaults to 320 when neither height is specified.
-    #[props(default)]
-    pub height: Option<f32>,
-    /// Relative width (`1.0` means 100%).
-    #[props(default = 1.0)]
-    pub percent_width: f32,
-    /// Relative height. When set, it suppresses the default fixed height.
-    #[props(default)]
-    pub percent_height: Option<f32>,
+    pub height: Option<String>,
     /// Called after a point, bar, sector, node, or region is selected.
     #[props(default)]
     pub on_select: Option<EventHandler<ChartEvent>>,
@@ -2091,22 +2085,16 @@ pub fn ECharts(props: EChartsProps) -> Element {
         }
     }));
 
-    let fixed_height = if props.height.is_none() && props.percent_height.is_none() {
-        Some(320.0)
-    } else {
-        props.height
-    };
+    let height = props.height.clone().unwrap_or_else(|| "320".into());
     let click_state = state.clone();
     let click_clock = animation_clock.clone();
     let click_handler = select_handler.clone();
     let click_events = event_handler.clone();
     rsx! {
         custom {
-            width: if let Some(width) = props.width { width },
-            height: if let Some(height) = fixed_height { height },
-            percent_width: props.percent_width,
-            percent_height: if let Some(height) = props.percent_height { height },
-            hit_test_behavior: 0,
+            width: props.width.clone(),
+            height: height,
+            hit_test_behavior: "default",
             ontouch: move |event: dioxus_core::Event<dioxus_elements::event::PointerData>| {
                 let Some(pointer) = event.data().pointer else {
                     return;

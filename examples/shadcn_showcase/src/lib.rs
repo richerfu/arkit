@@ -8,17 +8,18 @@ use arkit::entry;
 use arkit::prelude::*;
 use arkit::shadcn as arkit_shadcn;
 use arkit::shadcn::components::{
-    Accordion, AccordionItemSpec, Alert, AlertDescription, AlertDialog, AlertList, AlertTitle,
-    AlertVariant, AspectRatio, Avatar, AvatarFallback, Badge, BadgeVariant, BottomNavigation,
-    BottomNavigationItem, BottomSheet, BottomSheetTextInput, Button, ButtonSize, ButtonVariant,
-    Calendar, Card, CardContent, CardFooter, CardHeader, Carousel, CarouselControlsPlacement,
-    CarouselIndicatorVariant, CarouselStyle, Checkbox, Collapsible, ContextMenu, DatePicker,
-    Dialog, DialogFooter, DialogHeader, DropdownMenu, Field, FieldContent, FieldDescription,
-    FieldError, FieldGroup, FieldOrientation, FieldSeparator, FieldSet, FieldTitle, Form, FormItem,
-    HoverCard, Input, InputOtp, InputOtpMode, InputOtpSeparator, Label, Markdown, MenuEntry,
-    Menubar, MenubarMenuSpec, MultiSlider, Popover, Progress, RadioGroup, RangeSlider, Select,
-    Separator, Skeleton, Slider, SliderOrientation, SliderStyle, Sonner, SonnerToast, Spinner,
-    Switch, Table, Tabs, Text, TextVariant, Textarea, Toggle, ToggleGroup, Tooltip,
+    Accordion, AccordionItemSpec, Alert, AlertDescription, AlertDialog, AlertDialogAction,
+    AlertList, AlertTitle, AlertVariant, AspectRatio, Avatar, AvatarFallback, Badge, BadgeVariant,
+    BottomNavigation, BottomNavigationItem, BottomSheet, BottomSheetTextInput, Button, ButtonSize,
+    ButtonVariant, Calendar, Card, CardContent, CardFooter, CardHeader, Carousel,
+    CarouselControlsPlacement, CarouselIndicatorVariant, CarouselStyle, Checkbox, Code,
+    Collapsible, ContextMenu, DatePicker, Dialog, DialogFooter, DialogHeader, DropdownMenu, Field,
+    FieldContent, FieldDescription, FieldError, FieldGroup, FieldOrientation, FieldSeparator,
+    FieldSet, FieldTitle, Form, FormItem, HoverCard, Input, InputOtp, InputOtpMode,
+    InputOtpSeparator, Label, Markdown, MenuEntry, Menubar, MenubarMenuSpec, MultiSlider, Popover,
+    Progress, RadioGroup, RangeSlider, Select, Separator, Skeleton, Slider, SliderOrientation,
+    SliderStyle, Sonner, SonnerPosition, SonnerToast, Spinner, Switch, Table, Tabs, Text,
+    TextVariant, Textarea, ToastAppearance, Toggle, ToggleGroup, ToggleVariant, Tooltip,
 };
 use arkit::shadcn::icon::icon_placeholder;
 use arkit::shadcn::theme::{
@@ -29,6 +30,52 @@ const HOME_HEADER_HEIGHT: f32 = 80.0;
 const DETAIL_HEADER_HEIGHT: f32 = 48.0;
 const TRACKING_TIGHT: f32 = -0.35;
 const MARKDOWN_STREAM_INTERVAL_MS: u64 = 500;
+
+/// Static sample for tree-sitter fenced-code highlighting (`markdown` + `code`).
+const MARKDOWN_HIGHLIGHT_SAMPLE: &str = r#"## Syntax highlighting
+
+Fenced blocks reuse the standalone `Code` pipeline when the `code` feature is enabled. Unknown languages fall back to plain monospace.
+
+```rust
+fn fib(n: u32) -> u32 {
+    match n {
+        0 | 1 => n,
+        _ => fib(n - 1) + fib(n - 2),
+    }
+}
+```
+
+```python
+def greet(name: str) -> str:
+    # theme-aware token colors
+    return f"hello, {name}"
+```
+
+```json
+{
+  "feature": "code",
+  "languages": ["rust", "python", "json", "bash"]
+}
+```
+
+```bash
+ohrs build --arch aarch
+./app/run.sh shadcn_showcase all
+```
+"#;
+
+const CODE_STANDALONE_RUST: &str = r#"pub fn answer() -> i32 {
+    // standalone Code component
+    42
+}
+"#;
+
+const CODE_STANDALONE_JSON: &str = r#"{
+  "component": "Code",
+  "feature": "code",
+  "highlight": true
+}
+"#;
 
 const MARKDOWN_STREAM_CHUNKS: &[&str] = &[
     "# Live deployment briefing\n\n",
@@ -181,6 +228,10 @@ const COMPONENTS: &[ComponentSpec] = &[
         name: "Label",
     },
     ComponentSpec {
+        slug: "code",
+        name: "Code",
+    },
+    ComponentSpec {
         slug: "markdown",
         name: "Markdown",
     },
@@ -276,8 +327,8 @@ fn app() -> Element {
         ThemeProvider {
             theme,
             column {
-                percent_width: 1.0,
-                percent_height: 1.0,
+                width: "100%",
+                height: "100%",
                 background_color: theme.colors.background,
                 if let Some(slug) = selected_slug {
                     MountTransition {
@@ -423,16 +474,16 @@ fn HomeView(
             on_custom,
         }
         column {
-            percent_width: 1.0,
+            width: "100%",
             layout_weight: 1.0,
             background_color: theme.colors.background,
             scroll {
-                percent_width: 1.0,
-                percent_height: 1.0,
-                alignment: 0_i32,
+                width: "100%",
+                height: "100%",
+                alignment: "top-start",
                 background_color: theme.colors.background,
             column {
-                percent_width: 1.0,
+                width: "100%",
                 background_color: theme.colors.background,
                 align_items: "center",
                 justify_content: "start",
@@ -441,14 +492,14 @@ fn HomeView(
                 padding_bottom: spacing::XXL,
                 padding_left: spacing::LG,
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     max_width_constraint: 512.0,
                     align_items: "start",
                     justify_content: "start",
                     Input {
                         placeholder: Some("Search UI...".to_string()),
                         value: Some(query),
-                        percent_width: Some(1.0),
+                        width: "100%",
                         on_change: move |value| on_query.call(value),
                     }
                     row { height: spacing::LG }
@@ -461,7 +512,7 @@ fn HomeView(
                         }
                     } else {
                         column {
-                            percent_width: 1.0,
+                            width: "100%",
                             align_items: "start",
                             justify_content: "start",
                             for (index, item) in items.iter().enumerate() {
@@ -540,7 +591,7 @@ fn NavBar(
 
     rsx! {
         row {
-            percent_width: 1.0,
+            width: "100%",
             height: header_height,
             background_color: theme.colors.background,
             padding_top: if back { 4.0 } else { 18.0 },
@@ -681,14 +732,14 @@ fn ThemeMenu(
                     layout_weight: 1.0,
                     clip: true,
                     text {
-                        percent_width: 1.0,
+                        width: "100%",
                         content: active_theme_label.to_string(),
                         font_size: typography::SM,
                         font_weight: 500_i32,
                         font_color: theme.colors.secondary_foreground,
                         line_height: 18.0,
                         max_lines: 1_i32,
-                        text_overflow: 2_i32,
+                        text_overflow: "ellipsis",
                     }
                 }
                 row { width: spacing::XS }
@@ -718,7 +769,7 @@ fn ComponentListItem(
 
     rsx! {
         row {
-            percent_width: 1.0,
+            width: "100%",
             height: 56.0,
             align_items: "center",
             justify_content: "space_between",
@@ -729,7 +780,7 @@ fn ComponentListItem(
             background_color: row_background,
             border_width: border_width,
             border_color: row_border,
-            border_style: 0_i32,
+            border_style: "solid",
             border_radius: radius_value,
             clip: true,
             onclick: move |_| on_select.call(spec.slug),
@@ -761,17 +812,17 @@ fn DemoCanvas(slug: &'static str) -> Element {
     if policy.fill_height {
         rsx! {
             column {
-                percent_width: 1.0,
+                width: "100%",
                 layout_weight: 1.0,
                 background_color: theme.colors.surface,
                 scroll {
-                    percent_width: 1.0,
-                    percent_height: 1.0,
+                    width: "100%",
+                    height: "100%",
                     background_color: theme.colors.surface,
                     scroll_enabled: true,
                     column {
-                        percent_width: 1.0,
-                        percent_height: 1.0,
+                        width: "100%",
+                        height: "100%",
                         background_color: theme.colors.surface,
                         align_items: if policy.center_x { "center" } else { "start" },
                         justify_content: if policy.center_y { "center" } else { "start" },
@@ -787,16 +838,16 @@ fn DemoCanvas(slug: &'static str) -> Element {
     } else {
         rsx! {
             column {
-                percent_width: 1.0,
+                width: "100%",
                 layout_weight: 1.0,
                 background_color: theme.colors.surface,
                 scroll {
-                    percent_width: 1.0,
-                    percent_height: 1.0,
+                    width: "100%",
+                    height: "100%",
                     background_color: theme.colors.surface,
                     scroll_enabled: true,
                     column {
-                        percent_width: 1.0,
+                        width: "100%",
                         background_color: theme.colors.surface,
                         align_items: if policy.center_x { "center" } else { "start" },
                         justify_content: if policy.center_y { "center" } else { "start" },
@@ -900,7 +951,7 @@ fn demo_canvas_policy(slug: &str) -> DemoCanvasPolicy {
             fill_height: true,
             padding: [spacing::XXL, spacing::LG, spacing::XXL, spacing::LG],
         },
-        "markdown" => DemoCanvasPolicy {
+        "code" | "markdown" => DemoCanvasPolicy {
             center_x: true,
             center_y: false,
             fill_height: false,
@@ -953,6 +1004,32 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let mut switch_checked = use_signal(|| false);
     let mut toggle_pressed = use_signal(|| false);
     let mut toggle_values = use_signal(|| vec!["bold".to_string()]);
+    // Dual-mode demo signals (controlled half). Uncontrolled halves omit value/open.
+    let mut accordion_uc_note = use_signal(|| "Uses default_value only.".to_string());
+    let mut checkbox_uc_label = use_signal(|| false);
+    let mut switch_uc_note = use_signal(|| "default_checked=false".to_string());
+    let mut toggle_uc_note = use_signal(|| "default_checked=false".to_string());
+    let mut toggle_group_uc_note = use_signal(|| "default: bold".to_string());
+    let mut radio_uc_note = use_signal(|| "default: Comfortable".to_string());
+    let mut tabs_active = use_signal(|| 0_usize);
+    let mut collapsible_open = use_signal(|| true);
+    let mut collapsible_uc_note = use_signal(|| "default_open=true".to_string());
+    let mut select_uc_note = use_signal(|| "default: Apple".to_string());
+    let mut select_open_uc_note = use_signal(|| "open unmanaged".to_string());
+    let mut carousel_uc_note = use_signal(|| "default_index=0".to_string());
+    let mut date_picker_uc_selected = use_signal(|| None::<String>);
+    let mut date_picker_uc_note = use_signal(|| "selection/open unmanaged".to_string());
+    let mut dialog_uc_gen = use_signal(|| 0_u64);
+    let mut alert_uc_gen = use_signal(|| 0_u64);
+    let mut sheet_uc_gen = use_signal(|| 0_u64);
+    let mut popover_uc_note = use_signal(|| "open unmanaged".to_string());
+    let mut hover_uc_note = use_signal(|| "open unmanaged".to_string());
+    let mut tooltip_uc_note = use_signal(|| "open unmanaged".to_string());
+    let mut menu_uc_note = use_signal(|| "open unmanaged".to_string());
+    let mut context_uc_note = use_signal(|| "open unmanaged".to_string());
+    let mut menubar_uc_note = use_signal(|| "active unmanaged".to_string());
+    let mut input_controlled = use_signal(|| "hello".to_string());
+    let mut textarea_controlled = use_signal(|| "Draft notes…".to_string());
     let mut otp_value = use_signal(String::new);
     let mut otp_invalid = use_signal(|| false);
     let mut otp_status = use_signal(|| "Enter the six-digit code.".to_string());
@@ -1025,49 +1102,31 @@ fn ComponentDemo(slug: &'static str) -> Element {
         "accordion" => rsx! {
             fixed_width {
                 width: 512.0,
-                Accordion {
-                    items: vec![
-                        AccordionItemSpec::new(
-                            "Product Information",
-                            "item-1",
-                            rsx! {
-                                column {
-                                    percent_width: 1.0,
-                                    Text { content: "Our flagship product combines cutting-edge technology with sleek design. Built with premium materials, it offers unparalleled performance and reliability.".to_string(), variant: TextVariant::Muted }
-                                    v_gap { height: spacing::LG }
-                                    Text { content: "Key features include advanced processing capabilities, and an intuitive user interface designed for both beginners and experts.".to_string(), variant: TextVariant::Muted }
-                                }
-                            },
-                        ),
-                        AccordionItemSpec::new(
-                            "Shipping Details",
-                            "item-2",
-                            rsx! {
-                                column {
-                                    percent_width: 1.0,
-                                    Text { content: "We offer worldwide shipping through trusted courier partners. Standard delivery takes 3-5 business days, while express shipping ensures delivery within 1-2 business days.".to_string(), variant: TextVariant::Muted }
-                                    v_gap { height: spacing::LG }
-                                    Text { content: "All orders are carefully packaged and fully insured. Track your shipment in real-time through our dedicated tracking portal.".to_string(), variant: TextVariant::Muted }
-                                }
-                            },
-                        ),
-                        AccordionItemSpec::new(
-                            "Return Policy",
-                            "item-3",
-                            rsx! {
-                                column {
-                                    percent_width: 1.0,
-                                    Text { content: "We stand behind our products with a comprehensive 30-day return policy. If you're not completely satisfied, simply return the item in its original condition.".to_string(), variant: TextVariant::Muted }
-                                    v_gap { height: spacing::LG }
-                                    Text { content: "Our hassle-free return process includes free return shipping and full refunds processed within 48 hours of receiving the returned item.".to_string(), variant: TextVariant::Muted }
-                                }
-                            },
-                        ),
-                    ],
-                    value: Some(accordion_value()),
-                    default_value: Some("item-1".to_string()),
-                    collapsible: true,
-                    on_value_change: move |value| accordion_value.set(value),
+                column {
+                    width: "100%",
+                    demo_mode_label {
+                        title: "Controlled".to_string(),
+                        detail: Some(format!("value = {:?}", accordion_value())),
+                    }
+                    Accordion {
+                        items: accordion_demo_items(),
+                        value: Some(accordion_value()),
+                        collapsible: true,
+                        on_value_change: move |value| accordion_value.set(value),
+                    }
+                    {demo_mode_divider()}
+                    demo_mode_label {
+                        title: "Uncontrolled".to_string(),
+                        detail: Some(accordion_uc_note()),
+                    }
+                    Accordion {
+                        items: accordion_demo_items(),
+                        default_value: Some("item-1".to_string()),
+                        collapsible: true,
+                        on_value_change: move |value| {
+                            accordion_uc_note.set(format!("on_value_change = {:?}", value));
+                        },
+                    }
                 }
             }
         },
@@ -1075,7 +1134,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
             fixed_width {
                 width: 576.0,
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     Alert {
                         icon: "circle-check".to_string(),
                         AlertTitle { content: "Success! Your changes have been saved".to_string() }
@@ -1105,10 +1164,17 @@ fn ComponentDemo(slug: &'static str) -> Element {
             }
         },
         "alert-dialog" => rsx! {
-            Button {
-                variant: ButtonVariant::Outline,
-                onclick: move |_| alert_open.set(true),
-                "Show Alert Dialog"
+            column {
+                align_items: "start",
+                demo_mode_label {
+                    title: "Controlled".to_string(),
+                    detail: Some(format!("open = {}", alert_open())),
+                }
+                Button {
+                    variant: ButtonVariant::Outline,
+                    onclick: move |_| alert_open.set(true),
+                    "Show Alert Dialog"
+                }
             }
             AlertDialog {
                 title: "Are you absolutely sure?".to_string(),
@@ -1119,30 +1185,62 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 cancel: rsx! {
                     Button {
                         variant: ButtonVariant::Outline,
-                        percent_width: Some(1.0),
+                        width: "100%",
                         onclick: move |_| alert_open.set(false),
                         "Cancel"
                     }
                 },
                 action: rsx! {
                     Button {
-                        percent_width: Some(1.0),
+                        width: "100%",
                         onclick: move |_| alert_open.set(false),
                         "Continue"
                     }
                 },
             }
+            {demo_mode_divider()}
+            demo_mode_label {
+                title: "Uncontrolled".to_string(),
+                detail: Some("default_open + internal state; actions call use_dialog_close".to_string()),
+            }
+            Button {
+                variant: ButtonVariant::Outline,
+                onclick: move |_| alert_uc_gen.set(alert_uc_gen() + 1),
+                "Show Uncontrolled Alert"
+            }
+            if alert_uc_gen() > 0 {
+                AlertDialog {
+                    key: "{alert_uc_gen()}",
+                    title: "Uncontrolled dialog".to_string(),
+                    description: "Opened with default_open. Cancel/OK and backdrop dismiss via internal close.".to_string(),
+                    default_open: Some(true),
+                    on_close: move |_| {},
+                    cancel: rsx! {
+                        AlertDialogAction {
+                            width: "100%",
+                            variant: ButtonVariant::Outline,
+                            "Cancel"
+                        }
+                    },
+                    action: rsx! {
+                        AlertDialogAction {
+                            width: "100%",
+                            "OK"
+                        }
+                    },
+                }
+            }
         },
         "aspect-ratio" => rsx! {
             column {
-                percent_width: 1.0,
+                width: "100%",
                 AspectRatio {
                     ratio: 16.0 / 9.0,
                     image {
                         src: "https://images.unsplash.com/photo-1672758247442-82df22f5899e".to_string(),
-                        percent_width: 1.0,
-                        percent_height: 1.0,
-                        object_fit: 1_i32,
+                        width: "100%",
+                        height: "100%",
+                        object_fit: "cover",
                         border_radius: theme.radii.md,
                         clip: true,
                     }
@@ -1212,11 +1310,11 @@ fn ComponentDemo(slug: &'static str) -> Element {
 
             rsx! {
                 column {
-                    percent_width: 1.0,
-                    percent_height: 1.0,
+                    width: "100%",
+                    height: "100%",
                     background_color: theme.colors.card,
                     column {
-                        percent_width: 1.0,
+                        width: "100%",
                         layout_weight: 1.0,
                         align_items: "center",
                         justify_content: "center",
@@ -1251,9 +1349,16 @@ fn ComponentDemo(slug: &'static str) -> Element {
             }
         }
         "bottom-sheet" => rsx! {
-            Button {
-                onclick: move |_| bottom_sheet_open.set(true),
-                "Open"
+            column {
+                align_items: "start",
+                demo_mode_label {
+                    title: "Controlled".to_string(),
+                    detail: Some(format!("open = {}", bottom_sheet_open())),
+                }
+                Button {
+                    onclick: move |_| bottom_sheet_open.set(true),
+                    "Open"
+                }
             }
             BottomSheet {
                 title: "Edit your profile".to_string(),
@@ -1261,7 +1366,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 default_open: Some(false),
                 on_close: move |_| bottom_sheet_open.set(false),
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     Label { content: "Name".to_string() }
                     v_gap { height: 10.0 }
                     BottomSheetTextInput {
@@ -1277,17 +1382,39 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     v_gap { height: spacing::XL }
                     Button {
-                        percent_width: Some(1.0),
+                        width: "100%",
                         onclick: move |_| bottom_sheet_open.set(false),
                         "Save Changes"
+                    }
+                }
+            }
+            {demo_mode_divider()}
+            demo_mode_label {
+                title: "Uncontrolled".to_string(),
+                detail: Some("default_open via remount key".to_string()),
+            }
+            Button {
+                variant: ButtonVariant::Outline,
+                onclick: move |_| sheet_uc_gen.set(sheet_uc_gen() + 1),
+                "Open Uncontrolled Sheet"
+            }
+            if sheet_uc_gen() > 0 {
+                BottomSheet {
+                    key: "{sheet_uc_gen()}",
+                    title: "Uncontrolled sheet".to_string(),
+                    default_open: Some(true),
+                    on_close: move |_| {},
+                    Text {
+                        content: "Dismiss uses internal open state.".to_string(),
+                        variant: TextVariant::Muted,
                     }
                 }
             }
         },
         "button" => rsx! {
             column {
-                percent_width: 1.0,
-                percent_height: 1.0,
+                width: "100%",
+                height: "100%",
                 align_items: "center",
                 justify_content: "center",
                 Button { onclick: move |_| {}, "Default" }
@@ -1309,7 +1436,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
         },
         "calendar" => rsx! {
             column {
-                percent_width: 1.0,
+                width: "100%",
                 Calendar {
                     selected: calendar_selected(),
                     on_day_press: move |date| calendar_selected.set(Some(date)),
@@ -1376,8 +1503,8 @@ fn ComponentDemo(slug: &'static str) -> Element {
             .map(|(index, (icon, title, description))| {
                 rsx! {
                     column {
-                        percent_width: 1.0,
-                        percent_height: 1.0,
+                        width: "100%",
+                        height: "100%",
                         align_items: "center",
                         justify_content: "center",
                         padding_top: spacing::XXL,
@@ -1393,7 +1520,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                             font_weight: 600_i32,
                             font_color: theme.colors.card_foreground,
                             line_height: 28.0,
-                            text_align: 1_i32,
+                            text_align: "center",
                         }
                         v_gap { height: spacing::SM }
                         text {
@@ -1401,7 +1528,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                             font_size: typography::SM,
                             font_color: theme.colors.muted_foreground,
                             line_height: 20.0,
-                            text_align: 1_i32,
+                            text_align: "center",
                         }
                         v_gap { height: spacing::XL }
                         text {
@@ -1415,46 +1542,58 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 }
             })
             .collect();
-            let overlay_slides = ["First", "Second", "Third", "Fourth"]
-                .into_iter()
-                .enumerate()
-                .map(|(index, label)| {
-                    rsx! {
-                        column {
-                            percent_width: 1.0,
-                            percent_height: 1.0,
-                            align_items: "center",
-                            justify_content: "center",
-                            background_color: theme.colors.muted,
-                            text {
-                                content: (index + 1).to_string(),
-                                font_size: 64.0,
-                                font_weight: 700_i32,
-                                font_color: theme.colors.foreground,
-                                line_height: 72.0,
-                            }
-                            v_gap { height: spacing::SM }
-                            text {
-                                content: label,
-                                font_size: typography::SM,
-                                font_weight: 500_i32,
-                                font_color: theme.colors.muted_foreground,
-                                line_height: 20.0,
+            let make_overlay_slides = || {
+                ["First", "Second", "Third", "Fourth"]
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, label)| {
+                        rsx! {
+                            column {
+                                width: "100%",
+                                height: "100%",
+                                align_items: "center",
+                                justify_content: "center",
+                                background_color: theme.colors.muted,
+                                text {
+                                    content: (index + 1).to_string(),
+                                    font_size: 64.0,
+                                    font_weight: 700_i32,
+                                    font_color: theme.colors.foreground,
+                                    line_height: 72.0,
+                                }
+                                v_gap { height: spacing::SM }
+                                text {
+                                    content: label,
+                                    font_size: typography::SM,
+                                    font_weight: 500_i32,
+                                    font_color: theme.colors.muted_foreground,
+                                    line_height: 20.0,
+                                }
                             }
                         }
-                    }
-                })
-                .collect();
+                    })
+                    .collect::<Vec<_>>()
+            };
+            let overlay_slides = make_overlay_slides();
+            let overlay_slides_uc = make_overlay_slides();
 
             rsx! {
                 fixed_width {
                     width: 336.0,
                     column {
-                        percent_width: 1.0,
+                        width: "100%",
+                        demo_mode_label {
+                            title: "Controlled".to_string(),
+                            detail: Some(format!(
+                                "index = {}, overlay = {}",
+                                carousel_index(),
+                                carousel_overlay_index()
+                            )),
+                        }
                         Carousel {
                             slides,
                             index: Some(carousel_index()),
-                            height: 300.0,
+                            height: 280.0,
                             indicator_variant: CarouselIndicatorVariant::Pill,
                             style: CarouselStyle {
                                 viewport_radius: Some(theme.radii.xxl),
@@ -1465,11 +1604,11 @@ fn ComponentDemo(slug: &'static str) -> Element {
                             },
                             on_change: move |index| carousel_index.set(index),
                         }
-                        v_gap { height: spacing::XXL }
+                        v_gap { height: spacing::LG }
                         Carousel {
                             slides: overlay_slides,
                             index: Some(carousel_overlay_index()),
-                            height: 220.0,
+                            height: 180.0,
                             show_indicators: false,
                             controls_placement: CarouselControlsPlacement::OverlayCenter,
                             style: CarouselStyle {
@@ -1481,6 +1620,23 @@ fn ComponentDemo(slug: &'static str) -> Element {
                             },
                             on_change: move |index| carousel_overlay_index.set(index),
                         }
+                        {demo_mode_divider()}
+                        demo_mode_label {
+                            title: "Uncontrolled".to_string(),
+                            detail: Some(carousel_uc_note()),
+                        }
+                        Carousel {
+                            slides: overlay_slides_uc,
+                            default_index: 0,
+                            height: 160.0,
+                            style: CarouselStyle {
+                                viewport_radius: Some(theme.radii.xxl),
+                                ..CarouselStyle::default()
+                            },
+                            on_change: move |index| {
+                                carousel_uc_note.set(format!("on_change = {index}"));
+                            },
+                        }
                     }
                 }
             }
@@ -1489,54 +1645,32 @@ fn ComponentDemo(slug: &'static str) -> Element {
             fixed_width {
                 width: 384.0,
                 column {
-                    percent_width: 1.0,
-                    row {
-                        align_self: "start",
-                        align_items: "center",
-                        justify_content: "start",
-                        Checkbox {
-                            label: Some("Accept terms and conditions".to_string()),
-                            checked: Some(checkbox_first()),
-                            on_change: Some(EventHandler::new(move |value| checkbox_first.set(value))),
-                        }
+                    width: "100%",
+                    demo_mode_label {
+                        title: "Controlled".to_string(),
+                        detail: Some(format!(
+                            "a={}, b={}, card={}",
+                            checkbox_first(),
+                            checkbox_second(),
+                            checkbox_card()
+                        )),
                     }
-                    v_gap { height: spacing::XXL }
-                    column {
-                        align_self: "start",
+                    Checkbox {
+                        label: Some("Accept terms and conditions".to_string()),
+                        checked: Some(checkbox_first()),
+                        on_change: Some(EventHandler::new(move |value| checkbox_first.set(value))),
+                    }
+                    v_gap { height: spacing::LG }
+                    Checkbox {
+                        label: Some("Marketing emails".to_string()),
+                        checked: Some(checkbox_second()),
+                        on_change: Some(EventHandler::new(move |value| checkbox_second.set(value))),
+                    }
+                    v_gap { height: spacing::LG }
+                    row {
+                        width: "100%",
                         align_items: "start",
-                        Checkbox {
-                            label: Some("Accept terms and conditions".to_string()),
-                            checked: Some(checkbox_second()),
-                            on_change: Some(EventHandler::new(move |value| checkbox_second.set(value))),
-                        }
-                        row {
-                            margin_top: spacing::SM,
-                            margin_left: spacing::XXL,
-                            Text { content: "By clicking this checkbox, you agree to the terms and conditions.".to_string(), variant: TextVariant::Muted }
-                        }
-                    }
-                    v_gap { height: spacing::XXL }
-                    row {
-                        align_self: "start",
-                        align_items: "center",
-                        justify_content: "start",
-                        Checkbox {
-                            label: Some("Enable notifications".to_string()),
-                            checked: Some(false),
-                            default_checked: Some(false),
-                            disabled: Some(true),
-                        }
-                    }
-                    v_gap { height: spacing::XXL }
-                    row {
-                        percent_width: 1.0,
-                        align_self: "start",
-                        align_items: "start",
-                        justify_content: "start",
-                        padding_top: 12.0,
-                        padding_right: 12.0,
-                        padding_bottom: 12.0,
-                        padding_left: 12.0,
+                        padding: 12.0,
                         border_width: 1.0,
                         border_color: if checkbox_card() { 0xFF2563EBu32 } else { theme.colors.border },
                         border_radius: theme.radii.lg,
@@ -1552,17 +1686,30 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         column {
                             layout_weight: 1.0,
                             align_items: "start",
-                            text {
-                                content: "Enable notifications".to_string(),
-                                percent_width: 1.0,
-                                font_size: typography::SM,
-                                font_weight: 500_i32,
-                                font_color: theme.colors.foreground,
-                                line_height: 14.0,
-                            }
-                            v_gap { height: spacing::SM }
-                            Text { content: "You can enable or disable notifications at any time.".to_string(), variant: TextVariant::Muted }
+                            Text { content: "Enable notifications".to_string(), variant: TextVariant::Small }
+                            Text { content: "You can enable or disable anytime.".to_string(), variant: TextVariant::Muted }
                         }
+                    }
+                    {demo_mode_divider()}
+                    demo_mode_label {
+                        title: "Uncontrolled".to_string(),
+                        detail: Some("default_checked=true; parent only observes on_change".to_string()),
+                    }
+                    Checkbox {
+                        label: Some("Remember me".to_string()),
+                        default_checked: Some(true),
+                        on_change: Some(EventHandler::new(move |value| checkbox_uc_label.set(value))),
+                    }
+                    v_gap { height: spacing::SM }
+                    Text {
+                        content: format!("last on_change = {}", checkbox_uc_label()),
+                        variant: TextVariant::Muted,
+                    }
+                    v_gap { height: spacing::LG }
+                    Checkbox {
+                        label: Some("Disabled".to_string()),
+                        default_checked: Some(false),
+                        disabled: Some(true),
                     }
                 }
             }
@@ -1570,18 +1717,44 @@ fn ComponentDemo(slug: &'static str) -> Element {
         "collapsible" => rsx! {
             fixed_width {
                 width: 350.0,
-                Collapsible {
-                    title: "@peduarte starred 3 repositories".to_string(),
-                    open: Some(toggle_pressed()),
-                    default_open: true,
-                    on_open_change: EventHandler::new(move |value| toggle_pressed.set(value)),
-                    column {
-                        percent_width: 1.0,
-                        repo_row { name: "@radix-ui/primitives".to_string() }
-                        v_gap { height: spacing::SM }
-                        repo_row { name: "@radix-ui/react".to_string() }
-                        v_gap { height: spacing::SM }
-                        repo_row { name: "@stitches/core".to_string() }
+                column {
+                    width: "100%",
+                    demo_mode_label {
+                        title: "Controlled".to_string(),
+                        detail: Some(format!("open = {}", collapsible_open())),
+                    }
+                    Collapsible {
+                        title: "@peduarte starred 3 repositories".to_string(),
+                        open: Some(collapsible_open()),
+                        on_open_change: EventHandler::new(move |value| collapsible_open.set(value)),
+                        column {
+                            width: "100%",
+                            repo_row { name: "@radix-ui/primitives".to_string() }
+                            v_gap { height: spacing::SM }
+                            repo_row { name: "@radix-ui/react".to_string() }
+                            v_gap { height: spacing::SM }
+                            repo_row { name: "@stitches/core".to_string() }
+                        }
+                    }
+                    {demo_mode_divider()}
+                    demo_mode_label {
+                        title: "Uncontrolled".to_string(),
+                        detail: Some(collapsible_uc_note()),
+                    }
+                    Collapsible {
+                        title: "Uncontrolled collapsible".to_string(),
+                        default_open: true,
+                        on_open_change: EventHandler::new(move |value| {
+                            collapsible_uc_note.set(format!("on_open_change = {value}"));
+                        }),
+                        column {
+                            width: "100%",
+                            repo_row { name: "@radix-ui/primitives".to_string() }
+                            v_gap { height: spacing::SM }
+                            repo_row { name: "@radix-ui/react".to_string() }
+                            v_gap { height: spacing::SM }
+                            repo_row { name: "@stitches/core".to_string() }
+                        }
                     }
                 }
             }
@@ -1590,7 +1763,11 @@ fn ComponentDemo(slug: &'static str) -> Element {
             fixed_width {
                 width: 300.0,
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
+                    demo_mode_label {
+                        title: "Controlled".to_string(),
+                        detail: Some(format!("open = {}", context_open())),
+                    }
                     ContextMenu {
                         open: Some(context_open()),
                         default_open: false,
@@ -1606,49 +1783,114 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         ),
                         stack {
                             width: 300.0,
-                            height: 150.0,
-                            alignment: 4_i32,
+                            height: 120.0,
+                            alignment: "center",
                             border_width: 1.0,
                             border_color: theme.colors.foreground,
                             border_radius: theme.radii.md,
-                            border_style: 1_i32,
+                            border_style: "dashed",
                             clip: true,
                             text {
-                                content: "Long press here".to_string(),
+                                content: "Long press (controlled)".to_string(),
                                 font_size: typography::LG,
                                 font_color: theme.colors.foreground,
                                 line_height: 22.0,
                             }
                         }
                     }
-                    v_gap { height: spacing::LG }
+                    v_gap { height: spacing::MD }
                     Button {
                         variant: ButtonVariant::Outline,
-                        percent_width: Some(1.0),
+                        width: "100%",
                         onclick: move |_| context_outside_clicks += 1,
                         "Outside click · {context_outside_clicks()}"
                     }
-                    v_gap { height: spacing::SM }
-                    Text {
-                        content: "With the menu open, the first click closes it without activating the button. The next click increments the count.".to_string(),
-                        variant: TextVariant::Muted,
+                    {demo_mode_divider()}
+                    demo_mode_label {
+                        title: "Uncontrolled".to_string(),
+                        detail: Some(context_uc_note()),
+                    }
+                    ContextMenu {
+                        default_open: false,
+                        on_open_change: move |value| {
+                            context_uc_note.set(format!("on_open_change = {value}"));
+                        },
+                        width: Some(288.0),
+                        items: context_menu_items(
+                            context_bookmarks(),
+                            context_full_urls(),
+                            context_person(),
+                            EventHandler::new(move |value| context_bookmarks.set(value)),
+                            EventHandler::new(move |value| context_full_urls.set(value)),
+                            EventHandler::new(move |value| context_person.set(value)),
+                        ),
+                        stack {
+                            width: 300.0,
+                            height: 100.0,
+                            alignment: "center",
+                            border_width: 1.0,
+                            border_color: theme.colors.border,
+                            border_radius: theme.radii.md,
+                            border_style: "dashed",
+                            clip: true,
+                            text {
+                                content: "Long press (uncontrolled)".to_string(),
+                                font_size: typography::MD,
+                                font_color: theme.colors.foreground,
+                                line_height: 20.0,
+                            }
+                        }
                     }
                 }
             }
         },
         "date-picker" => rsx! {
-            DatePicker {
-                selected: date_picker_selected(),
-                open: Some(date_picker_open()),
-                on_change: move |date| date_picker_selected.set(date),
-                on_open_change: move |open| date_picker_open.set(open),
+            column {
+                align_items: "start",
+                demo_mode_label {
+                    title: "Controlled".to_string(),
+                    detail: Some(format!(
+                        "selected = {:?}, open = {}",
+                        date_picker_selected(),
+                        date_picker_open()
+                    )),
+                }
+                DatePicker {
+                    selected: date_picker_selected(),
+                    open: Some(date_picker_open()),
+                    on_change: move |date| date_picker_selected.set(date),
+                    on_open_change: move |open| date_picker_open.set(open),
+                }
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Uncontrolled open".to_string(),
+                    detail: Some(date_picker_uc_note()),
+                }
+                DatePicker {
+                    selected: date_picker_uc_selected(),
+                    default_open: false,
+                    on_change: move |date: Option<String>| {
+                        date_picker_uc_selected.set(date.clone());
+                        date_picker_uc_note.set(format!("on_change = {:?}", date));
+                    },
+                    on_open_change: move |open| {
+                        date_picker_uc_note.set(format!("on_open_change = {open}"));
+                    },
+                }
             }
         },
         "dialog" => rsx! {
-            Button {
-                variant: ButtonVariant::Outline,
-                onclick: move |_| dialog_open.set(true),
-                "Edit Profile"
+            column {
+                align_items: "start",
+                demo_mode_label {
+                    title: "Controlled".to_string(),
+                    detail: Some(format!("open = {}", dialog_open())),
+                }
+                Button {
+                    variant: ButtonVariant::Outline,
+                    onclick: move |_| dialog_open.set(true),
+                    "Edit Profile"
+                }
             }
             Dialog {
                 open: Some(dialog_open()),
@@ -1659,7 +1901,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     description: Some("Make changes to your profile here. Click save when you're done.".to_string()),
                 }
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     align_items: "start",
                     margin_top: spacing::XL,
                     Label { content: "Name".to_string() }
@@ -1667,7 +1909,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     Input {
                         value: Some(dialog_name()),
                         placeholder: Some("Your name".to_string()),
-                        percent_width: Some(1.0),
+                        width: "100%",
                         on_change: move |value| dialog_name.set(value),
                     }
                     v_gap { height: spacing::LG }
@@ -1676,7 +1918,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     Input {
                         value: Some(dialog_username()),
                         placeholder: Some("@username".to_string()),
-                        percent_width: Some(1.0),
+                        width: "100%",
                         on_change: move |value| dialog_username.set(value),
                     }
                 }
@@ -1693,17 +1935,65 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                 }
             }
+            {demo_mode_divider()}
+            demo_mode_label {
+                title: "Uncontrolled".to_string(),
+                detail: Some("default_open via remount key".to_string()),
+            }
+            Button {
+                variant: ButtonVariant::Outline,
+                onclick: move |_| dialog_uc_gen.set(dialog_uc_gen() + 1),
+                "Open Uncontrolled Dialog"
+            }
+            if dialog_uc_gen() > 0 {
+                Dialog {
+                    key: "{dialog_uc_gen()}",
+                    default_open: Some(true),
+                    on_close: move |_| {},
+                    DialogHeader {
+                        title: "Uncontrolled".to_string(),
+                        description: Some("Opened with default_open; dismiss uses internal state.".to_string()),
+                    }
+                    DialogFooter {
+                        Button {
+                            onclick: move |_| {},
+                            "Close"
+                        }
+                    }
+                }
+            }
         },
         "dropdown-menu" => rsx! {
             fixed_width {
                 width: 384.0,
-                DropdownMenu {
-                    open: Some(menu_open()),
-                    default_open: false,
-                    on_open_change: Some(EventHandler::new(move |value| menu_open.set(value))),
-                    width: Some(288.0),
-                    items: dropdown_menu_items(),
-                    Button { variant: ButtonVariant::Outline, onclick: move |_| {}, "Open" }
+                column {
+                    width: "100%",
+                    demo_mode_label {
+                        title: "Controlled".to_string(),
+                        detail: Some(format!("open = {}", menu_open())),
+                    }
+                    DropdownMenu {
+                        open: Some(menu_open()),
+                        default_open: false,
+                        on_open_change: Some(EventHandler::new(move |value| menu_open.set(value))),
+                        width: Some(288.0),
+                        items: dropdown_menu_items(),
+                        Button { variant: ButtonVariant::Outline, onclick: move |_| {}, "Open" }
+                    }
+                    {demo_mode_divider()}
+                    demo_mode_label {
+                        title: "Uncontrolled".to_string(),
+                        detail: Some(menu_uc_note()),
+                    }
+                    DropdownMenu {
+                        default_open: false,
+                        on_open_change: Some(EventHandler::new(move |value| {
+                            menu_uc_note.set(format!("on_open_change = {value}"));
+                        })),
+                        width: Some(288.0),
+                        items: dropdown_menu_items(),
+                        Button { variant: ButtonVariant::Outline, onclick: move |_| {}, "Open (uncontrolled)" }
+                    }
                 }
             }
         },
@@ -1711,26 +2001,26 @@ fn ComponentDemo(slug: &'static str) -> Element {
             fixed_width {
                 width: 440.0,
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     height: 1110.0,
                     align_items: "start",
                     text {
                         content: "Account settings".to_string(),
-                        percent_width: 1.0,
+                        width: "100%",
                         font_size: typography::XXL,
                         font_weight: 700_i32,
                         font_color: theme.colors.foreground,
                         line_height: 32.0,
-                        text_align: 0_i32,
+                        text_align: "start",
                     }
                     v_gap { height: spacing::SM }
                     text {
                         content: "Update your public profile and communication preferences.".to_string(),
-                        percent_width: 1.0,
+                        width: "100%",
                         font_size: typography::SM,
                         font_color: theme.colors.muted_foreground,
                         line_height: 20.0,
-                        text_align: 0_i32,
+                        text_align: "start",
                     }
                     v_gap { height: spacing::XXL }
                     Form {
@@ -1760,7 +2050,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                                     Input {
                                         value: Some(form_name()),
                                         placeholder: Some("Your name".to_string()),
-                                        percent_width: Some(1.0),
+                                        width: "100%",
                                         invalid: form_name_invalid,
                                         on_change: move |value| {
                                             form_name.set(value);
@@ -1776,7 +2066,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                                     Input {
                                         value: Some(form_email()),
                                         placeholder: Some("name@example.com".to_string()),
-                                        percent_width: Some(1.0),
+                                        width: "100%",
                                         invalid: form_email_invalid,
                                         on_change: move |value| {
                                             form_email.set(value);
@@ -1791,7 +2081,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                                         value: Some(form_bio()),
                                         placeholder: Some("Tell people a little about yourself.".to_string()),
                                         height: Some(96.0),
-                                        percent_width: Some(1.0),
+                                        width: "100%",
                                         on_change: move |value| {
                                             form_bio.set(value);
                                             form_status.set(None);
@@ -1829,7 +2119,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                                 },
                             }
                             row {
-                                percent_width: 1.0,
+                                width: "100%",
                                 margin_top: spacing::XS,
                                 padding_left: spacing::XXL,
                                 FieldDescription {
@@ -1844,7 +2134,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         }
                         if let Some(success) = form_status() {
                             row {
-                                percent_width: 1.0,
+                                width: "100%",
                                 align_items: "center",
                                 justify_content: "start",
                                 margin_bottom: spacing::LG,
@@ -1871,12 +2161,12 @@ fn ComponentDemo(slug: &'static str) -> Element {
                                         } else {
                                             "Review the highlighted fields and try again.".to_string()
                                         },
-                                        percent_width: 1.0,
+                                        width: "100%",
                                         font_size: typography::XS,
                                         font_weight: 500_i32,
                                         font_color: if success { theme.colors.chart_2 } else { theme.colors.destructive },
                                         line_height: 18.0,
-                                        text_align: 0_i32,
+                                        text_align: "start",
                                     }
                                 }
                             }
@@ -1888,47 +2178,56 @@ fn ComponentDemo(slug: &'static str) -> Element {
         "hover-card" => rsx! {
             fixed_width {
                 width: 320.0,
-                HoverCard {
-                    open: Some(hover_open()),
-                    default_open: Some(false),
-                    on_close: move |_| hover_open.set(false),
-                    on_open_change: move |value| hover_open.set(value),
-                    width: Some(320.0),
-                    trigger: rsx! { Button { variant: ButtonVariant::Link, onclick: move |_| {}, "@expo" } },
-                    row {
-                        percent_width: 1.0,
-                        align_items: "start",
-                        justify_content: "start",
-                        {demo_avatar("https://github.com/expo.png", "E", false, None)}
-                        h_gap { width: spacing::LG }
-                        column {
-                            layout_weight: 1.0,
+                column {
+                    width: "100%",
+                    demo_mode_label {
+                        title: "Controlled".to_string(),
+                        detail: Some(format!("open = {}", hover_open())),
+                    }
+                    HoverCard {
+                        open: Some(hover_open()),
+                        default_open: Some(false),
+                        on_close: move |_| hover_open.set(false),
+                        on_open_change: move |value| hover_open.set(value),
+                        width: Some(320.0),
+                        trigger: rsx! { Button { variant: ButtonVariant::Link, onclick: move |_| {}, "@expo" } },
+                        row {
+                            width: "100%",
                             align_items: "start",
-                            justify_content: "start",
-                            text {
-                                content: "@expo".to_string(),
-                                font_size: typography::SM,
-                                font_weight: 600_i32,
-                                font_color: theme.colors.foreground,
-                                line_height: 20.0,
-                                text_align: 0_i32,
+                            {demo_avatar("https://github.com/expo.png", "E", false, None)}
+                            h_gap { width: spacing::LG }
+                            column {
+                                layout_weight: 1.0,
+                                align_items: "start",
+                                text {
+                                    content: "@expo".to_string(),
+                                    font_size: typography::SM,
+                                    font_weight: 600_i32,
+                                    font_color: theme.colors.foreground,
+                                    line_height: 20.0,
+                                }
+                                Text {
+                                    content: "Framework and tools for creating native apps with React.".to_string(),
+                                    variant: TextVariant::Muted,
+                                }
                             }
-                            v_gap { height: 4.0 }
-                            text {
-                                content: "Framework and tools for creating native apps with React.".to_string(),
-                                font_size: typography::SM,
-                                font_color: theme.colors.foreground,
-                                line_height: 20.0,
-                                text_align: 0_i32,
-                            }
-                            v_gap { height: 4.0 }
-                            text {
-                                content: "Joined December 2021".to_string(),
-                                font_size: typography::XS,
-                                font_color: theme.colors.muted_foreground,
-                                line_height: 16.0,
-                                text_align: 0_i32,
-                            }
+                        }
+                    }
+                    {demo_mode_divider()}
+                    demo_mode_label {
+                        title: "Uncontrolled".to_string(),
+                        detail: Some(hover_uc_note()),
+                    }
+                    HoverCard {
+                        default_open: Some(false),
+                        on_open_change: move |value| {
+                            hover_uc_note.set(format!("on_open_change = {value}"));
+                        },
+                        width: Some(280.0),
+                        trigger: rsx! { Button { variant: ButtonVariant::Link, onclick: move |_| {}, "@shadcn" } },
+                        Text {
+                            content: "Hover card with internal open state.".to_string(),
+                            variant: TextVariant::Muted,
                         }
                     }
                 }
@@ -1965,17 +2264,38 @@ fn ComponentDemo(slug: &'static str) -> Element {
         "input" => rsx! {
             fixed_width {
                 width: 384.0,
-                Input { placeholder: Some("Email".to_string()), percent_width: Some(1.0) }
+                column {
+                    width: "100%",
+                    demo_mode_label {
+                        title: "Controlled".to_string(),
+                        detail: Some(format!("value = {:?}", input_controlled())),
+                    }
+                    Input {
+                        placeholder: Some("Email".to_string()),
+                        value: Some(input_controlled()),
+                        width: "100%",
+                        on_change: Some(EventHandler::new(move |value| input_controlled.set(value))),
+                    }
+                    {demo_mode_divider()}
+                    demo_mode_label {
+                        title: "Uncontrolled".to_string(),
+                        detail: Some("omit value — native field owns text".to_string()),
+                    }
+                    Input {
+                        placeholder: Some("Uncontrolled input".to_string()),
+                        width: "100%",
+                    }
+                }
             }
         },
         "input-otp" => rsx! {
             fixed_width {
                 width: 420.0,
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     align_items: "start",
                     text {
-                        percent_width: 1.0,
+                        width: "100%",
                         content: "Verify your email".to_string(),
                         font_size: typography::XXL,
                         font_weight: 700_i32,
@@ -1984,7 +2304,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     v_gap { height: spacing::SM }
                     text {
-                        percent_width: 1.0,
+                        width: "100%",
                         content: "Enter the verification code sent to m@example.com.".to_string(),
                         font_size: typography::SM,
                         font_weight: 400_i32,
@@ -2015,7 +2335,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     v_gap { height: spacing::SM }
                     text {
-                        percent_width: 1.0,
+                        width: "100%",
                         content: otp_status(),
                         font_size: typography::XS,
                         font_weight: 400_i32,
@@ -2028,7 +2348,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     v_gap { height: spacing::XL }
                     Button {
-                        percent_width: Some(1.0),
+                        width: "100%",
                         disabled: Some(otp_value().chars().count() != 6),
                         onclick: move |_| {
                             if otp_value() == "246810" {
@@ -2042,7 +2362,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     Button {
                         variant: ButtonVariant::Link,
-                        percent_width: Some(1.0),
+                        width: "100%",
                         onclick: move |_| {
                             otp_value.set(String::new());
                             otp_invalid.set(false);
@@ -2105,6 +2425,40 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 Label { content: "Accept terms and conditions".to_string() }
             }
         },
+        "code" => rsx! {
+            fixed_width {
+                width: 640.0,
+                column {
+                    width: "100%",
+                    align_items: "start",
+                    Text {
+                        content: "Standalone Code (feature = code)".to_string(),
+                        variant: TextVariant::Small,
+                    }
+                    v_gap { height: spacing::SM }
+                    Text {
+                        content: "No Markdown required. Toggle theme to compare palettes.".to_string(),
+                        variant: TextVariant::Muted,
+                    }
+                    v_gap { height: spacing::MD }
+                    Code {
+                        source: CODE_STANDALONE_RUST.to_string(),
+                        language: Some("rust".to_string()),
+                    }
+                    v_gap { height: spacing::LG }
+                    Code {
+                        source: CODE_STANDALONE_JSON.to_string(),
+                        language: Some("json".to_string()),
+                    }
+                    v_gap { height: spacing::LG }
+                    Code {
+                        source: "plain monospace without highlighting".to_string(),
+                        language: None,
+                        highlight: false,
+                    }
+                }
+            }
+        },
         "markdown" => {
             let chunk_index = markdown_chunk_index();
             let complete = chunk_index == MARKDOWN_STREAM_CHUNKS.len();
@@ -2139,8 +2493,29 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 fixed_width {
                     width: 640.0,
                     column {
-                        percent_width: 1.0,
+                        width: "100%",
                         align_items: "start",
+                        Text {
+                            content: "Tree-sitter highlight".to_string(),
+                            variant: TextVariant::Small,
+                        }
+                        v_gap { height: spacing::SM }
+                        Text {
+                            content: "Static fences (rust / python / json / bash). Toggle theme to compare palettes.".to_string(),
+                            variant: TextVariant::Muted,
+                        }
+                        v_gap { height: spacing::MD }
+                        Markdown {
+                            source: MARKDOWN_HIGHLIGHT_SAMPLE.to_string(),
+                        }
+                        v_gap { height: spacing::XL }
+                        Separator {}
+                        v_gap { height: spacing::XL }
+                        Text {
+                            content: "Streaming document".to_string(),
+                            variant: TextVariant::Small,
+                        }
+                        v_gap { height: spacing::SM }
                         Text { content: status, variant: TextVariant::Muted }
                         v_gap { height: spacing::SM }
                         Progress {
@@ -2193,58 +2568,114 @@ fn ComponentDemo(slug: &'static str) -> Element {
             }
         }
         "menubar" => rsx! {
-            Menubar {
-                active: Some(menubar_active()),
-                default_active: None,
-                on_active_change: move |value| menubar_active.set(value),
-                menus: menubar_menus(
-                    context_bookmarks(),
-                    context_full_urls(),
-                    context_person(),
-                    EventHandler::new(move |value| context_bookmarks.set(value)),
-                    EventHandler::new(move |value| context_full_urls.set(value)),
-                    EventHandler::new(move |value| context_person.set(value)),
-                ),
+            column {
+                width: "100%",
+                demo_mode_label {
+                    title: "Controlled".to_string(),
+                    detail: Some(format!("active = {:?}", menubar_active())),
+                }
+                Menubar {
+                    active: Some(menubar_active()),
+                    default_active: None,
+                    on_active_change: move |value| menubar_active.set(value),
+                    menus: menubar_menus(
+                        context_bookmarks(),
+                        context_full_urls(),
+                        context_person(),
+                        EventHandler::new(move |value| context_bookmarks.set(value)),
+                        EventHandler::new(move |value| context_full_urls.set(value)),
+                        EventHandler::new(move |value| context_person.set(value)),
+                    ),
+                }
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Uncontrolled".to_string(),
+                    detail: Some(menubar_uc_note()),
+                }
+                Menubar {
+                    default_active: None,
+                    on_active_change: move |value| {
+                        menubar_uc_note.set(format!("on_active_change = {:?}", value));
+                    },
+                    menus: menubar_menus(
+                        context_bookmarks(),
+                        context_full_urls(),
+                        context_person(),
+                        EventHandler::new(move |value| context_bookmarks.set(value)),
+                        EventHandler::new(move |value| context_full_urls.set(value)),
+                        EventHandler::new(move |value| context_person.set(value)),
+                    ),
+                }
             }
         },
         "popover" => rsx! {
-            Popover {
-                open: Some(popover_open()),
-                default_open: Some(false),
-                on_close: move |_| popover_open.set(false),
-                on_open_change: move |value| popover_open.set(value),
-                width: Some(320.0),
-                trigger: rsx! { Button { variant: ButtonVariant::Outline, onclick: move |_| {}, "Open popover" } },
-                column {
-                    percent_width: 1.0,
-                    text {
-                        content: "Dimensions".to_string(),
-                        font_size: typography::MD,
-                        font_weight: 500_i32,
-                        font_color: theme.colors.foreground,
-                        line_height: 16.0,
+            column {
+                align_items: "start",
+                demo_mode_label {
+                    title: "Controlled".to_string(),
+                    detail: Some(format!("open = {}", popover_open())),
+                }
+                Popover {
+                    open: Some(popover_open()),
+                    default_open: Some(false),
+                    on_close: move |_| popover_open.set(false),
+                    on_open_change: move |value| popover_open.set(value),
+                    width: Some(320.0),
+                    trigger: rsx! { Button { variant: ButtonVariant::Outline, onclick: move |_| {}, "Open popover" } },
+                    column {
+                        width: "100%",
+                        text {
+                            content: "Dimensions".to_string(),
+                            font_size: typography::MD,
+                            font_weight: 500_i32,
+                            font_color: theme.colors.foreground,
+                            line_height: 16.0,
+                        }
+                        v_gap { height: spacing::SM }
+                        Text { content: "Set the dimensions for the layer.".to_string(), variant: TextVariant::Muted }
+                        v_gap { height: spacing::LG }
+                        popover_form_row {
+                            label: "Width".to_string(),
+                            value: "100%".to_string(),
+                        }
+                        v_gap { height: spacing::SM }
+                        popover_form_row {
+                            label: "Max. width".to_string(),
+                            value: "300px".to_string(),
+                        }
+                        v_gap { height: spacing::SM }
+                        popover_form_row {
+                            label: "Height".to_string(),
+                            value: "25px".to_string(),
+                        }
+                        v_gap { height: spacing::SM }
+                        popover_form_row {
+                            label: "Max. height".to_string(),
+                            value: "none".to_string(),
+                        }
                     }
-                    v_gap { height: spacing::SM }
-                    Text { content: "Set the dimensions for the layer.".to_string(), variant: TextVariant::Muted }
-                    v_gap { height: spacing::LG }
-                    popover_form_row {
-                        label: "Width".to_string(),
-                        value: "100%".to_string(),
-                    }
-                    v_gap { height: spacing::SM }
-                    popover_form_row {
-                        label: "Max. width".to_string(),
-                        value: "300px".to_string(),
-                    }
-                    v_gap { height: spacing::SM }
-                    popover_form_row {
-                        label: "Height".to_string(),
-                        value: "25px".to_string(),
-                    }
-                    v_gap { height: spacing::SM }
-                    popover_form_row {
-                        label: "Max. height".to_string(),
-                        value: "none".to_string(),
+                }
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Uncontrolled".to_string(),
+                    detail: Some(popover_uc_note()),
+                }
+                Popover {
+                    default_open: Some(false),
+                    on_open_change: move |value| {
+                        popover_uc_note.set(format!("on_open_change = {value}"));
+                    },
+                    width: Some(280.0),
+                    trigger: rsx! {
+                        Button {
+                            variant: ButtonVariant::Outline,
+                            onclick: move |_| {},
+                            "Open (uncontrolled)"
+                        }
+                    },
+                    Text {
+                        content: "Popover manages its own open state.".to_string(),
+                        variant: TextVariant::Muted,
                     }
                 }
             }
@@ -2253,7 +2684,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
             fixed_width {
                 width: 420.0,
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     align_items: "start",
                     padding_top: spacing::XL,
                     padding_right: spacing::XL,
@@ -2264,7 +2695,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     border_color: theme.colors.border,
                     border_radius: theme.radii.xl,
                     row {
-                        percent_width: 1.0,
+                        width: "100%",
                         align_items: "center",
                         justify_content: "start",
                         row {
@@ -2297,7 +2728,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     v_gap { height: spacing::XL }
                     row {
-                        percent_width: 1.0,
+                        width: "100%",
                         align_items: "center",
                         justify_content: "space_between",
                         text {
@@ -2323,15 +2754,15 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     v_gap { height: spacing::SM }
                     text {
                         content: format!("{:.0} MB of 100 MB", upload_progress()),
-                        percent_width: 1.0,
+                        width: "100%",
                         font_size: typography::XS,
                         font_color: theme.colors.muted_foreground,
                         line_height: 18.0,
-                        text_align: 0_i32,
+                        text_align: "start",
                     }
                     v_gap { height: spacing::XL }
                     row {
-                        percent_width: 1.0,
+                        width: "100%",
                         align_items: "center",
                         justify_content: "end",
                         Button {
@@ -2362,25 +2793,86 @@ fn ComponentDemo(slug: &'static str) -> Element {
         "radio-group" => rsx! {
             fixed_width {
                 width: 384.0,
-                RadioGroup {
-                    options: vec!["Default".to_string(), "Comfortable".to_string(), "Compact".to_string()],
-                    selected: Some(radio_choice()),
-                    default_selected: "Default".to_string(),
-                    on_select: move |value| radio_choice.set(value),
+                column {
+                    width: "100%",
+                    demo_mode_label {
+                        title: "Controlled".to_string(),
+                        detail: Some(format!("selected = {}", radio_choice())),
+                    }
+                    RadioGroup {
+                        options: vec!["Default".to_string(), "Comfortable".to_string(), "Compact".to_string()],
+                        selected: Some(radio_choice()),
+                        on_select: move |value| radio_choice.set(value),
+                    }
+                    {demo_mode_divider()}
+                    demo_mode_label {
+                        title: "Uncontrolled".to_string(),
+                        detail: Some(radio_uc_note()),
+                    }
+                    RadioGroup {
+                        options: vec!["Default".to_string(), "Comfortable".to_string(), "Compact".to_string()],
+                        default_selected: "Comfortable".to_string(),
+                        on_select: move |value| {
+                            radio_uc_note.set(format!("on_select = {value}"));
+                        },
+                    }
                 }
             }
         },
         "select" => rsx! {
-            {select_carousel(page(), selected_fruit(), select_open(), on_page, EventHandler::new(move |value| selected_fruit.set(value)), EventHandler::new(move |value| select_open.set(value)))}
+            column {
+                width: "100%",
+                demo_mode_label {
+                    title: "Controlled".to_string(),
+                    detail: Some(format!(
+                        "selected = {:?}, open = {}",
+                        selected_fruit(),
+                        select_open()
+                    )),
+                }
+                {select_carousel(
+                    page(),
+                    selected_fruit(),
+                    select_open(),
+                    on_page,
+                    EventHandler::new(move |value| selected_fruit.set(value)),
+                    EventHandler::new(move |value| select_open.set(value)),
+                )}
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Uncontrolled".to_string(),
+                    detail: Some(format!("{} | {}", select_uc_note(), select_open_uc_note())),
+                }
+                fixed_width {
+                    width: 180.0,
+                    Select {
+                        options: vec![
+                            "Apple".to_string(),
+                            "Banana".to_string(),
+                            "Blueberry".to_string(),
+                            "Grapes".to_string(),
+                            "Pineapple".to_string(),
+                        ],
+                        default_selected: "Apple".to_string(),
+                        default_open: false,
+                        on_select: Some(EventHandler::new(move |value| {
+                            select_uc_note.set(format!("on_select = {value}"));
+                        })),
+                        on_open_change: Some(EventHandler::new(move |open| {
+                            select_open_uc_note.set(format!("on_open_change = {open}"));
+                        })),
+                    }
+                }
+            }
         },
         "separator" => rsx! {
             fixed_width {
                 width: 320.0,
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     align_items: "start",
                     column {
-                        percent_width: 1.0,
+                        width: "100%",
                         align_items: "start",
                         Text { content: "Radix Primitives".to_string(), variant: TextVariant::Small }
                         v_gap { height: 4.0 }
@@ -2407,17 +2899,27 @@ fn ComponentDemo(slug: &'static str) -> Element {
             }
         },
         "skeleton" => rsx! {
+            // Card-like frame so the avatar + text lines read as a real loading
+            // block (geometry is from Skeleton; contrast is fixed in the component).
             fixed_width {
                 width: 320.0,
-                row {
-                    align_items: "center",
-                    justify_content: "start",
-                    Skeleton { width: 48.0, height: 48.0 }
-                    h_gap { width: spacing::LG }
-                    column {
-                        Skeleton { width: 250.0, height: 16.0 }
-                        v_gap { height: spacing::SM }
-                        Skeleton { width: 200.0, height: 16.0 }
+                column {
+                    width: "100%",
+                    padding: spacing::LG,
+                    background_color: theme.colors.background,
+                    border_radius: theme.radii.lg,
+                    border_width: 1.0,
+                    border_color: theme.colors.border,
+                    row {
+                        align_items: "center",
+                        justify_content: "start",
+                        Skeleton { width: 48.0, height: 48.0 }
+                        h_gap { width: spacing::LG }
+                        column {
+                            Skeleton { width: 220.0, height: 16.0 }
+                            v_gap { height: spacing::SM }
+                            Skeleton { width: 180.0, height: 16.0 }
+                        }
                     }
                 }
             }
@@ -2426,11 +2928,11 @@ fn ComponentDemo(slug: &'static str) -> Element {
             fixed_width {
                 width: 420.0,
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     height: 1064.0,
                     align_items: "start",
                     text {
-                        percent_width: 1.0,
+                        width: "100%",
                         content: "Sound & haptics".to_string(),
                         font_size: typography::XXL,
                         font_weight: 700_i32,
@@ -2439,7 +2941,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     v_gap { height: spacing::SM }
                     text {
-                        percent_width: 1.0,
+                        width: "100%",
                         content: "Tune playback, output levels, and channel balance.".to_string(),
                         font_size: typography::SM,
                         font_color: theme.colors.muted_foreground,
@@ -2448,16 +2950,16 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     v_gap { height: spacing::XXL }
 
                     column {
-                        percent_width: 1.0,
+                        width: "100%",
                         align_items: "start",
                         padding: spacing::LG,
                         background_color: theme.colors.card,
-                        border_style: 0_i32,
+                        border_style: "solid",
                         border_width: 1.0,
                         border_color: theme.colors.border,
                         border_radius: theme.radii.xl,
                         row {
-                            percent_width: 1.0,
+                            width: "100%",
                             align_items: "center",
                             justify_content: "start",
                             row {
@@ -2498,7 +3000,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                             on_change: move |value| playback_position.set(value),
                         }
                         row {
-                            percent_width: 1.0,
+                            width: "100%",
                             align_items: "center",
                             justify_content: "space_between",
                             text {
@@ -2518,7 +3020,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
 
                     v_gap { height: spacing::XXL }
                     row {
-                        percent_width: 1.0,
+                        width: "100%",
                         align_items: "center",
                         justify_content: "space_between",
                         text {
@@ -2545,7 +3047,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
 
                     v_gap { height: spacing::XL }
                     row {
-                        percent_width: 1.0,
+                        width: "100%",
                         align_items: "center",
                         justify_content: "space_between",
                         column {
@@ -2586,7 +3088,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
 
                     v_gap { height: spacing::XL }
                     row {
-                        percent_width: 1.0,
+                        width: "100%",
                         align_items: "center",
                         justify_content: "space_between",
                         column {
@@ -2627,7 +3129,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
 
                     v_gap { height: spacing::XL }
                     row {
-                        percent_width: 1.0,
+                        width: "100%",
                         align_items: "center",
                         justify_content: "space_between",
                         text {
@@ -2663,7 +3165,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         line_height: 20.0,
                     }
                     text {
-                        percent_width: 1.0,
+                        width: "100%",
                         content: "Vertical controls keep minimum at the bottom.".to_string(),
                         font_size: typography::XS,
                         font_color: theme.colors.muted_foreground,
@@ -2671,7 +3173,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     v_gap { height: spacing::MD }
                     row {
-                        percent_width: 1.0,
+                        width: "100%",
                         height: 220.0,
                         align_items: "center",
                         justify_content: "center",
@@ -2736,7 +3238,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
 
                     v_gap { height: spacing::XL }
                     row {
-                        percent_width: 1.0,
+                        width: "100%",
                         align_items: "center",
                         justify_content: "space_between",
                         column {
@@ -2776,10 +3278,10 @@ fn ComponentDemo(slug: &'static str) -> Element {
             fixed_width {
                 width: 420.0,
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     align_items: "start",
                     text {
-                        percent_width: 1.0,
+                        width: "100%",
                         content: "Notifications".to_string(),
                         font_size: typography::XXL,
                         font_weight: 700_i32,
@@ -2788,8 +3290,8 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     v_gap { height: spacing::SM }
                     text {
-                        percent_width: 1.0,
-                        content: "Toast messages are rendered at the app root, above the bottom safe area. Swipe down or sideways to dismiss.".to_string(),
+                        width: "100%",
+                        content: "Bottom-center Sonner stack (official peeks). Swipe up to expand, down to collapse/dismiss. Minimal is a compact chip.".to_string(),
                         font_size: typography::SM,
                         font_weight: 400_i32,
                         font_color: theme.colors.muted_foreground,
@@ -2798,99 +3300,194 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     v_gap { height: spacing::LG }
                     Button {
                         variant: ButtonVariant::Outline,
-                        percent_width: Some(1.0),
+                        width: "100%",
                         onclick: move |_| sonner_background_clicks += 1,
                         "Background click test · {sonner_background_clicks()}"
                     }
                     v_gap { height: spacing::XXL }
+                    text {
+                        width: "100%",
+                        content: "Notification".to_string(),
+                        font_size: typography::SM,
+                        font_weight: 600_i32,
+                        font_color: theme.colors.foreground,
+                        line_height: 20.0,
+                    }
+                    v_gap { height: spacing::MD }
                     row {
-                        percent_width: 1.0,
+                        width: "100%",
                         Button {
                             variant: ButtonVariant::Outline,
-                            percent_width: Some(0.48),
+                            width: "48%",
                             onclick: move |_| enqueue_sonner_toast(
                                 sonner_toasts,
                                 sonner_next_id,
-                                move |id| SonnerToast::new(id, "Event has been created.")
-                                    .description("Monday, January 3rd at 6:00pm")
+                                move |id| SonnerToast::new(id, "Event created")
+                                    .description("Mon, Jan 3 · 6:00pm")
                                     .action("Undo")
                                     .duration_ms(0)
                                     .on_action(move || {
                                         let mut status = sonner_status;
-                                        status.set(format!("Action selected for toast #{id}."));
+                                        status.set(format!("Undo #{id}"));
                                     }),
                             ),
                             "Default"
                         }
                         row { layout_weight: 1.0 }
                         Button {
-                            percent_width: Some(0.48),
+                            width: "48%",
                             onclick: move |_| enqueue_sonner_toast(
                                 sonner_toasts,
                                 sonner_next_id,
                                 |id| SonnerToast::success(id, "Changes saved")
-                                    .description("Your profile is up to date."),
+                                    .description("Profile is up to date")
+                                    .duration_ms(0),
                             ),
                             "Success"
                         }
                     }
                     v_gap { height: spacing::MD }
                     row {
-                        percent_width: 1.0,
+                        width: "100%",
                         Button {
                             variant: ButtonVariant::Secondary,
-                            percent_width: Some(0.48),
+                            width: "48%",
                             onclick: move |_| enqueue_sonner_toast(
                                 sonner_toasts,
                                 sonner_next_id,
-                                |id| SonnerToast::info(id, "New version available")
-                                    .description("Update when you are ready."),
+                                |id| SonnerToast::info(id, "Update available")
+                                    .description("Install when ready")
+                                    .duration_ms(0),
                             ),
                             "Info"
                         }
                         row { layout_weight: 1.0 }
                         Button {
                             variant: ButtonVariant::Outline,
-                            percent_width: Some(0.48),
+                            width: "48%",
                             onclick: move |_| enqueue_sonner_toast(
                                 sonner_toasts,
                                 sonner_next_id,
-                                |id| SonnerToast::warning(id, "Storage almost full")
-                                    .description("Free up space to keep syncing."),
+                                |id| SonnerToast::warning(id, "Storage low")
+                                    .description("Free up space")
+                                    .duration_ms(0),
                             ),
                             "Warning"
                         }
                     }
                     v_gap { height: spacing::MD }
                     row {
-                        percent_width: 1.0,
+                        width: "100%",
                         Button {
                             variant: ButtonVariant::Destructive,
-                            percent_width: Some(0.48),
+                            width: "48%",
                             onclick: move |_| enqueue_sonner_toast(
                                 sonner_toasts,
                                 sonner_next_id,
                                 |id| SonnerToast::error(id, "Upload failed")
-                                    .description("Check your connection and try again."),
+                                    .description("Check connection")
+                                    .duration_ms(0),
                             ),
                             "Error"
                         }
                         row { layout_weight: 1.0 }
                         Button {
                             variant: ButtonVariant::Outline,
-                            percent_width: Some(0.48),
+                            width: "48%",
                             onclick: move |_| enqueue_sonner_toast(
                                 sonner_toasts,
                                 sonner_next_id,
-                                |id| SonnerToast::loading(id, "Uploading photos")
-                                    .description("This toast stays until dismissed."),
+                                |id| SonnerToast::loading(id, "Uploading…")
+                                    .description("Stays until dismissed"),
                             ),
                             "Loading"
                         }
                     }
+                    v_gap { height: spacing::MD }
+                    Button {
+                        variant: ButtonVariant::Secondary,
+                        width: "100%",
+                        onclick: move |_| {
+                            for (title, description) in [
+                                ("Alice", "Free this afternoon?"),
+                                ("Reminder", "Review in 10 min"),
+                                ("Payment", "¥128 received"),
+                            ] {
+                                enqueue_sonner_toast(
+                                    sonner_toasts,
+                                    sonner_next_id,
+                                    move |id| SonnerToast::info(id, title)
+                                        .description(description)
+                                        .duration_ms(0),
+                                );
+                            }
+                            let mut status = sonner_status;
+                            status.set("Stack ready — swipe up to expand, down to dismiss.".into());
+                        },
+                        "Stack 3 · swipe up"
+                    }
+                    v_gap { height: spacing::XXL }
+                    text {
+                        width: "100%",
+                        content: "Minimal".to_string(),
+                        font_size: typography::SM,
+                        font_weight: 600_i32,
+                        font_color: theme.colors.foreground,
+                        line_height: 20.0,
+                    }
+                    v_gap { height: spacing::SM }
+                    text {
+                        width: "100%",
+                        content: "Compact chip — short copy only.".to_string(),
+                        font_size: typography::XS,
+                        font_weight: 400_i32,
+                        font_color: theme.colors.muted_foreground,
+                        line_height: 16.0,
+                    }
+                    v_gap { height: spacing::MD }
+                    row {
+                        width: "100%",
+                        Button {
+                            variant: ButtonVariant::Outline,
+                            width: "31%",
+                            onclick: move |_| enqueue_sonner_toast(
+                                sonner_toasts,
+                                sonner_next_id,
+                                |id| SonnerToast::minimal(id, "Copied"),
+                            ),
+                            "Copy"
+                        }
+                        row { layout_weight: 1.0 }
+                        Button {
+                            width: "31%",
+                            onclick: move |_| enqueue_sonner_toast(
+                                sonner_toasts,
+                                sonner_next_id,
+                                |id| SonnerToast::success(id, "Saved")
+                                    .appearance(ToastAppearance::Minimal)
+                                    .dismissible(false)
+                                    .duration_ms(2_000),
+                            ),
+                            "Saved"
+                        }
+                        row { layout_weight: 1.0 }
+                        Button {
+                            variant: ButtonVariant::Destructive,
+                            width: "31%",
+                            onclick: move |_| enqueue_sonner_toast(
+                                sonner_toasts,
+                                sonner_next_id,
+                                |id| SonnerToast::error(id, "Failed")
+                                    .appearance(ToastAppearance::Minimal)
+                                    .dismissible(false)
+                                    .duration_ms(2_500),
+                            ),
+                            "Fail"
+                        }
+                    }
                     v_gap { height: spacing::XL }
                     text {
-                        percent_width: 1.0,
+                        width: "100%",
                         content: sonner_status(),
                         font_size: typography::XS,
                         font_weight: 400_i32,
@@ -2901,6 +3498,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
             }
             Sonner {
                 toasts: sonner_toasts(),
+                position: SonnerPosition::BottomCenter,
                 visible_toasts: 3,
                 rich_colors: true,
             }
@@ -2909,7 +3507,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
             fixed_width {
                 width: 320.0,
                 column {
-                    percent_width: 1.0,
+                    width: "100%",
                     align_items: "center",
                     text {
                         content: "Sizes".to_string(),
@@ -2950,58 +3548,60 @@ fn ComponentDemo(slug: &'static str) -> Element {
             }
         },
         "switch" => rsx! {
-            row {
-                align_items: "center",
-                justify_content: "start",
-                Switch {
-                    checked: Some(switch_checked()),
-                    on_change: Some(EventHandler::new(move |value| switch_checked.set(value))),
+            column {
+                align_items: "start",
+                demo_mode_label {
+                    title: "Controlled".to_string(),
+                    detail: Some(format!("checked = {}", switch_checked())),
                 }
-                h_gap { width: spacing::SM }
-                Label { content: "Airplane Mode".to_string() }
+                row {
+                    align_items: "center",
+                    Switch {
+                        checked: Some(switch_checked()),
+                        on_change: Some(EventHandler::new(move |value| switch_checked.set(value))),
+                    }
+                    h_gap { width: spacing::SM }
+                    Label { content: "Airplane Mode".to_string() }
+                }
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Uncontrolled".to_string(),
+                    detail: Some(switch_uc_note()),
+                }
+                row {
+                    align_items: "center",
+                    Switch {
+                        default_checked: Some(false),
+                        on_change: Some(EventHandler::new(move |value| {
+                            switch_uc_note.set(format!("on_change = {value}"));
+                        })),
+                    }
+                    h_gap { width: spacing::SM }
+                    Label { content: "Wi‑Fi".to_string() }
+                }
             }
         },
         "tabs" => rsx! {
-            row {
-                percent_width: 1.0,
+            column {
+                width: "100%",
                 max_width_constraint: 384.0,
+                demo_mode_label {
+                    title: "Controlled".to_string(),
+                    detail: Some(format!("active = {}", tabs_active())),
+                }
                 Tabs {
                     labels: vec!["Account".to_string(), "Password".to_string()],
+                    active: Some(tabs_active()),
+                    on_change: move |index| tabs_active.set(index),
                     panels: vec![
                         rsx! {
                             Card {
                                 CardHeader {
                                     title: "Account".to_string(),
-                                    description: "Make changes to your account here. Click save when you're done.".to_string(),
+                                    description: "Controlled tab panel.".to_string(),
                                 }
                                 CardContent {
-                                    column {
-                                        percent_width: 1.0,
-                                        column {
-                                            percent_width: 1.0,
-                                            Label { content: "Name".to_string() }
-                                            v_gap { height: spacing::XXS }
-                                            Input {
-                                                placeholder: Some("Pedro Duarte".to_string()),
-                                                value: Some("Pedro Duarte".to_string()),
-                                                percent_width: Some(1.0),
-                                            }
-                                        }
-                                        v_gap { height: spacing::SM }
-                                        column {
-                                            percent_width: 1.0,
-                                            Label { content: "Username".to_string() }
-                                            v_gap { height: spacing::XXS }
-                                            Input {
-                                                placeholder: Some("@peduarte".to_string()),
-                                                value: Some("@peduarte".to_string()),
-                                                percent_width: Some(1.0),
-                                            }
-                                        }
-                                    }
-                                }
-                                CardFooter {
-                                    Button { onclick: move |_| {}, "Save changes" }
+                                    Text { content: "Parent owns active index.".to_string(), variant: TextVariant::Muted }
                                 }
                             }
                         },
@@ -3009,36 +3609,30 @@ fn ComponentDemo(slug: &'static str) -> Element {
                             Card {
                                 CardHeader {
                                     title: "Password".to_string(),
-                                    description: "Change your password here. After saving, you'll be logged out.".to_string(),
+                                    description: "Second controlled panel.".to_string(),
                                 }
                                 CardContent {
-                                    column {
-                                        percent_width: 1.0,
-                                        column {
-                                            percent_width: 1.0,
-                                            Label { content: "Current password".to_string() }
-                                            v_gap { height: spacing::XXS }
-                                            Input {
-                                                placeholder: Some("********".to_string()),
-                                                percent_width: Some(1.0),
-                                            }
-                                        }
-                                        v_gap { height: spacing::SM }
-                                        column {
-                                            percent_width: 1.0,
-                                            Label { content: "New password".to_string() }
-                                            v_gap { height: spacing::XXS }
-                                            Input {
-                                                placeholder: Some("********".to_string()),
-                                                percent_width: Some(1.0),
-                                            }
-                                        }
-                                    }
-                                }
-                                CardFooter {
-                                    Button { onclick: move |_| {}, "Save password" }
+                                    Text { content: "Switch tabs via triggers.".to_string(), variant: TextVariant::Muted }
                                 }
                             }
+                        },
+                    ],
+                }
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Uncontrolled".to_string(),
+                    detail: Some("default_active = 0".to_string()),
+                }
+                Tabs {
+                    labels: vec!["One".to_string(), "Two".to_string()],
+                    default_active: 0,
+                    on_change: move |_| {},
+                    panels: vec![
+                        rsx! {
+                            Text { content: "Uncontrolled panel A".to_string(), variant: TextVariant::Muted }
+                        },
+                        rsx! {
+                            Text { content: "Uncontrolled panel B".to_string(), variant: TextVariant::Muted }
                         },
                     ],
                 }
@@ -3050,35 +3644,130 @@ fn ComponentDemo(slug: &'static str) -> Element {
         "textarea" => rsx! {
             fixed_width {
                 width: 384.0,
-                Textarea { placeholder: Some("Type your message here.".to_string()), percent_width: Some(1.0) }
+                column {
+                    width: "100%",
+                    demo_mode_label {
+                        title: "Controlled".to_string(),
+                        detail: Some(format!("value.len = {}", textarea_controlled().chars().count())),
+                    }
+                    Textarea {
+                        placeholder: Some("Type your message here.".to_string()),
+                        value: Some(textarea_controlled()),
+                        width: "100%",
+                        on_change: Some(EventHandler::new(move |value| textarea_controlled.set(value))),
+                    }
+                    {demo_mode_divider()}
+                    demo_mode_label {
+                        title: "Uncontrolled".to_string(),
+                        detail: Some("omit value — native field owns text".to_string()),
+                    }
+                    Textarea {
+                        placeholder: Some("Uncontrolled textarea".to_string()),
+                        width: "100%",
+                    }
+                }
             }
         },
         "toggle" => rsx! {
-            Toggle {
-                label: "".to_string(),
-                icon: Some("bold".to_string()),
-                checked: Some(toggle_pressed()),
-                on_change: EventHandler::new(move |value| toggle_pressed.set(value)),
+            column {
+                align_items: "start",
+                demo_mode_label {
+                    title: "Controlled".to_string(),
+                    detail: Some(format!("checked = {}", toggle_pressed())),
+                }
+                Toggle {
+                    label: "".to_string(),
+                    icon: Some("bold".to_string()),
+                    variant: ToggleVariant::Outline,
+                    checked: Some(toggle_pressed()),
+                    on_change: EventHandler::new(move |value| toggle_pressed.set(value)),
+                }
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Uncontrolled".to_string(),
+                    detail: Some(toggle_uc_note()),
+                }
+                Toggle {
+                    label: "".to_string(),
+                    icon: Some("italic".to_string()),
+                    variant: ToggleVariant::Outline,
+                    default_checked: false,
+                    on_change: EventHandler::new(move |value| {
+                        toggle_uc_note.set(format!("on_change = {value}"));
+                    }),
+                }
             }
         },
         "toggle-group" => rsx! {
-            ToggleGroup {
-                options: vec!["bold".to_string(), "italic".to_string(), "underline".to_string()],
-                selected: Some(toggle_values()),
-                default_selected: vec!["bold".to_string()],
-                icons: true,
-                multi: true,
-                on_change: move |values| toggle_values.set(values),
+            column {
+                align_items: "start",
+                demo_mode_label {
+                    title: "Controlled".to_string(),
+                    detail: Some(format!("selected = {:?}", toggle_values())),
+                }
+                ToggleGroup {
+                    options: vec!["bold".to_string(), "italic".to_string(), "underline".to_string()],
+                    selected: Some(toggle_values()),
+                    icons: true,
+                    multi: true,
+                    on_change: move |values| toggle_values.set(values),
+                }
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Uncontrolled".to_string(),
+                    detail: Some(toggle_group_uc_note()),
+                }
+                ToggleGroup {
+                    options: vec!["bold".to_string(), "italic".to_string(), "underline".to_string()],
+                    default_selected: vec!["bold".to_string()],
+                    icons: true,
+                    multi: true,
+                    on_change: move |values| {
+                        toggle_group_uc_note.set(format!("on_change = {:?}", values));
+                    },
+                }
             }
         },
         "tooltip" => rsx! {
-            Tooltip {
-                open: Some(tooltip_open()),
-                default_open: Some(false),
-                on_close: move |_| tooltip_open.set(false),
-                on_open_change: move |value| tooltip_open.set(value),
-                content: "Add to library".to_string(),
-                trigger: rsx! { Button { variant: ButtonVariant::Outline, onclick: move |_| {}, "Press" } },
+            column {
+                align_items: "start",
+                demo_mode_label {
+                    title: "Controlled".to_string(),
+                    detail: Some(format!("open = {}", tooltip_open())),
+                }
+                Tooltip {
+                    open: Some(tooltip_open()),
+                    default_open: Some(false),
+                    on_close: move |_| tooltip_open.set(false),
+                    on_open_change: move |value| tooltip_open.set(value),
+                    content: "Add to library".to_string(),
+                    trigger: rsx! {
+                        Button {
+                            variant: ButtonVariant::Outline,
+                            onclick: move |_| {},
+                            "Press"
+                        }
+                    },
+                }
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Uncontrolled".to_string(),
+                    detail: Some(tooltip_uc_note()),
+                }
+                Tooltip {
+                    default_open: Some(false),
+                    on_open_change: move |value| {
+                        tooltip_uc_note.set(format!("on_open_change = {value}"));
+                    },
+                    content: "Uncontrolled tooltip".to_string(),
+                    trigger: rsx! {
+                        Button {
+                            variant: ButtonVariant::Outline,
+                            onclick: move |_| {},
+                            "Hover/Press"
+                        }
+                    },
+                }
             }
         },
         "table" => rsx! {
@@ -3103,18 +3792,106 @@ fn ComponentDemo(slug: &'static str) -> Element {
 
 #[component]
 fn fixed_width(width: f32, children: Element) -> Element {
+    // shadcn-style max-width cap: fill the parent up to `width`, never force a
+    // hard width that can overflow narrow screens (512vp ≈ 1664px @3.25x).
+    // Select/Popover still measure the painted control; anchor geometry no
+    // longer depends on this wrapper using an absolute width.
     rsx! {
         column {
-            percent_width: 1.0,
+            width: "100%",
             align_items: "center",
             column {
-                percent_width: 1.0,
+                width: "100%",
                 max_width_constraint: width,
-                align_items: "center",
+                align_items: "stretch",
                 {children}
             }
         }
     }
+}
+
+/// Section header for controlled / uncontrolled showcase pairs.
+#[component]
+fn demo_mode_label(title: String, detail: Option<String>) -> Element {
+    let theme = arkit_shadcn::theme::use_theme();
+    rsx! {
+        column {
+            width: "100%",
+            align_items: "start",
+            text {
+                content: title,
+                font_size: typography::SM,
+                font_weight: 600_i32,
+                font_color: theme.colors.foreground,
+                line_height: 20.0,
+            }
+            if let Some(text) = detail {
+                text {
+                    content: text,
+                    font_size: typography::XS,
+                    font_color: theme.colors.muted_foreground,
+                    line_height: 16.0,
+                    margin_top: 2.0,
+                }
+            }
+            v_gap { height: spacing::SM }
+        }
+    }
+}
+
+fn demo_mode_divider() -> Element {
+    rsx! {
+        column {
+            width: "100%",
+            v_gap { height: spacing::XL }
+            Separator {}
+            v_gap { height: spacing::XL }
+        }
+    }
+}
+
+fn accordion_demo_items() -> Vec<AccordionItemSpec> {
+    vec![
+        AccordionItemSpec::new(
+            "Product Information",
+            "item-1",
+            rsx! {
+                column {
+                    width: "100%",
+                    Text {
+                        content: "Our flagship product combines cutting-edge technology with sleek design.".to_string(),
+                        variant: TextVariant::Muted,
+                    }
+                }
+            },
+        ),
+        AccordionItemSpec::new(
+            "Shipping Details",
+            "item-2",
+            rsx! {
+                column {
+                    width: "100%",
+                    Text {
+                        content: "Standard delivery takes 3-5 business days worldwide.".to_string(),
+                        variant: TextVariant::Muted,
+                    }
+                }
+            },
+        ),
+        AccordionItemSpec::new(
+            "Return Policy",
+            "item-3",
+            rsx! {
+                column {
+                    width: "100%",
+                    Text {
+                        content: "30-day returns with free shipping on eligible orders.".to_string(),
+                        variant: TextVariant::Muted,
+                    }
+                }
+            },
+        ),
+    ]
 }
 
 fn enqueue_sonner_toast(
@@ -3181,7 +3958,7 @@ fn IconTile(name: String, color: u32, size: Option<f32>) -> Element {
             stack {
                 width: 48.0,
                 height: 48.0,
-                alignment: 4_i32,
+                alignment: "center",
                 border_radius: theme.radii.md,
                 border_width: 1.0,
                 border_color: theme.colors.border,
@@ -3199,7 +3976,7 @@ fn repo_row(name: String) -> Element {
     let theme = arkit_shadcn::theme::use_theme();
     rsx! {
         row {
-            percent_width: 1.0,
+            width: "100%",
             align_self: "start",
             padding_top: spacing::SM,
             padding_right: spacing::LG,
@@ -3218,7 +3995,7 @@ fn repo_row(name: String) -> Element {
 fn popover_form_row(label: String, value: String) -> Element {
     rsx! {
         row {
-            percent_width: 1.0,
+            width: "100%",
             align_self: "start",
             align_items: "center",
             justify_content: "start",
@@ -3233,7 +4010,7 @@ fn popover_form_row(label: String, value: String) -> Element {
                     placeholder: Some(value.clone()),
                     value: Some(value),
                     height: Some(32.0),
-                    percent_width: Some(1.0),
+                    width: "100%",
                 }
             }
         }
@@ -3253,24 +4030,24 @@ fn carousel_frame(
 
     rsx! {
         stack {
-            percent_width: 1.0,
-            percent_height: 1.0,
+            width: "100%",
+            height: "100%",
             row {
-                percent_width: 1.0,
-                percent_height: 1.0,
+                width: "100%",
+                height: "100%",
                 align_items: "center",
                 justify_content: "center",
                 padding_bottom: if reserve_bottom_controls { 48.0 + spacing::LG } else { 0.0 },
                 {preview}
             }
             column {
-                percent_width: 1.0,
-                percent_height: 1.0,
+                width: "100%",
+                height: "100%",
                 align_items: "center",
                 justify_content: "end",
-                hit_test_behavior: 2_i32,
+                hit_test_behavior: "transparent",
                 row {
-                    percent_width: 1.0,
+                    width: "100%",
                     height: 48.0,
                     align_items: "center",
                     justify_content: "center",
@@ -3307,10 +4084,10 @@ fn carousel_button(icon: String, disabled: bool, onclick: EventHandler<()>) -> E
             border_radius: theme.radii.md,
             border_width: 1.0,
             border_color: theme.colors.border,
-            border_style: 0_i32,
+            border_style: "solid",
             clip: true,
             opacity: if disabled { 0.5 } else { 1.0 },
-            shadow: 1_i32,
+            shadow: "sm",
             onclick: move |_| {
                 if !disabled {
                     onclick.call(());
@@ -3390,10 +4167,10 @@ fn text_carousel(page: i32, on_page: EventHandler<i32>) -> Element {
             fixed_width {
                 width: 512.0,
                 scroll {
-                    percent_width: 1.0,
-                    percent_height: 1.0,
+                    width: "100%",
+                    height: "100%",
                     column {
-                        percent_width: 1.0,
+                        width: "100%",
                         padding_top: spacing::XXL,
                         padding_right: spacing::XXL,
                         padding_bottom: 72.0,

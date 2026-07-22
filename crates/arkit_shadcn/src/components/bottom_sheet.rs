@@ -9,8 +9,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use super::floating_layer::SHADOW_SM;
-use super::{ARKUI_BORDER_STYLE_SOLID, ARKUI_BUTTON_TYPE_NORMAL};
+use super::ARKUI_BORDER_STYLE_SOLID;
 use crate::icon::icon_placeholder;
 use crate::theme::*;
 use arkit_prelude::*;
@@ -176,14 +175,14 @@ fn BottomSheetPanel(props: BottomSheetPanelProps) -> Element {
 
     rsx! {
         column {
-            percent_width: 1.0,
+            width: "100%",
             constraint_size: format!("0,100000,{BOTTOM_SHEET_MIN_HEIGHT},100000"),
             border_radius: top_radius,
             border_width: "1,1,0,1",
             border_color: theme.colors.border,
             border_style: ARKUI_BORDER_STYLE_SOLID,
             background_color: theme.colors.card,
-            shadow: SHADOW_SM,
+            shadow: "sm",
             clip: true,
             on_touch: move |evt| {
                 let Some(pointer) = evt.data().pointer else {
@@ -228,7 +227,7 @@ fn BottomSheetPanel(props: BottomSheetPanelProps) -> Element {
                 }
             },
             row {
-                percent_width: 1.0,
+                width: "100%",
                 height: BOTTOM_SHEET_HANDLE_HEIGHT,
                 align_items: "center",
                 justify_content: "center",
@@ -242,7 +241,7 @@ fn BottomSheetPanel(props: BottomSheetPanelProps) -> Element {
             }
             if props.show_header {
                 row {
-                    percent_width: 1.0,
+                    width: "100%",
                     height: BOTTOM_SHEET_HEADER_HEIGHT,
                     align_items: "center",
                     padding_left: spacing::LG,
@@ -252,35 +251,35 @@ fn BottomSheetPanel(props: BottomSheetPanelProps) -> Element {
                     row {
                         layout_weight: 1.0,
                         text {
-                            percent_width: 1.0,
+                            width: "100%",
                             font_size: typography::XL,
                             font_weight: 700_i32,
                             font_color: theme.colors.foreground,
                             line_height: 25.0,
-                            text_align: 1_i32,
+                            text_align: "center",
                             "{props.title}"
                         }
                     }
                     button {
-                        button_type: ARKUI_BUTTON_TYPE_NORMAL,
+                        button_type: "normal",
                         width: 48.0,
                         height: 48.0,
                         padding: 0.0,
-                        background_color: 0x00000000,
+                        background_color: "#00000000",
                         border_width: 0.0,
                         border_style: ARKUI_BORDER_STYLE_SOLID,
                         border_radius: theme.radii.md,
                         clip: true,
                         focusable: false,
                         focus_on_touch: false,
-                        alignment: 4_i32,
+                        alignment: "center",
                         onclick: move |_| on_close.call(()),
                         {icon_placeholder("x", 24.0, theme.colors.muted_foreground)}
                     }
                 }
             }
             column {
-                percent_width: 1.0,
+                width: "100%",
                 padding_top: body_top_padding,
                 padding_right: spacing::LG,
                 padding_bottom: body_bottom_padding,
@@ -306,7 +305,7 @@ pub fn BottomSheetTextInput(
             placeholder: if let Some(placeholder) = placeholder { placeholder },
             placeholder_color: theme.colors.muted_foreground,
             caret_color: theme.colors.primary,
-            percent_width: 1.0,
+            width: "100%",
             height: 56.0,
             padding_top: spacing::XXS,
             padding_right: spacing::MD,
