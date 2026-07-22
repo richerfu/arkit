@@ -954,6 +954,32 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let mut switch_checked = use_signal(|| false);
     let mut toggle_pressed = use_signal(|| false);
     let mut toggle_values = use_signal(|| vec!["bold".to_string()]);
+    // Dual-mode demo signals (controlled half). Uncontrolled halves omit value/open.
+    let mut accordion_uc_note = use_signal(|| "Uses default_value only.".to_string());
+    let mut checkbox_uc_label = use_signal(|| false);
+    let mut switch_uc_note = use_signal(|| "default_checked=false".to_string());
+    let mut toggle_uc_note = use_signal(|| "default_checked=false".to_string());
+    let mut toggle_group_uc_note = use_signal(|| "default: bold".to_string());
+    let mut radio_uc_note = use_signal(|| "default: Comfortable".to_string());
+    let mut tabs_active = use_signal(|| 0_usize);
+    let mut collapsible_open = use_signal(|| true);
+    let mut collapsible_uc_note = use_signal(|| "default_open=true".to_string());
+    let mut select_uc_note = use_signal(|| "default: Apple".to_string());
+    let mut select_open_uc_note = use_signal(|| "open unmanaged".to_string());
+    let mut carousel_uc_note = use_signal(|| "default_index=0".to_string());
+    let mut date_picker_uc_selected = use_signal(|| None::<String>);
+    let mut date_picker_uc_note = use_signal(|| "selection/open unmanaged".to_string());
+    let mut dialog_uc_gen = use_signal(|| 0_u64);
+    let mut alert_uc_gen = use_signal(|| 0_u64);
+    let mut sheet_uc_gen = use_signal(|| 0_u64);
+    let mut popover_uc_note = use_signal(|| "open unmanaged".to_string());
+    let mut hover_uc_note = use_signal(|| "open unmanaged".to_string());
+    let mut tooltip_uc_note = use_signal(|| "open unmanaged".to_string());
+    let mut menu_uc_note = use_signal(|| "open unmanaged".to_string());
+    let mut context_uc_note = use_signal(|| "open unmanaged".to_string());
+    let mut menubar_uc_note = use_signal(|| "active unmanaged".to_string());
+    let mut input_controlled = use_signal(|| "hello".to_string());
+    let mut textarea_controlled = use_signal(|| "Draft notes…".to_string());
     let mut otp_value = use_signal(String::new);
     let mut otp_invalid = use_signal(|| false);
     let mut otp_status = use_signal(|| "Enter the six-digit code.".to_string());
@@ -1026,49 +1052,31 @@ fn ComponentDemo(slug: &'static str) -> Element {
         "accordion" => rsx! {
             fixed_width {
                 width: 512.0,
-                Accordion {
-                    items: vec![
-                        AccordionItemSpec::new(
-                            "Product Information",
-                            "item-1",
-                            rsx! {
-                                column {
-                                    percent_width: 1.0,
-                                    Text { content: "Our flagship product combines cutting-edge technology with sleek design. Built with premium materials, it offers unparalleled performance and reliability.".to_string(), variant: TextVariant::Muted }
-                                    v_gap { height: spacing::LG }
-                                    Text { content: "Key features include advanced processing capabilities, and an intuitive user interface designed for both beginners and experts.".to_string(), variant: TextVariant::Muted }
-                                }
-                            },
-                        ),
-                        AccordionItemSpec::new(
-                            "Shipping Details",
-                            "item-2",
-                            rsx! {
-                                column {
-                                    percent_width: 1.0,
-                                    Text { content: "We offer worldwide shipping through trusted courier partners. Standard delivery takes 3-5 business days, while express shipping ensures delivery within 1-2 business days.".to_string(), variant: TextVariant::Muted }
-                                    v_gap { height: spacing::LG }
-                                    Text { content: "All orders are carefully packaged and fully insured. Track your shipment in real-time through our dedicated tracking portal.".to_string(), variant: TextVariant::Muted }
-                                }
-                            },
-                        ),
-                        AccordionItemSpec::new(
-                            "Return Policy",
-                            "item-3",
-                            rsx! {
-                                column {
-                                    percent_width: 1.0,
-                                    Text { content: "We stand behind our products with a comprehensive 30-day return policy. If you're not completely satisfied, simply return the item in its original condition.".to_string(), variant: TextVariant::Muted }
-                                    v_gap { height: spacing::LG }
-                                    Text { content: "Our hassle-free return process includes free return shipping and full refunds processed within 48 hours of receiving the returned item.".to_string(), variant: TextVariant::Muted }
-                                }
-                            },
-                        ),
-                    ],
-                    value: Some(accordion_value()),
-                    default_value: Some("item-1".to_string()),
-                    collapsible: true,
-                    on_value_change: move |value| accordion_value.set(value),
+                column {
+                    percent_width: 1.0,
+                    demo_mode_label {
+                        title: "Controlled".to_string(),
+                        detail: Some(format!("value = {:?}", accordion_value())),
+                    }
+                    Accordion {
+                        items: accordion_demo_items(),
+                        value: Some(accordion_value()),
+                        collapsible: true,
+                        on_value_change: move |value| accordion_value.set(value),
+                    }
+                    {demo_mode_divider()}
+                    demo_mode_label {
+                        title: "Uncontrolled".to_string(),
+                        detail: Some(accordion_uc_note()),
+                    }
+                    Accordion {
+                        items: accordion_demo_items(),
+                        default_value: Some("item-1".to_string()),
+                        collapsible: true,
+                        on_value_change: move |value| {
+                            accordion_uc_note.set(format!("on_value_change = {:?}", value));
+                        },
+                    }
                 }
             }
         },
@@ -1106,10 +1114,17 @@ fn ComponentDemo(slug: &'static str) -> Element {
             }
         },
         "alert-dialog" => rsx! {
-            Button {
-                variant: ButtonVariant::Outline,
-                onclick: move |_| alert_open.set(true),
-                "Show Alert Dialog"
+            column {
+                align_items: "start",
+                demo_mode_label {
+                    title: "Controlled".to_string(),
+                    detail: Some(format!("open = {}", alert_open())),
+                }
+                Button {
+                    variant: ButtonVariant::Outline,
+                    onclick: move |_| alert_open.set(true),
+                    "Show Alert Dialog"
+                }
             }
             AlertDialog {
                 title: "Are you absolutely sure?".to_string(),
@@ -1132,6 +1147,40 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         "Continue"
                     }
                 },
+            }
+            {demo_mode_divider()}
+            demo_mode_label {
+                title: "Uncontrolled".to_string(),
+                detail: Some("default_open via remount key (open is otherwise parent-driven)".to_string()),
+            }
+            Button {
+                variant: ButtonVariant::Outline,
+                onclick: move |_| alert_uc_gen.set(alert_uc_gen() + 1),
+                "Show Uncontrolled Alert"
+            }
+            if alert_uc_gen() > 0 {
+                AlertDialog {
+                    key: "{alert_uc_gen()}",
+                    title: "Uncontrolled dialog".to_string(),
+                    description: "Opened with default_open; close uses internal state.".to_string(),
+                    default_open: Some(true),
+                    on_close: move |_| {},
+                    cancel: rsx! {
+                        Button {
+                            percent_width: Some(1.0),
+                            variant: ButtonVariant::Outline,
+                            onclick: move |_| {},
+                            "Cancel"
+                        }
+                    },
+                    action: rsx! {
+                        Button {
+                            percent_width: Some(1.0),
+                            onclick: move |_| {},
+                            "OK"
+                        }
+                    },
+                }
             }
         },
         "aspect-ratio" => rsx! {
@@ -1252,9 +1301,16 @@ fn ComponentDemo(slug: &'static str) -> Element {
             }
         }
         "bottom-sheet" => rsx! {
-            Button {
-                onclick: move |_| bottom_sheet_open.set(true),
-                "Open"
+            column {
+                align_items: "start",
+                demo_mode_label {
+                    title: "Controlled".to_string(),
+                    detail: Some(format!("open = {}", bottom_sheet_open())),
+                }
+                Button {
+                    onclick: move |_| bottom_sheet_open.set(true),
+                    "Open"
+                }
             }
             BottomSheet {
                 title: "Edit your profile".to_string(),
@@ -1281,6 +1337,28 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         percent_width: Some(1.0),
                         onclick: move |_| bottom_sheet_open.set(false),
                         "Save Changes"
+                    }
+                }
+            }
+            {demo_mode_divider()}
+            demo_mode_label {
+                title: "Uncontrolled".to_string(),
+                detail: Some("default_open via remount key".to_string()),
+            }
+            Button {
+                variant: ButtonVariant::Outline,
+                onclick: move |_| sheet_uc_gen.set(sheet_uc_gen() + 1),
+                "Open Uncontrolled Sheet"
+            }
+            if sheet_uc_gen() > 0 {
+                BottomSheet {
+                    key: "{sheet_uc_gen()}",
+                    title: "Uncontrolled sheet".to_string(),
+                    default_open: Some(true),
+                    on_close: move |_| {},
+                    Text {
+                        content: "Dismiss uses internal open state.".to_string(),
+                        variant: TextVariant::Muted,
                     }
                 }
             }
@@ -1416,46 +1494,58 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 }
             })
             .collect();
-            let overlay_slides = ["First", "Second", "Third", "Fourth"]
-                .into_iter()
-                .enumerate()
-                .map(|(index, label)| {
-                    rsx! {
-                        column {
-                            percent_width: 1.0,
-                            percent_height: 1.0,
-                            align_items: "center",
-                            justify_content: "center",
-                            background_color: theme.colors.muted,
-                            text {
-                                content: (index + 1).to_string(),
-                                font_size: 64.0,
-                                font_weight: 700_i32,
-                                font_color: theme.colors.foreground,
-                                line_height: 72.0,
-                            }
-                            v_gap { height: spacing::SM }
-                            text {
-                                content: label,
-                                font_size: typography::SM,
-                                font_weight: 500_i32,
-                                font_color: theme.colors.muted_foreground,
-                                line_height: 20.0,
+            let make_overlay_slides = || {
+                ["First", "Second", "Third", "Fourth"]
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, label)| {
+                        rsx! {
+                            column {
+                                percent_width: 1.0,
+                                percent_height: 1.0,
+                                align_items: "center",
+                                justify_content: "center",
+                                background_color: theme.colors.muted,
+                                text {
+                                    content: (index + 1).to_string(),
+                                    font_size: 64.0,
+                                    font_weight: 700_i32,
+                                    font_color: theme.colors.foreground,
+                                    line_height: 72.0,
+                                }
+                                v_gap { height: spacing::SM }
+                                text {
+                                    content: label,
+                                    font_size: typography::SM,
+                                    font_weight: 500_i32,
+                                    font_color: theme.colors.muted_foreground,
+                                    line_height: 20.0,
+                                }
                             }
                         }
-                    }
-                })
-                .collect();
+                    })
+                    .collect::<Vec<_>>()
+            };
+            let overlay_slides = make_overlay_slides();
+            let overlay_slides_uc = make_overlay_slides();
 
             rsx! {
                 fixed_width {
                     width: 336.0,
                     column {
                         percent_width: 1.0,
+                        demo_mode_label {
+                            title: "Controlled".to_string(),
+                            detail: Some(format!(
+                                "index = {}, overlay = {}",
+                                carousel_index(),
+                                carousel_overlay_index()
+                            )),
+                        }
                         Carousel {
                             slides,
                             index: Some(carousel_index()),
-                            height: 300.0,
+                            height: 280.0,
                             indicator_variant: CarouselIndicatorVariant::Pill,
                             style: CarouselStyle {
                                 viewport_radius: Some(theme.radii.xxl),
@@ -1466,11 +1556,11 @@ fn ComponentDemo(slug: &'static str) -> Element {
                             },
                             on_change: move |index| carousel_index.set(index),
                         }
-                        v_gap { height: spacing::XXL }
+                        v_gap { height: spacing::LG }
                         Carousel {
                             slides: overlay_slides,
                             index: Some(carousel_overlay_index()),
-                            height: 220.0,
+                            height: 180.0,
                             show_indicators: false,
                             controls_placement: CarouselControlsPlacement::OverlayCenter,
                             style: CarouselStyle {
@@ -1482,6 +1572,23 @@ fn ComponentDemo(slug: &'static str) -> Element {
                             },
                             on_change: move |index| carousel_overlay_index.set(index),
                         }
+                        {demo_mode_divider()}
+                        demo_mode_label {
+                            title: "Uncontrolled".to_string(),
+                            detail: Some(carousel_uc_note()),
+                        }
+                        Carousel {
+                            slides: overlay_slides_uc,
+                            default_index: 0,
+                            height: 160.0,
+                            style: CarouselStyle {
+                                viewport_radius: Some(theme.radii.xxl),
+                                ..CarouselStyle::default()
+                            },
+                            on_change: move |index| {
+                                carousel_uc_note.set(format!("on_change = {index}"));
+                            },
+                        }
                     }
                 }
             }
@@ -1491,53 +1598,31 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 width: 384.0,
                 column {
                     percent_width: 1.0,
-                    row {
-                        align_self: "start",
-                        align_items: "center",
-                        justify_content: "start",
-                        Checkbox {
-                            label: Some("Accept terms and conditions".to_string()),
-                            checked: Some(checkbox_first()),
-                            on_change: Some(EventHandler::new(move |value| checkbox_first.set(value))),
-                        }
+                    demo_mode_label {
+                        title: "Controlled".to_string(),
+                        detail: Some(format!(
+                            "a={}, b={}, card={}",
+                            checkbox_first(),
+                            checkbox_second(),
+                            checkbox_card()
+                        )),
                     }
-                    v_gap { height: spacing::XXL }
-                    column {
-                        align_self: "start",
-                        align_items: "start",
-                        Checkbox {
-                            label: Some("Accept terms and conditions".to_string()),
-                            checked: Some(checkbox_second()),
-                            on_change: Some(EventHandler::new(move |value| checkbox_second.set(value))),
-                        }
-                        row {
-                            margin_top: spacing::SM,
-                            margin_left: spacing::XXL,
-                            Text { content: "By clicking this checkbox, you agree to the terms and conditions.".to_string(), variant: TextVariant::Muted }
-                        }
+                    Checkbox {
+                        label: Some("Accept terms and conditions".to_string()),
+                        checked: Some(checkbox_first()),
+                        on_change: Some(EventHandler::new(move |value| checkbox_first.set(value))),
                     }
-                    v_gap { height: spacing::XXL }
-                    row {
-                        align_self: "start",
-                        align_items: "center",
-                        justify_content: "start",
-                        Checkbox {
-                            label: Some("Enable notifications".to_string()),
-                            checked: Some(false),
-                            default_checked: Some(false),
-                            disabled: Some(true),
-                        }
+                    v_gap { height: spacing::LG }
+                    Checkbox {
+                        label: Some("Marketing emails".to_string()),
+                        checked: Some(checkbox_second()),
+                        on_change: Some(EventHandler::new(move |value| checkbox_second.set(value))),
                     }
-                    v_gap { height: spacing::XXL }
+                    v_gap { height: spacing::LG }
                     row {
                         percent_width: 1.0,
-                        align_self: "start",
                         align_items: "start",
-                        justify_content: "start",
-                        padding_top: 12.0,
-                        padding_right: 12.0,
-                        padding_bottom: 12.0,
-                        padding_left: 12.0,
+                        padding: 12.0,
                         border_width: 1.0,
                         border_color: if checkbox_card() { 0xFF2563EBu32 } else { theme.colors.border },
                         border_radius: theme.radii.lg,
@@ -1553,17 +1638,30 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         column {
                             layout_weight: 1.0,
                             align_items: "start",
-                            text {
-                                content: "Enable notifications".to_string(),
-                                percent_width: 1.0,
-                                font_size: typography::SM,
-                                font_weight: 500_i32,
-                                font_color: theme.colors.foreground,
-                                line_height: 14.0,
-                            }
-                            v_gap { height: spacing::SM }
-                            Text { content: "You can enable or disable notifications at any time.".to_string(), variant: TextVariant::Muted }
+                            Text { content: "Enable notifications".to_string(), variant: TextVariant::Small }
+                            Text { content: "You can enable or disable anytime.".to_string(), variant: TextVariant::Muted }
                         }
+                    }
+                    {demo_mode_divider()}
+                    demo_mode_label {
+                        title: "Uncontrolled".to_string(),
+                        detail: Some("default_checked=true; parent only observes on_change".to_string()),
+                    }
+                    Checkbox {
+                        label: Some("Remember me".to_string()),
+                        default_checked: Some(true),
+                        on_change: Some(EventHandler::new(move |value| checkbox_uc_label.set(value))),
+                    }
+                    v_gap { height: spacing::SM }
+                    Text {
+                        content: format!("last on_change = {}", checkbox_uc_label()),
+                        variant: TextVariant::Muted,
+                    }
+                    v_gap { height: spacing::LG }
+                    Checkbox {
+                        label: Some("Disabled".to_string()),
+                        default_checked: Some(false),
+                        disabled: Some(true),
                     }
                 }
             }
@@ -1571,18 +1669,44 @@ fn ComponentDemo(slug: &'static str) -> Element {
         "collapsible" => rsx! {
             fixed_width {
                 width: 350.0,
-                Collapsible {
-                    title: "@peduarte starred 3 repositories".to_string(),
-                    open: Some(toggle_pressed()),
-                    default_open: true,
-                    on_open_change: EventHandler::new(move |value| toggle_pressed.set(value)),
-                    column {
-                        percent_width: 1.0,
-                        repo_row { name: "@radix-ui/primitives".to_string() }
-                        v_gap { height: spacing::SM }
-                        repo_row { name: "@radix-ui/react".to_string() }
-                        v_gap { height: spacing::SM }
-                        repo_row { name: "@stitches/core".to_string() }
+                column {
+                    percent_width: 1.0,
+                    demo_mode_label {
+                        title: "Controlled".to_string(),
+                        detail: Some(format!("open = {}", collapsible_open())),
+                    }
+                    Collapsible {
+                        title: "@peduarte starred 3 repositories".to_string(),
+                        open: Some(collapsible_open()),
+                        on_open_change: EventHandler::new(move |value| collapsible_open.set(value)),
+                        column {
+                            percent_width: 1.0,
+                            repo_row { name: "@radix-ui/primitives".to_string() }
+                            v_gap { height: spacing::SM }
+                            repo_row { name: "@radix-ui/react".to_string() }
+                            v_gap { height: spacing::SM }
+                            repo_row { name: "@stitches/core".to_string() }
+                        }
+                    }
+                    {demo_mode_divider()}
+                    demo_mode_label {
+                        title: "Uncontrolled".to_string(),
+                        detail: Some(collapsible_uc_note()),
+                    }
+                    Collapsible {
+                        title: "Uncontrolled collapsible".to_string(),
+                        default_open: true,
+                        on_open_change: EventHandler::new(move |value| {
+                            collapsible_uc_note.set(format!("on_open_change = {value}"));
+                        }),
+                        column {
+                            percent_width: 1.0,
+                            repo_row { name: "@radix-ui/primitives".to_string() }
+                            v_gap { height: spacing::SM }
+                            repo_row { name: "@radix-ui/react".to_string() }
+                            v_gap { height: spacing::SM }
+                            repo_row { name: "@stitches/core".to_string() }
+                        }
                     }
                 }
             }
@@ -1592,6 +1716,10 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 width: 300.0,
                 column {
                     percent_width: 1.0,
+                    demo_mode_label {
+                        title: "Controlled".to_string(),
+                        detail: Some(format!("open = {}", context_open())),
+                    }
                     ContextMenu {
                         open: Some(context_open()),
                         default_open: false,
@@ -1607,7 +1735,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         ),
                         stack {
                             width: 300.0,
-                            height: 150.0,
+                            height: 120.0,
                             alignment: 4_i32,
                             border_width: 1.0,
                             border_color: theme.colors.foreground,
@@ -1615,41 +1743,106 @@ fn ComponentDemo(slug: &'static str) -> Element {
                             border_style: 1_i32,
                             clip: true,
                             text {
-                                content: "Long press here".to_string(),
+                                content: "Long press (controlled)".to_string(),
                                 font_size: typography::LG,
                                 font_color: theme.colors.foreground,
                                 line_height: 22.0,
                             }
                         }
                     }
-                    v_gap { height: spacing::LG }
+                    v_gap { height: spacing::MD }
                     Button {
                         variant: ButtonVariant::Outline,
                         percent_width: Some(1.0),
                         onclick: move |_| context_outside_clicks += 1,
                         "Outside click · {context_outside_clicks()}"
                     }
-                    v_gap { height: spacing::SM }
-                    Text {
-                        content: "With the menu open, the first click closes it without activating the button. The next click increments the count.".to_string(),
-                        variant: TextVariant::Muted,
+                    {demo_mode_divider()}
+                    demo_mode_label {
+                        title: "Uncontrolled".to_string(),
+                        detail: Some(context_uc_note()),
+                    }
+                    ContextMenu {
+                        default_open: false,
+                        on_open_change: move |value| {
+                            context_uc_note.set(format!("on_open_change = {value}"));
+                        },
+                        width: Some(288.0),
+                        items: context_menu_items(
+                            context_bookmarks(),
+                            context_full_urls(),
+                            context_person(),
+                            EventHandler::new(move |value| context_bookmarks.set(value)),
+                            EventHandler::new(move |value| context_full_urls.set(value)),
+                            EventHandler::new(move |value| context_person.set(value)),
+                        ),
+                        stack {
+                            width: 300.0,
+                            height: 100.0,
+                            alignment: 4_i32,
+                            border_width: 1.0,
+                            border_color: theme.colors.border,
+                            border_radius: theme.radii.md,
+                            border_style: 1_i32,
+                            clip: true,
+                            text {
+                                content: "Long press (uncontrolled)".to_string(),
+                                font_size: typography::MD,
+                                font_color: theme.colors.foreground,
+                                line_height: 20.0,
+                            }
+                        }
                     }
                 }
             }
         },
         "date-picker" => rsx! {
-            DatePicker {
-                selected: date_picker_selected(),
-                open: Some(date_picker_open()),
-                on_change: move |date| date_picker_selected.set(date),
-                on_open_change: move |open| date_picker_open.set(open),
+            column {
+                align_items: "start",
+                demo_mode_label {
+                    title: "Controlled".to_string(),
+                    detail: Some(format!(
+                        "selected = {:?}, open = {}",
+                        date_picker_selected(),
+                        date_picker_open()
+                    )),
+                }
+                DatePicker {
+                    selected: date_picker_selected(),
+                    open: Some(date_picker_open()),
+                    on_change: move |date| date_picker_selected.set(date),
+                    on_open_change: move |open| date_picker_open.set(open),
+                }
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Uncontrolled open".to_string(),
+                    detail: Some(date_picker_uc_note()),
+                }
+                DatePicker {
+                    selected: date_picker_uc_selected(),
+                    default_open: false,
+                    on_change: move |date: Option<String>| {
+                        date_picker_uc_selected.set(date.clone());
+                        date_picker_uc_note.set(format!("on_change = {:?}", date));
+                    },
+                    on_open_change: move |open| {
+                        date_picker_uc_note.set(format!("on_open_change = {open}"));
+                    },
+                }
             }
         },
         "dialog" => rsx! {
-            Button {
-                variant: ButtonVariant::Outline,
-                onclick: move |_| dialog_open.set(true),
-                "Edit Profile"
+            column {
+                align_items: "start",
+                demo_mode_label {
+                    title: "Controlled".to_string(),
+                    detail: Some(format!("open = {}", dialog_open())),
+                }
+                Button {
+                    variant: ButtonVariant::Outline,
+                    onclick: move |_| dialog_open.set(true),
+                    "Edit Profile"
+                }
             }
             Dialog {
                 open: Some(dialog_open()),
@@ -1694,17 +1887,65 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                 }
             }
+            {demo_mode_divider()}
+            demo_mode_label {
+                title: "Uncontrolled".to_string(),
+                detail: Some("default_open via remount key".to_string()),
+            }
+            Button {
+                variant: ButtonVariant::Outline,
+                onclick: move |_| dialog_uc_gen.set(dialog_uc_gen() + 1),
+                "Open Uncontrolled Dialog"
+            }
+            if dialog_uc_gen() > 0 {
+                Dialog {
+                    key: "{dialog_uc_gen()}",
+                    default_open: Some(true),
+                    on_close: move |_| {},
+                    DialogHeader {
+                        title: "Uncontrolled".to_string(),
+                        description: Some("Opened with default_open; dismiss uses internal state.".to_string()),
+                    }
+                    DialogFooter {
+                        Button {
+                            onclick: move |_| {},
+                            "Close"
+                        }
+                    }
+                }
+            }
         },
         "dropdown-menu" => rsx! {
             fixed_width {
                 width: 384.0,
-                DropdownMenu {
-                    open: Some(menu_open()),
-                    default_open: false,
-                    on_open_change: Some(EventHandler::new(move |value| menu_open.set(value))),
-                    width: Some(288.0),
-                    items: dropdown_menu_items(),
-                    Button { variant: ButtonVariant::Outline, onclick: move |_| {}, "Open" }
+                column {
+                    percent_width: 1.0,
+                    demo_mode_label {
+                        title: "Controlled".to_string(),
+                        detail: Some(format!("open = {}", menu_open())),
+                    }
+                    DropdownMenu {
+                        open: Some(menu_open()),
+                        default_open: false,
+                        on_open_change: Some(EventHandler::new(move |value| menu_open.set(value))),
+                        width: Some(288.0),
+                        items: dropdown_menu_items(),
+                        Button { variant: ButtonVariant::Outline, onclick: move |_| {}, "Open" }
+                    }
+                    {demo_mode_divider()}
+                    demo_mode_label {
+                        title: "Uncontrolled".to_string(),
+                        detail: Some(menu_uc_note()),
+                    }
+                    DropdownMenu {
+                        default_open: false,
+                        on_open_change: Some(EventHandler::new(move |value| {
+                            menu_uc_note.set(format!("on_open_change = {value}"));
+                        })),
+                        width: Some(288.0),
+                        items: dropdown_menu_items(),
+                        Button { variant: ButtonVariant::Outline, onclick: move |_| {}, "Open (uncontrolled)" }
+                    }
                 }
             }
         },
@@ -1889,47 +2130,56 @@ fn ComponentDemo(slug: &'static str) -> Element {
         "hover-card" => rsx! {
             fixed_width {
                 width: 320.0,
-                HoverCard {
-                    open: Some(hover_open()),
-                    default_open: Some(false),
-                    on_close: move |_| hover_open.set(false),
-                    on_open_change: move |value| hover_open.set(value),
-                    width: Some(320.0),
-                    trigger: rsx! { Button { variant: ButtonVariant::Link, onclick: move |_| {}, "@expo" } },
-                    row {
-                        percent_width: 1.0,
-                        align_items: "start",
-                        justify_content: "start",
-                        {demo_avatar("https://github.com/expo.png", "E", false, None)}
-                        h_gap { width: spacing::LG }
-                        column {
-                            layout_weight: 1.0,
+                column {
+                    percent_width: 1.0,
+                    demo_mode_label {
+                        title: "Controlled".to_string(),
+                        detail: Some(format!("open = {}", hover_open())),
+                    }
+                    HoverCard {
+                        open: Some(hover_open()),
+                        default_open: Some(false),
+                        on_close: move |_| hover_open.set(false),
+                        on_open_change: move |value| hover_open.set(value),
+                        width: Some(320.0),
+                        trigger: rsx! { Button { variant: ButtonVariant::Link, onclick: move |_| {}, "@expo" } },
+                        row {
+                            percent_width: 1.0,
                             align_items: "start",
-                            justify_content: "start",
-                            text {
-                                content: "@expo".to_string(),
-                                font_size: typography::SM,
-                                font_weight: 600_i32,
-                                font_color: theme.colors.foreground,
-                                line_height: 20.0,
-                                text_align: 0_i32,
+                            {demo_avatar("https://github.com/expo.png", "E", false, None)}
+                            h_gap { width: spacing::LG }
+                            column {
+                                layout_weight: 1.0,
+                                align_items: "start",
+                                text {
+                                    content: "@expo".to_string(),
+                                    font_size: typography::SM,
+                                    font_weight: 600_i32,
+                                    font_color: theme.colors.foreground,
+                                    line_height: 20.0,
+                                }
+                                Text {
+                                    content: "Framework and tools for creating native apps with React.".to_string(),
+                                    variant: TextVariant::Muted,
+                                }
                             }
-                            v_gap { height: 4.0 }
-                            text {
-                                content: "Framework and tools for creating native apps with React.".to_string(),
-                                font_size: typography::SM,
-                                font_color: theme.colors.foreground,
-                                line_height: 20.0,
-                                text_align: 0_i32,
-                            }
-                            v_gap { height: 4.0 }
-                            text {
-                                content: "Joined December 2021".to_string(),
-                                font_size: typography::XS,
-                                font_color: theme.colors.muted_foreground,
-                                line_height: 16.0,
-                                text_align: 0_i32,
-                            }
+                        }
+                    }
+                    {demo_mode_divider()}
+                    demo_mode_label {
+                        title: "Uncontrolled".to_string(),
+                        detail: Some(hover_uc_note()),
+                    }
+                    HoverCard {
+                        default_open: Some(false),
+                        on_open_change: move |value| {
+                            hover_uc_note.set(format!("on_open_change = {value}"));
+                        },
+                        width: Some(280.0),
+                        trigger: rsx! { Button { variant: ButtonVariant::Link, onclick: move |_| {}, "@shadcn" } },
+                        Text {
+                            content: "Hover card with internal open state.".to_string(),
+                            variant: TextVariant::Muted,
                         }
                     }
                 }
@@ -1966,7 +2216,28 @@ fn ComponentDemo(slug: &'static str) -> Element {
         "input" => rsx! {
             fixed_width {
                 width: 384.0,
-                Input { placeholder: Some("Email".to_string()), percent_width: Some(1.0) }
+                column {
+                    percent_width: 1.0,
+                    demo_mode_label {
+                        title: "Controlled".to_string(),
+                        detail: Some(format!("value = {:?}", input_controlled())),
+                    }
+                    Input {
+                        placeholder: Some("Email".to_string()),
+                        value: Some(input_controlled()),
+                        percent_width: Some(1.0),
+                        on_change: Some(EventHandler::new(move |value| input_controlled.set(value))),
+                    }
+                    {demo_mode_divider()}
+                    demo_mode_label {
+                        title: "Uncontrolled".to_string(),
+                        detail: Some("omit value — native field owns text".to_string()),
+                    }
+                    Input {
+                        placeholder: Some("Uncontrolled input".to_string()),
+                        percent_width: Some(1.0),
+                    }
+                }
             }
         },
         "input-otp" => rsx! {
@@ -2194,58 +2465,114 @@ fn ComponentDemo(slug: &'static str) -> Element {
             }
         }
         "menubar" => rsx! {
-            Menubar {
-                active: Some(menubar_active()),
-                default_active: None,
-                on_active_change: move |value| menubar_active.set(value),
-                menus: menubar_menus(
-                    context_bookmarks(),
-                    context_full_urls(),
-                    context_person(),
-                    EventHandler::new(move |value| context_bookmarks.set(value)),
-                    EventHandler::new(move |value| context_full_urls.set(value)),
-                    EventHandler::new(move |value| context_person.set(value)),
-                ),
+            column {
+                percent_width: 1.0,
+                demo_mode_label {
+                    title: "Controlled".to_string(),
+                    detail: Some(format!("active = {:?}", menubar_active())),
+                }
+                Menubar {
+                    active: Some(menubar_active()),
+                    default_active: None,
+                    on_active_change: move |value| menubar_active.set(value),
+                    menus: menubar_menus(
+                        context_bookmarks(),
+                        context_full_urls(),
+                        context_person(),
+                        EventHandler::new(move |value| context_bookmarks.set(value)),
+                        EventHandler::new(move |value| context_full_urls.set(value)),
+                        EventHandler::new(move |value| context_person.set(value)),
+                    ),
+                }
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Uncontrolled".to_string(),
+                    detail: Some(menubar_uc_note()),
+                }
+                Menubar {
+                    default_active: None,
+                    on_active_change: move |value| {
+                        menubar_uc_note.set(format!("on_active_change = {:?}", value));
+                    },
+                    menus: menubar_menus(
+                        context_bookmarks(),
+                        context_full_urls(),
+                        context_person(),
+                        EventHandler::new(move |value| context_bookmarks.set(value)),
+                        EventHandler::new(move |value| context_full_urls.set(value)),
+                        EventHandler::new(move |value| context_person.set(value)),
+                    ),
+                }
             }
         },
         "popover" => rsx! {
-            Popover {
-                open: Some(popover_open()),
-                default_open: Some(false),
-                on_close: move |_| popover_open.set(false),
-                on_open_change: move |value| popover_open.set(value),
-                width: Some(320.0),
-                trigger: rsx! { Button { variant: ButtonVariant::Outline, onclick: move |_| {}, "Open popover" } },
-                column {
-                    percent_width: 1.0,
-                    text {
-                        content: "Dimensions".to_string(),
-                        font_size: typography::MD,
-                        font_weight: 500_i32,
-                        font_color: theme.colors.foreground,
-                        line_height: 16.0,
+            column {
+                align_items: "start",
+                demo_mode_label {
+                    title: "Controlled".to_string(),
+                    detail: Some(format!("open = {}", popover_open())),
+                }
+                Popover {
+                    open: Some(popover_open()),
+                    default_open: Some(false),
+                    on_close: move |_| popover_open.set(false),
+                    on_open_change: move |value| popover_open.set(value),
+                    width: Some(320.0),
+                    trigger: rsx! { Button { variant: ButtonVariant::Outline, onclick: move |_| {}, "Open popover" } },
+                    column {
+                        percent_width: 1.0,
+                        text {
+                            content: "Dimensions".to_string(),
+                            font_size: typography::MD,
+                            font_weight: 500_i32,
+                            font_color: theme.colors.foreground,
+                            line_height: 16.0,
+                        }
+                        v_gap { height: spacing::SM }
+                        Text { content: "Set the dimensions for the layer.".to_string(), variant: TextVariant::Muted }
+                        v_gap { height: spacing::LG }
+                        popover_form_row {
+                            label: "Width".to_string(),
+                            value: "100%".to_string(),
+                        }
+                        v_gap { height: spacing::SM }
+                        popover_form_row {
+                            label: "Max. width".to_string(),
+                            value: "300px".to_string(),
+                        }
+                        v_gap { height: spacing::SM }
+                        popover_form_row {
+                            label: "Height".to_string(),
+                            value: "25px".to_string(),
+                        }
+                        v_gap { height: spacing::SM }
+                        popover_form_row {
+                            label: "Max. height".to_string(),
+                            value: "none".to_string(),
+                        }
                     }
-                    v_gap { height: spacing::SM }
-                    Text { content: "Set the dimensions for the layer.".to_string(), variant: TextVariant::Muted }
-                    v_gap { height: spacing::LG }
-                    popover_form_row {
-                        label: "Width".to_string(),
-                        value: "100%".to_string(),
-                    }
-                    v_gap { height: spacing::SM }
-                    popover_form_row {
-                        label: "Max. width".to_string(),
-                        value: "300px".to_string(),
-                    }
-                    v_gap { height: spacing::SM }
-                    popover_form_row {
-                        label: "Height".to_string(),
-                        value: "25px".to_string(),
-                    }
-                    v_gap { height: spacing::SM }
-                    popover_form_row {
-                        label: "Max. height".to_string(),
-                        value: "none".to_string(),
+                }
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Uncontrolled".to_string(),
+                    detail: Some(popover_uc_note()),
+                }
+                Popover {
+                    default_open: Some(false),
+                    on_open_change: move |value| {
+                        popover_uc_note.set(format!("on_open_change = {value}"));
+                    },
+                    width: Some(280.0),
+                    trigger: rsx! {
+                        Button {
+                            variant: ButtonVariant::Outline,
+                            onclick: move |_| {},
+                            "Open (uncontrolled)"
+                        }
+                    },
+                    Text {
+                        content: "Popover manages its own open state.".to_string(),
+                        variant: TextVariant::Muted,
                     }
                 }
             }
@@ -2363,16 +2690,77 @@ fn ComponentDemo(slug: &'static str) -> Element {
         "radio-group" => rsx! {
             fixed_width {
                 width: 384.0,
-                RadioGroup {
-                    options: vec!["Default".to_string(), "Comfortable".to_string(), "Compact".to_string()],
-                    selected: Some(radio_choice()),
-                    default_selected: "Default".to_string(),
-                    on_select: move |value| radio_choice.set(value),
+                column {
+                    percent_width: 1.0,
+                    demo_mode_label {
+                        title: "Controlled".to_string(),
+                        detail: Some(format!("selected = {}", radio_choice())),
+                    }
+                    RadioGroup {
+                        options: vec!["Default".to_string(), "Comfortable".to_string(), "Compact".to_string()],
+                        selected: Some(radio_choice()),
+                        on_select: move |value| radio_choice.set(value),
+                    }
+                    {demo_mode_divider()}
+                    demo_mode_label {
+                        title: "Uncontrolled".to_string(),
+                        detail: Some(radio_uc_note()),
+                    }
+                    RadioGroup {
+                        options: vec!["Default".to_string(), "Comfortable".to_string(), "Compact".to_string()],
+                        default_selected: "Comfortable".to_string(),
+                        on_select: move |value| {
+                            radio_uc_note.set(format!("on_select = {value}"));
+                        },
+                    }
                 }
             }
         },
         "select" => rsx! {
-            {select_carousel(page(), selected_fruit(), select_open(), on_page, EventHandler::new(move |value| selected_fruit.set(value)), EventHandler::new(move |value| select_open.set(value)))}
+            column {
+                percent_width: 1.0,
+                demo_mode_label {
+                    title: "Controlled".to_string(),
+                    detail: Some(format!(
+                        "selected = {:?}, open = {}",
+                        selected_fruit(),
+                        select_open()
+                    )),
+                }
+                {select_carousel(
+                    page(),
+                    selected_fruit(),
+                    select_open(),
+                    on_page,
+                    EventHandler::new(move |value| selected_fruit.set(value)),
+                    EventHandler::new(move |value| select_open.set(value)),
+                )}
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Uncontrolled".to_string(),
+                    detail: Some(format!("{} | {}", select_uc_note(), select_open_uc_note())),
+                }
+                fixed_width {
+                    width: 180.0,
+                    Select {
+                        options: vec![
+                            "Apple".to_string(),
+                            "Banana".to_string(),
+                            "Blueberry".to_string(),
+                            "Grapes".to_string(),
+                            "Pineapple".to_string(),
+                        ],
+                        default_selected: "Apple".to_string(),
+                        default_open: false,
+                        on_select: Some(EventHandler::new(move |value| {
+                            select_uc_note.set(format!("on_select = {value}"));
+                        })),
+                        on_open_change: Some(EventHandler::new(move |open| {
+                            select_open_uc_note.set(format!("on_open_change = {open}"));
+                        })),
+                    }
+                }
+            }
         },
         "separator" => rsx! {
             fixed_width {
@@ -3057,58 +3445,60 @@ fn ComponentDemo(slug: &'static str) -> Element {
             }
         },
         "switch" => rsx! {
-            row {
-                align_items: "center",
-                justify_content: "start",
-                Switch {
-                    checked: Some(switch_checked()),
-                    on_change: Some(EventHandler::new(move |value| switch_checked.set(value))),
+            column {
+                align_items: "start",
+                demo_mode_label {
+                    title: "Controlled".to_string(),
+                    detail: Some(format!("checked = {}", switch_checked())),
                 }
-                h_gap { width: spacing::SM }
-                Label { content: "Airplane Mode".to_string() }
+                row {
+                    align_items: "center",
+                    Switch {
+                        checked: Some(switch_checked()),
+                        on_change: Some(EventHandler::new(move |value| switch_checked.set(value))),
+                    }
+                    h_gap { width: spacing::SM }
+                    Label { content: "Airplane Mode".to_string() }
+                }
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Uncontrolled".to_string(),
+                    detail: Some(switch_uc_note()),
+                }
+                row {
+                    align_items: "center",
+                    Switch {
+                        default_checked: Some(false),
+                        on_change: Some(EventHandler::new(move |value| {
+                            switch_uc_note.set(format!("on_change = {value}"));
+                        })),
+                    }
+                    h_gap { width: spacing::SM }
+                    Label { content: "Wi‑Fi".to_string() }
+                }
             }
         },
         "tabs" => rsx! {
-            row {
+            column {
                 percent_width: 1.0,
                 max_width_constraint: 384.0,
+                demo_mode_label {
+                    title: "Controlled".to_string(),
+                    detail: Some(format!("active = {}", tabs_active())),
+                }
                 Tabs {
                     labels: vec!["Account".to_string(), "Password".to_string()],
+                    active: Some(tabs_active()),
+                    on_change: move |index| tabs_active.set(index),
                     panels: vec![
                         rsx! {
                             Card {
                                 CardHeader {
                                     title: "Account".to_string(),
-                                    description: "Make changes to your account here. Click save when you're done.".to_string(),
+                                    description: "Controlled tab panel.".to_string(),
                                 }
                                 CardContent {
-                                    column {
-                                        percent_width: 1.0,
-                                        column {
-                                            percent_width: 1.0,
-                                            Label { content: "Name".to_string() }
-                                            v_gap { height: spacing::XXS }
-                                            Input {
-                                                placeholder: Some("Pedro Duarte".to_string()),
-                                                value: Some("Pedro Duarte".to_string()),
-                                                percent_width: Some(1.0),
-                                            }
-                                        }
-                                        v_gap { height: spacing::SM }
-                                        column {
-                                            percent_width: 1.0,
-                                            Label { content: "Username".to_string() }
-                                            v_gap { height: spacing::XXS }
-                                            Input {
-                                                placeholder: Some("@peduarte".to_string()),
-                                                value: Some("@peduarte".to_string()),
-                                                percent_width: Some(1.0),
-                                            }
-                                        }
-                                    }
-                                }
-                                CardFooter {
-                                    Button { onclick: move |_| {}, "Save changes" }
+                                    Text { content: "Parent owns active index.".to_string(), variant: TextVariant::Muted }
                                 }
                             }
                         },
@@ -3116,36 +3506,30 @@ fn ComponentDemo(slug: &'static str) -> Element {
                             Card {
                                 CardHeader {
                                     title: "Password".to_string(),
-                                    description: "Change your password here. After saving, you'll be logged out.".to_string(),
+                                    description: "Second controlled panel.".to_string(),
                                 }
                                 CardContent {
-                                    column {
-                                        percent_width: 1.0,
-                                        column {
-                                            percent_width: 1.0,
-                                            Label { content: "Current password".to_string() }
-                                            v_gap { height: spacing::XXS }
-                                            Input {
-                                                placeholder: Some("********".to_string()),
-                                                percent_width: Some(1.0),
-                                            }
-                                        }
-                                        v_gap { height: spacing::SM }
-                                        column {
-                                            percent_width: 1.0,
-                                            Label { content: "New password".to_string() }
-                                            v_gap { height: spacing::XXS }
-                                            Input {
-                                                placeholder: Some("********".to_string()),
-                                                percent_width: Some(1.0),
-                                            }
-                                        }
-                                    }
-                                }
-                                CardFooter {
-                                    Button { onclick: move |_| {}, "Save password" }
+                                    Text { content: "Switch tabs via triggers.".to_string(), variant: TextVariant::Muted }
                                 }
                             }
+                        },
+                    ],
+                }
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Uncontrolled".to_string(),
+                    detail: Some("default_active = 0".to_string()),
+                }
+                Tabs {
+                    labels: vec!["One".to_string(), "Two".to_string()],
+                    default_active: 0,
+                    on_change: move |_| {},
+                    panels: vec![
+                        rsx! {
+                            Text { content: "Uncontrolled panel A".to_string(), variant: TextVariant::Muted }
+                        },
+                        rsx! {
+                            Text { content: "Uncontrolled panel B".to_string(), variant: TextVariant::Muted }
                         },
                     ],
                 }
@@ -3157,38 +3541,130 @@ fn ComponentDemo(slug: &'static str) -> Element {
         "textarea" => rsx! {
             fixed_width {
                 width: 384.0,
-                Textarea { placeholder: Some("Type your message here.".to_string()), percent_width: Some(1.0) }
+                column {
+                    percent_width: 1.0,
+                    demo_mode_label {
+                        title: "Controlled".to_string(),
+                        detail: Some(format!("value.len = {}", textarea_controlled().chars().count())),
+                    }
+                    Textarea {
+                        placeholder: Some("Type your message here.".to_string()),
+                        value: Some(textarea_controlled()),
+                        percent_width: Some(1.0),
+                        on_change: Some(EventHandler::new(move |value| textarea_controlled.set(value))),
+                    }
+                    {demo_mode_divider()}
+                    demo_mode_label {
+                        title: "Uncontrolled".to_string(),
+                        detail: Some("omit value — native field owns text".to_string()),
+                    }
+                    Textarea {
+                        placeholder: Some("Uncontrolled textarea".to_string()),
+                        percent_width: Some(1.0),
+                    }
+                }
             }
         },
         "toggle" => rsx! {
-            // Outline so pressed/unpressed stay visible on light Zinc surfaces
-            // (Default accent fill is nearly the same as the canvas).
-            Toggle {
-                label: "".to_string(),
-                icon: Some("bold".to_string()),
-                variant: ToggleVariant::Outline,
-                checked: Some(toggle_pressed()),
-                on_change: EventHandler::new(move |value| toggle_pressed.set(value)),
+            column {
+                align_items: "start",
+                demo_mode_label {
+                    title: "Controlled".to_string(),
+                    detail: Some(format!("checked = {}", toggle_pressed())),
+                }
+                Toggle {
+                    label: "".to_string(),
+                    icon: Some("bold".to_string()),
+                    variant: ToggleVariant::Outline,
+                    checked: Some(toggle_pressed()),
+                    on_change: EventHandler::new(move |value| toggle_pressed.set(value)),
+                }
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Uncontrolled".to_string(),
+                    detail: Some(toggle_uc_note()),
+                }
+                Toggle {
+                    label: "".to_string(),
+                    icon: Some("italic".to_string()),
+                    variant: ToggleVariant::Outline,
+                    default_checked: false,
+                    on_change: EventHandler::new(move |value| {
+                        toggle_uc_note.set(format!("on_change = {value}"));
+                    }),
+                }
             }
         },
         "toggle-group" => rsx! {
-            ToggleGroup {
-                options: vec!["bold".to_string(), "italic".to_string(), "underline".to_string()],
-                selected: Some(toggle_values()),
-                default_selected: vec!["bold".to_string()],
-                icons: true,
-                multi: true,
-                on_change: move |values| toggle_values.set(values),
+            column {
+                align_items: "start",
+                demo_mode_label {
+                    title: "Controlled".to_string(),
+                    detail: Some(format!("selected = {:?}", toggle_values())),
+                }
+                ToggleGroup {
+                    options: vec!["bold".to_string(), "italic".to_string(), "underline".to_string()],
+                    selected: Some(toggle_values()),
+                    icons: true,
+                    multi: true,
+                    on_change: move |values| toggle_values.set(values),
+                }
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Uncontrolled".to_string(),
+                    detail: Some(toggle_group_uc_note()),
+                }
+                ToggleGroup {
+                    options: vec!["bold".to_string(), "italic".to_string(), "underline".to_string()],
+                    default_selected: vec!["bold".to_string()],
+                    icons: true,
+                    multi: true,
+                    on_change: move |values| {
+                        toggle_group_uc_note.set(format!("on_change = {:?}", values));
+                    },
+                }
             }
         },
         "tooltip" => rsx! {
-            Tooltip {
-                open: Some(tooltip_open()),
-                default_open: Some(false),
-                on_close: move |_| tooltip_open.set(false),
-                on_open_change: move |value| tooltip_open.set(value),
-                content: "Add to library".to_string(),
-                trigger: rsx! { Button { variant: ButtonVariant::Outline, onclick: move |_| {}, "Press" } },
+            column {
+                align_items: "start",
+                demo_mode_label {
+                    title: "Controlled".to_string(),
+                    detail: Some(format!("open = {}", tooltip_open())),
+                }
+                Tooltip {
+                    open: Some(tooltip_open()),
+                    default_open: Some(false),
+                    on_close: move |_| tooltip_open.set(false),
+                    on_open_change: move |value| tooltip_open.set(value),
+                    content: "Add to library".to_string(),
+                    trigger: rsx! {
+                        Button {
+                            variant: ButtonVariant::Outline,
+                            onclick: move |_| {},
+                            "Press"
+                        }
+                    },
+                }
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Uncontrolled".to_string(),
+                    detail: Some(tooltip_uc_note()),
+                }
+                Tooltip {
+                    default_open: Some(false),
+                    on_open_change: move |value| {
+                        tooltip_uc_note.set(format!("on_open_change = {value}"));
+                    },
+                    content: "Uncontrolled tooltip".to_string(),
+                    trigger: rsx! {
+                        Button {
+                            variant: ButtonVariant::Outline,
+                            onclick: move |_| {},
+                            "Hover/Press"
+                        }
+                    },
+                }
             }
         },
         "table" => rsx! {
@@ -3229,6 +3705,90 @@ fn fixed_width(width: f32, children: Element) -> Element {
             }
         }
     }
+}
+
+/// Section header for controlled / uncontrolled showcase pairs.
+#[component]
+fn demo_mode_label(title: String, detail: Option<String>) -> Element {
+    let theme = arkit_shadcn::theme::use_theme();
+    rsx! {
+        column {
+            percent_width: 1.0,
+            align_items: "start",
+            text {
+                content: title,
+                font_size: typography::SM,
+                font_weight: 600_i32,
+                font_color: theme.colors.foreground,
+                line_height: 20.0,
+            }
+            if let Some(text) = detail {
+                text {
+                    content: text,
+                    font_size: typography::XS,
+                    font_color: theme.colors.muted_foreground,
+                    line_height: 16.0,
+                    margin_top: 2.0,
+                }
+            }
+            v_gap { height: spacing::SM }
+        }
+    }
+}
+
+fn demo_mode_divider() -> Element {
+    rsx! {
+        column {
+            percent_width: 1.0,
+            v_gap { height: spacing::XL }
+            Separator {}
+            v_gap { height: spacing::XL }
+        }
+    }
+}
+
+fn accordion_demo_items() -> Vec<AccordionItemSpec> {
+    vec![
+        AccordionItemSpec::new(
+            "Product Information",
+            "item-1",
+            rsx! {
+                column {
+                    percent_width: 1.0,
+                    Text {
+                        content: "Our flagship product combines cutting-edge technology with sleek design.".to_string(),
+                        variant: TextVariant::Muted,
+                    }
+                }
+            },
+        ),
+        AccordionItemSpec::new(
+            "Shipping Details",
+            "item-2",
+            rsx! {
+                column {
+                    percent_width: 1.0,
+                    Text {
+                        content: "Standard delivery takes 3-5 business days worldwide.".to_string(),
+                        variant: TextVariant::Muted,
+                    }
+                }
+            },
+        ),
+        AccordionItemSpec::new(
+            "Return Policy",
+            "item-3",
+            rsx! {
+                column {
+                    percent_width: 1.0,
+                    Text {
+                        content: "30-day returns with free shipping on eligible orders.".to_string(),
+                        variant: TextVariant::Muted,
+                    }
+                }
+            },
+        ),
+    ]
 }
 
 fn enqueue_sonner_toast(
