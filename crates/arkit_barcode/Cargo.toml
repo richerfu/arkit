@@ -1,0 +1,21 @@
+[package]
+name = "arkit_barcode"
+description = "Barcode and QR code generation for Arkit (encode, SVG/PNG export, UI)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+arkit_arkui = { workspace = true }
+arkit_prelude = { workspace = true }
+arkit_runtime = { workspace = true }
+base64 = { workspace = true }
+png = { workspace = true }
+rxing = { workspace = true }
+tokio = { workspace = true }
+
+[lib]

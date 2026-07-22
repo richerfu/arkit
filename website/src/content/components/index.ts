@@ -34,6 +34,7 @@ export const componentCatalog: ContentCatalog = {
       sections: [
         section("alert"),
         section("card"),
+        section("barcode"),
         section("code"),
         section("markdown"),
         section("skeleton"),
