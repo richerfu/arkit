@@ -44,11 +44,13 @@ let toast = SonnerToast::success(2, "Saved")
 | `toasts`         | 空             | 结构化 `SonnerToast` 列表                                      |
 | `messages`       | 空             | 纯文本列表；需要标题/操作/时长时用 `toasts`                    |
 | `position`       | `BottomCenter` | 上/下 × 左/中/右六种位置                                       |
-| `visible_toasts` | `3`            | 重叠栈中同时露出的最大数量，至少 1                             |
+| `visible_toasts` | `3`            | 重叠栈中同时露出的最大数量；不影响隐藏 toast 的计时            |
 | `rich_colors`    | `false`        | 语义强化配色                                                   |
 | `style`          | 默认           | 最大宽度、safe-area offset、inset、`stack_offset` 与 card 样式 |
 
 `SonnerToast` 提供 default/success/info/warning/error/loading/minimal constructors，以及 description、appearance、duration、action、dismiss builder。`duration_ms(0)` 保持到显式关闭；Loading 默认保持。timer、action、关闭按钮和 swipe 都必须最终从调用方列表清理对应 id。
+
+所有 live toast 在进入 `Sonner` 时即开始计时，包括折叠栈中超出 `visible_toasts` 的条目。非受控模式会记住仍在输入列表中的已关闭 toast；调用方移除该条目后，相同 id 可以再次使用。若要用相同 id 原地替换一个仍在列表中的 toast，必须递增 `revision`。
 
 手势约定（底部锚点）：
 

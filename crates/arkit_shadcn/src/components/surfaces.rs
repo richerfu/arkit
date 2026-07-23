@@ -8,7 +8,7 @@
 //! skips notification chrome.
 
 use std::time::Duration;
-use std::{fmt, rc::Rc};
+use std::{cell::RefCell, fmt, rc::Rc};
 
 use super::{Spinner, ARKUI_BORDER_STYLE_SOLID};
 use crate::icon::icon_placeholder;
@@ -307,6 +307,84 @@ impl SonnerToast {
     pub fn on_dismiss(mut self, handler: impl Fn() + 'static) -> Self {
         self.dismiss_handler = Some(Rc::new(handler));
         self
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ToastIdentity {
+    id: u64,
+    revision: u32,
+}
+
+impl From<&SonnerToast> for ToastIdentity {
+    fn from(toast: &SonnerToast) -> Self {
+        Self {
+            id: toast.id,
+            revision: toast.revision,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct LegacyMessageSlot {
+    message: String,
+    revision: u32,
+}
+
+#[derive(Debug, Default)]
+struct SonnerState {
+    dismissed: Vec<ToastIdentity>,
+    legacy_messages: Vec<LegacyMessageSlot>,
+}
+
+impl SonnerState {
+    fn reconcile_legacy_messages(&mut self, messages: Vec<String>) -> Vec<SonnerToast> {
+        let message_count = messages.len();
+        let mut toasts = Vec::with_capacity(message_count);
+
+        for (index, message) in messages.into_iter().enumerate() {
+            let revision = match self.legacy_messages.get_mut(index) {
+                Some(slot) if slot.message == message => slot.revision,
+                Some(slot) => {
+                    slot.message.clone_from(&message);
+                    slot.revision = slot
+                        .revision
+                        .checked_add(1)
+                        .expect("sonner legacy message revision space exhausted");
+                    slot.revision
+                }
+                None => {
+                    self.legacy_messages.push(LegacyMessageSlot {
+                        message: message.clone(),
+                        revision: 0,
+                    });
+                    0
+                }
+            };
+            toasts.push(
+                SonnerToast::new(u64::MAX.saturating_sub(index as u64), message).revision(revision),
+            );
+        }
+
+        self.legacy_messages.truncate(message_count);
+        toasts
+    }
+
+    fn reconcile_dismissals(&mut self, live: &[ToastIdentity]) {
+        self.dismissed.retain(|identity| live.contains(identity));
+    }
+
+    fn dismiss(&mut self, identity: ToastIdentity) -> bool {
+        if self.dismissed.contains(&identity) {
+            false
+        } else {
+            self.dismissed.push(identity);
+            true
+        }
+    }
+
+    fn is_dismissed(&self, identity: ToastIdentity) -> bool {
+        self.dismissed.contains(&identity)
     }
 }
 
@@ -680,6 +758,8 @@ pub struct SonnerProps {
     pub messages: Vec<String>,
     #[props(default)]
     pub position: SonnerPosition,
+    /// Maximum number of collapsed notification cards to paint. Timers still
+    /// run for every live toast.
     #[props(default = 3usize)]
     pub visible_toasts: usize,
     #[props(default)]
@@ -696,35 +776,35 @@ pub struct SonnerProps {
 #[component]
 pub fn Sonner(props: SonnerProps) -> Element {
     let theme = use_theme();
-    let mut dismissed = use_signal(Vec::<u64>::new);
+    let state = use_hook(|| Rc::new(RefCell::new(SonnerState::default())));
+    let mut state_version = use_signal(|| 0_u64);
+    let _ = state_version();
     let mut items = props.toasts;
-    items.extend(
-        props
-            .messages
-            .into_iter()
-            .enumerate()
-            .map(|(index, message)| {
-                SonnerToast::new(u64::MAX.saturating_sub(index as u64), message)
-            }),
-    );
-    items.retain(|toast| !dismissed().contains(&toast.id));
+    items.extend(state.borrow_mut().reconcile_legacy_messages(props.messages));
+    let live = items.iter().map(ToastIdentity::from).collect::<Vec<_>>();
+    {
+        let mut state = state.borrow_mut();
+        state.reconcile_dismissals(&live);
+        items.retain(|toast| !state.is_dismissed(ToastIdentity::from(toast)));
+    }
 
     let controlled_dismiss = props.on_dismiss;
-    let dismiss = EventHandler::new(move |id: u64| {
+    let dismiss_state = state.clone();
+    let dismiss = EventHandler::new(move |identity: ToastIdentity| {
         if let Some(handler) = controlled_dismiss {
-            handler.call(id);
-        } else {
-            dismissed.with_mut(|ids| {
-                if !ids.contains(&id) {
-                    ids.push(id);
-                }
-            });
+            handler.call(identity.id);
+        } else if dismiss_state.borrow_mut().dismiss(identity) {
+            state_version += 1;
         }
     });
 
+    let open = !items.is_empty();
+    // Timer ownership stays in Sonner rather than the visible overlay deck.
+    // Collapsing, expanding, or clipping the deck must not restart or delay it.
+    let timer_items = items.clone();
     let layer = rsx! {
         SonnerLayer {
-            toasts: items.clone(),
+            toasts: items,
             position: props.position,
             visible_toasts: props.visible_toasts.max(1),
             rich_colors: props.rich_colors,
@@ -733,8 +813,21 @@ pub fn Sonner(props: SonnerProps) -> Element {
             on_dismiss: dismiss,
         }
     };
-    use_sonner_overlay(!items.is_empty(), layer);
-    rsx! {}
+    use_sonner_overlay(open, layer);
+    rsx! {
+        for toast in timer_items {
+            {
+                let timer_key = format!("{}:{}", toast.id, toast.revision);
+                rsx! {
+                    SonnerToastTimer {
+                        key: "{timer_key}",
+                        toast,
+                        on_dismiss: dismiss,
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn use_sonner_overlay(open: bool, layer: Element) {
@@ -763,7 +856,7 @@ fn SonnerLayer(
     rich_colors: bool,
     style: SonnerStyle,
     theme: Theme,
-    on_dismiss: EventHandler<u64>,
+    on_dismiss: EventHandler<ToastIdentity>,
 ) -> Element {
     let safe_area = arkit_hooks::use_safe_area();
     let viewport_width = viewport_width_vp();
@@ -1055,7 +1148,7 @@ fn render_minimal_row(
     rich_colors: bool,
     style: ToastStyle,
     theme: Theme,
-    on_dismiss: EventHandler<u64>,
+    on_dismiss: EventHandler<ToastIdentity>,
     swipe_direction: ToastSwipeDirection,
 ) -> Element {
     if minimals.is_empty() {
@@ -1117,37 +1210,12 @@ fn SonnerToastEntry(
     interactive: bool,
     style: ToastStyle,
     theme: Theme,
-    on_dismiss: EventHandler<u64>,
+    on_dismiss: EventHandler<ToastIdentity>,
     on_expand_change: Option<EventHandler<bool>>,
 ) -> Element {
-    let id = toast.id;
-    let duration_ms = toast.duration_ms;
+    let identity = ToastIdentity::from(&toast);
     let action_handler = toast.action_handler.clone();
     let dismiss_handler = toast.dismiss_handler.clone();
-    let timer_dismiss = on_dismiss;
-    let timer_callback = dismiss_handler.clone();
-    // Capture the runtime handle while rendering on the registered UI thread.
-    // `tokio_handle()` is thread-local; resolving it lazily from inside a
-    // Dioxus task can run outside that registration and silently stop the task.
-    let async_runtime = arkit_runtime::tokio_handle();
-    let _dismiss_timer = use_future(move || {
-        let async_runtime = async_runtime.clone();
-        let timer_callback = timer_callback.clone();
-        async move {
-            if duration_ms == 0 {
-                return;
-            }
-            let timer = async_runtime.spawn(async move {
-                tokio::time::sleep(Duration::from_millis(duration_ms)).await;
-            });
-            if timer.await.is_ok() {
-                if let Some(handler) = timer_callback {
-                    handler();
-                }
-                timer_dismiss.call(id);
-            }
-        }
-    });
 
     let action_dismiss_callback = dismiss_handler.clone();
     let action = EventHandler::new(move |_: ()| {
@@ -1160,7 +1228,7 @@ fn SonnerToastEntry(
         if let Some(handler) = action_dismiss_callback.as_ref() {
             handler();
         }
-        on_dismiss.call(id);
+        on_dismiss.call(identity);
     });
     let dismiss = EventHandler::new(move |_: ()| {
         if !interactive {
@@ -1169,7 +1237,7 @@ fn SonnerToastEntry(
         if let Some(handler) = dismiss_handler.as_ref() {
             handler();
         }
-        on_dismiss.call(id);
+        on_dismiss.call(identity);
     });
     let expand = on_expand_change.map(|handler| {
         EventHandler::new(move |next: bool| {
@@ -1203,6 +1271,40 @@ fn SonnerToastEntry(
             }
         }
     }
+}
+
+/// Lifetime owner for one toast timer. This component is keyed by
+/// `(id, revision)` and remains mounted even when the corresponding card is
+/// outside the collapsed visual cap.
+#[component]
+fn SonnerToastTimer(toast: SonnerToast, on_dismiss: EventHandler<ToastIdentity>) -> Element {
+    let identity = ToastIdentity::from(&toast);
+    let duration_ms = toast.duration_ms;
+    let timer_callback = toast.dismiss_handler.clone();
+    // Capture the runtime handle while rendering on the registered UI thread.
+    // `tokio_handle()` is thread-local; resolving it lazily from inside a
+    // Dioxus task can run outside that registration and silently stop the task.
+    let async_runtime = arkit_runtime::tokio_handle();
+    let _dismiss_timer = use_future(move || {
+        let async_runtime = async_runtime.clone();
+        let timer_callback = timer_callback.clone();
+        async move {
+            if duration_ms == 0 {
+                return;
+            }
+            let timer = async_runtime.spawn(async move {
+                tokio::time::sleep(Duration::from_millis(duration_ms)).await;
+            });
+            if timer.await.is_ok() {
+                if let Some(handler) = timer_callback {
+                    handler();
+                }
+                on_dismiss.call(identity);
+            }
+        }
+    });
+
+    rsx! {}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -1510,6 +1612,49 @@ mod tests {
         let toast = SonnerToast::success(7, "Uploaded").revision(3);
         assert_eq!(toast.id, 7);
         assert_eq!(toast.revision, 3);
+    }
+
+    #[test]
+    fn dismissal_tombstone_is_released_after_source_removal() {
+        let identity = ToastIdentity { id: 7, revision: 0 };
+        let mut state = SonnerState::default();
+
+        assert!(state.dismiss(identity));
+        state.reconcile_dismissals(&[identity]);
+        assert!(state.is_dismissed(identity));
+
+        state.reconcile_dismissals(&[]);
+        assert!(!state.is_dismissed(identity));
+        assert!(state.dismiss(identity), "the removed id must be reusable");
+    }
+
+    #[test]
+    fn a_new_revision_does_not_inherit_an_old_dismissal() {
+        let old = ToastIdentity { id: 7, revision: 0 };
+        let updated = ToastIdentity { id: 7, revision: 1 };
+        let mut state = SonnerState::default();
+
+        assert!(state.dismiss(old));
+        state.reconcile_dismissals(&[updated]);
+
+        assert!(!state.is_dismissed(old));
+        assert!(!state.is_dismissed(updated));
+    }
+
+    #[test]
+    fn replacing_a_legacy_message_advances_its_identity() {
+        let mut state = SonnerState::default();
+        let first = state.reconcile_legacy_messages(vec!["first".to_string()]);
+        let first_identity = ToastIdentity::from(&first[0]);
+        assert!(state.dismiss(first_identity));
+
+        let second = state.reconcile_legacy_messages(vec!["second".to_string()]);
+        let second_identity = ToastIdentity::from(&second[0]);
+        state.reconcile_dismissals(&[second_identity]);
+
+        assert_eq!(second_identity.id, first_identity.id);
+        assert_eq!(second_identity.revision, first_identity.revision + 1);
+        assert!(!state.is_dismissed(second_identity));
     }
 
     #[test]
