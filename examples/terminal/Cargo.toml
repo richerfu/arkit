@@ -1,0 +1,26 @@
+[package]
+name = "terminal_example"
+description = "libghostty-vt embedded terminal showcase for arkit"
+publish = false
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+arkit = { workspace = true, features = ["terminal"] }
+arkit_runtime.workspace = true
+napi-ohos.workspace = true
+napi-derive-ohos.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "sync", "time", "net", "macros"] }
+# SSH host lives in the example, not in arkit_terminal.
+russh.workspace = true
+
+[build-dependencies]
+napi-build-ohos.workspace = true
