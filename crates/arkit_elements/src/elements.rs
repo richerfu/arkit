@@ -347,6 +347,7 @@ define_element! {
         margin_left, margin_right, margin_x, margin_y, margin_horizontal, margin_vertical,
         width, height, opacity, border_radius, border_width,
         border_color, border_style, visibility, enabled, clip, focusable, focus_on_touch,
+        focused, focus_status,
         hit_test_behavior, aspect_ratio, position, z_index,
     }
 }
@@ -360,6 +361,7 @@ define_element! {
         margin_left, margin_right, margin_x, margin_y, margin_horizontal, margin_vertical,
         width, height, opacity, border_radius, border_width,
         border_color, border_style, visibility, enabled, clip, focusable, focus_on_touch,
+        focused, focus_status,
         hit_test_behavior, aspect_ratio, position, z_index,
     }
 }

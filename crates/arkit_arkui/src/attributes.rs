@@ -716,6 +716,9 @@ enum AttrGroup {
 
 fn attr_group(name: &str) -> AttrGroup {
     match name {
+        "focusable" | "focus_on_touch" | "focused" | "focus_status" | "enabled" => {
+            AttrGroup::Control
+        }
         "font_size"
         | "font_color"
         | "font_weight"
@@ -745,7 +748,6 @@ fn attr_group(name: &str) -> AttrGroup {
         | "opacity"
         | "clip"
         | "visibility"
-        | "enabled"
         | "foreground_color"
         | "progress_color"
         | "loading_progress_color"
@@ -1073,6 +1075,20 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
             ArkUINodeAttributeType::FocusOnTouch,
             EncodedAttrValue::Bool(as_bool(value)?),
         ),
+        // ArkUI NODE_FOCUS_STATUS: 1 = request focus.
+        // Only encode when true — writing 0 on every idle frame would steal
+        // focus from sibling inputs (SSH form, etc.).
+        "focused" | "focus_status" => {
+            if as_bool(value)? {
+                EncodedAttr::new(
+                    name,
+                    ArkUINodeAttributeType::FocusStatus,
+                    EncodedAttrValue::I32(1),
+                )
+            } else {
+                return None;
+            }
+        }
         "hit_test_behavior" => EncodedAttr::new(
             name,
             ArkUINodeAttributeType::HitTestBehavior,

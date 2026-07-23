@@ -11,7 +11,7 @@ workspace = true
 
 [features]
 default = []
-full = ["animation", "barcode", "camera-scan", "chart", "code", "i18n", "icon", "lottie-network", "markdown", "router", "shadcn"]
+full = ["animation", "barcode", "camera-scan", "chart", "code", "i18n", "icon", "lottie-network", "markdown", "router", "shadcn", "terminal"]
 animation = ["dep:arkit_animation"]
 # Standalone barcode / QR generation (no camera required).
 barcode = ["dep:arkit_barcode"]
@@ -30,6 +30,8 @@ markdown = ["shadcn", "arkit_shadcn/markdown"]
 markdown-highlight = ["markdown", "code"]
 router = ["animation", "dep:arkit_router"]
 shadcn = ["animation", "icon", "dep:arkit_shadcn"]
+# Embedded terminal (libghostty-vt via Zig).
+terminal = ["dep:arkit_terminal"]
 
 [dependencies]
 arkit_derive.workspace = true
@@ -46,6 +48,7 @@ arkit_chart = { workspace = true, optional = true }
 arkit_shadcn = { workspace = true, optional = true }
 arkit_icon = { workspace = true, optional = true }
 arkit_lottie = { workspace = true, optional = true }
+arkit_terminal = { workspace = true, optional = true }
 ohos-arkui-binding.workspace = true
 openharmony-ability.workspace = true
 napi-ohos.workspace = true

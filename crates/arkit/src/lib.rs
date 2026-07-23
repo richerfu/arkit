@@ -3,9 +3,10 @@
 //! The default facade exports Dioxus core (`rsx!`, `use_signal`, `Element`),
 //! the ArkUI element registry, renderer, runtime, and host hooks. Domain
 //! libraries are opt-in through the `animation`, `barcode`, `camera`, `chart`,
-//! `code`, `i18n`, `icon`, `lottie`, `markdown`, `router`, and `shadcn` features
-//! (or `full`). Barcode/QR generation is the `barcode` feature (no camera).
-//! Code highlighting uses `code`; Markdown fences need `markdown` + `code`.
+//! `code`, `i18n`, `icon`, `lottie`, `markdown`, `router`, `shadcn`, and
+//! `terminal` features (or `full`). Barcode/QR generation is the `barcode`
+//! feature (no camera). Code highlighting uses `code`; Markdown fences need
+//! `markdown` + `code`. Terminal uses `terminal` (libghostty-vt).
 //! The `#[entry]` macro mounts a `fn() -> Element` root component into a
 //! NodeContent slot.
 
@@ -153,6 +154,17 @@ pub use arkit_chart::{
     LabelLayoutCallbackParams, LabelLayoutCallbackResult, LabelLayoutOptions, LabelStyle, Legend,
     LineStyle, LinkData, MapFeature, MapOptions, MapPolygon, MapSeries, NodeData, SankeySeries,
     Series, SeriesOptions, Title, Tooltip, VisualStyle,
+};
+
+// --- Embedded terminal (libghostty-vt) ---
+#[cfg(feature = "terminal")]
+pub use arkit_terminal as terminal;
+#[cfg(feature = "terminal")]
+pub use arkit_terminal::{
+    rgb_to_argb, CursorVisualStyle, KeyChord, KeyMods, MouseAction, MouseButton, MouseInput, Rgb,
+    Terminal, TerminalCell, TerminalConfig, TerminalController, TerminalCursor, TerminalEffects,
+    TerminalEngine, TerminalError, TerminalErrorKind, TerminalFrame, TerminalProps, TerminalResult,
+    TerminalRun, TerminalScrollbar, TerminalSize,
 };
 
 // --- shadcn component library ---
@@ -377,6 +389,14 @@ pub mod prelude {
         CameraScanConfiguration, CameraScanFormat, CameraScanModeConfiguration,
         CameraScanPreviewInteractions, CameraScanRegion, CameraScanResult,
         CameraScanToolbarConfiguration,
+    };
+
+    #[cfg(feature = "terminal")]
+    pub use crate::{
+        rgb_to_argb, CursorVisualStyle, KeyChord, KeyMods, MouseAction, MouseButton, MouseInput,
+        Rgb, Terminal, TerminalCell, TerminalConfig, TerminalController, TerminalCursor,
+        TerminalEffects, TerminalEngine, TerminalError, TerminalErrorKind, TerminalFrame,
+        TerminalProps, TerminalResult, TerminalRun, TerminalScrollbar, TerminalSize,
     };
 
     #[cfg(feature = "shadcn")]
