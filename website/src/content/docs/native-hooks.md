@@ -5,7 +5,7 @@ description: "节点句柄、布局观测与 UI-loop handoff。"
 
 # 原生节点与布局 Hooks
 
-核心业务 UI 应使用 `rsx!`。本章 API 是 escape hatch，只在声明式 element registry 无法表达的能力中使用，例如原生 WebView、NodeAdapter、自定义 Drawing 或第三方 ArkUI node。
+核心业务 UI 应使用 `rsx!`。本章 API 是 escape hatch，只在声明式 element registry 无法表达的能力中使用，例如原生 WebView、自定义 Drawing、第三方 ArkUI node，或 NodeAdapter 的底层原生 item 路径。普通虚拟列表 item 已支持 `use_virtual_node_adapter_rsx`，无需使用 `NodeBuilder`。
 
 ## ArkHost 与 use_ark_node
 
@@ -52,7 +52,7 @@ use_layout_frame_node(move |mut node, frame| {
 
 ## NodeBuilder
 
-NodeAdapter 的 `render_item` 在 Dioxus render cycle 外执行，必须返回原生 `ArkUINode`。`NodeBuilder` 为这个边界提供链式、可清理的构造器：
+`use_virtual_node_adapter` 的底层 `render_item` 在 Dioxus render cycle 外执行，必须返回原生 `ArkUINode`。`NodeBuilder` 为这个边界提供链式、可清理的构造器：
 
 ```rust
 fn render_item(index: u32) -> ArkUIResult<ArkUINode> {
@@ -81,7 +81,7 @@ fn render_item(index: u32) -> ArkUIResult<ArkUINode> {
 | `padding` / `margin` / `child`                                   | 盒模型与子节点                             |
 | `attr`                                                           | 任意 `ArkUINodeAttributeType`              |
 
-声明式 RSX 使用 CSS 写法（`width: "100%"`、`height: 48.0`）；`NodeBuilder` 是 render cycle 外的命令式路径，二者面向不同边界。
+声明式 RSX 使用 CSS 写法（`width: "100%"`、`height: 48.0`）；`NodeBuilder` 是 render cycle 外的命令式路径。虚拟 item 默认使用 `use_virtual_node_adapter_rsx`，只有明确需要直接返回 native node 时才落到这里。
 
 builder 在 `build` 前持有 native cleanup guard。任一步返回错误或 builder 被提前 drop，已创建 node 会被 dispose；`build` 后所有权转移给调用方。
 

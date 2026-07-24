@@ -1,9 +1,9 @@
 //! Complex cases — List / Grid / WaterFlow virtualized via ArkUI `NodeAdapter`.
 //!
-//! `use_virtual_node_adapter` attaches the matching adapter to the native host
-//! so only visible items are created on demand (true virtualization). Each
-//! container also demonstrates item-local invalidation: updating one revision
-//! calls `reload_items(index, 1)` and rebuilds only that native item.
+//! `use_virtual_node_adapter_rsx` attaches the matching adapter to the native
+//! host so only visible RSX items are created on demand (true virtualization).
+//! Each container also demonstrates item-local Dioxus state and adapter-driven
+//! invalidation of one data revision.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -65,7 +65,7 @@ fn app() -> Element {
                 padding: 16.0,
                 font_size: 13.0,
                 font_color: "#ff475569",
-                "total {TOTAL} (NodeAdapter virtualized)"
+                "total {TOTAL} (NodeAdapter + RSX virtualized)"
             }
 
             VirtualCaseView { kind: VirtualKind::List, active: cur == Case::List }
@@ -79,7 +79,7 @@ fn app() -> Element {
 fn VirtualCaseView(kind: VirtualKind, active: bool) -> Element {
     let revisions = use_hook(|| Rc::new(RefCell::new(vec![0_u32; TOTAL as usize])));
     let render_revisions = revisions.clone();
-    let adapter = use_virtual_node_adapter(kind, TOTAL, move |index| {
+    let adapter = use_virtual_node_adapter_rsx(kind, TOTAL, move |index| {
         let revision = render_revisions.borrow()[index as usize];
         render_virtual_item(kind, index, revision)
     });
@@ -215,13 +215,8 @@ fn use_attach_virtual_adapter(adapter: VirtualNodeAdapter) {
     });
 }
 
-fn render_virtual_item(
-    kind: VirtualKind,
-    index: u32,
-    revision: u32,
-) -> arkit::ohos_arkui_binding::common::error::ArkUIResult<
-    arkit::ohos_arkui_binding::common::node::ArkUINode,
-> {
+fn render_virtual_item(kind: VirtualKind, index: u32, revision: u32) -> Element {
+    let mut taps = use_signal(|| 0_u32);
     let (height, background_color) = match kind {
         VirtualKind::WaterFlow => {
             const HEIGHTS: [f32; 5] = [88.0, 120.0, 152.0, 104.0, 136.0];
@@ -248,29 +243,35 @@ fn render_virtual_item(
         }
     };
     let label = if kind == VirtualKind::WaterFlow {
-        format!("#{index:05}\nrev {revision} · {height:.0}vp")
+        format!(
+            "#{index:05}\nrev {revision} · {height:.0}vp · taps {}",
+            taps()
+        )
     } else {
-        format!("#{index:05} · rev {revision}")
+        format!("#{index:05} · rev {revision} · taps {}", taps())
     };
-    let text = NodeBuilder::new("text")?
-        .font_size(14.0)?
-        .font_color("#ff334155")?
-        .text_content(label)?
-        .build();
-    let item = NodeBuilder::new("row")?
-        .height(height)?
-        .background_color(background_color)?
-        .padding([12.0, 12.0, 12.0, 12.0])?
-        .child(text)?;
-    let item = if kind == VirtualKind::WaterFlow {
+
+    let width = if kind == VirtualKind::WaterFlow {
         // Native WaterFlow measures percentage widths against the host rather
-        // than the generated FlowItem. Match the explicit auto-fill track to
-        // keep the item content inside its wrapper.
-        item.width(104.0)?
+        // than the generated FlowItem. Match the explicit auto-fill track.
+        "104vp"
     } else {
-        item.percent_width(1.0)?
+        "100%"
     };
-    Ok(item.build())
+    rsx! {
+        row {
+            width: width,
+            height,
+            background_color,
+            padding: 12.0,
+            onclick: move |_| taps += 1,
+            text {
+                font_size: 14.0,
+                font_color: "#ff334155",
+                "{label}"
+            }
+        }
+    }
 }
 
 fn virtual_kind_label(kind: VirtualKind) -> &'static str {

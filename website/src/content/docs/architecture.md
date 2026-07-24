@@ -88,7 +88,7 @@ Chart model 是受控 snapshot。render transition 共享 `Rc` option，hit regi
 OpenHarmony binding 中部分 node/adapter handle 没有隐式 Drop：
 
 - `NodeBuilder` 在 build 前清理 early-error path。
-- VirtualNodeAdapter 管理 attach/detach/reload 与 item wrapper。
+- VirtualNodeAdapter 管理 attach/detach/reload、item wrapper，以及可见 RSX subtree 的 runtime owner。
 - Embedded WebView attach 失败立即 dispose ArkTS controller。
 - renderer dispose subtree 前先注销 event/gesture callback。
 - UI-only native 对象保持 thread-local ownership，不跨线程析构。
@@ -107,6 +107,7 @@ OpenHarmony binding 中部分 node/adapter handle 没有隐式 Drop：
 | ------------------------ | ------------------------------- |
 | 普通页面和组件           | `arkit::prelude` + RSX          |
 | 领域功能                 | facade feature + 对应 namespace |
+| 虚拟 RSX 列表            | `use_virtual_node_adapter_rsx`  |
 | 布局观测/adapter/WebView | `arkit_hooks` / facade hooks    |
 | 自定义 native item       | `NodeBuilder`                   |
 | 框架贡献：渲染 mutation  | `arkit_arkui`                   |

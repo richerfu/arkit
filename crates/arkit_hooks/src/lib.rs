@@ -49,5 +49,8 @@ pub use overlay::{
 pub use safe_area::{
     use_safe_area, use_safe_area_policy, use_window_metrics, SafeArea, SafeAreaEdges, SafeAreaProps,
 };
-pub use virtual_list::{use_virtual_node_adapter, use_virtual_node_adapter_items_keyed};
+pub use virtual_list::{
+    use_virtual_node_adapter, use_virtual_node_adapter_items_keyed, use_virtual_node_adapter_rsx,
+    use_virtual_node_adapter_rsx_items_keyed,
+};
 pub use virtual_range::{use_virtual_range, VirtualVisibleRange};

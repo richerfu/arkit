@@ -56,7 +56,9 @@ pub mod image;
 pub use image::{ArkImageSource, RetainedImage};
 
 pub mod virtual_adapter;
-pub use virtual_adapter::{RenderItem, VirtualKind, VirtualNodeAdapter};
+pub use virtual_adapter::{
+    MountItem, RenderItem, VirtualItemMount, VirtualKind, VirtualNodeAdapter,
+};
 
 pub mod node_builder;
 pub use node_builder::{NativeNodeEvent, NodeBuilder, NodeEventType, PreDragStatus};
@@ -266,10 +268,19 @@ pub struct ArkUIRenderer {
     /// entry is a ready-to-clone host subtree (kinds + structure) that
     /// `load_template` instantiates.
     templates: FxHashMap<usize, Vec<TemplateHostNode>>,
-    /// The NodeContent slot root, owning the mounted base node.
-    root_node: RootNode,
+    /// Ownership boundary for the synthetic host root.
+    root_mount: RendererRootMount,
     /// Event sink (set by the runtime after construction).
     sink: Option<Rc<dyn EventSink>>,
+}
+
+enum RendererRootMount {
+    /// Normal application renderer: the root is mounted in and owned through a
+    /// NodeContent slot.
+    NodeContent(RootNode),
+    /// Embedded renderer: the caller owns the supplied native root and keeps it
+    /// alive until after this renderer is dropped.
+    Embedded,
 }
 
 /// A template's static structure, mirroring [`TemplateNode`] but in host terms.
@@ -345,7 +356,25 @@ impl ArkUIRenderer {
             return Err(error);
         }
         let root = Rc::new(RefCell::new(root_ark));
+        Ok(Self::from_root(
+            root,
+            RendererRootMount::NodeContent(root_node),
+        ))
+    }
 
+    /// Create a renderer that projects a Dioxus subtree directly into an
+    /// existing native root.
+    ///
+    /// The caller owns `root` and must keep it alive until this renderer is
+    /// dropped. Embedded renderers do not dispose or detach the root; they only
+    /// tear down renderer-owned listeners. This is the mount boundary used by
+    /// RSX-backed NodeAdapter items, whose ListItem/GridItem/FlowItem wrapper
+    /// remains owned by ArkUI's adapter.
+    pub fn new_embedded(root: Rc<RefCell<ArkUINode>>) -> Self {
+        Self::from_root(root, RendererRootMount::Embedded)
+    }
+
+    fn from_root(root: Rc<RefCell<ArkUINode>>, root_mount: RendererRootMount) -> Self {
         let mut hosts = Vec::new();
         let mut root_host = HostNode::new(HostKind::Root);
         root_host.native = Some(root);
@@ -355,15 +384,15 @@ impl ArkUIRenderer {
 
         let element_to_host = vec![Some(0)];
 
-        Ok(Self {
+        Self {
             hosts,
             free_hosts: Vec::new(),
             element_to_host,
             stack: Vec::new(),
             templates: FxHashMap::default(),
-            root_node,
+            root_mount,
             sink: None,
-        })
+        }
     }
 
     /// Install the event sink used to forward native events into the VirtualDom.
@@ -1547,7 +1576,10 @@ impl ArkUIRenderer {
         // rely on active tokens. Tear both down before RootNode destroys the
         // native subtree.
         self.clear_subtree_native_listeners(0);
-        self.root_node.unmount()
+        match &mut self.root_mount {
+            RendererRootMount::NodeContent(root_node) => root_node.unmount(),
+            RendererRootMount::Embedded => Ok(()),
+        }
     }
 
     /// Look up the native ArkUI node backing the given dioxus [`ElementId`], if

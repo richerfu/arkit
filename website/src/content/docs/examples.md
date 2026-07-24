@@ -85,7 +85,7 @@ ohrs build --arch aarch
 - WaterFlow：五种循环高度与固定 auto-fill track。
 - 三种容器都可选择目标 index 并执行 `reload_items(index, 1)`；revision、颜色立即变化，WaterFlow 同时改变该项高度。
 
-它验证 NodeAdapter attach、wrapper kind、item recycle、局部失效、变高重新测量和 NodeBuilder early-error ownership。点击“更新单项”时，业务数据先更新，再同步调用 adapter；状态文案的 Dioxus 重渲染发生在 native item 更新之后，因此不会掩盖局部更新链路的问题。
+它验证 NodeAdapter attach、wrapper kind、RSX item scope、item recycle、局部 signal、局部失效和变高重新测量。点击可见 item 会更新它独立的 `taps` signal；点击“更新单项”时，业务数据先更新，再同步 reload 目标 item，用于验证 subtree 卸载、重建与 native wrapper 生命周期。
 
 ## lottie
 
