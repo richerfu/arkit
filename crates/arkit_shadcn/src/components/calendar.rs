@@ -8,6 +8,7 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::i18n::use_component_i18n;
 use crate::icon::icon_placeholder;
 use crate::theme::{typography, use_theme, Theme, ThemeMode};
 use arkit_prelude::*;
@@ -68,6 +69,14 @@ impl CalendarLabels {
         )
     }
 
+    pub(crate) fn localized(i18n: crate::i18n::ComponentI18n) -> Self {
+        Self::new(
+            i18n.calendar_weekdays(),
+            i18n.calendar_months(),
+            i18n.calendar_month_title_template(),
+        )
+    }
+
     fn month_title(&self, year: i32, month: u8) -> String {
         self.month_title_template
             .replace("{year}", &year.to_string())
@@ -87,8 +96,10 @@ pub struct CalendarProps {
     /// Initially visible month in `YYYY-MM` form. Defaults to the current
     /// month and is intentionally only read when the component mounts.
     pub initial_month: Option<String>,
-    /// Month names, weekday headings, and month-title formatting.
-    pub labels: CalendarLabels,
+    /// Month names, weekday headings, and month-title formatting. When
+    /// omitted, the active i18n locale selects the built-in labels.
+    #[props(default)]
+    pub labels: Option<CalendarLabels>,
     /// Selected-day fill. Defaults to the RNR sky-600/sky-500 colors.
     pub selection_color: Option<u32>,
     /// Today and navigation accent. Defaults to `selection_color`.
@@ -106,6 +117,7 @@ pub struct CalendarProps {
 #[component]
 pub fn Calendar(props: CalendarProps) -> Element {
     let theme = use_theme();
+    let i18n = use_component_i18n();
     let today = CalendarDate::today();
     let initial = props
         .initial_month
@@ -128,8 +140,11 @@ pub fn Calendar(props: CalendarProps) -> Element {
 
     let previous = month.previous();
     let next = month.next();
-    let title = props.labels.month_title(month.year, month.month);
-    let weekdays = props.labels.weekdays;
+    let labels = props
+        .labels
+        .unwrap_or_else(|| CalendarLabels::localized(i18n));
+    let title = labels.month_title(month.year, month.month);
+    let weekdays = labels.weekdays;
     let dates = month.grid_dates();
     let weeks = dates.chunks_exact(7).map(|week| {
         let cells = week.iter().copied().map(|date| {

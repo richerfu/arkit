@@ -11,16 +11,15 @@ use arkit::shadcn::components::{
     Accordion, AccordionItemSpec, Alert, AlertDescription, AlertDialog, AlertDialogAction,
     AlertList, AlertTitle, AlertVariant, AspectRatio, Avatar, AvatarFallback, Badge, BadgeVariant,
     BottomNavigation, BottomNavigationItem, BottomSheet, BottomSheetTextInput, Button, ButtonSize,
-    ButtonVariant, Calendar, CalendarLabels, Card, CardContent, CardFooter, CardHeader, Carousel,
+    ButtonVariant, Calendar, Card, CardContent, CardFooter, CardHeader, Carousel,
     CarouselControlsPlacement, CarouselIndicatorVariant, CarouselStyle, Checkbox, Code,
     Collapsible, ContextMenu, DatePicker, Dialog, DialogFooter, DialogHeader, DropdownMenu, Field,
     FieldContent, FieldDescription, FieldError, FieldGroup, FieldOrientation, FieldSeparator,
     FieldSet, FieldTitle, Form, FormItem, HoverCard, Input, InputOtp, InputOtpMode,
-    InputOtpSeparator, Label, Markdown, MarkdownAdmonitionLabels, MenuEntry, Menubar,
-    MenubarMenuSpec, MultiSlider, Popover, Progress, RadioGroup, RangeSlider, Select, Separator,
-    Skeleton, Slider, SliderOrientation, SliderStyle, Sonner, SonnerPosition, SonnerToast, Spinner,
-    Switch, Table, Tabs, Text, TextVariant, Textarea, ToastAppearance, Toggle, ToggleGroup,
-    ToggleVariant, Tooltip,
+    InputOtpSeparator, Label, Markdown, MenuEntry, Menubar, MenubarMenuSpec, MultiSlider, Popover,
+    Progress, RadioGroup, RangeSlider, Select, Separator, Skeleton, Slider, SliderOrientation,
+    SliderStyle, Sonner, SonnerPosition, SonnerToast, Spinner, Switch, Table, Tabs, Text,
+    TextVariant, Textarea, ToastAppearance, Toggle, ToggleGroup, ToggleVariant, Tooltip,
 };
 use arkit::shadcn::icon::icon_placeholder;
 use arkit::shadcn::theme::{
@@ -31,6 +30,14 @@ const HOME_HEADER_HEIGHT: f32 = 80.0;
 const DETAIL_HEADER_HEIGHT: f32 = 48.0;
 const TRACKING_TIGHT: f32 = -0.35;
 const MARKDOWN_STREAM_INTERVAL_MS: u64 = 500;
+
+arkit::i18n! {
+    pub mod tr {
+        path: "locales",
+        fallback: "en-US",
+        locales: ["en-US", "zh-CN"],
+    }
+}
 
 /// Static sample for tree-sitter fenced-code highlighting (`markdown` + `code`).
 const MARKDOWN_HIGHLIGHT_SAMPLE: &str = r#"## Syntax highlighting
@@ -312,6 +319,7 @@ const COMPONENTS: &[ComponentSpec] = &[
 
 #[entry]
 fn app() -> Element {
+    let _i18n = use_i18n_provider(&tr::CATALOG, tr::FALLBACK_LOCALE.id());
     let mut mode = use_signal(|| ThemeMode::Light);
     let mut preset = use_signal(|| ThemePreset::Zinc);
     let mut custom = use_signal(|| false);
@@ -581,6 +589,8 @@ fn NavBar(
     on_custom: EventHandler<bool>,
 ) -> Element {
     let theme = arkit_shadcn::theme::use_theme();
+    let i18n = use_i18n();
+    let language_button = t!(tr::language_button());
     let title_size = if back { 17.0 } else { 34.0 };
     let title_weight = if back { 500 } else { 700 };
     let title_line_height = if back { 22.0 } else { 40.0 };
@@ -630,6 +640,19 @@ fn NavBar(
                 on_mode,
                 on_preset,
                 on_custom,
+            }
+            row { width: spacing::SM }
+            Button {
+                variant: ButtonVariant::Outline,
+                size: ButtonSize::Sm,
+                onclick: move |_| {
+                    let next = match i18n.locale_id().as_str() {
+                        "zh-CN" => "en-US",
+                        _ => "zh-CN",
+                    };
+                    i18n.set_locale_id(next);
+                },
+                "{language_button}"
             }
         }
     }
@@ -1440,13 +1463,11 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 width: "100%",
                 Calendar {
                     selected: calendar_selected(),
-                    labels: CalendarLabels::english(),
                     on_day_press: move |date| calendar_selected.set(Some(date)),
                 }
                 v_gap { height: spacing::XXL }
                 Calendar {
                     selected_dates: calendar_selected_dates(),
-                    labels: CalendarLabels::english(),
                     selection_color: Some(0xFFF97316u32),
                     today_color: Some(0xFFF97316u32),
                     on_day_press: move |date: String| {
@@ -1860,9 +1881,6 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 }
                 DatePicker {
                     selected: date_picker_selected(),
-                    placeholder: "Pick a date".to_string(),
-                    close_label: "Close".to_string(),
-                    calendar_labels: CalendarLabels::english(),
                     open: Some(date_picker_open()),
                     on_change: move |date| date_picker_selected.set(date),
                     on_open_change: move |open| date_picker_open.set(open),
@@ -1874,9 +1892,6 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 }
                 DatePicker {
                     selected: date_picker_uc_selected(),
-                    placeholder: "Pick a date".to_string(),
-                    close_label: "Close".to_string(),
-                    calendar_labels: CalendarLabels::english(),
                     default_open: false,
                     on_change: move |date: Option<String>| {
                         date_picker_uc_selected.set(date.clone());
@@ -2516,7 +2531,6 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         v_gap { height: spacing::MD }
                         Markdown {
                             source: MARKDOWN_HIGHLIGHT_SAMPLE.to_string(),
-                            admonition_labels: Some(MarkdownAdmonitionLabels::english()),
                         }
                         v_gap { height: spacing::XL }
                         Separator {}
@@ -2567,7 +2581,6 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         v_gap { height: spacing::XL }
                         Markdown {
                             source: document,
-                            admonition_labels: Some(MarkdownAdmonitionLabels::english()),
                             on_link_click: Some(EventHandler::new(move |url: String| {
                                 markdown_link.set(format!("Activated: {url}"));
                             })),
@@ -2864,8 +2877,6 @@ fn ComponentDemo(slug: &'static str) -> Element {
                             "Grapes".to_string(),
                             "Pineapple".to_string(),
                         ],
-                        placeholder: "Select a fruit".to_string(),
-                        label: Some("Fruits".to_string()),
                         default_selected: "Apple".to_string(),
                         default_open: false,
                         on_select: Some(EventHandler::new(move |value| {
@@ -4159,8 +4170,6 @@ fn select_carousel(
                 width: 180.0,
                 Select {
                     options,
-                    placeholder: "Select a fruit".to_string(),
-                    label: Some("Fruits".to_string()),
                     selected: Some(selected),
                     default_selected: "Apple".to_string(),
                     open: Some(open),

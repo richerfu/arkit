@@ -339,6 +339,7 @@ version = "0.0.1-beta.0"
 dependencies = [
  "arkit_animation",
  "arkit_hooks",
+ "arkit_i18n",
  "arkit_icon",
  "arkit_prelude",
  "arkit_runtime",

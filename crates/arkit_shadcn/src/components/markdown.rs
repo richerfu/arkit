@@ -13,7 +13,10 @@ use pulldown_cmark::{
 };
 use smallvec::SmallVec;
 
-use crate::theme::{spacing, typography, use_theme, Theme};
+use crate::{
+    i18n::use_component_i18n,
+    theme::{spacing, typography, use_theme, Theme},
+};
 
 #[cfg(feature = "code")]
 use super::Code;
@@ -221,9 +224,12 @@ pub struct MarkdownProps {
     #[props(default)]
     pub style: Option<MarkdownStyle>,
     /// Labels rendered above GitHub-style admonition quotes. When omitted,
-    /// admonitions keep their visual treatment without injecting fixed copy.
+    /// the active i18n locale selects the built-in labels.
     #[props(default)]
     pub admonition_labels: Option<MarkdownAdmonitionLabels>,
+    /// Whether admonition headings are rendered.
+    #[props(default = true)]
+    pub show_admonition_labels: bool,
     /// Receives the destination of an activated Markdown link. Without a
     /// handler, links remain visually distinct but are inert.
     #[props(default)]
@@ -239,12 +245,27 @@ pub struct MarkdownProps {
 #[component]
 pub fn Markdown(props: MarkdownProps) -> Element {
     let theme = use_theme();
+    let i18n = use_component_i18n();
     let style = props
         .style
         .unwrap_or_else(|| MarkdownStyle::from_theme(&theme));
     let source = props.source;
     let options = props.options;
-    let admonition_labels = props.admonition_labels;
+    let admonition_labels = if props.show_admonition_labels {
+        Some(
+            props
+                .admonition_labels
+                .unwrap_or_else(|| MarkdownAdmonitionLabels {
+                    note: i18n.markdown_admonition_note(),
+                    tip: i18n.markdown_admonition_tip(),
+                    important: i18n.markdown_admonition_important(),
+                    warning: i18n.markdown_admonition_warning(),
+                    caution: i18n.markdown_admonition_caution(),
+                }),
+        )
+    } else {
+        None
+    };
     let document = use_memo(use_reactive((&source, &options), |(source, options)| {
         MarkdownDocument::parse(&source, options)
     }));

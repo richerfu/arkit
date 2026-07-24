@@ -9,17 +9,19 @@
 //! separates it from the option list.
 
 use super::ARKUI_BORDER_STYLE_SOLID;
-use crate::theme::*;
+use crate::{i18n::use_component_i18n, theme::*};
 use arkit_prelude::*;
 
 #[component]
 pub fn Command(
     query: String,
     options: Vec<String>,
-    placeholder: String,
+    placeholder: Option<String>,
     on_query_change: Option<EventHandler<String>>,
 ) -> Element {
     let theme = use_theme();
+    let i18n = use_component_i18n();
+    let placeholder = placeholder.unwrap_or_else(|| i18n.command_placeholder());
     let colors = &theme.colors;
     let sm = theme.radii.sm;
     let md = theme.radii.md;

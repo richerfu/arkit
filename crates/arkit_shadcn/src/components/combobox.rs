@@ -5,7 +5,7 @@
 //! icon, the selected value (or placeholder), and a chevrons-up-down icon; the
 //! dropdown lists options with a check mark on the active one.
 
-use crate::theme::*;
+use crate::{i18n::use_component_i18n, theme::*};
 use arkit_prelude::*;
 
 const COMBOBOX_PANEL_FALLBACK_WIDTH: f32 = 240.0;
@@ -13,7 +13,7 @@ const COMBOBOX_PANEL_FALLBACK_WIDTH: f32 = 240.0;
 #[component]
 pub fn Combobox(
     options: Vec<String>,
-    placeholder: String,
+    placeholder: Option<String>,
     label: Option<String>,
     selected: String,
     open: Option<bool>,
@@ -22,6 +22,7 @@ pub fn Combobox(
     on_select: Option<EventHandler<String>>,
 ) -> Element {
     let theme = use_theme();
+    let i18n = use_component_i18n();
     let mut internal_open = use_signal(|| default_open);
     let is_controlled = open.is_some();
     let current_open = open.unwrap_or_else(|| *internal_open.read());
@@ -42,9 +43,11 @@ pub fn Combobox(
     let trigger_label = if has_value {
         selected.clone()
     } else {
-        placeholder
+        placeholder.unwrap_or_else(|| i18n.combobox_placeholder())
     };
-    let panel_label = label.filter(|label| !label.is_empty());
+    let panel_label = label
+        .or_else(|| Some(i18n.combobox_label()))
+        .filter(|label| !label.is_empty());
     let label_color = if has_value {
         colors.foreground
     } else {

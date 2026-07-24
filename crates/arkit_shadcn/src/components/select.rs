@@ -9,7 +9,7 @@
 use super::floating_layer::{
     trigger_width_vp, FloatingAlign, FloatingPanelPlacement, FloatingSide, FLOATING_CAPTURE_COLOR,
 };
-use crate::theme::*;
+use crate::{i18n::use_component_i18n, theme::*};
 use arkit_prelude::*;
 
 const SELECT_PANEL_FALLBACK_WIDTH: f32 = 180.0;
@@ -23,7 +23,7 @@ const SELECT_TEXT_OVERFLOW_ELLIPSIS: &str = "ellipsis";
 #[component]
 pub fn Select(
     options: Vec<String>,
-    placeholder: String,
+    placeholder: Option<String>,
     label: Option<String>,
     selected: Option<String>,
     default_selected: String,
@@ -33,6 +33,7 @@ pub fn Select(
     on_select: Option<EventHandler<String>>,
 ) -> Element {
     let theme = use_theme();
+    let i18n = use_component_i18n();
     let overlay = arkit_hooks::use_overlay();
     let mut trigger_frame = use_signal(arkit_hooks::LayoutFrame::default);
     // Measure only the painted trigger root via `onarea` (full control width).
@@ -70,7 +71,7 @@ pub fn Select(
     let trigger_label = if has_value {
         current_selected.clone()
     } else {
-        placeholder
+        placeholder.unwrap_or_else(|| i18n.select_placeholder())
     };
     let label_color = if has_value {
         colors.foreground
@@ -78,7 +79,7 @@ pub fn Select(
         colors.muted_foreground
     };
     let count = options.len();
-    let panel_label = label.filter(|label| !label.is_empty());
+    let has_panel_label = label.as_deref() != Some("");
 
     let toggle = move |_| {
         if current_open {
@@ -92,7 +93,7 @@ pub fn Select(
         let frame = *trigger_frame.read();
         let viewport = overlay.viewport();
         let panel_width = trigger_width_vp(frame, viewport, SELECT_PANEL_FALLBACK_WIDTH);
-        let panel_height = select_panel_estimated_height(count, panel_label.is_some());
+        let panel_height = select_panel_estimated_height(count, has_panel_label);
         let placement = FloatingPanelPlacement::resolve(
             frame,
             viewport,
@@ -108,12 +109,14 @@ pub fn Select(
             dismiss_overlay.dismiss();
         });
         let overlay_options = options.clone();
-        let overlay_label = panel_label.clone();
+        let overlay_label = label.clone();
         let overlay_selected = current_selected.clone();
+        let overlay_i18n = i18n;
 
         overlay.show_floating(move || {
             select_overlay_content(SelectOverlayContent {
                 theme,
+                i18n: overlay_i18n,
                 panel_width,
                 placement,
                 options: overlay_options,
@@ -178,6 +181,7 @@ pub fn Select(
 
 struct SelectOverlayContent {
     theme: Theme,
+    i18n: crate::i18n::ComponentI18n,
     panel_width: f32,
     placement: FloatingPanelPlacement,
     options: Vec<String>,
@@ -190,6 +194,7 @@ struct SelectOverlayContent {
 fn select_overlay_content(content: SelectOverlayContent) -> Element {
     let SelectOverlayContent {
         theme,
+        i18n,
         panel_width,
         placement,
         options,
@@ -198,6 +203,9 @@ fn select_overlay_content(content: SelectOverlayContent) -> Element {
         set_selected,
         on_dismiss,
     } = content;
+    let label = label
+        .or_else(|| Some(i18n.select_label()))
+        .filter(|label| !label.is_empty());
     let colors = theme.colors;
     let scroll_list = options.len() > 8;
     let top = placement.y.max(0.0);

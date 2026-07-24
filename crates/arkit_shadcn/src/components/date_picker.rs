@@ -7,6 +7,7 @@
 //! picker, which is a different component.
 
 use super::{BottomSheet, Button, ButtonSize, ButtonVariant, Calendar, CalendarLabels};
+use crate::i18n::use_component_i18n;
 use crate::icon::icon_placeholder;
 use crate::theme::{spacing, typography, use_theme};
 use arkit_prelude::*;
@@ -21,11 +22,13 @@ pub struct DatePickerProps {
     pub selected: Option<String>,
     pub default_selected: Option<String>,
     /// Trigger text shown while no date is selected.
-    pub placeholder: String,
+    pub placeholder: Option<String>,
     /// Label for the action that dismisses the calendar sheet.
-    pub close_label: String,
+    pub close_label: Option<String>,
     /// Localized month, weekday, and title text forwarded to [`Calendar`].
-    pub calendar_labels: CalendarLabels,
+    /// When omitted, [`Calendar`] follows the active i18n locale.
+    #[props(default)]
+    pub calendar_labels: Option<CalendarLabels>,
     /// Controlled sheet state.
     pub open: Option<bool>,
     #[props(default)]
@@ -42,6 +45,7 @@ pub struct DatePickerProps {
 #[component]
 pub fn DatePicker(props: DatePickerProps) -> Element {
     let theme = use_theme();
+    let i18n = use_component_i18n();
     let mut internal_selected = use_signal(|| props.default_selected.clone());
     let mut internal_open = use_signal(|| props.default_open);
     let open_controlled = props.open.is_some();
@@ -50,7 +54,18 @@ pub fn DatePicker(props: DatePickerProps) -> Element {
         .clone()
         .or_else(|| internal_selected.read().clone());
     let open = props.open.unwrap_or_else(|| *internal_open.read());
-    let label = selected.clone().unwrap_or(props.placeholder);
+    let placeholder = props
+        .placeholder
+        .unwrap_or_else(|| i18n.date_picker_placeholder());
+    let close_label = props
+        .close_label
+        .unwrap_or_else(|| i18n.date_picker_close());
+    let calendar_labels = Some(
+        props
+            .calendar_labels
+            .unwrap_or_else(|| CalendarLabels::localized(i18n)),
+    );
+    let label = selected.clone().unwrap_or(placeholder);
     let initial_month = selected
         .as_deref()
         .and_then(|date| date.get(..7))
@@ -113,7 +128,7 @@ pub fn DatePicker(props: DatePickerProps) -> Element {
                 Calendar {
                     selected: selected.clone(),
                     initial_month,
-                    labels: props.calendar_labels,
+                    labels: calendar_labels,
                     embedded: true,
                     on_day_press: move |date| select_date.call(date),
                 }
@@ -122,7 +137,7 @@ pub fn DatePicker(props: DatePickerProps) -> Element {
                     size: ButtonSize::Sm,
                     width: "100%",
                     onclick: move |_| set_open.call(false),
-                    {props.close_label}
+                    {close_label}
                 }
             }
         }

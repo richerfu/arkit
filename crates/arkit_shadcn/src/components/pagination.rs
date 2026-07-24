@@ -6,7 +6,7 @@
 //! and the `XXS` inline spacing. Button variant styling (ghost/outline) is
 //! inlined so this component is self-contained.
 
-use crate::theme::*;
+use crate::{i18n::use_component_i18n, theme::*};
 use arkit_prelude::*;
 
 use super::ARKUI_BORDER_STYLE_SOLID;
@@ -18,8 +18,8 @@ const TRANSPARENT: u32 = 0x00000000;
 pub struct PaginationProps {
     pub page: i32,
     pub total_pages: i32,
-    pub previous_label: String,
-    pub next_label: String,
+    pub previous_label: Option<String>,
+    pub next_label: Option<String>,
     #[props(default)]
     pub on_page_change: EventHandler<i32>,
 }
@@ -28,11 +28,14 @@ pub struct PaginationProps {
 #[component]
 pub fn Pagination(props: PaginationProps) -> Element {
     let theme = use_theme();
+    let i18n = use_component_i18n();
     let total_pages = props.total_pages.max(1);
     let current = props.page.clamp(1, total_pages);
     let on_page_change = props.on_page_change;
-    let previous_label = props.previous_label;
-    let next_label = props.next_label;
+    let previous_label = props
+        .previous_label
+        .unwrap_or_else(|| i18n.pagination_previous());
+    let next_label = props.next_label.unwrap_or_else(|| i18n.pagination_next());
 
     let mut page_numbers: Vec<i32> = vec![1, total_pages, current - 1, current, current + 1]
         .into_iter()
