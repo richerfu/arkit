@@ -41,6 +41,7 @@ mod drawer;
 mod dropdown_menu;
 mod floating_layer;
 mod form;
+mod guide;
 mod hover_card;
 mod input;
 mod input_otp;
@@ -126,6 +127,9 @@ pub use form::{
     FieldLegendProps, FieldLegendVariant, FieldOrientation, FieldProps, FieldSeparator,
     FieldSeparatorProps, FieldSet, FieldSetProps, FieldTitle, FieldTitleProps, Form, FormItem,
     FormItemProps, FormProps,
+};
+pub use guide::{
+    Guide, GuideLabels, GuideProps, GuideSide, GuideStep, GuideStyle, GuideTarget, GuideTargetProps,
 };
 pub use hover_card::{HoverCard, HoverCardProps};
 pub use input::{Input, InputProps};

@@ -1,6 +1,6 @@
 //! shadcn showcase aligned with the pre-Dioxus React Native Reusables demo.
 
-use std::time::Duration;
+use std::{rc::Rc, time::Duration};
 
 use arkit::dioxus_core::EventHandler;
 use arkit::dioxus_signals::WritableExt;
@@ -15,11 +15,12 @@ use arkit::shadcn::components::{
     CarouselControlsPlacement, CarouselIndicatorVariant, CarouselStyle, Checkbox, Code,
     Collapsible, ContextMenu, DatePicker, Dialog, DialogFooter, DialogHeader, DropdownMenu, Field,
     FieldContent, FieldDescription, FieldError, FieldGroup, FieldOrientation, FieldSeparator,
-    FieldSet, FieldTitle, Form, FormItem, HoverCard, Input, InputOtp, InputOtpMode,
-    InputOtpSeparator, Label, Markdown, MenuEntry, Menubar, MenubarMenuSpec, MultiSlider, Popover,
-    Progress, RadioGroup, RangeSlider, Select, Separator, Skeleton, Slider, SliderOrientation,
-    SliderStyle, Sonner, SonnerPosition, SonnerToast, Spinner, Switch, Table, Tabs, Text,
-    TextVariant, Textarea, ToastAppearance, Toggle, ToggleGroup, ToggleVariant, Tooltip,
+    FieldSet, FieldTitle, Form, FormItem, Guide, GuideSide, GuideStep, GuideTarget, HoverCard,
+    Input, InputOtp, InputOtpMode, InputOtpSeparator, Label, Markdown, MenuEntry, Menubar,
+    MenubarMenuSpec, MultiSlider, Popover, Progress, RadioGroup, RangeSlider, Select, Separator,
+    Skeleton, Slider, SliderOrientation, SliderStyle, Sonner, SonnerPosition, SonnerToast, Spinner,
+    Switch, Table, Tabs, Text, TextVariant, Textarea, ToastAppearance, Toggle, ToggleGroup,
+    ToggleVariant, Tooltip,
 };
 use arkit::shadcn::icon::icon_placeholder;
 use arkit::shadcn::theme::{
@@ -216,6 +217,10 @@ const COMPONENTS: &[ComponentSpec] = &[
         name: "Form",
     },
     ComponentSpec {
+        slug: "guide",
+        name: "Guide",
+    },
+    ComponentSpec {
         slug: "hover-card",
         name: "Hover Card",
     },
@@ -324,8 +329,28 @@ fn app() -> Element {
     let mut preset = use_signal(|| ThemePreset::Zinc);
     let mut custom = use_signal(|| false);
     let mut theme_menu_open = use_signal(|| false);
+    let mut language_menu_open = use_signal(|| false);
     let mut selected = use_signal(|| None::<&'static str>);
     let mut query = use_signal(String::new);
+
+    let scoped_back_press = dioxus_hooks::use_callback(move |()| {
+        if language_menu_open() {
+            language_menu_open.set(false);
+            return true;
+        }
+        if theme_menu_open() {
+            theme_menu_open.set(false);
+            return true;
+        }
+        if selected().is_some() {
+            selected.set(None);
+            return true;
+        }
+        false
+    });
+    let back_press_handler: Rc<dyn Fn() -> bool> = Rc::new(move || scoped_back_press.call(()));
+    let _back_press_registration =
+        use_hook(move || Rc::new(arkit::register_back_press_handler(back_press_handler)));
 
     let theme = resolve_theme(mode(), preset(), custom());
 
@@ -351,8 +376,20 @@ fn app() -> Element {
                             preset: preset(),
                             custom: custom(),
                             theme_menu_open: theme_menu_open(),
+                            language_menu_open: language_menu_open(),
                             on_back: move |_| selected.set(None),
-                            on_theme_menu_open: move |value| theme_menu_open.set(value),
+                            on_theme_menu_open: move |value| {
+                                theme_menu_open.set(value);
+                                if value {
+                                    language_menu_open.set(false);
+                                }
+                            },
+                            on_language_menu_open: move |value| {
+                                language_menu_open.set(value);
+                                if value {
+                                    theme_menu_open.set(false);
+                                }
+                            },
                             on_mode: move |value| {
                                 mode.set(value);
                                 theme_menu_open.set(false);
@@ -380,9 +417,21 @@ fn app() -> Element {
                             preset: preset(),
                             custom: custom(),
                             theme_menu_open: theme_menu_open(),
+                            language_menu_open: language_menu_open(),
                             on_query: move |value: String| query.set(value),
                             on_select: move |slug: &'static str| selected.set(Some(slug)),
-                            on_theme_menu_open: move |value| theme_menu_open.set(value),
+                            on_theme_menu_open: move |value| {
+                                theme_menu_open.set(value);
+                                if value {
+                                    language_menu_open.set(false);
+                                }
+                            },
+                            on_language_menu_open: move |value| {
+                                language_menu_open.set(value);
+                                if value {
+                                    theme_menu_open.set(false);
+                                }
+                            },
                             on_mode: move |value| {
                                 mode.set(value);
                                 theme_menu_open.set(false);
@@ -453,9 +502,11 @@ fn HomeView(
     preset: ThemePreset,
     custom: bool,
     theme_menu_open: bool,
+    language_menu_open: bool,
     on_query: EventHandler<String>,
     on_select: EventHandler<&'static str>,
     on_theme_menu_open: EventHandler<bool>,
+    on_language_menu_open: EventHandler<bool>,
     on_mode: EventHandler<ThemeMode>,
     on_preset: EventHandler<ThemePreset>,
     on_custom: EventHandler<bool>,
@@ -470,14 +521,16 @@ fn HomeView(
 
     rsx! {
         NavBar {
-            title: "Showcase".to_string(),
+            title: "Arkit".to_string(),
             back: false,
             mode,
             preset,
             custom,
             open: theme_menu_open,
+            language_open: language_menu_open,
             on_back: move |_| {},
             on_open: on_theme_menu_open,
+            on_language_open: on_language_menu_open,
             on_mode,
             on_preset,
             on_custom,
@@ -548,8 +601,10 @@ fn DetailView(
     preset: ThemePreset,
     custom: bool,
     theme_menu_open: bool,
+    language_menu_open: bool,
     on_back: EventHandler<()>,
     on_theme_menu_open: EventHandler<bool>,
+    on_language_menu_open: EventHandler<bool>,
     on_mode: EventHandler<ThemeMode>,
     on_preset: EventHandler<ThemePreset>,
     on_custom: EventHandler<bool>,
@@ -562,8 +617,10 @@ fn DetailView(
             preset,
             custom,
             open: theme_menu_open,
+            language_open: language_menu_open,
             on_back,
             on_open: on_theme_menu_open,
+            on_language_open: on_language_menu_open,
             on_mode,
             on_preset,
             on_custom,
@@ -582,15 +639,15 @@ fn NavBar(
     preset: ThemePreset,
     custom: bool,
     open: bool,
+    language_open: bool,
     on_back: EventHandler<()>,
     on_open: EventHandler<bool>,
+    on_language_open: EventHandler<bool>,
     on_mode: EventHandler<ThemeMode>,
     on_preset: EventHandler<ThemePreset>,
     on_custom: EventHandler<bool>,
 ) -> Element {
     let theme = arkit_shadcn::theme::use_theme();
-    let i18n = use_i18n();
-    let language_button = t!(tr::language_button());
     let title_size = if back { 17.0 } else { 34.0 };
     let title_weight = if back { 500 } else { 700 };
     let title_line_height = if back { 22.0 } else { 40.0 };
@@ -613,6 +670,7 @@ fn NavBar(
             row {
                 layout_weight: 1.0,
                 align_items: if back { "center" } else { "bottom" },
+                clip: true,
                 if back {
                     Button {
                         variant: ButtonVariant::Ghost,
@@ -622,13 +680,20 @@ fn NavBar(
                     }
                     row { width: spacing::SM }
                 }
-                text {
-                    content: title,
-                    font_size: title_size,
-                    font_weight: title_weight,
-                    line_height: title_line_height,
-                    font_color: theme.colors.foreground,
-                    text_letter_spacing: TRACKING_TIGHT,
+                row {
+                    layout_weight: 1.0,
+                    clip: true,
+                    text {
+                        width: "100%",
+                        content: title,
+                        font_size: title_size,
+                        font_weight: title_weight,
+                        line_height: title_line_height,
+                        font_color: theme.colors.foreground,
+                        text_letter_spacing: TRACKING_TIGHT,
+                        max_lines: 1_i32,
+                        text_overflow: "ellipsis",
+                    }
                 }
             }
             ThemeMenu {
@@ -642,17 +707,54 @@ fn NavBar(
                 on_custom,
             }
             row { width: spacing::SM }
-            Button {
-                variant: ButtonVariant::Outline,
-                size: ButtonSize::Sm,
-                onclick: move |_| {
-                    let next = match i18n.locale_id().as_str() {
-                        "zh-CN" => "en-US",
-                        _ => "zh-CN",
-                    };
-                    i18n.set_locale_id(next);
-                },
-                "{language_button}"
+            LanguageMenu {
+                open: language_open,
+                on_open: on_language_open,
+            }
+        }
+    }
+}
+
+#[component]
+fn LanguageMenu(open: bool, on_open: EventHandler<bool>) -> Element {
+    let theme = arkit_shadcn::theme::use_theme();
+    let i18n = use_i18n();
+    let selected = i18n.locale_id();
+    let items = vec![
+        MenuEntry::radio(
+            "简体中文",
+            "zh-CN",
+            selected.clone(),
+            EventHandler::new(move |_| i18n.set_locale_id("zh-CN")),
+        )
+        .close_on_select(),
+        MenuEntry::radio(
+            "English",
+            "en-US",
+            selected,
+            EventHandler::new(move |_| i18n.set_locale_id("en-US")),
+        )
+        .close_on_select(),
+    ];
+
+    rsx! {
+        DropdownMenu {
+            items,
+            open: Some(open),
+            default_open: false,
+            on_open_change: Some(on_open),
+            trigger_capture: Some(false),
+            width: Some(176.0),
+            row {
+                width: 40.0,
+                height: 40.0,
+                align_items: "center",
+                justify_content: "center",
+                border_radius: theme.radii.md,
+                border_width: 1.0,
+                border_color: theme.colors.border,
+                background_color: theme.colors.background,
+                {icon_placeholder("languages", 18.0, theme.colors.foreground)}
             }
         }
     }
@@ -676,11 +778,6 @@ fn ThemeMenu(
         theme_preset_key(preset).to_string()
     };
     let selected_mode = theme_mode_key(mode).to_string();
-    let active_theme_label = if custom {
-        "Custom"
-    } else {
-        theme_preset_label(preset)
-    };
     let icon = match mode {
         ThemeMode::Light => "sun",
         ThemeMode::Dark => "moon",
@@ -736,38 +833,15 @@ fn ThemeMenu(
             on_open_change: Some(on_open),
             trigger_capture: Some(false),
             row {
-                width: 120.0,
-                height: 36.0,
+                width: 40.0,
+                height: 40.0,
                 align_items: "center",
-                padding_right: spacing::SM,
-                padding_left: spacing::SM,
+                justify_content: "center",
                 border_radius: theme.radii.md,
                 border_width: 1.0,
                 border_color: theme.colors.border,
-                background_color: theme.colors.secondary,
-                row {
-                    width: 12.0,
-                    height: 12.0,
-                    border_radius: theme.radii.full,
-                    background_color: theme.colors.primary,
-                }
-                row { width: spacing::SM }
-                row {
-                    layout_weight: 1.0,
-                    clip: true,
-                    text {
-                        width: "100%",
-                        content: active_theme_label.to_string(),
-                        font_size: typography::SM,
-                        font_weight: 500_i32,
-                        font_color: theme.colors.secondary_foreground,
-                        line_height: 18.0,
-                        max_lines: 1_i32,
-                        text_overflow: "ellipsis",
-                    }
-                }
-                row { width: spacing::XS }
-                {icon_placeholder(icon, 16.0, theme.colors.secondary_foreground)}
+                background_color: theme.colors.background,
+                {icon_placeholder(icon, 18.0, theme.colors.foreground)}
             }
         }
     }
@@ -963,6 +1037,12 @@ fn demo_canvas_policy(slug: &str) -> DemoCanvasPolicy {
             fill_height: false,
             padding: [spacing::XXL, spacing::LG, spacing::XXL, spacing::LG],
         },
+        "guide" => DemoCanvasPolicy {
+            center_x: true,
+            center_y: true,
+            fill_height: true,
+            padding: [spacing::LG, spacing::LG, spacing::LG, spacing::LG],
+        },
         "sonner" => DemoCanvasPolicy {
             center_x: false,
             center_y: false,
@@ -1065,6 +1145,9 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let mut form_terms_accepted = use_signal(|| false);
     let mut form_attempted = use_signal(|| false);
     let mut form_status = use_signal(|| None::<bool>);
+    let mut guide_open = use_signal(|| false);
+    let mut guide_step = use_signal(|| 0_usize);
+    let mut guide_status = use_signal(|| "Start the guide to preview all steps.".to_string());
     let mut playback_position = use_signal(|| 92.0_f32);
     let mut media_volume = use_signal(|| 68.0_f32);
     let mut notification_strength = use_signal(|| 6.0_f32);
@@ -2191,6 +2274,139 @@ fn ComponentDemo(slug: &'static str) -> Element {
                                         font_color: if success { theme.colors.chart_2 } else { theme.colors.destructive },
                                         line_height: 18.0,
                                         text_align: "start",
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "guide" => rsx! {
+            fixed_width {
+                width: 420.0,
+                Guide {
+                    steps: vec![
+                        GuideStep::new(
+                            "guide-profile",
+                            "Your workspace",
+                            "This summary keeps the active project and its recent activity in one place.",
+                        )
+                        .side(GuideSide::Bottom),
+                        GuideStep::new(
+                            "guide-search",
+                            "Find anything",
+                            "Search across components, examples, and documentation without leaving the page.",
+                        )
+                        .side(GuideSide::Bottom),
+                        GuideStep::new(
+                            "guide-settings",
+                            "Tune the experience",
+                            "Open preferences to change appearance, notifications, and workspace defaults.",
+                        )
+                        .side(GuideSide::Top),
+                    ],
+                    open: Some(guide_open()),
+                    step: Some(guide_step()),
+                    on_open_change: move |open| guide_open.set(open),
+                    on_step_change: move |step| {
+                        guide_step.set(step);
+                        guide_status.set(format!("Showing step {} of 3.", step + 1));
+                    },
+                    on_skip: move |_| {
+                        guide_status.set("Guide skipped. You can restart it anytime.".to_string());
+                    },
+                    on_finish: move |_| {
+                        guide_status.set("Guide completed.".to_string());
+                    },
+                    column {
+                        width: "100%",
+                        align_items: "start",
+                        row {
+                            width: "100%",
+                            align_items: "center",
+                            justify_content: "space_between",
+                            column {
+                                align_items: "start",
+                                text {
+                                    content: "Product tour".to_string(),
+                                    font_size: typography::XXL,
+                                    font_weight: 700_i32,
+                                    font_color: theme.colors.foreground,
+                                    line_height: 32.0,
+                                }
+                                text {
+                                    content: guide_status(),
+                                    font_size: typography::XS,
+                                    font_color: theme.colors.muted_foreground,
+                                    line_height: 18.0,
+                                }
+                            }
+                            Button {
+                                size: ButtonSize::Sm,
+                                onclick: move |_| {
+                                    guide_step.set(0);
+                                    guide_status.set("Showing step 1 of 3.".to_string());
+                                    guide_open.set(true);
+                                },
+                                "Start guide"
+                            }
+                        }
+                        v_gap { height: spacing::XXL }
+                        GuideTarget {
+                            id: "guide-profile".to_string(),
+                            Card {
+                                CardHeader {
+                                    title: "Arkit workspace".to_string(),
+                                    description: "12 components updated this week".to_string(),
+                                }
+                                CardContent {
+                                    row {
+                                        width: "100%",
+                                        align_items: "center",
+                                        justify_content: "space_between",
+                                        Badge {
+                                            content: "Active".to_string(),
+                                            variant: BadgeVariant::Secondary,
+                                        }
+                                        text {
+                                            content: "Last opened today".to_string(),
+                                            font_size: typography::XS,
+                                            font_color: theme.colors.muted_foreground,
+                                            line_height: 18.0,
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        v_gap { height: spacing::XL }
+                        row {
+                            width: "100%",
+                            align_items: "center",
+                            justify_content: "space_between",
+                            GuideTarget {
+                                id: "guide-search".to_string(),
+                                Button {
+                                    variant: ButtonVariant::Outline,
+                                    onclick: move |_| {},
+                                    row {
+                                        align_items: "center",
+                                        {icon_placeholder("search", 18.0, theme.colors.foreground)}
+                                        h_gap { width: spacing::SM }
+                                        "Search"
+                                    }
+                                }
+                            }
+                            GuideTarget {
+                                id: "guide-settings".to_string(),
+                                Button {
+                                    variant: ButtonVariant::Outline,
+                                    onclick: move |_| {},
+                                    row {
+                                        align_items: "center",
+                                        {icon_placeholder("settings-2", 18.0, theme.colors.foreground)}
+                                        h_gap { width: spacing::SM }
+                                        "Preferences"
                                     }
                                 }
                             }

@@ -93,6 +93,7 @@ export const componentCatalog: ContentCatalog = {
     {
       title: "浮层与菜单",
       sections: [
+        section("guide"),
         section("dialog"),
         section("alert-dialog"),
         section("sheet"),

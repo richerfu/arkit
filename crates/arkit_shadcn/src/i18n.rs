@@ -94,6 +94,22 @@ impl ComponentI18n {
         self.tr(messages::date_picker_close())
     }
 
+    pub(crate) fn guide_previous(self) -> String {
+        self.tr(messages::guide_previous())
+    }
+
+    pub(crate) fn guide_next(self) -> String {
+        self.tr(messages::guide_next())
+    }
+
+    pub(crate) fn guide_skip(self) -> String {
+        self.tr(messages::guide_skip())
+    }
+
+    pub(crate) fn guide_finish(self) -> String {
+        self.tr(messages::guide_finish())
+    }
+
     pub(crate) fn markdown_admonition_note(self) -> String {
         self.tr(messages::markdown_admonition_note())
     }
@@ -150,6 +166,10 @@ mod tests {
         assert_eq!(i18n.calendar_months()[6], "July");
         assert_eq!(i18n.calendar_month_title_template(), "{month} {year}");
         assert_eq!(i18n.chart_series(2), "Series 2");
+        assert_eq!(i18n.guide_previous(), "Previous");
+        assert_eq!(i18n.guide_next(), "Next");
+        assert_eq!(i18n.guide_skip(), "Skip");
+        assert_eq!(i18n.guide_finish(), "Finish");
     }
 
     #[test]
@@ -160,6 +180,10 @@ mod tests {
         assert_eq!(i18n.calendar_months()[6], "七月");
         assert_eq!(i18n.calendar_month_title_template(), "{year}年{month}");
         assert_eq!(i18n.chart_series(2), "系列 2");
+        assert_eq!(i18n.guide_previous(), "上一步");
+        assert_eq!(i18n.guide_next(), "下一步");
+        assert_eq!(i18n.guide_skip(), "跳过");
+        assert_eq!(i18n.guide_finish(), "完成");
     }
 
     #[test]
