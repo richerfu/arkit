@@ -6,7 +6,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "libterminal_example.so": "file:./src/main/cpp/types/libterminal_example",
+    "libshadcn_showcase.so": "file:./src/main/cpp/types/libshadcn_showcase",
     "@ohos-rs/ability": "0.4.0-beta.7"
   }
 }

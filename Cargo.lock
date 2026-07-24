@@ -177,6 +177,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "arkit_calendar_icu"
+version = "0.0.1-beta.0"
+dependencies = [
+ "arkit_i18n",
+ "arkit_prelude",
+ "arkit_shadcn",
+ "dioxus-hooks",
+ "icu_calendar",
+]
+
+[[package]]
 name = "arkit_camera"
 version = "0.0.1-beta.0"
 dependencies = [
@@ -653,6 +664,16 @@ name = "bytes"
 version = "1.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
+
+[[package]]
+name = "calendrical_calculations"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5abbd6eeda6885048d357edc66748eea6e0268e3dd11f326fff5bd248d779c26"
+dependencies = [
+ "core_maths",
+ "displaydoc",
+]
 
 [[package]]
 name = "camera_example"
@@ -2084,6 +2105,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f31827a206f56af32e590ba56d5d2d085f558508192593743f16b2306495269f"
 dependencies = [
  "cc",
+]
+
+[[package]]
+name = "icu_calendar"
+version = "2.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2b2acc6263f494f1df50685b53ff8e57869e47d5c6fe39c23d518ae9a4f3e45"
+dependencies = [
+ "calendrical_calculations",
+ "displaydoc",
+ "icu_locale_core",
+ "icu_provider",
+ "tinystr",
+ "zerovec",
 ]
 
 [[package]]
@@ -4189,6 +4224,7 @@ name = "shadcn_showcase"
 version = "0.0.1-beta.0"
 dependencies = [
  "arkit",
+ "arkit_calendar_icu",
  "napi-build-ohos",
  "napi-derive-ohos",
  "napi-ohos",

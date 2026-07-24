@@ -11,8 +11,8 @@ use arkit::shadcn::components::{
     Accordion, AccordionItemSpec, Alert, AlertDescription, AlertDialog, AlertDialogAction,
     AlertList, AlertTitle, AlertVariant, AspectRatio, Avatar, AvatarFallback, Badge, BadgeVariant,
     BottomNavigation, BottomNavigationItem, BottomSheet, BottomSheetTextInput, Button, ButtonSize,
-    ButtonVariant, Calendar, Card, CardContent, CardFooter, CardHeader, Carousel,
-    CarouselControlsPlacement, CarouselIndicatorVariant, CarouselStyle, Checkbox, Code,
+    ButtonVariant, Calendar, CalendarYearRange, Card, CardContent, CardFooter, CardHeader,
+    Carousel, CarouselControlsPlacement, CarouselIndicatorVariant, CarouselStyle, Checkbox, Code,
     Collapsible, ContextMenu, DatePicker, Dialog, DialogFooter, DialogHeader, DropdownMenu, Field,
     FieldContent, FieldDescription, FieldError, FieldGroup, FieldOrientation, FieldSeparator,
     FieldSet, FieldTitle, Form, FormItem, Guide, GuideSide, GuideStep, GuideTarget, HoverCard,
@@ -26,6 +26,7 @@ use arkit::shadcn::icon::icon_placeholder;
 use arkit::shadcn::theme::{
     spacing, typography, ColorTokens, RadiusTokens, Theme, ThemeMode, ThemePreset, ThemeProvider,
 };
+use arkit_calendar_icu::{use_chinese_lunar_plugin, ChineseLunarOptions};
 
 const HOME_HEADER_HEIGHT: f32 = 80.0;
 const DETAIL_HEADER_HEIGHT: f32 = 48.0;
@@ -1072,6 +1073,7 @@ fn demo_canvas_policy(slug: &str) -> DemoCanvasPolicy {
 
 #[component]
 fn ComponentDemo(slug: &'static str) -> Element {
+    let lunar_calendar_plugin = use_chinese_lunar_plugin(ChineseLunarOptions::default());
     let mut page = use_signal(|| 1_i32);
     let mut dialog_open = use_signal(|| false);
     let mut dialog_name = use_signal(|| "Pedro Duarte".to_string());
@@ -1546,6 +1548,8 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 width: "100%",
                 Calendar {
                     selected: calendar_selected(),
+                    year_range: CalendarYearRange::new(1900, 2100),
+                    day_plugin: lunar_calendar_plugin,
                     on_day_press: move |date| calendar_selected.set(Some(date)),
                 }
                 v_gap { height: spacing::XXL }
@@ -1965,6 +1969,8 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 DatePicker {
                     selected: date_picker_selected(),
                     open: Some(date_picker_open()),
+                    calendar_year_range: CalendarYearRange::new(1900, 2100),
+                    calendar_day_plugin: lunar_calendar_plugin,
                     on_change: move |date| date_picker_selected.set(date),
                     on_open_change: move |open| date_picker_open.set(open),
                 }
@@ -1976,6 +1982,8 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 DatePicker {
                     selected: date_picker_uc_selected(),
                     default_open: false,
+                    calendar_year_range: CalendarYearRange::new(1900, 2100),
+                    calendar_day_plugin: lunar_calendar_plugin,
                     on_change: move |date: Option<String>| {
                         date_picker_uc_selected.set(date.clone());
                         date_picker_uc_note.set(format!("on_change = {:?}", date));

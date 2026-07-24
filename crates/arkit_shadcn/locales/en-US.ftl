@@ -18,6 +18,7 @@ calendar-month-october = October
 calendar-month-november = November
 calendar-month-december = December
 calendar-month-title-template = { "{" }month{ "}" } { "{" }year{ "}" }
+calendar-back-to-days = Back to dates
 chart-series = Series { $number }
 combobox-placeholder = Search an option
 combobox-label = Suggestions

@@ -89,7 +89,10 @@ pub use bottom_sheet::{
 };
 pub use breadcrumb::{Breadcrumb, BreadcrumbItem, BreadcrumbItemProps, BreadcrumbProps};
 pub use button::{Button, ButtonProps, ButtonSize, ButtonVariant};
-pub use calendar::{Calendar, CalendarLabels, CalendarProps};
+pub use calendar::{
+    Calendar, CalendarDate, CalendarDayContext, CalendarDayPlugin, CalendarLabels, CalendarProps,
+    CalendarYearRange,
+};
 pub use card::{
     Card, CardContent, CardContentProps, CardDescription, CardDescriptionProps, CardFooter,
     CardFooterProps, CardHeader, CardHeaderProps, CardProps, CardTitle, CardTitleProps,
