@@ -164,20 +164,6 @@ pub fn TimePicker(props: TimePickerProps) -> Element {
     let on_change = props.on_change;
     let on_open_change = props.on_open_change;
 
-    use_effect(use_reactive(
-        (&open, &selected),
-        move |(next_open, next_selected)| {
-            // Do not write draft state during the same commit that publishes
-            // the BottomSheet overlay. On ArkUI that second render can race the
-            // overlay signal and leave `open = true` without a mounted panel.
-            // Closed pickers can safely mirror externally controlled values;
-            // the trigger also snapshots the latest value before opening.
-            if !next_open {
-                draft.set(next_selected.unwrap_or(TimeValue::MIDNIGHT));
-            }
-        },
-    ));
-
     let set_open = EventHandler::new(move |next: bool| {
         if !open_controlled {
             internal_open.set(next);
@@ -296,15 +282,7 @@ pub fn TimePicker(props: TimePickerProps) -> Element {
                             select_hour,
                         )}
                     }
-                    text {
-                        width: spacing::LG,
-                        margin_top: 46.0,
-                        content: ":".to_string(),
-                        font_size: typography::XL,
-                        font_weight: 600_i32,
-                        font_color: theme.colors.muted_foreground,
-                        text_align: "center",
-                    }
+                    row { width: spacing::SM }
                     column {
                         layout_weight: 1.0,
                         {time_picker_column(
@@ -338,9 +316,12 @@ pub fn TimePicker(props: TimePickerProps) -> Element {
                         variant: ButtonVariant::Outline,
                         width: "48%",
                         onclick: move |_| {
+                            // Close first. A second state-driven render before
+                            // BottomSheet observes `open = false` can otherwise
+                            // leave a stale, visible overlay snapshot behind.
+                            set_open.call(false);
                             internal_selected.set(None);
                             on_change.call(None);
-                            set_open.call(false);
                         },
                         {clear_label}
                     }
@@ -350,9 +331,9 @@ pub fn TimePicker(props: TimePickerProps) -> Element {
                         width: "48%",
                         onclick: move |_| {
                             let next = Some(draft());
+                            set_open.call(false);
                             internal_selected.set(next);
                             on_change.call(next);
-                            set_open.call(false);
                         },
                         {confirm_label}
                     }
