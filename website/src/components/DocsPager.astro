@@ -1,0 +1,52 @@
+---
+import { contentHref } from "@/lib/catalog";
+import type { ContentArea } from "@/lib/types";
+
+interface Neighbor {
+  id: string;
+  title: string;
+}
+
+interface Props {
+  area: ContentArea;
+  previous?: Neighbor;
+  next?: Neighbor;
+  catalogTitle: string;
+}
+
+const { area, previous, next, catalogTitle } = Astro.props;
+---
+
+<nav
+  class="mt-12 grid gap-3 border-t border-border pt-8 sm:grid-cols-2"
+  aria-label={`${catalogTitle}翻页`}
+>
+  {
+    previous ? (
+      <a
+        href={contentHref(area, previous.id)}
+        class="group flex flex-col gap-1.5 rounded-lg border border-border bg-card p-4 transition-colors hover:bg-accent/40"
+      >
+        <span class="text-xs text-muted-foreground">Previous</span>
+        <strong class="text-sm font-medium text-foreground group-hover:text-primary">
+          ← {previous.title}
+        </strong>
+      </a>
+    ) : (
+      <span class="hidden sm:block" />
+    )
+  }
+  {
+    next ? (
+      <a
+        href={contentHref(area, next.id)}
+        class="group flex flex-col gap-1.5 rounded-lg border border-border bg-card p-4 text-right transition-colors hover:bg-accent/40 sm:col-start-2"
+      >
+        <span class="text-xs text-muted-foreground">Next</span>
+        <strong class="text-sm font-medium text-foreground group-hover:text-primary">
+          {next.title} →
+        </strong>
+      </a>
+    ) : null
+  }
+</nav>

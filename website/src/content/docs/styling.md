@@ -1,13 +1,11 @@
 ---
 title: 属性与样式
-description: "类型约定、颜色、单位与条件样式。"
+description: "颜色、尺寸和条件样式怎么写，才不容易踩坑。"
 ---
 
 # 属性与样式
 
-Arkit element 的属性是编译期 descriptor。RSX 更新后 renderer 只提交变化的 attribute；删除条件属性会恢复对应 native 默认值或清除状态。
-
-属性值按 **CSS 语义** 编码：长度用 vp / `"N%"`，枚举用关键字字符串。完整关键字表见 [元素与布局](/docs/elements-layout)。
+样式值按 CSS 思路编码：长度、颜色、枚举关键字都有固定约定。写对类型，比事后靠字符串拼接省心得多。完整关键字表见 [元素与布局](../elements-layout/)。
 
 ## 常用属性族
 

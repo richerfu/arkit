@@ -1,22 +1,11 @@
 ---
 title: 视觉与交互组件
-description: "Legend、Tooltip、DataZoom、VisualMap 与状态样式。"
+description: "图例、提示、缩放和 VisualMap：给图表补说明和筛选。"
 ---
 
 # 视觉与交互组件
 
-Option component 负责说明、筛选和视觉映射；series 负责具体数据标记。
-
-| 组件           | 职责                                |
-| -------------- | ----------------------------------- |
-| `Title`        | 说明图表目的                        |
-| `Legend`       | 展示并切换 series/category          |
-| `Tooltip`      | 展示当前命中数据                    |
-| `VisualMap`    | 把数值区间映射到颜色、symbol 等视觉 |
-| `DataZoom`     | slider/inside 视口缩放              |
-| `BrushOptions` | 矩形、线等区域选择                  |
-| `Timeline`     | 驱动多个 option 数据状态            |
-| `MediaOptions` | 按 canvas 条件应用响应式 option     |
+图例、提示、缩放、VisualMap 这些负责说明和筛选；series 才负责画数据本身。
 
 ## 三态样式
 

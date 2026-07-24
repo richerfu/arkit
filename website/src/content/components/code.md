@@ -1,35 +1,11 @@
 ---
 title: Code
-description: "独立语法高亮代码块（tree-sitter）。"
+description: "独立的语法高亮代码块，底层用 tree-sitter。"
 ---
 
 # Code
 
-`Code` 把一段源码渲染为原生 ArkUI 等宽文本，可选 tree-sitter 语法高亮。它与 Markdown **解耦**：只启用 `code` feature 即可使用，不必拉取 Markdown 解析器。
-
-```toml
-[dependencies]
-arkit = { version = "*", features = ["code"] }
-```
-
-```rust
-use arkit::shadcn::components::Code;
-
-Code {
-    source: "fn main() {\n    println!(\"hi\");\n}\n".to_string(),
-    language: Some("rust".to_string()),
-}
-```
-
-关闭高亮、仅等宽展示：
-
-```rust
-Code {
-    source: log_line,
-    language: None,
-    highlight: false,
-}
-```
+单独的代码高亮块，底层是 tree-sitter。可以脱离 Markdown 使用，也可以给 Markdown 围栏复用。
 
 ## Feature 关系
 

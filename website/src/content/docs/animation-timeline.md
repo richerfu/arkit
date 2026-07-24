@@ -1,11 +1,11 @@
 ---
 title: Timeline 编排
-description: "位置、label、call、barrier 与嵌套。"
+description: "用 label、call 和嵌套 timeline 把多段动画排进一条时间线。"
 ---
 
 # Timeline 编排
 
-`Timeline` 把 animation、timer、set、call、label、barrier 和 nested timeline 解析成确定的时间计划。
+Timeline 把多段动画、延时、回调和子时间线排成一条确定的时间计划。用 label 标记阶段，比满屏魔法数字好改。
 
 ## 位置表达式
 

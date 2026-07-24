@@ -1,11 +1,11 @@
 ---
 title: 实时更新与动画
-description: "受控更新、appendData 与统一时钟。"
+description: "数据刷新和追加点时，动画怎样跟统一时钟对齐。"
 ---
 
 # 实时更新与动画
 
-常规更新传入新的受控 `ChartOption`；高频追加点只在 scatter/lines 使用 `appendData`。初始和更新 transition 由 root AnimationHost 驱动。
+常规刷新直接换受控 Option；高频只加点时，scatter / lines 可以用 `appendData`。动画跟 root 的 AnimationHost 同一套时钟。
 
 ## 受控 Option
 

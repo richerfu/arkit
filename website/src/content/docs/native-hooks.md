@@ -1,11 +1,11 @@
 ---
 title: 原生节点与布局 Hooks
-description: "节点句柄、布局观测与 UI-loop handoff。"
+description: "需要摸到原生节点、布局尺寸或切回 UI loop 时可以用的 hooks。"
 ---
 
 # 原生节点与布局 Hooks
 
-核心业务 UI 应使用 `rsx!`。本章 API 是 escape hatch，只在声明式 element registry 无法表达的能力中使用，例如原生 WebView、自定义 Drawing、第三方 ArkUI node，或 NodeAdapter 的底层原生 item 路径。普通虚拟列表 item 已支持 `use_virtual_node_adapter_rsx`，无需使用 `NodeBuilder`。
+大多数页面用 RSX 就够了。真要拿原生句柄、听布局变化，或把结果丢回 UI 线程时，再用这组 native hooks。
 
 ## ArkHost 与 use_ark_node
 

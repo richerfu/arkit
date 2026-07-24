@@ -1,37 +1,11 @@
 ---
 title: Guide
-description: "多步骤目标引导与功能导览。"
+description: "分步高亮界面元素，做功能导览。"
 ---
 
 # Guide
 
-Guide 用目标高亮和说明浮层串联多步功能导览。`GuideTarget` 直接测量子节点，不会给原布局增加固定尺寸或容器层级；浮层会根据安全区域和可用空间自动翻转。
-
-```rust
-let mut open = use_signal(|| false);
-let mut step = use_signal(|| 0_usize);
-
-Guide {
-    steps: vec![
-        GuideStep::new("search", "搜索", "从这里查找项目。"),
-        GuideStep::new("settings", "设置", "在这里调整偏好。")
-            .side(GuideSide::Top),
-    ],
-    open: Some(open()),
-    step: Some(step()),
-    on_open_change: move |value| open.set(value),
-    on_step_change: move |value| step.set(value),
-
-    GuideTarget {
-        id: "search".to_string(),
-        SearchButton {}
-    }
-    GuideTarget {
-        id: "settings".to_string(),
-        SettingsButton {}
-    }
-}
-```
+分步高亮界面上的目标元素，适合做首次使用的功能导览。
 
 ## 主要 Props
 

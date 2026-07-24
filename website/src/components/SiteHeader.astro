@@ -1,0 +1,66 @@
+---
+import ThemeToggle from "@/components/ThemeToggle.astro";
+import type { ContentArea } from "@/lib/types";
+import { joinBase } from "@/lib/catalog";
+
+interface Props {
+  active?: "home" | ContentArea;
+}
+
+const { active = "home" } = Astro.props;
+const base = import.meta.env.BASE_URL;
+
+const links = [
+  { id: "docs" as const, href: joinBase(base, "docs/"), label: "文档" },
+  { id: "components" as const, href: joinBase(base, "components/"), label: "组件" },
+  { id: "charts" as const, href: joinBase(base, "charts/"), label: "图表" },
+];
+---
+
+<header
+  class="sticky top-0 z-50 w-full border-b border-border/80 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80"
+>
+  <div class="mx-auto flex h-14 w-full max-w-[90rem] items-center gap-4 px-4 sm:px-6">
+    <a class="mr-2 flex items-center gap-2 font-semibold tracking-tight" href={joinBase(base)}>
+      <img
+        src={joinBase(base, "logo.svg")}
+        alt=""
+        width="24"
+        height="24"
+        class="size-6 rounded-md border border-border"
+      />
+      <span class="hidden sm:inline">arkit</span>
+    </a>
+
+    <nav class="flex flex-1 items-center gap-1 text-sm" aria-label="主导航">
+      {
+        links.map((link) => (
+          <a
+            href={link.href}
+            class:list={[
+              "rounded-md px-3 py-1.5 transition-colors hover:text-foreground",
+              active === link.id
+                ? "bg-accent font-medium text-foreground"
+                : "text-muted-foreground",
+            ]}
+          >
+            {link.label}
+          </a>
+        ))
+      }
+    </nav>
+
+    <div class="flex items-center gap-1">
+      <ThemeToggle />
+      <a
+        class="hidden items-center gap-1 rounded-md px-2.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground sm:inline-flex"
+        href="https://github.com/richerfu/arkit"
+        target="_blank"
+        rel="noreferrer"
+      >
+        GitHub
+        <span aria-hidden="true" class="text-xs">↗</span>
+      </a>
+    </div>
+  </div>
+</header>

@@ -1,18 +1,11 @@
 ---
 title: Skeleton
-description: "结构化加载占位。"
+description: "加载中的骨架占位，避免空白闪烁。"
 ---
 
 # Skeleton
 
-Skeleton 是固定尺寸加载占位。填充为 `primary` 约 10% 透明度（对齐 shadcn `bg-primary/10`），在白色与灰色画布上都能看清。
-
-```rust
-column {
-    Skeleton { width: 160.0, height: 20.0 }
-    Skeleton { width: 40.0, height: 40.0 }
-}
-```
+加载中的骨架占位，比空白闪一下更稳。
 
 ## Props
 

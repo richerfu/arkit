@@ -1,11 +1,11 @@
 ---
 title: Hooks 与生命周期
-description: "hook 规则、effect、memo 与清理。"
+description: "Hook 的使用规则，以及 effect、memo 和清理时机。"
 ---
 
 # Hooks 与生命周期
 
-Hook 把状态和资源绑定到组件 scope。调用顺序必须在每次 render 中保持一致，因此 Hook 不能放进条件、循环或提前返回之后。
+Hook 的规则和 React 类似：只在组件顶层调用，顺序保持稳定。effect 负责订阅和副作用，清理函数在依赖变了或组件卸载时跑。
 
 ## 常用 Hooks
 

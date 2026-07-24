@@ -1,19 +1,11 @@
 ---
 title: Spinner
-description: "不确定进度指示器。"
+description: "不知道进度时用的转圈指示。"
 ---
 
 # Spinner
 
-Spinner 表示进度未知的短任务。默认使用 ArkUI LoadingProgress，也可让指定 Lucide 图标旋转。
-
-```rust
-Spinner {
-    size: 20.0,
-    color: Some(0xFF46D37A),
-    spinning: loading(),
-}
-```
+进度还算不出来时，先转个圈。
 
 ## Props
 

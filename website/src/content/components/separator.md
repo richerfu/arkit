@@ -1,16 +1,11 @@
 ---
 title: Separator
-description: "水平和垂直分隔。"
+description: "横线或竖线，用来隔开内容区块。"
 ---
 
 # Separator
 
-Separator 使用 Theme border token 绘制 1vp 分隔线。
-
-```rust
-Separator {}
-Separator { vertical_height: 24.0 }
-```
+横线或竖线，用来在视觉上切开区块。
 
 ## Props
 

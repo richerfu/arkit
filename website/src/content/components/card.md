@@ -1,11 +1,11 @@
 ---
 title: Card
-description: "卡片及 Header、Content、Footer。"
+description: "内容卡片，可拆 Header / Content / Footer。"
 ---
 
 # Card
 
-Card 是带 border、radius、shadow 和主题色的内容 surface。
+一块有边界的内容容器，可以拆成 Header、正文和 Footer。
 
 ## 快速组合
 

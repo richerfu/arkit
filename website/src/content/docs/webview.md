@@ -1,11 +1,11 @@
 ---
 title: 嵌入 WebView
-description: "原生挂载、导航、消息与资源清理。"
+description: "在页面里嵌原生 WebView：打开页面、收消息、离开时释放。"
 ---
 
 # 嵌入 WebView
 
-WebView 是 native escape hatch：Dioxus 声明占位与业务状态，`use_layout_frame_node` 在布局完成后把 ArkTS 创建的 WebView 原生节点挂到对应 ArkUI host。
+需要嵌网页时用原生 WebView，而不是再开一套 H5 容器框架。挂载、导航和消息回调都有对应 API；页面走了记得释放。
 
 ## Controller 生命周期
 

@@ -1,22 +1,13 @@
 ---
 title: 架构与 crate 边界
-description: "运行时、渲染器与领域 crate 职责。"
+description: "VirtualDom、HostTree 和各个 crate 各管什么，依赖边界在哪里。"
 ---
 
 # 架构与 crate 边界
 
-Arkit 的唯一 UI 运行模型是 Dioxus：
+Arkit 的 UI 只走 Dioxus 这一条路：业务写出组件树，运行时 diff 后投影到 ArkUI 原生节点，中间没有第二套 UI 状态。
 
-```text
-#[entry] root
-    → Dioxus VirtualDom + scheduler
-    → WriteMutations
-    → arkit_arkui HostTree
-    → deterministic projection
-    → ArkUI native nodes
-```
-
-## Crate 所有权
+## 各 crate 管什么
 
 | Crate                              | 责任                                                                        |
 | ---------------------------------- | --------------------------------------------------------------------------- |
@@ -33,13 +24,17 @@ Arkit 的唯一 UI 运行模型是 Dioxus：
 | `arkit_router`                     | dioxus-router 的 ArkUI Link/back/transition 集成                            |
 | `arkit_i18n` / `arkit_i18n_macros` | runtime locale 与编译期 Fluent catalog                                      |
 | `arkit_icon`                       | embedded SVG catalog、raster source 与有界 cache                            |
+| `arkit_lottie`                     | ThorVG worker、XComponent/NativeWindow Lottie 渲染                          |
+| `arkit_camera`                     | CameraKit 预览、拍照；可选 scan 解码                                        |
+| `arkit_barcode`                    | 独立条码/二维码生成（rxing），无相机依赖                                    |
+| `arkit_terminal`                   | libghostty-vt + GPU surface；会话 I/O 由应用托管                            |
 | `arkit_shadcn`                     | 主题 tokens、业务组件和浮层组合                                             |
 
-domain crate 不依赖 facade；facade 组合 domain API。`arkit_prelude` 避免 shadcn/icon/animation 反向依赖 `arkit` 形成环。
+领域 crate 不反向依赖 facade；facade 只是把它们拼起来对外。`arkit_prelude` 用来打断 shadcn / icon / animation 对 `arkit` 的环。
 
 ## HostTree 投影
 
-Dioxus logical tree 是真实来源。HostTree 保存 template path、placeholder、text child、ElementId、listener 和 native ownership。ArkUI tree 是当前 logical tree 的投影。
+逻辑上以 Dioxus 树为准。HostTree 记着模板路径、占位、文本子节点、ElementId、监听器和原生所有权；ArkUI 树上的节点只是这份逻辑树的投影。
 
 典型规则：
 
@@ -97,7 +92,16 @@ OpenHarmony binding 中部分 node/adapter handle 没有隐式 Drop：
 
 ## Feature 与依赖边界
 
-核心 facade 不自动链接领域栈。`chart` 依赖 animation；`router` 依赖 animation；`shadcn` 依赖 animation + icon；`markdown` 依赖 shadcn，并单独启用 `arkit_shadcn` 的 Markdown 解析依赖。这些关系只在 root `Cargo.toml`/crate manifest 中声明，业务 crate 用 `arkit` features 选择。
+核心 facade 不自动链接领域栈。主要 feature 边：
+
+- `chart` / `router` → `animation`
+- `shadcn` → `animation` + `i18n` + `icon`
+- `markdown` / `code` → `shadcn`（`markdown-highlight` = 二者组合）
+- `camera-scan` → `animation` + `camera` + scan decoder
+- `lottie-network` → `lottie` + HTTP 栈；`lottie-expressions` 可选
+- `barcode`、`terminal`、`camera`、`lottie` 各自独立可选
+
+这些关系只在 root `Cargo.toml`/crate manifest 中声明，业务 crate 用 `arkit` features 选择。
 
 第三方/internal dependency version 集中在 workspace `Cargo.toml`，成员 crate 使用 `workspace = true`，确保 ArkUI binding/sys 类型身份一致。
 

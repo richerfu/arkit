@@ -1,11 +1,11 @@
 ---
 title: Input
-description: "单行文本输入。"
+description: "单行文本输入，适合标题、账号这类短内容。"
 ---
 
 # Input
 
-shadcn 风格的单行输入框。
+单行文本输入。
 
 ## 用法
 

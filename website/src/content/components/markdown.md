@@ -1,40 +1,11 @@
 ---
 title: Markdown
-description: "高性能原生 CommonMark/GFM 渲染。"
+description: "原生渲染 Markdown（CommonMark / GFM），可选代码高亮。"
 ---
 
 # Markdown
 
-`Markdown` 把 CommonMark/GFM 内容直接渲染为原生 ArkUI 节点，不经过 HTML 或 WebView。默认支持标题、段落、强调、链接、图片、引用、嵌套列表、代码块、分隔线、表格、任务列表和脚注。
-
-Markdown 解析器由独立的 `markdown` feature 引入；只启用 `shadcn` 不会链接这些依赖。
-
-```toml
-[dependencies]
-arkit = { version = "*", features = ["markdown"] }
-```
-
-围栏代码语法高亮由 **`code` feature** 提供（可与 Markdown 独立使用）。两者一起启用时，Markdown 的 fenced block 会复用 [`Code`](./code) 组件管线：
-
-```toml
-[dependencies]
-# 等价写法：features = ["markdown-highlight"]
-arkit = { version = "*", features = ["markdown", "code"] }
-```
-
-```rust
-Markdown {
-    source: r#"
-# Release notes
-
-- [x] Parse once
-- [x] Render natively
-
-See the [migration guide](https://example.com).
-"#.to_string(),
-    on_link_click: move |url| open_url(url),
-}
-```
+用原生节点渲染 CommonMark / GFM。需要围栏高亮时再打开 `code` feature。
 
 ## 性能模型
 
@@ -82,7 +53,7 @@ rsx! { Markdown { source, style: Some(style) } }
 | `MarkdownStyle::code_highlight`   | `CodeHighlightPalette`；`from_theme` 按 light/dark 选预设 |
 | 渲染                              | 有 `code` 时委托给 `Code` 组件；否则纯等宽                |
 
-内置语言、自定义 `register_language`、palette 细节见 [Code](./code)。
+内置语言、自定义 `register_language`、palette 细节见 [Code](../code/)。
 
 关闭某一篇文档的高亮（需已启用 `code`）：
 

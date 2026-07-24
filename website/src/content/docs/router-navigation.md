@@ -1,11 +1,11 @@
 ---
 title: 导航与历史栈
-description: "Link、push、replace、back 与系统返回键。"
+description: "Link、push / replace / back，以及系统返回键怎么接到路由上。"
 ---
 
 # 导航与历史栈
 
-Arkit 的原生 `Link` 渲染 ArkUI `text`，点击后向当前 Navigator push typed route。它不是 Web anchor。
+页面之间跳转用 Link 或编程式 push / replace / back。系统返回键会走到同一套栈，避免「按了返回却什么都没发生」。
 
 ## Link
 

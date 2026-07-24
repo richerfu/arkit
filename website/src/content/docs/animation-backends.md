@@ -1,11 +1,11 @@
 ---
 title: 后端与性能
-description: "sampled/native lowering、回退与诊断。"
+description: "采样后端和原生 lowering 怎么选，失败时如何回退和排查。"
 ---
 
 # 后端与性能
 
-AnimationHost 支持 root Engine sampled backend 和可保持语义时的 ArkUI native lowering。选择后端的目标是契约一致，不只是“尽量原生”。
+动画可以走 root 引擎逐帧采样，也可以在语义完整时降到 ArkUI native。怎么选取决于「能不能保住契约」，而不是「尽量原生」。
 
 ## Execution Policy
 

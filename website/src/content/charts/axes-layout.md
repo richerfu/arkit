@@ -1,19 +1,11 @@
 ---
 title: 坐标轴与布局
-description: "Axis、Grid、绘图区与坐标转换。"
+description: "坐标轴、网格和绘图区怎么摆，坐标如何换算。"
 ---
 
 # 坐标轴与布局
 
-直角坐标图由 Axis、Grid 和 series 共同定义。Axis 支持 `category`、`value`、`time` 与 `log` 类型，方向通过 x/y 轴位置确定。
-
-```rust
-let option = ChartOption::new()
-    .grid(Grid::default())
-    .x_axis(Axis::category(["一月", "二月", "三月"]))
-    .y_axis(Axis::value())
-    .push_series(Series::bar("订单", [32.0, 48.0, 41.0]));
-```
+直角坐标图由坐标轴、网格和 series 一起定调。轴可以是类目、数值、时间或对数，位置决定它是横轴还是纵轴。
 
 ## Axis
 

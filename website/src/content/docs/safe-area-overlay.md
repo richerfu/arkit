@@ -1,11 +1,11 @@
 ---
 title: 安全区与浮层
-description: "SafeArea、OverlayRoot 与层级管理。"
+description: "安全区怎么避让，浮层又该挂在哪一层。"
 ---
 
 # 安全区与浮层
 
-`#[entry]` 默认以 `SafeAreaPolicy::Safe` 挂载业务 subtree，并在最外层创建唯一 `OverlayRoot`。普通页面自动避让视觉安全区，浮层仍覆盖完整 surface。
+刘海、手势条和键盘会吃掉可视区域。业务内容默认待在安全区里；需要贴边或盖在上面的浮层，走 OverlayRoot。
 
 ## SafeArea
 

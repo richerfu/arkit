@@ -1,11 +1,11 @@
 ---
 title: ArkTS 工程接入
-description: "NativeAbility、XComponent 与生命周期。"
+description: "把 Rust native 模块接到 ArkTS Ability 和 XComponent 上。"
 ---
 
 # ArkTS 工程接入
 
-Arkit native 模块通过 `@ohos-rs/ability` 接入 ArkTS。业务侧不需要手写 `NodeContent`、`ContentSlot` 或 N-API 生命周期函数。
+Rust 编出来的 `.so` 通过 `@ohos-rs/ability` 挂进 ArkTS。业务侧一般不用手写 NodeContent 或 N-API 生命周期胶水。
 
 ## 安装 Ability 包
 

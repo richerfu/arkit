@@ -1,21 +1,11 @@
 ---
 title: Checkbox
-description: "受控和非受控复选。"
+description: "复选框，受控和非受控都能用。"
 ---
 
 # Checkbox
 
-Checkbox 表达一个可独立选择的布尔值，适合协议确认或多选列表。`checked` 与 `default_checked` 分别对应受控和非受控模式。
-
-```rust
-let mut accepted = use_signal(|| false);
-
-Checkbox {
-    label: "我已阅读并同意协议",
-    checked: accepted(),
-    on_change: move |next| accepted.set(next),
-}
-```
+复选框。受控、非受控两种用法都支持。
 
 ## Props
 

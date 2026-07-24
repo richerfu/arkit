@@ -1,11 +1,11 @@
 ---
 title: Textarea
-description: "多行文本输入。"
+description: "多行文本输入，适合备注和较长说明。"
 ---
 
 # Textarea
 
-shadcn 风格的多行输入框。
+多行文本输入。
 
 ## 用法
 

@@ -1,11 +1,11 @@
 ---
 title: Layout 与 Presence
-description: "FLIP、进退场和重排。"
+description: "布局变化用 FLIP 接起来，元素进场离场时也别闪一下就没了。"
 ---
 
 # Layout 与 Presence
 
-Layout animation 比较前后布局快照，把几何变化转换为 FLIP timeline。Presence 保留离场 child，直到真实动画 terminal event。
+布局动画比较前后几何，用 FLIP 把位移和尺寸变化接顺。Presence 会把离场元素多留一会儿，等动画真正结束后再卸掉。
 
 ## 注册 Layout
 

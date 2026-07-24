@@ -1,24 +1,11 @@
 ---
 title: Input OTP
-description: "验证码输入、slot 与分隔。"
+description: "验证码格子输入，支持分隔和逐位填写。"
 ---
 
 # Input OTP
 
-InputOtp 把一个完整字符串投影为多个输入槽，适合验证码和短 PIN。外部状态始终保存完整值，不需要逐槽管理 Signal。
-
-```rust
-let mut code = use_signal(String::new);
-
-InputOtp {
-    value: code(),
-    digits: 6,
-    mode: InputOtpMode::Number,
-    group_size: 3,
-    separator: InputOtpSeparator::Dash,
-    on_change: move |next| code.set(next),
-}
-```
+验证码格子输入：每位一个 slot，中间可以加分隔。
 
 ## Props
 
