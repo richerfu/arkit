@@ -8,6 +8,7 @@ members = [
     "crates/arkit_prelude",
     "crates/arkit_hooks",
     "crates/arkit_shadcn",
+    "plugins/arkit_calendar_icu",
     "crates/arkit_router",
     "crates/arkit_i18n",
     "crates/arkit_i18n_macros",
@@ -74,6 +75,7 @@ arkit_lottie = { path = "crates/arkit_lottie" }
 arkit_router = { path = "crates/arkit_router" }
 arkit_runtime = { path = "crates/arkit_runtime" }
 arkit_shadcn = { path = "crates/arkit_shadcn" }
+arkit_calendar_icu = { path = "plugins/arkit_calendar_icu" }
 arkit_arkui = { path = "crates/arkit_arkui" }
 arkit_elements = { path = "crates/arkit_elements" }
 arkit_prelude = { path = "crates/arkit_prelude" }
@@ -117,6 +119,7 @@ oxc_index = "5.0.0"
 rustc-hash = "2.1.3"
 smallvec = "1.15.2"
 pulldown-cmark = { version = "0.13.4", default-features = false }
+icu_calendar = { version = "2.2.1", default-features = false }
 
 # Tree-sitter syntax highlighting for Markdown fenced code (optional feature).
 tree-sitter = "0.25"

@@ -6,7 +6,10 @@
 //! the mobile interaction model instead of exposing ArkUI's inline wheel
 //! picker, which is a different component.
 
-use super::{BottomSheet, Button, ButtonSize, ButtonVariant, Calendar, CalendarLabels};
+use super::{
+    BottomSheet, Button, ButtonSize, ButtonVariant, Calendar, CalendarDate, CalendarDayPlugin,
+    CalendarLabels, CalendarYearRange,
+};
 use crate::i18n::use_component_i18n;
 use crate::icon::icon_placeholder;
 use crate::theme::{spacing, typography, use_theme};
@@ -29,6 +32,18 @@ pub struct DatePickerProps {
     /// When omitted, [`Calendar`] follows the active i18n locale.
     #[props(default)]
     pub calendar_labels: Option<CalendarLabels>,
+    /// Controlled visible calendar month in `YYYY-MM` form.
+    #[props(default)]
+    pub calendar_month: Option<String>,
+    /// Inclusive year range forwarded to the embedded [`Calendar`].
+    #[props(default)]
+    pub calendar_year_range: Option<CalendarYearRange>,
+    /// Explicit civil date used for the embedded calendar's "today" state.
+    #[props(default)]
+    pub calendar_today: Option<CalendarDate>,
+    /// Optional supporting-content plugin, such as the ICU4X lunar plugin.
+    #[props(default)]
+    pub calendar_day_plugin: Option<CalendarDayPlugin>,
     /// Controlled sheet state.
     pub open: Option<bool>,
     #[props(default)]
@@ -39,6 +54,9 @@ pub struct DatePickerProps {
     pub on_change: EventHandler<Option<String>>,
     #[props(default)]
     pub on_open_change: EventHandler<bool>,
+    /// Called whenever the embedded calendar requests a visible month change.
+    #[props(default)]
+    pub on_calendar_month_change: EventHandler<String>,
 }
 
 /// A mobile date picker matching the RNR outline-trigger/bottom-sheet flow.
@@ -65,6 +83,11 @@ pub fn DatePicker(props: DatePickerProps) -> Element {
             .calendar_labels
             .unwrap_or_else(|| CalendarLabels::localized(i18n)),
     );
+    let calendar_month = props.calendar_month;
+    let calendar_year_range = props.calendar_year_range;
+    let calendar_today = props.calendar_today;
+    let calendar_day_plugin = props.calendar_day_plugin;
+    let on_calendar_month_change = props.on_calendar_month_change;
     let label = selected.clone().unwrap_or(placeholder);
     let initial_month = selected
         .as_deref()
@@ -128,8 +151,13 @@ pub fn DatePicker(props: DatePickerProps) -> Element {
                 Calendar {
                     selected: selected.clone(),
                     initial_month,
+                    month: calendar_month,
+                    year_range: calendar_year_range,
+                    today: calendar_today,
                     labels: calendar_labels,
                     embedded: true,
+                    day_plugin: calendar_day_plugin,
+                    on_month_change: move |month| on_calendar_month_change.call(month),
                     on_day_press: move |date| select_date.call(date),
                 }
                 row { height: spacing::LG }
