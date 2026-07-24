@@ -29,7 +29,7 @@ markdown = ["shadcn", "arkit_shadcn/markdown"]
 # Convenience: Markdown fences use the Code pipeline when both are enabled.
 markdown-highlight = ["markdown", "code"]
 router = ["animation", "dep:arkit_router"]
-shadcn = ["animation", "icon", "dep:arkit_shadcn"]
+shadcn = ["animation", "i18n", "icon", "dep:arkit_shadcn"]
 # Embedded terminal (libghostty-vt via Zig).
 terminal = ["dep:arkit_terminal"]
 

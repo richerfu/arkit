@@ -88,7 +88,7 @@ pub use bottom_sheet::{
 };
 pub use breadcrumb::{Breadcrumb, BreadcrumbItem, BreadcrumbItemProps, BreadcrumbProps};
 pub use button::{Button, ButtonProps, ButtonSize, ButtonVariant};
-pub use calendar::{Calendar, CalendarProps};
+pub use calendar::{Calendar, CalendarLabels, CalendarProps};
 pub use card::{
     Card, CardContent, CardContentProps, CardDescription, CardDescriptionProps, CardFooter,
     CardFooterProps, CardHeader, CardHeaderProps, CardProps, CardTitle, CardTitleProps,
@@ -132,7 +132,9 @@ pub use input::{Input, InputProps};
 pub use input_otp::{InputOtp, InputOtpMode, InputOtpProps, InputOtpSeparator, InputOtpStyle};
 pub use label::{Label, LabelProps};
 #[cfg(feature = "markdown")]
-pub use markdown::{Markdown, MarkdownOptions, MarkdownProps, MarkdownStyle};
+pub use markdown::{
+    Markdown, MarkdownAdmonitionLabels, MarkdownOptions, MarkdownProps, MarkdownStyle,
+};
 pub use menu_common::{
     menu_action_entry, menu_checkbox_entry, menu_label_entry, menu_radio_entry,
     menu_separator_entry, menu_submenu_entry, MenuActionEntry, MenuCheckboxEntry, MenuEntry,

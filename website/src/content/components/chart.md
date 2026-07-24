@@ -14,10 +14,13 @@ ChartCard {
 }
 ```
 
-| 组件        | 属性                                | 说明                        |
-| ----------- | ----------------------------------- | --------------------------- |
-| `Chart`     | `values: Vec<f32>`                  | 每个值按 0–100 clamp 后展示 |
-| `ChartCard` | `title: String`、`values: Vec<f32>` | 标题化的 Chart 卡片         |
+| 组件        | 属性                                                              | 说明                        |
+| ----------- | ----------------------------------------------------------------- | --------------------------- |
+| `Chart`     | `values: Vec<f32>`、`series_labels: Vec<String>`                  | 每个值按 0–100 clamp 后展示 |
+| `ChartCard` | `title: String`、`values: Vec<f32>`、`series_labels: Vec<String>` | 标题化的 Chart 卡片         |
+
+`series_labels` 缺失的条目使用内置 “Series N”/“系列 N” 文案，并随应用
+locale 切换；显式提供的标签优先。
 
 它不等同于 `arkit::echarts::ECharts`：
 

@@ -17,10 +17,13 @@ Command {
 }
 ```
 
-| 属性              | 类型                           | 默认值   | 说明         |
-| ----------------- | ------------------------------ | -------- | ------------ |
-| `query`           | `String`                       | 空字符串 | 当前查询文本 |
-| `options`         | `Vec<String>`                  | 必填     | 命令文案列表 |
-| `on_query_change` | `Option<EventHandler<String>>` | `None`   | 查询变化回调 |
+| 属性              | 类型                           | 默认值           | 说明           |
+| ----------------- | ------------------------------ | ---------------- | -------------- |
+| `query`           | `String`                       | 空字符串         | 当前查询文本   |
+| `options`         | `Vec<String>`                  | 必填             | 命令文案列表   |
+| `placeholder`     | `Option<String>`               | 当前 i18n locale | 搜索框占位文案 |
+| `on_query_change` | `Option<EventHandler<String>>` | `None`           | 查询变化回调   |
 
 命令需要稳定 identity 时，在页面层维护 id 到文案/handler 的映射。执行后明确关闭外层 Dialog/Popover；破坏性命令应先进入 AlertDialog 确认。
+
+未显式传入 `placeholder` 时使用组件内置 `en-US`/`zh-CN` 文案，并随应用 locale 更新。

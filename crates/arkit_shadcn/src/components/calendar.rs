@@ -8,6 +8,7 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::i18n::use_component_i18n;
 use crate::icon::icon_placeholder;
 use crate::theme::{typography, use_theme, Theme, ThemeMode};
 use arkit_prelude::*;
@@ -20,21 +21,68 @@ const DARK_SELECTION: u32 = 0xFF0EA5E9;
 const CALENDAR_PADDING: f32 = 12.0;
 const DAY_SIZE: f32 = 36.0;
 const WEEK_ROW_HEIGHT: f32 = 40.0;
-const WEEKDAYS: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTHS: [&str; 12] = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-];
+
+/// User-visible calendar copy.
+///
+/// `month_title_template` replaces `{month}` with the matching entry from
+/// `months` and `{year}` with the numeric year.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CalendarLabels {
+    pub weekdays: [String; 7],
+    pub months: [String; 12],
+    pub month_title_template: String,
+}
+
+impl CalendarLabels {
+    pub fn new(
+        weekdays: [String; 7],
+        months: [String; 12],
+        month_title_template: impl Into<String>,
+    ) -> Self {
+        Self {
+            weekdays,
+            months,
+            month_title_template: month_title_template.into(),
+        }
+    }
+
+    /// English labels matching the original component presentation.
+    pub fn english() -> Self {
+        Self::new(
+            ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(str::to_owned),
+            [
+                "January",
+                "February",
+                "March",
+                "April",
+                "May",
+                "June",
+                "July",
+                "August",
+                "September",
+                "October",
+                "November",
+                "December",
+            ]
+            .map(str::to_owned),
+            "{month} {year}",
+        )
+    }
+
+    pub(crate) fn localized(i18n: crate::i18n::ComponentI18n) -> Self {
+        Self::new(
+            i18n.calendar_weekdays(),
+            i18n.calendar_months(),
+            i18n.calendar_month_title_template(),
+        )
+    }
+
+    fn month_title(&self, year: i32, month: u8) -> String {
+        self.month_title_template
+            .replace("{year}", &year.to_string())
+            .replace("{month}", &self.months[usize::from(month - 1)])
+    }
+}
 
 /// Props for [`Calendar`].
 #[derive(Props, Clone, PartialEq)]
@@ -48,6 +96,10 @@ pub struct CalendarProps {
     /// Initially visible month in `YYYY-MM` form. Defaults to the current
     /// month and is intentionally only read when the component mounts.
     pub initial_month: Option<String>,
+    /// Month names, weekday headings, and month-title formatting. When
+    /// omitted, the active i18n locale selects the built-in labels.
+    #[props(default)]
+    pub labels: Option<CalendarLabels>,
     /// Selected-day fill. Defaults to the RNR sky-600/sky-500 colors.
     pub selection_color: Option<u32>,
     /// Today and navigation accent. Defaults to `selection_color`.
@@ -65,6 +117,7 @@ pub struct CalendarProps {
 #[component]
 pub fn Calendar(props: CalendarProps) -> Element {
     let theme = use_theme();
+    let i18n = use_component_i18n();
     let today = CalendarDate::today();
     let initial = props
         .initial_month
@@ -87,7 +140,11 @@ pub fn Calendar(props: CalendarProps) -> Element {
 
     let previous = month.previous();
     let next = month.next();
-    let title = month.title();
+    let labels = props
+        .labels
+        .unwrap_or_else(|| CalendarLabels::localized(i18n));
+    let title = labels.month_title(month.year, month.month);
+    let weekdays = labels.weekdays;
     let dates = month.grid_dates();
     let weeks = dates.chunks_exact(7).map(|week| {
         let cells = week.iter().copied().map(|date| {
@@ -212,9 +269,9 @@ pub fn Calendar(props: CalendarProps) -> Element {
                 width: "100%",
                 height: 28.0,
                 align_items: "center",
-                for weekday in WEEKDAYS {
+                for (weekday_index, weekday) in weekdays.into_iter().enumerate() {
                     row {
-                        key: "{weekday}",
+                        key: "{weekday_index}",
                         layout_weight: 1.0,
                         align_items: "center",
                         justify_content: "center",
@@ -311,10 +368,6 @@ impl CalendarMonth {
         }
     }
 
-    fn title(self) -> String {
-        format!("{} {}", MONTHS[usize::from(self.month - 1)], self.year)
-    }
-
     fn grid_dates(self) -> [CalendarDate; 42] {
         let first = CalendarDate {
             year: self.year,
@@ -404,5 +457,25 @@ fn civil_from_days(days: i64) -> CalendarDate {
         year: year as i32,
         month: month as u8,
         day: day as u8,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn formats_month_title_from_external_labels() {
+        let labels = CalendarLabels::new(
+            ["日", "一", "二", "三", "四", "五", "六"].map(str::to_owned),
+            [
+                "1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月",
+                "12月",
+            ]
+            .map(str::to_owned),
+            "{year}年{month}",
+        );
+
+        assert_eq!(labels.month_title(2026, 7), "2026年7月");
     }
 }

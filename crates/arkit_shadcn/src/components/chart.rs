@@ -8,19 +8,24 @@
 //! bar uses `rounded_progress` styling (`full` radius, `secondary` track,
 //! clipped, 8px tall).
 
-use crate::theme::*;
+use crate::{i18n::use_component_i18n, theme::*};
 use arkit_prelude::*;
 
 /// Props for [`Chart`].
 #[derive(Props, Clone, PartialEq)]
 pub struct ChartProps {
     pub values: Vec<f32>,
+    /// Optional caller-provided labels by series index. Missing entries use
+    /// the active i18n locale's built-in `Series N` equivalent.
+    #[props(default)]
+    pub series_labels: Vec<String>,
 }
 
 /// A list of series progress bars on a card surface.
 #[component]
 pub fn Chart(props: ChartProps) -> Element {
     let theme = use_theme();
+    let i18n = use_component_i18n();
     let palette = [
         theme.colors.chart_1,
         theme.colors.chart_2,
@@ -36,7 +41,12 @@ pub fn Chart(props: ChartProps) -> Element {
         .map(|(idx, value)| {
             let percent = value.clamp(0.0, 100.0);
             let tone = palette[idx % palette.len()];
-            let label = format!("Series {}", idx + 1);
+            let label = props
+                .series_labels
+                .get(idx)
+                .filter(|label| !label.is_empty())
+                .cloned()
+                .unwrap_or_else(|| i18n.chart_series(idx + 1));
             let pct = format!("{percent:.0}%");
             let margin_top = if idx == 0 { 0.0 } else { spacing::XXL };
             rsx! {
@@ -102,6 +112,8 @@ pub fn Chart(props: ChartProps) -> Element {
 pub struct ChartCardProps {
     pub title: String,
     pub values: Vec<f32>,
+    #[props(default)]
+    pub series_labels: Vec<String>,
 }
 
 /// A titled chart card — a heading above a [`Chart`].
@@ -131,7 +143,10 @@ pub fn ChartCard(props: ChartCardProps) -> Element {
             row {
                 width: "100%",
                 margin_top: spacing::XXL,
-                Chart { values: props.values }
+                Chart {
+                    values: props.values,
+                    series_labels: props.series_labels,
+                }
             }
         }
     }
