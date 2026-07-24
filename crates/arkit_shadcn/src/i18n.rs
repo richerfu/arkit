@@ -98,6 +98,38 @@ impl ComponentI18n {
         self.tr(messages::date_picker_close())
     }
 
+    pub(crate) fn time_picker_placeholder(self) -> String {
+        self.tr(messages::time_picker_placeholder())
+    }
+
+    pub(crate) fn time_picker_title(self) -> String {
+        self.tr(messages::time_picker_title())
+    }
+
+    pub(crate) fn time_picker_hour(self) -> String {
+        self.tr(messages::time_picker_hour())
+    }
+
+    pub(crate) fn time_picker_minute(self) -> String {
+        self.tr(messages::time_picker_minute())
+    }
+
+    pub(crate) fn time_picker_clear(self) -> String {
+        self.tr(messages::time_picker_clear())
+    }
+
+    pub(crate) fn time_picker_confirm(self) -> String {
+        self.tr(messages::time_picker_confirm())
+    }
+
+    pub(crate) fn time_picker_am(self) -> String {
+        self.tr(messages::time_picker_am())
+    }
+
+    pub(crate) fn time_picker_pm(self) -> String {
+        self.tr(messages::time_picker_pm())
+    }
+
     pub(crate) fn guide_previous(self) -> String {
         self.tr(messages::guide_previous())
     }
@@ -175,6 +207,10 @@ mod tests {
         assert_eq!(i18n.guide_next(), "Next");
         assert_eq!(i18n.guide_skip(), "Skip");
         assert_eq!(i18n.guide_finish(), "Finish");
+        assert_eq!(i18n.time_picker_placeholder(), "Pick a time");
+        assert_eq!(i18n.time_picker_title(), "Select time");
+        assert_eq!(i18n.time_picker_confirm(), "Done");
+        assert_eq!(i18n.time_picker_am(), "AM");
     }
 
     #[test]
@@ -190,6 +226,10 @@ mod tests {
         assert_eq!(i18n.guide_next(), "下一步");
         assert_eq!(i18n.guide_skip(), "跳过");
         assert_eq!(i18n.guide_finish(), "完成");
+        assert_eq!(i18n.time_picker_placeholder(), "选择时间");
+        assert_eq!(i18n.time_picker_title(), "选择时间");
+        assert_eq!(i18n.time_picker_confirm(), "完成");
+        assert_eq!(i18n.time_picker_am(), "上午");
     }
 
     #[test]

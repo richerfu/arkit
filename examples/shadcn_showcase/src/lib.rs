@@ -19,8 +19,8 @@ use arkit::shadcn::components::{
     Input, InputOtp, InputOtpMode, InputOtpSeparator, Label, Markdown, MenuEntry, Menubar,
     MenubarMenuSpec, MultiSlider, Popover, Progress, RadioGroup, RangeSlider, Select, Separator,
     Skeleton, Slider, SliderOrientation, SliderStyle, Sonner, SonnerPosition, SonnerToast, Spinner,
-    Switch, Table, Tabs, Text, TextVariant, Textarea, ToastAppearance, Toggle, ToggleGroup,
-    ToggleVariant, Tooltip,
+    Switch, Table, Tabs, Text, TextVariant, Textarea, TimePicker, TimePickerFormat, TimeValue,
+    ToastAppearance, Toggle, ToggleGroup, ToggleVariant, Tooltip,
 };
 use arkit::shadcn::icon::icon_placeholder;
 use arkit::shadcn::theme::{
@@ -204,6 +204,10 @@ const COMPONENTS: &[ComponentSpec] = &[
     ComponentSpec {
         slug: "date-picker",
         name: "Date Picker",
+    },
+    ComponentSpec {
+        slug: "time-picker",
+        name: "Time Picker",
     },
     ComponentSpec {
         slug: "dialog",
@@ -1089,6 +1093,8 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let mut carousel_overlay_index = use_signal(|| 0_usize);
     let mut date_picker_selected = use_signal(|| None::<String>);
     let mut date_picker_open = use_signal(|| false);
+    let mut time_picker_selected = use_signal(|| TimeValue::new(9, 30));
+    let mut time_picker_open = use_signal(|| false);
     let mut popover_open = use_signal(|| false);
     let mut hover_open = use_signal(|| false);
     let mut tooltip_open = use_signal(|| false);
@@ -1125,6 +1131,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let mut carousel_uc_note = use_signal(|| "default_index=0".to_string());
     let mut date_picker_uc_selected = use_signal(|| None::<String>);
     let mut date_picker_uc_note = use_signal(|| "selection/open unmanaged".to_string());
+    let mut time_picker_uc_note = use_signal(|| "default: 03:30 PM".to_string());
     let mut dialog_uc_gen = use_signal(|| 0_u64);
     let mut alert_uc_gen = use_signal(|| 0_u64);
     let mut sheet_uc_gen = use_signal(|| 0_u64);
@@ -1990,6 +1997,43 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     },
                     on_open_change: move |open| {
                         date_picker_uc_note.set(format!("on_open_change = {open}"));
+                    },
+                }
+            }
+        },
+        "time-picker" => rsx! {
+            column {
+                align_items: "start",
+                demo_mode_label {
+                    title: "Controlled · 24 hour".to_string(),
+                    detail: Some(format!(
+                        "selected = {:?}, open = {}",
+                        time_picker_selected(),
+                        time_picker_open()
+                    )),
+                }
+                TimePicker {
+                    selected: time_picker_selected(),
+                    open: Some(time_picker_open()),
+                    minute_step: 5,
+                    on_change: move |time| time_picker_selected.set(time),
+                    on_open_change: move |open| time_picker_open.set(open),
+                }
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Uncontrolled · 12 hour".to_string(),
+                    detail: Some(time_picker_uc_note()),
+                }
+                TimePicker {
+                    default_selected: TimeValue::new(15, 30),
+                    format: TimePickerFormat::TwelveHour,
+                    minute_step: 15,
+                    default_open: false,
+                    on_change: move |time| {
+                        time_picker_uc_note.set(format!("on_change = {:?}", time));
+                    },
+                    on_open_change: move |open| {
+                        time_picker_uc_note.set(format!("on_open_change = {open}"));
                     },
                 }
             }
