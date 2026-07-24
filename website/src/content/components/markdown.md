@@ -32,6 +32,7 @@ Markdown {
 
 See the [migration guide](https://example.com).
 "#.to_string(),
+    admonition_labels: Some(MarkdownAdmonitionLabels::english()),
     on_link_click: move |url| open_url(url),
 }
 ```
@@ -48,12 +49,17 @@ See the [migration guide](https://example.com).
 
 ## Props
 
-| Prop            | 类型                           | 说明                                                        |
-| --------------- | ------------------------------ | ----------------------------------------------------------- |
-| `source`        | `String`                       | Markdown 源文本                                             |
-| `options`       | `MarkdownOptions`              | GFM 扩展开关，默认启用表格、任务、删除线、脚注和 admonition |
-| `style`         | `Option<MarkdownStyle>`        | 完整样式覆盖；缺省时实时读取当前 shadcn theme               |
-| `on_link_click` | `Option<EventHandler<String>>` | 链接激活回调；未提供时链接保留样式但不执行跳转              |
+| Prop                | 类型                               | 说明                                                        |
+| ------------------- | ---------------------------------- | ----------------------------------------------------------- |
+| `source`            | `String`                           | Markdown 源文本                                             |
+| `options`           | `MarkdownOptions`                  | GFM 扩展开关，默认启用表格、任务、删除线、脚注和 admonition |
+| `style`             | `Option<MarkdownStyle>`            | 完整样式覆盖；缺省时实时读取当前 shadcn theme               |
+| `admonition_labels` | `Option<MarkdownAdmonitionLabels>` | admonition 标题；`None` 时不注入固定标题文案                |
+| `on_link_click`     | `Option<EventHandler<String>>`     | 链接激活回调；未提供时链接保留样式但不执行跳转              |
+
+`MarkdownAdmonitionLabels::english()` 提供 GitHub 风格英文标题；也可通过
+`MarkdownAdmonitionLabels::new(...)` 传入本地化的 NOTE、TIP、IMPORTANT、
+WARNING 和 CAUTION 文案。
 
 `MarkdownStyle::from_theme(&theme)` 可生成完整样式，再覆盖颜色、正文/代码字号、块间距、代码 padding、图片高度或任务列表 marker 的选中/未选中配色。
 

@@ -12,6 +12,8 @@ let mut fruit = use_signal(String::new);
 
 Select {
     options: vec!["Apple".into(), "Pear".into()],
+    placeholder: "Select a fruit".into(),
+    label: Some("Fruits".into()),
     selected: fruit(),
     on_select: move |next| fruit.set(next),
 }
@@ -20,6 +22,8 @@ Select {
 | 属性               | 类型                           | 默认值   | 说明           |
 | ------------------ | ------------------------------ | -------- | -------------- |
 | `options`          | `Vec<String>`                  | 必填     | 候选项         |
+| `placeholder`      | `String`                       | 必填     | 未选中时的文案 |
+| `label`            | `Option<String>`               | `None`   | 下拉分组标题   |
 | `selected`         | `Option<String>`               | `None`   | 受控选中值     |
 | `default_selected` | `String`                       | 空字符串 | 非受控初始值   |
 | `open`             | `Option<bool>`                 | `None`   | 受控打开状态   |

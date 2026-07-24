@@ -12,7 +12,13 @@ let mut birthday = use_signal(|| None::<String>);
 
 DatePicker {
     selected: birthday(),
-    placeholder: "选择出生日期",
+    placeholder: "选择出生日期".into(),
+    close_label: "关闭".into(),
+    calendar_labels: CalendarLabels::new(
+        ["日", "一", "二", "三", "四", "五", "六"].map(str::to_owned),
+        ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"].map(str::to_owned),
+        "{year}年{month}",
+    ),
     on_change: move |next| birthday.set(next),
 }
 ```
@@ -21,7 +27,9 @@ DatePicker {
 | ------------------ | ------------------------------ | ---------- | ------------------------ |
 | `selected`         | `Option<String>`               | `None`     | 受控日期                 |
 | `default_selected` | `Option<String>`               | `None`     | 非受控初始日期           |
-| `placeholder`      | `Option<String>`               | `None`     | 未选择时文案             |
+| `placeholder`      | `String`                       | 必填       | 未选择时文案             |
+| `close_label`      | `String`                       | 必填       | 面板关闭按钮文案         |
+| `calendar_labels`  | `CalendarLabels`               | 必填       | 日历月份、星期及标题格式 |
 | `open`             | `Option<bool>`                 | `None`     | 受控面板状态             |
 | `default_open`     | `bool`                         | `false`    | 非受控初始状态           |
 | `disabled`         | `bool`                         | `false`    | 禁止打开                 |

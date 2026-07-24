@@ -18,6 +18,8 @@ const TRANSPARENT: u32 = 0x00000000;
 pub struct PaginationProps {
     pub page: i32,
     pub total_pages: i32,
+    pub previous_label: String,
+    pub next_label: String,
     #[props(default)]
     pub on_page_change: EventHandler<i32>,
 }
@@ -29,6 +31,8 @@ pub fn Pagination(props: PaginationProps) -> Element {
     let total_pages = props.total_pages.max(1);
     let current = props.page.clamp(1, total_pages);
     let on_page_change = props.on_page_change;
+    let previous_label = props.previous_label;
+    let next_label = props.next_label;
 
     let mut page_numbers: Vec<i32> = vec![1, total_pages, current - 1, current, current + 1]
         .into_iter()
@@ -59,7 +63,7 @@ pub fn Pagination(props: PaginationProps) -> Element {
             alignment: "center",
             onclick: move |_| on_prev.call(prev_target),
             text {
-                content: "Prev",
+                content: previous_label,
                 font_size: typography::SM,
                 font_weight: 500,
                 font_color: theme.colors.foreground,
@@ -153,7 +157,7 @@ pub fn Pagination(props: PaginationProps) -> Element {
             alignment: "center",
             onclick: move |_| on_next.call(next_target),
             text {
-                content: "Next",
+                content: next_label,
                 font_size: typography::SM,
                 font_weight: 500,
                 font_color: theme.colors.foreground,

@@ -13,6 +13,8 @@ const COMBOBOX_PANEL_FALLBACK_WIDTH: f32 = 240.0;
 #[component]
 pub fn Combobox(
     options: Vec<String>,
+    placeholder: String,
+    label: Option<String>,
     selected: String,
     open: Option<bool>,
     default_open: bool,
@@ -40,8 +42,9 @@ pub fn Combobox(
     let trigger_label = if has_value {
         selected.clone()
     } else {
-        String::from("Search an option")
+        placeholder
     };
+    let panel_label = label.filter(|label| !label.is_empty());
     let label_color = if has_value {
         colors.foreground
     } else {
@@ -92,16 +95,18 @@ pub fn Combobox(
                     border_width: 1.0,
                     border_color: colors.border,
                     shadow: "sm",
-                    row {
-                        padding_top: 8.0,
-                        padding_right: spacing::SM,
-                        padding_bottom: 8.0,
-                        padding_left: spacing::SM,
-                        text {
-                            font_size: typography::XS,
-                            font_color: colors.muted_foreground,
-                            line_height: 16.0,
-                            "Suggestions"
+                    if let Some(label) = panel_label {
+                        row {
+                            padding_top: 8.0,
+                            padding_right: spacing::SM,
+                            padding_bottom: 8.0,
+                            padding_left: spacing::SM,
+                            text {
+                                font_size: typography::XS,
+                                font_color: colors.muted_foreground,
+                                line_height: 16.0,
+                                {label}
+                            }
                         }
                     }
                     column {

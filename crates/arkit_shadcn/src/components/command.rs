@@ -16,6 +16,7 @@ use arkit_prelude::*;
 pub fn Command(
     query: String,
     options: Vec<String>,
+    placeholder: String,
     on_query_change: Option<EventHandler<String>>,
 ) -> Element {
     let theme = use_theme();
@@ -38,7 +39,7 @@ pub fn Command(
             padding_left: spacing::XXS,
             textinput {
                 value: query.clone(),
-                placeholder: "Search command...".to_string(),
+                placeholder,
                 placeholder_color: with_alpha(colors.muted_foreground, 0x80),
                 font_size: typography::MD,
                 font_color: colors.foreground,

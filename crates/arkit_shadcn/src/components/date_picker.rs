@@ -6,7 +6,7 @@
 //! the mobile interaction model instead of exposing ArkUI's inline wheel
 //! picker, which is a different component.
 
-use super::{BottomSheet, Button, ButtonSize, ButtonVariant, Calendar};
+use super::{BottomSheet, Button, ButtonSize, ButtonVariant, Calendar, CalendarLabels};
 use crate::icon::icon_placeholder;
 use crate::theme::{spacing, typography, use_theme};
 use arkit_prelude::*;
@@ -20,7 +20,12 @@ pub struct DatePickerProps {
     /// owns its selection and starts from `default_selected`.
     pub selected: Option<String>,
     pub default_selected: Option<String>,
-    pub placeholder: Option<String>,
+    /// Trigger text shown while no date is selected.
+    pub placeholder: String,
+    /// Label for the action that dismisses the calendar sheet.
+    pub close_label: String,
+    /// Localized month, weekday, and title text forwarded to [`Calendar`].
+    pub calendar_labels: CalendarLabels,
     /// Controlled sheet state.
     pub open: Option<bool>,
     #[props(default)]
@@ -45,11 +50,7 @@ pub fn DatePicker(props: DatePickerProps) -> Element {
         .clone()
         .or_else(|| internal_selected.read().clone());
     let open = props.open.unwrap_or_else(|| *internal_open.read());
-    let placeholder = props
-        .placeholder
-        .clone()
-        .unwrap_or_else(|| "Pick a date".to_string());
-    let label = selected.clone().unwrap_or(placeholder);
+    let label = selected.clone().unwrap_or(props.placeholder);
     let initial_month = selected
         .as_deref()
         .and_then(|date| date.get(..7))
@@ -112,6 +113,7 @@ pub fn DatePicker(props: DatePickerProps) -> Element {
                 Calendar {
                     selected: selected.clone(),
                     initial_month,
+                    labels: props.calendar_labels,
                     embedded: true,
                     on_day_press: move |date| select_date.call(date),
                 }
@@ -120,7 +122,7 @@ pub fn DatePicker(props: DatePickerProps) -> Element {
                     size: ButtonSize::Sm,
                     width: "100%",
                     onclick: move |_| set_open.call(false),
-                    "Close"
+                    {props.close_label}
                 }
             }
         }

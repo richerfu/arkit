@@ -23,6 +23,8 @@ const SELECT_TEXT_OVERFLOW_ELLIPSIS: &str = "ellipsis";
 #[component]
 pub fn Select(
     options: Vec<String>,
+    placeholder: String,
+    label: Option<String>,
     selected: Option<String>,
     default_selected: String,
     open: Option<bool>,
@@ -68,7 +70,7 @@ pub fn Select(
     let trigger_label = if has_value {
         current_selected.clone()
     } else {
-        String::from("Select a fruit")
+        placeholder
     };
     let label_color = if has_value {
         colors.foreground
@@ -76,6 +78,7 @@ pub fn Select(
         colors.muted_foreground
     };
     let count = options.len();
+    let panel_label = label.filter(|label| !label.is_empty());
 
     let toggle = move |_| {
         if current_open {
@@ -89,7 +92,7 @@ pub fn Select(
         let frame = *trigger_frame.read();
         let viewport = overlay.viewport();
         let panel_width = trigger_width_vp(frame, viewport, SELECT_PANEL_FALLBACK_WIDTH);
-        let panel_height = select_panel_estimated_height(count);
+        let panel_height = select_panel_estimated_height(count, panel_label.is_some());
         let placement = FloatingPanelPlacement::resolve(
             frame,
             viewport,
@@ -105,18 +108,20 @@ pub fn Select(
             dismiss_overlay.dismiss();
         });
         let overlay_options = options.clone();
+        let overlay_label = panel_label.clone();
         let overlay_selected = current_selected.clone();
 
         overlay.show_floating(move || {
-            select_overlay_content(
+            select_overlay_content(SelectOverlayContent {
                 theme,
                 panel_width,
                 placement,
-                overlay_options,
-                overlay_selected,
+                options: overlay_options,
+                label: overlay_label,
+                selected: overlay_selected,
                 set_selected,
-                dismiss,
-            )
+                on_dismiss: dismiss,
+            })
         });
     };
 
@@ -171,15 +176,28 @@ pub fn Select(
     }
 }
 
-fn select_overlay_content(
+struct SelectOverlayContent {
     theme: Theme,
     panel_width: f32,
     placement: FloatingPanelPlacement,
     options: Vec<String>,
+    label: Option<String>,
     selected: String,
     set_selected: EventHandler<String>,
     on_dismiss: EventHandler<()>,
-) -> Element {
+}
+
+fn select_overlay_content(content: SelectOverlayContent) -> Element {
+    let SelectOverlayContent {
+        theme,
+        panel_width,
+        placement,
+        options,
+        label,
+        selected,
+        set_selected,
+        on_dismiss,
+    } = content;
     let colors = theme.colors;
     let scroll_list = options.len() > 8;
     let top = placement.y.max(0.0);
@@ -208,19 +226,21 @@ fn select_overlay_content(
                 padding_right: spacing::XXS,
                 padding_bottom: spacing::XXS,
                 padding_left: spacing::XXS,
-                row {
-                    width: "100%",
-                    padding_top: 8.0,
-                    padding_right: spacing::SM,
-                    padding_bottom: 8.0,
-                    padding_left: spacing::SM,
-                    text {
-                        font_size: typography::XS,
-                        font_color: colors.muted_foreground,
-                        line_height: 16.0,
-                        max_lines: SELECT_TEXT_MAX_LINES,
-                        text_overflow: SELECT_TEXT_OVERFLOW_ELLIPSIS,
-                        "Fruits"
+                if let Some(label) = label {
+                    row {
+                        width: "100%",
+                        padding_top: 8.0,
+                        padding_right: spacing::SM,
+                        padding_bottom: 8.0,
+                        padding_left: spacing::SM,
+                        text {
+                            font_size: typography::XS,
+                            font_color: colors.muted_foreground,
+                            line_height: 16.0,
+                            max_lines: SELECT_TEXT_MAX_LINES,
+                            text_overflow: SELECT_TEXT_OVERFLOW_ELLIPSIS,
+                            {label}
+                        }
                     }
                 }
                 if scroll_list {
@@ -302,12 +322,29 @@ fn select_option_row(
     }
 }
 
-fn select_panel_estimated_height(option_count: usize) -> f32 {
+fn select_panel_estimated_height(option_count: usize, has_label: bool) -> f32 {
     (spacing::XXS * 2.0)
-        + SELECT_PANEL_HEADER_HEIGHT
+        + if has_label {
+            SELECT_PANEL_HEADER_HEIGHT
+        } else {
+            0.0
+        }
         + if option_count > 8 {
             SELECT_PANEL_SCROLL_HEIGHT
         } else {
             (option_count as f32) * SELECT_OPTION_HEIGHT
         }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn panel_height_only_reserves_header_space_for_external_label() {
+        let without_label = select_panel_estimated_height(3, false);
+        let with_label = select_panel_estimated_height(3, true);
+
+        assert_eq!(with_label - without_label, SELECT_PANEL_HEADER_HEIGHT);
+    }
 }

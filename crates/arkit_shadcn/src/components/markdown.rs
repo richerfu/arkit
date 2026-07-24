@@ -91,6 +91,49 @@ impl MarkdownOptions {
     }
 }
 
+/// User-visible labels for GitHub-style admonition block quotes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MarkdownAdmonitionLabels {
+    pub note: String,
+    pub tip: String,
+    pub important: String,
+    pub warning: String,
+    pub caution: String,
+}
+
+impl MarkdownAdmonitionLabels {
+    pub fn new(
+        note: impl Into<String>,
+        tip: impl Into<String>,
+        important: impl Into<String>,
+        warning: impl Into<String>,
+        caution: impl Into<String>,
+    ) -> Self {
+        Self {
+            note: note.into(),
+            tip: tip.into(),
+            important: important.into(),
+            warning: warning.into(),
+            caution: caution.into(),
+        }
+    }
+
+    /// English labels matching GitHub's standard presentation.
+    pub fn english() -> Self {
+        Self::new("NOTE", "TIP", "IMPORTANT", "WARNING", "CAUTION")
+    }
+
+    fn label(&self, kind: BlockQuoteKind) -> String {
+        match kind {
+            BlockQuoteKind::Note => self.note.clone(),
+            BlockQuoteKind::Tip => self.tip.clone(),
+            BlockQuoteKind::Important => self.important.clone(),
+            BlockQuoteKind::Warning => self.warning.clone(),
+            BlockQuoteKind::Caution => self.caution.clone(),
+        }
+    }
+}
+
 /// Visual tokens for [`Markdown`].
 ///
 /// Use [`MarkdownStyle::from_theme`] to derive a complete style and then
@@ -177,6 +220,10 @@ pub struct MarkdownProps {
     /// Complete style override. Omit it to track the active shadcn theme.
     #[props(default)]
     pub style: Option<MarkdownStyle>,
+    /// Labels rendered above GitHub-style admonition quotes. When omitted,
+    /// admonitions keep their visual treatment without injecting fixed copy.
+    #[props(default)]
+    pub admonition_labels: Option<MarkdownAdmonitionLabels>,
     /// Receives the destination of an activated Markdown link. Without a
     /// handler, links remain visually distinct but are inert.
     #[props(default)]
@@ -197,6 +244,7 @@ pub fn Markdown(props: MarkdownProps) -> Element {
         .unwrap_or_else(|| MarkdownStyle::from_theme(&theme));
     let source = props.source;
     let options = props.options;
+    let admonition_labels = props.admonition_labels;
     let document = use_memo(use_reactive((&source, &options), |(source, options)| {
         MarkdownDocument::parse(&source, options)
     }));
@@ -204,6 +252,7 @@ pub fn Markdown(props: MarkdownProps) -> Element {
     let blocks = render_blocks(
         &document.blocks,
         &style,
+        admonition_labels.as_ref(),
         props.on_link_click,
         "markdown",
         0,
@@ -951,6 +1000,7 @@ impl InlineAlignment {
 fn render_blocks(
     blocks: &[Block],
     style: &MarkdownStyle,
+    admonition_labels: Option<&MarkdownAdmonitionLabels>,
     on_link_click: Option<EventHandler<String>>,
     key_prefix: &str,
     depth: usize,
@@ -967,6 +1017,7 @@ fn render_blocks(
                 render_block(
                     block,
                     style,
+                    admonition_labels,
                     on_link_click,
                     key.as_str(),
                     depth,
@@ -989,6 +1040,7 @@ fn render_blocks(
 fn render_block(
     block: &Block,
     style: &MarkdownStyle,
+    admonition_labels: Option<&MarkdownAdmonitionLabels>,
     on_link_click: Option<EventHandler<String>>,
     key_prefix: &str,
     depth: usize,
@@ -1029,12 +1081,13 @@ fn render_block(
             let nested = render_blocks(
                 blocks,
                 style,
+                admonition_labels,
                 on_link_click,
                 &nested_key,
                 depth + 1,
                 code_highlight,
             );
-            let label = kind.and_then(admonition_label);
+            let label = kind.and_then(|kind| admonition_labels.map(|labels| labels.label(kind)));
             rsx! {
                 row {
                     width: "100%",
@@ -1077,6 +1130,7 @@ fn render_block(
                     let nested = render_blocks(
                         &item.blocks,
                         style,
+                        admonition_labels,
                         on_link_click,
                         &nested_key,
                         depth + 1,
@@ -1116,6 +1170,7 @@ fn render_block(
             let nested = render_blocks(
                 blocks,
                 style,
+                admonition_labels,
                 on_link_click,
                 &nested_key,
                 depth + 1,
@@ -1569,19 +1624,6 @@ fn heading_metrics(level: u8) -> (f32, f32, i32) {
     }
 }
 
-fn admonition_label(kind: BlockQuoteKind) -> Option<String> {
-    Some(
-        match kind {
-            BlockQuoteKind::Note => "NOTE",
-            BlockQuoteKind::Tip => "TIP",
-            BlockQuoteKind::Important => "IMPORTANT",
-            BlockQuoteKind::Warning => "WARNING",
-            BlockQuoteKind::Caution => "CAUTION",
-        }
-        .to_owned(),
-    )
-}
-
 fn render_list_marker(
     start: Option<u64>,
     index: usize,
@@ -1786,5 +1828,13 @@ mod tests {
             .blocks
             .iter()
             .all(|block| { matches!(block, Block::Paragraph(content) if content.len() == 1) }));
+    }
+
+    #[test]
+    fn admonition_labels_are_supplied_by_the_caller() {
+        let labels = MarkdownAdmonitionLabels::new("备注", "提示", "重要", "警告", "注意");
+
+        assert_eq!(labels.label(BlockQuoteKind::Note), "备注");
+        assert_eq!(labels.label(BlockQuoteKind::Caution), "注意");
     }
 }
