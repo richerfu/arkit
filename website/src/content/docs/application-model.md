@@ -1,11 +1,11 @@
 ---
 title: 组件与 RSX
-description: "组件边界、Props、children 与组合模式。"
+description: "用组件和 RSX 组织页面：Props、children 以及常见的组合方式。"
 ---
 
 # 组件与 RSX
 
-组件是 Arkit 应用的基本边界。它接收 Props、读取 Hook 状态并返回 `Element`；RSX 描述的不是一次性 native node，而是下一次 VirtualDom diff 的目标结构。
+组件是 Arkit 应用的基本单位：接收 Props、用 Hook 读状态，返回一棵 `Element`。RSX 描述的是「下一次 diff 期望长什么样」，不是一次性的原生节点快照。
 
 ## 定义组件
 

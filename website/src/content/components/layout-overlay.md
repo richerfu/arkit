@@ -1,11 +1,11 @@
 ---
 title: 布局与浮层
-description: "尺寸、SafeArea、OverlayRoot 与键盘。"
+description: "测量尺寸、处理安全区与键盘，并把浮层挂到 OverlayRoot。"
 ---
 
 # 布局与浮层
 
-组件使用 ArkUI vp 布局。父容器必须提供可确定尺寸；百分比只相对于已确定的 parent content box。
+量尺寸、躲安全区、听键盘，以及把浮层挂到 OverlayRoot 上——这几件事经常一起出现。
 
 ## 尺寸与对齐
 

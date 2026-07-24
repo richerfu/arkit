@@ -1,11 +1,11 @@
 ---
 title: Button
-description: "按钮变体、尺寸、禁用和点击。"
+description: "主题化按钮，覆盖常见变体、尺寸和禁用态。"
 ---
 
 # Button
 
-Button 是主题化 ArkUI 按钮，用于触发即时 action。
+主题化按钮：变体、尺寸、禁用和点击回调都按常见 shadcn 习惯暴露。
 
 ## 用法
 

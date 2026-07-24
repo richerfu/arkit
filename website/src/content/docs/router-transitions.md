@@ -1,11 +1,11 @@
 ---
 title: 页面转场
-description: "转场配置、生命周期与返回方向。"
+description: "页面切换动画怎么配，前进和返回方向如何区分。"
 ---
 
 # 页面转场
 
-路由转场只负责页面 mount/unmount 的视觉，不修改 Router history。`router` 自动启用 `animation`，因此所有转场使用 root AnimationHost。
+切页时可以挂过渡动画。配置跟在路由上，前进和返回可以走不同方向，生命周期也和页面挂载对齐。
 
 ## RouteTransition
 

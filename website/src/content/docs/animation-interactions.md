@@ -1,11 +1,11 @@
 ---
 title: Drag 与 Scroll
-description: "手势联动、惯性、阈值与同步。"
+description: "拖拽和滚动怎么驱动同一套动画引擎，而不是另起炉灶。"
 ---
 
 # Drag 与 Scroll
 
-手势模块不建立另一套动画系统。Drag 把 pointer sample 映射为 controls seek，release 的惯性、snap、spring 编译为 Timeline；Scroll observer 也在帧边界驱动同一 Engine。
+拖拽和滚动不另起一套动画系统：手势采样映射成 seek，松手后的惯性和吸附再编译回 Timeline，仍然走同一引擎。
 
 ## Draggable
 

@@ -1,11 +1,11 @@
 ---
 title: 异步任务
-description: "resource、future、Tokio 与取消语义。"
+description: "异步任务如何回到 UI 线程，以及取消和依赖更新要注意什么。"
 ---
 
 # 异步任务
 
-Arkit runtime 把 Dioxus scheduler 与 OpenHarmony UI loop 连接起来。Future 完成后由 waker 唤醒 UI，不需要固定轮询。
+Runtime 把 Dioxus 的调度器和 OpenHarmony 的 UI loop 接在一起。Future 完成后会通过 waker 把 UI 叫醒，不需要你自己轮询。
 
 ## 选择异步 Hook
 

@@ -1,25 +1,11 @@
 ---
 title: Carousel
-description: "轮播、控制器和指示器。"
+description: "轮播内容，带控制器和指示点。"
 ---
 
 # Carousel
 
-Carousel 使用原生 Swiper 展示分页内容，支持滑动、循环、自动播放、导航按钮和页码指示。
-
-```rust
-Carousel {
-    slides: vec![
-        rsx! { PromoCard { title: "第一项" } },
-        rsx! { PromoCard { title: "第二项" } },
-    ],
-    height: 240.0,
-    looping: true,
-    show_controls: true,
-    show_indicators: true,
-    on_change: move |index| tracing::debug!(index),
-}
-```
+横向或纵向轮播，附带控制器和指示点。
 
 ## 主要 Props
 

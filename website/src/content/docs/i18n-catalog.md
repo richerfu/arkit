@@ -1,11 +1,11 @@
 ---
 title: 资源与消息
-description: "FTL 资源、参数、选择器和编译期校验。"
+description: "FTL 资源怎么组织参数和选择器，编译期又能帮你查什么。"
 ---
 
 # 资源与消息
 
-Arkit 使用 Fluent `.ftl` 资源。每个 locale 必须提供同一组公开 message/attribute，并在解析引用后需要相同变量集合。
+Catalog 描述有哪些消息、参数长什么样。写错 key 或漏参数时，希望在编译期就看见，而不是上线后空白。
 
 ## 资源示例
 

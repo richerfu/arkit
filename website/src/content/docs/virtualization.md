@@ -1,13 +1,11 @@
 ---
 title: 虚拟列表与可见范围
-description: "List、Grid、WaterFlow 的 RSX 真虚拟化与 NodeAdapter。"
+description: "在 List / Grid / WaterFlow 里用 RSX 做真正的虚拟列表。"
 ---
 
 # 虚拟列表与可见范围
 
-`use_virtual_node_adapter_rsx` 把 ArkUI NodeAdapter 挂到 `list`、`grid` 或 `waterflow`。只有进入可见区域的 item 才创建对应的 Dioxus subtree；item 可以直接写 RSX、组件、hook、signal 和事件。这是真虚拟化，不是先构建完整列表再隐藏。
-
-原有 `use_virtual_node_adapter` 继续保留，作为需要 `NodeBuilder` 的底层原生节点路径。
+列表特别长时，不要把所有 item 一次性挂进树上。用 NodeAdapter 做真正的虚拟化：只挂可见项，RSX 仍然负责每一项长什么样。
 
 ## 支持的容器
 

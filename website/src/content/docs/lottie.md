@@ -1,18 +1,11 @@
 ---
 title: Lottie
-description: "基于 ThorVG、XComponent 与 NativeWindow 的高性能 Lottie 渲染。"
+description: "在原生 Surface 上播 Lottie，并处理好暂停与生命周期。"
 ---
 
 # Lottie
 
-Lottie 是独立领域能力，不进入默认依赖图：
-
-```toml
-[dependencies]
-arkit = { version = "*", features = ["lottie"] }
-```
-
-只有启用 `lottie` 时才会引入 `arkit_lottie`、ThorVG、XComponent callback 与 NativeWindow。需要 URL 数据源时改用 `lottie-network`，Reqwest/Rustls 网络依赖只绑定在 `arkit_lottie/network` 上；默认依赖图和基础 `lottie` feature 都不会引入网络栈。需要执行 Lottie expressions 时显式改用 `lottie-expressions`；默认构建不包含 expression 引擎，避免无条件增加包体和初始化成本。
+Lottie 走 ThorVG 和独立 Surface，不塞进 WebView。播、停、seek 和可见性暂停都接到组件生命周期上，后台时不会空转。
 
 ## 渲染路径
 

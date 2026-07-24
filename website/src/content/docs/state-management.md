@@ -1,11 +1,11 @@
 ---
 title: 状态管理
-description: "Signal、派生状态、共享状态与更新原则。"
+description: "用 Signal 保存、派生和共享状态。"
 ---
 
 # 状态管理
 
-Arkit 直接使用 Dioxus Signal。状态读取建立响应式依赖，写入唤醒相关 scope；renderer 随下一次 VirtualDom diff 更新 native tree。
+状态默认放在 Signal 里。读的时候建立依赖，写的时候触发更新；派生状态用 memo 或计算函数，跨组件共享则上 context 或把 Signal 放进 props。
 
 ## 局部状态
 

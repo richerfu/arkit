@@ -1,11 +1,13 @@
 ---
 title: 图表总览
-description: "原生 renderer、支持范围和阅读路径。"
+description: "原生 Drawing 图表能做什么、不支持什么，建议怎么读后面的文档。"
 ---
 
 # 图表总览
 
-启用 `chart` 后，`arkit::echarts` 提供 ECharts 语义的 typed / JSON model，以及 ArkUI Custom + Drawing 原生 renderer。它不嵌 WebView；`chart` 自动启用 root `animation`。
+打开 `chart` 之后，可以通过 `arkit::echarts` 用接近 ECharts 的 Option 模型画图。渲染在 ArkUI Custom + Drawing 上完成，**不嵌 WebView**。
+
+下面按「怎么建模 → 有哪些系列 → 交互和性能」组织，建议先读组件与 Option，再按需点进具体 series。
 
 ## 接入
 

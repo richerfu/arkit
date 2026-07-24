@@ -45,7 +45,7 @@ id = "oxfmt"
 name = "oxfmt"
 language = "system"
 entry = "pnpm run format:check"
-files = '^(website/.*\.(css|html|js|json|jsonc|jsx|md|mdx|scss|ts|tsx|ya?ml)|package\.json|pnpm-workspace\.yaml|prek\.toml|\.github/workflows/.*\.ya?ml|\.oxfmtrc\.json|\.oxlintrc\.json)$'
+files = '^(website/.*\.(astro|css|html|js|json|jsonc|jsx|md|mdx|mjs|scss|ts|tsx|ya?ml)|package\.json|pnpm-workspace\.yaml|prek\.toml|\.github/workflows/.*\.ya?ml|\.oxfmtrc\.json|\.oxlintrc\.json)$'
 pass_filenames = false
 
 [[repos.hooks]]
@@ -53,7 +53,7 @@ id = "oxlint"
 name = "oxlint"
 language = "system"
 entry = "pnpm run lint"
-files = '^website/.*\.(js|jsx|ts|tsx)$'
+files = '^website/.*\.(astro|js|jsx|mjs|ts|tsx)$'
 pass_filenames = false
 
 [[repos.hooks]]
@@ -61,7 +61,7 @@ id = "website-typecheck"
 name = "website typecheck"
 language = "system"
 entry = "pnpm run website:typecheck"
-files = '^website/(src/.*\.(ts|tsx)|vite\.config\.ts|tsconfig.*\.json|package\.json)$'
+files = '^website/(src/.*\.(astro|ts|tsx)|astro\.config\.mjs|tsconfig.*\.json|package\.json|content\.config\.ts)$'
 pass_filenames = false
 
 [[repos.hooks]]

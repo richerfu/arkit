@@ -1,11 +1,11 @@
 ---
 title: 上下文与 Provider
-description: "跨层依赖、provider 所有权与作用域。"
+description: "需要跨多层传递依赖时，Provider 该怎么放、谁来持有。"
 ---
 
 # 上下文与 Provider
 
-Context 用于跨多层组件共享稳定依赖。Provider 把值放在当前 subtree，consumer 读取最近一层同类型值。
+需要把某个依赖穿透多层组件时，用 Context 比一层层传 props 干净。Provider 挂在 subtree 根上，下面的组件取最近一层同类型值。
 
 ## 定义上下文
 

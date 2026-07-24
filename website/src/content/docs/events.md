@@ -1,11 +1,11 @@
 ---
 title: 事件处理
-description: "事件 payload、闭包捕获与默认行为。"
+description: "点击、输入、滚动如何进业务代码，闭包捕获要注意什么。"
 ---
 
 # 事件处理
 
-原生 ArkUI 事件进入 `EventSink`，转换成 Dioxus event 后按 FIFO 派发。离散 click/change 不丢失，高频 pointer move 可以在进入 VirtualDom 前按 pointer/node 合并。
+原生 ArkUI 事件会先进入 `EventSink`，再转成 Dioxus 事件按顺序派发。点击、变更这类离散事件不会悄悄丢掉；高频的 pointer move 可以在进 VirtualDom 前按节点合并。
 
 ## 事件与 Payload
 

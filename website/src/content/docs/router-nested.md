@@ -1,11 +1,11 @@
 ---
 title: 嵌套路由
-description: "Outlet、参数、查询串与页面壳。"
+description: "嵌套路由、动态参数和查询串，以及页面外壳怎么拆。"
 ---
 
 # 嵌套路由
 
-嵌套路由让多个页面共享 layout shell。父 route 渲染导航和公共 provider，`Outlet` 渲染当前 child，不直接调用 child component 函数。
+复杂应用常常要嵌套布局：外壳不变，内层 Outlet 换页。参数和查询串也能从路由里类型化读出。
 
 ## 定义 Layout
 

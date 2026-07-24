@@ -1,0 +1,39 @@
+---
+interface Heading {
+  depth: number;
+  slug: string;
+  text: string;
+}
+
+interface Props {
+  headings: Heading[];
+}
+
+const { headings } = Astro.props;
+const items = headings.filter((heading) => heading.depth === 2 || heading.depth === 3);
+---
+
+{
+  items.length > 0 ? (
+    <aside class="sticky top-14 hidden h-[calc(100vh-3.5rem)] w-56 shrink-0 overflow-y-auto border-l border-border xl:block">
+      <nav class="px-4 py-8" aria-label="本页目录">
+        <p class="mb-3 text-xs font-medium text-muted-foreground">On This Page</p>
+        <ul class="grid gap-2 border-l border-border">
+          {items.map((heading) => (
+            <li>
+              <a
+                href={`#${heading.slug}`}
+                class:list={[
+                  "block text-xs text-muted-foreground transition-colors hover:text-foreground",
+                  heading.depth === 2 ? "pl-3" : "pl-5",
+                ]}
+              >
+                {heading.text}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    </aside>
+  ) : null
+}

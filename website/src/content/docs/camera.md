@@ -1,29 +1,11 @@
 ---
 title: 相机
-description: "CameraKit 预览、前后摄切换、拍照、扫码与资源生命周期。"
+description: "预览、切换镜头、拍照和扫码，怎么接到页面里。"
 ---
 
 # 相机
 
-相机能力分为两层：`ohos-camera-binding` 负责 CameraKit RAII、输出 profile、控制项、图片/分析帧回调，并通过独立的 `xcomponent` feature 提供 Surface 直连；`arkit_camera` 只负责 Dioxus/ArkUI 生命周期、worker 和组件集成。
-
-拍照模式通过 facade 的 `camera` feature 单独启用：
-
-```toml
-[dependencies]
-arkit = { version = "*", features = ["camera"] }
-```
-
-需要扫码时改用 `camera-scan`：
-
-```toml
-[dependencies]
-arkit = { version = "*", features = ["camera-scan"] }
-```
-
-`camera-scan` 包含 `camera`，并额外引入纯 Rust 条码解码依赖。只启用 `camera` 时，扫码解码器不会进入依赖图。
-
-未启用该 feature 时，`arkit_camera`、CameraKit 及相机领域新增的 native surface/image 依赖边不会进入业务依赖图。基础 renderer 已经共享的 ArkUI 绑定不重复计入相机 feature。
+相机分成两层：底层 binding 管 CameraKit 和 Surface，上层 `arkit_camera` 只管组件生命周期和 worker。预览拍照开 `camera`，扫码再叠 `camera-scan`。
 
 ## 相机与扫码两种模式
 

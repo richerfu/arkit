@@ -1,21 +1,11 @@
 ---
 title: Label
-description: "表单与控件标签。"
+description: "给输入控件配可读标签。"
 ---
 
 # Label
 
-Label 是小号、中等字重的表单标签。
-
-```rust
-column {
-    Label { content: "用户名" }
-    Input {
-        value: name(),
-        on_change: move |next| name.set(next),
-    }
-}
-```
+给控件配可读标签，点标签也能聚焦到对应输入。
 
 ## Props
 

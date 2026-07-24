@@ -1,11 +1,11 @@
 ---
 title: 动画概览
-description: "统一时钟、target、timeline 与渲染路径。"
+description: "整棵树上共用一套时钟：从 target 到 timeline 的大致路径。"
 ---
 
 # 动画概览
 
-启用 `animation` 后，一个 Arkit UI root 只有一个 AnimationHost、一个 Engine 和一次帧提交。ArkUI node、Drawing、Chart、Layout、Presence、Drag 与 Scroll 共用时钟和控制语义。
+打开 `animation` 之后，一个 UI root 只有一个 AnimationHost 和一套时钟。ArkUI、Drawing、图表、布局和手势都共享同一套控制语义。
 
 ## 核心模型
 

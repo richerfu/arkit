@@ -5,31 +5,24 @@
     "perf": "warn",
     "suspicious": "warn"
   },
-  "plugins": ["import", "jsx-a11y", "react", "typescript", "unicorn"],
+  "plugins": ["import", "typescript", "unicorn"],
   "ignorePatterns": [
-    "**/.void/**",
+    "**/.astro/**",
     "**/dist/**",
     "**/node_modules/**",
     "**/target/**",
     "app/**",
     "crates/**",
-    "examples/**"
+    "examples/**",
+    "website/src/env.d.ts"
   ],
   "options": {
     "denyWarnings": true,
     "reportUnusedDisableDirectives": "error"
   },
-  "rules": {
-    "react/react-in-jsx-scope": "off"
-  },
-  "settings": {
-    "react": {
-      "version": "19.2.1"
-    }
-  },
   "overrides": [
     {
-      "files": ["website/src/**/*.{ts,tsx}"],
+      "files": ["website/src/**/*.{ts,js,mjs,astro}"],
       "env": {
         "browser": true
       },
@@ -38,13 +31,7 @@
       }
     },
     {
-      "files": ["website/src/main.tsx"],
-      "rules": {
-        "react/no-array-index-key": "off"
-      }
-    },
-    {
-      "files": ["website/vite.config.ts"],
+      "files": ["website/astro.config.mjs", "website/**/*.config.*"],
       "env": {
         "node": true
       }

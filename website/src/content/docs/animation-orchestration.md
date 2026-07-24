@@ -1,11 +1,11 @@
 ---
 title: Stagger 与 Animatable
-description: "分布延迟、重定向和 scope。"
+description: "列表错开入场、高频改目标，以及把一组动画收进同一个 scope。"
 ---
 
 # Stagger 与 Animatable
 
-Stagger 负责为一组 item 生成可复现延迟；Animatable 负责高频 imperative retarget；AnimationScope 统一拥有一组 controls、方法和清理策略。
+列表要错落入场时用 stagger；需要每帧改目标时用 Animatable；一组控件的生命周期想一起收掉，放进 AnimationScope。
 
 ## Stagger
 

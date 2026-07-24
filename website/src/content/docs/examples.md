@@ -1,13 +1,15 @@
 ---
 title: 示例索引
-description: "workspace 示例、覆盖范围与验证命令。"
+description: "仓库里有哪些示例、各自练什么，以及怎么编进真机验证。"
 ---
 
 # 示例索引
 
-workspace 提供 11 个可运行 OpenHarmony `cdylib`。示例既是入门代码，也是公开 API 的编译与真机契约。
+仓库里目前有 **13** 个可在设备上跑的示例（见 workspace 的 `members`）。它们既是上手材料，也是公开 API 是否还能编译、能否上真机的活合同。
 
-## 示例矩阵
+如果磁盘上还有 `examples/canvas` 但没进 members，说明它目前不算正式示例，文档也不覆盖。
+
+## 一览
 
 | 示例              | 覆盖能力                                                                  | 关键入口                              |
 | ----------------- | ------------------------------------------------------------------------- | ------------------------------------- |
@@ -15,26 +17,33 @@ workspace 提供 11 个可运行 OpenHarmony `cdylib`。示例既是入门代码
 | `async_task`      | `use_resource`、Tokio timer、UI wake                                      | `examples/async_task/src/lib.rs`      |
 | `animation`       | timeline、easing、controls、layout/presence、drag/scroll、lowering        | `examples/animation/src/lib.rs`       |
 | `camera`          | CameraKit 拍照/扫码双模式、可配置工具栏、分辨率与完整控制项               | `examples/camera/src/lib.rs`          |
+| `barcode`         | 独立二维码/条形码生成、`Barcode` / `use_barcode`、PNG 导出                | `examples/barcode/src/lib.rs`         |
 | `chart`           | 22 series、realtime option、actions、events、appendData、coordinate query | `examples/chart/src/lib.rs`           |
 | `complex_cases`   | 10,000 item List/Grid/WaterFlow、单项动态更新与变高重排                   | `examples/complex_cases/src/lib.rs`   |
 | `i18n`            | Fluent macro、typed message、locale switch、Cargo rename                  | `examples/i18n/src/lib.rs`            |
 | `lottie`          | ThorVG worker、XComponent 帧同步、播放控制、fit/repeat/speed              | `examples/lottie/src/lib.rs`          |
 | `router`          | typed routes、ArkUI Link、dynamic param、route transition                 | `examples/router/src/lib.rs`          |
-| `shadcn_showcase` | themes、表单、导航、浮层、反馈、数据展示组件                              | `examples/shadcn_showcase/src/lib.rs` |
+| `shadcn_showcase` | themes、表单、导航、浮层、反馈、Guide、数据展示组件                       | `examples/shadcn_showcase/src/lib.rs` |
+| `terminal`        | GPU 终端、本地 shell / SSH Host、`feed_vt` 与 IME gutter                  | `examples/terminal/src/lib.rs`        |
 | `webview`         | embedded mount、URL、title callback、reload/focus/zoom                    | `examples/webview/src/lib.rs`         |
 
-## 通用构建方式
+## 怎么编、怎么装
 
-每次进入一个 example 目录：
+在对应 example 目录里执行：
 
 ```sh
 cd examples/counter
 ohrs build --arch aarch
 ```
 
-将 `counter` 替换成目标示例。`--arch aarch` 对应当前主要 arm64 设备流程；其他 ABI 按项目 ohrs/toolchain 配置选择。
+把 `counter` 换成你要的示例名。`--arch aarch` 对应常见的 arm64 设备；别的 ABI 按你本机 ohrs / 工具链配置来。
 
-一次只打包一个 example 的最新产物。仓库 app shell 的 `moduleName` 和复制的 `.so` 必须匹配。
+建议一次只装一个 example 的最新产物，并保证 app 壳里的 `moduleName` 和 `.so` 名字对得上。
+
+```sh
+# 从仓库根目录把构建产物装进 app 并运行（脚本名以仓库为准）
+./app/run.sh counter all
+```
 
 ## counter
 
@@ -73,8 +82,22 @@ ohrs build --arch aarch
 - 后置/前置相机切换、暂停和恢复。
 - JPEG 拍照数据从 ImageNative/NativeBuffer 安全复制到 `CapturedPhoto`。
 - 权限拒绝、无相机设备和 native error 的可观察状态。
+- 启用扫码路径时（`camera-scan`）解码结果与配置项。
 
 相机画面与拍照必须在带 CameraKit 相机设备的真机上验收。没有虚拟相机的模拟器仍可验证 HAP 加载、权限请求、Surface 建立和 `Unavailable` 错误路径。
+
+## barcode
+
+与相机扫码解耦的**生成**路径（`barcode` feature）。确认：
+
+- `encode_barcode` / `use_barcode` 对 QR 与常见 1D 格式产出位图。
+- UI 线程不直接跑同步重编码；hook 路径走异步导出。
+- PNG/base64 导出与组件展示一致。
+
+```sh
+cd examples/barcode && ohrs build --arch aarch
+./app/run.sh barcode all
+```
 
 ## complex_cases
 
@@ -114,8 +137,27 @@ cd ../../
 - controlled/uncontrolled inputs。
 - Dialog/Sheet/Drawer/Popover/Menu safe-area。
 - Tabs/Accordion/Carousel navigation。
+- Guide 分步引导。
 - Sonner timer、action 与 swipe dismiss。
 - 离开页面后的 overlay 和 timer cleanup。
+
+## terminal
+
+GPU 终端 + 应用自管 Host：
+
+- 本地 shell 回显与基础行编辑。
+- SSH 连接/断开/切回本地。
+- `on_input` / `on_write_pty` 与 `controller.feed_vt` 数据通路。
+- IME 与顶部 gutter、resize 后栅格一致。
+
+```sh
+cd examples/terminal
+ohrs build --arch aarch
+cd ../../
+./app/run.sh terminal all
+```
+
+详见 [GPU 终端](../terminal/)。
 
 ## webview
 
@@ -138,3 +180,11 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```
 
 涉及 ArkUI/N-API/runtime 的变更还必须选择受影响 example 执行 `ohrs build` 和真机交互。host cargo 命令无法验证目标 symbols、HAP packaging 或设备行为。
+
+站点（Astro）变更：
+
+```sh
+pnpm install
+pnpm run check
+pnpm run website:build
+```

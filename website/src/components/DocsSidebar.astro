@@ -1,0 +1,56 @@
+---
+import { getCollection } from "astro:content";
+import { catalogSectionIds, contentHref, getContentCatalog } from "@/lib/catalog";
+import type { ContentArea } from "@/lib/types";
+
+interface Props {
+  area: ContentArea;
+  activeId: string;
+  mobile?: boolean;
+}
+
+const { area, activeId, mobile = false } = Astro.props;
+const catalog = getContentCatalog(area);
+const entries = await getCollection(area);
+const titleById = Object.fromEntries(entries.map((entry) => [entry.id, entry.data.title]));
+const orderedIds = catalogSectionIds(catalog);
+
+for (const id of orderedIds) {
+  if (!titleById[id]) {
+    throw new Error(`missing content entry for ${area}/${id}`);
+  }
+}
+---
+
+<nav
+  class:list={[mobile ? "grid gap-6 px-2 pt-3" : "grid gap-6", "text-sm"]}
+  aria-label={`${catalog.title}章节`}
+>
+  {
+    catalog.groups.map((group) => (
+      <div>
+        <h4 class="mb-1 px-2 text-xs font-semibold text-foreground/80">{group.title}</h4>
+        <div class="grid gap-0.5">
+          {group.sections.map((id) => {
+            const href = contentHref(area, id);
+            const active = id === activeId;
+            return (
+              <a
+                href={href}
+                class:list={[
+                  "rounded-md px-2 py-1.5 text-[0.8125rem] transition-colors",
+                  active
+                    ? "bg-accent font-medium text-accent-foreground"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                ]}
+                aria-current={active ? "page" : undefined}
+              >
+                {titleById[id]}
+              </a>
+            );
+          })}
+        </div>
+      </div>
+    ))
+  }
+</nav>

@@ -4,25 +4,22 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
-    "build": "tsc --noEmit && vite build && vite build --ssr src/ssg.tsx --outDir .ssg && node scripts/render-ssg.mjs",
-    "preview": "vite preview --host 127.0.0.1"
+    "dev": "astro dev --host 127.0.0.1",
+    "build": "astro check && astro build",
+    "preview": "astro preview --host 127.0.0.1",
+    "check": "astro check"
   },
   "dependencies": {
+    "@astrojs/check": "^0.9.6",
+    "@fontsource-variable/geist": "^5.2.8",
     "@fontsource/maple-mono": "^5.2.6",
-    "@void/md": "^0.9.3",
-    "@void/react": "^0.9.3",
-    "react": "^19.2.1",
-    "react-dom": "^19.2.1",
-    "void": "^0.9.3"
+    "astro": "^5.16.6",
+    "tailwind-merge": "^3.4.0",
+    "tailwindcss": "^4.3.1"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.1",
-    "@types/node": "^26.0.1",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "tailwindcss": "^4.3.1",
-    "typescript": "^6.0.3",
-    "vite": "^8.0.0"
+    "@types/node": "^22.15.30",
+    "typescript": "^5.9.3"
   }
 }

@@ -1,11 +1,11 @@
 ---
 title: 窗口与尺寸
-description: "窗口尺寸、密度、方向和响应式布局。"
+description: "读窗口尺寸、密度和方向，做响应式布局时怎么用。"
 ---
 
 # 窗口与尺寸
 
-`arkit_runtime` 是窗口几何的唯一来源。它把 window rect、XComponent surface resize、avoid-area 和 keyboard callback 归一成响应式 `WindowMetrics`。
+窗口大小、像素密度、方向都会变。`use_window_metrics` 给你一份当前快照，布局和动画都可以据此响应。
 
 ## 读取 Metrics
 

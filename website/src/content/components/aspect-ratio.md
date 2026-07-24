@@ -1,22 +1,11 @@
 ---
 title: AspectRatio
-description: "固定媒体宽高比。"
+description: "给图片或视频框住固定宽高比。"
 ---
 
 # AspectRatio
 
-AspectRatio 创建全宽 Stack，并用 ArkUI `aspect_ratio` 约束高度。
-
-```rust
-AspectRatio {
-    ratio: 16.0 / 9.0,
-    image {
-        width: "100%",
-        height: "100%",
-        src: cover,
-    }
-}
-```
+给媒体区域锁住宽高比，避免图片或视频把布局撑得忽高忽低。
 
 ## Props
 

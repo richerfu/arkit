@@ -1,11 +1,11 @@
 ---
 title: Text
-description: "主题化文本层级与排版。"
+description: "按层级排版的文本组件，跟着主题走。"
 ---
 
 # Text
 
-Text 把项目排版层级映射为主题化 ArkUI text。
+跟着主题走的文本层级，少手写一堆字号颜色。
 
 ## 用法
 
