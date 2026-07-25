@@ -146,6 +146,26 @@ impl ComponentI18n {
         self.tr(messages::guide_finish())
     }
 
+    pub(crate) fn load_more_idle(self) -> String {
+        self.tr(messages::load_more_idle())
+    }
+
+    pub(crate) fn load_more_loading(self) -> String {
+        self.tr(messages::load_more_loading())
+    }
+
+    pub(crate) fn load_more_failed(self) -> String {
+        self.tr(messages::load_more_failed())
+    }
+
+    pub(crate) fn load_more_no_more(self) -> String {
+        self.tr(messages::load_more_no_more())
+    }
+
+    pub(crate) fn load_more_retry(self) -> String {
+        self.tr(messages::load_more_retry())
+    }
+
     pub(crate) fn markdown_admonition_note(self) -> String {
         self.tr(messages::markdown_admonition_note())
     }
@@ -211,6 +231,8 @@ mod tests {
         assert_eq!(i18n.time_picker_title(), "Select time");
         assert_eq!(i18n.time_picker_confirm(), "Done");
         assert_eq!(i18n.time_picker_am(), "AM");
+        assert_eq!(i18n.load_more_loading(), "Loading…");
+        assert_eq!(i18n.load_more_no_more(), "No more items");
     }
 
     #[test]
@@ -230,6 +252,8 @@ mod tests {
         assert_eq!(i18n.time_picker_title(), "选择时间");
         assert_eq!(i18n.time_picker_confirm(), "完成");
         assert_eq!(i18n.time_picker_am(), "上午");
+        assert_eq!(i18n.load_more_loading(), "加载中…");
+        assert_eq!(i18n.load_more_no_more(), "没有更多了");
     }
 
     #[test]

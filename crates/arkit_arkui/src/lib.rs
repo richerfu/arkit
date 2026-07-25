@@ -1905,6 +1905,7 @@ fn event_type_for_name(name: &str, tag: &str) -> Option<NodeEventType> {
         (ArkEventKind::Scroll, "list") => ListOnScrollIndex,
         (ArkEventKind::Scroll, "waterflow") => WaterFlowOnScrollIndex,
         (ArkEventKind::Scroll, "scroll") => ScrollEventOnScroll,
+        (ArkEventKind::ReachEnd, "scroll") => ScrollEventOnReachEnd,
 
         // Swiper change. Animation-end is used as the stable selection
         // boundary: unlike the early change callback, it fires after the
@@ -1956,6 +1957,11 @@ mod event_tests {
             Some(NodeEventType::OnHoverMove)
         );
         assert_eq!(event_type_for_name("scroll", "grid"), None);
+        assert_eq!(
+            event_type_for_name("_reach_end", "scroll"),
+            Some(NodeEventType::ScrollEventOnReachEnd)
+        );
+        assert_eq!(event_type_for_name("reach_end", "list"), None);
         assert_eq!(
             event_type_for_name("_swiper_change", "swiper"),
             Some(NodeEventType::SwiperEventOnAnimationEnd)

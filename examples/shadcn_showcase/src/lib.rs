@@ -16,11 +16,12 @@ use arkit::shadcn::components::{
     Collapsible, ContextMenu, DatePicker, Dialog, DialogFooter, DialogHeader, DropdownMenu, Field,
     FieldContent, FieldDescription, FieldError, FieldGroup, FieldOrientation, FieldSeparator,
     FieldSet, FieldTitle, Form, FormItem, Guide, GuideSide, GuideStep, GuideTarget, HoverCard,
-    Input, InputOtp, InputOtpMode, InputOtpSeparator, Label, Markdown, MenuEntry, Menubar,
-    MenubarMenuSpec, MultiSlider, Popover, Progress, RadioGroup, RangeSlider, Select, Separator,
-    Skeleton, Slider, SliderOrientation, SliderStyle, Sonner, SonnerPosition, SonnerToast, Spinner,
-    Switch, Table, Tabs, Text, TextVariant, Textarea, TimePicker, TimePickerFormat, TimeValue,
-    ToastAppearance, Toggle, ToggleGroup, ToggleVariant, Tooltip,
+    InfiniteScroll, Input, InputOtp, InputOtpMode, InputOtpSeparator, Label, LoadMoreIndicator,
+    LoadMoreState, Markdown, MenuEntry, Menubar, MenubarMenuSpec, MultiSlider, Popover, Progress,
+    PullToRefresh, RadioGroup, RangeSlider, Select, Separator, Skeleton, Slider, SliderOrientation,
+    SliderStyle, Sonner, SonnerPosition, SonnerToast, Spinner, Switch, Table, Tabs, Text,
+    TextVariant, Textarea, TimePicker, TimePickerFormat, TimeValue, ToastAppearance, Toggle,
+    ToggleGroup, ToggleVariant, Tooltip,
 };
 use arkit::shadcn::icon::icon_placeholder;
 use arkit::shadcn::theme::{
@@ -246,6 +247,10 @@ const COMPONENTS: &[ComponentSpec] = &[
         name: "Label",
     },
     ComponentSpec {
+        slug: "layout",
+        name: "Col / Row",
+    },
+    ComponentSpec {
         slug: "code",
         name: "Code",
     },
@@ -264,6 +269,10 @@ const COMPONENTS: &[ComponentSpec] = &[
     ComponentSpec {
         slug: "progress",
         name: "Progress",
+    },
+    ComponentSpec {
+        slug: "refresh-load-more",
+        name: "Refresh & Load More",
     },
     ComponentSpec {
         slug: "radio-group",
@@ -905,6 +914,16 @@ fn ComponentListItem(
 #[component]
 fn DemoCanvas(slug: &'static str) -> Element {
     let theme = arkit_shadcn::theme::use_theme();
+    if slug == "refresh-load-more" {
+        return rsx! {
+            column {
+                width: "100%",
+                layout_weight: 1.0,
+                background_color: theme.colors.surface,
+                ComponentDemo { slug }
+            }
+        };
+    }
     let policy = demo_canvas_policy(slug);
     let bottom_padding = if slug == "bottom-navigation" {
         policy.padding[2]
@@ -1047,6 +1066,12 @@ fn demo_canvas_policy(slug: &str) -> DemoCanvasPolicy {
             center_y: true,
             fill_height: true,
             padding: [spacing::LG, spacing::LG, spacing::LG, spacing::LG],
+        },
+        "refresh-load-more" => DemoCanvasPolicy {
+            center_x: false,
+            center_y: false,
+            fill_height: true,
+            padding: [0.0, 0.0, 0.0, 0.0],
         },
         "sonner" => DemoCanvasPolicy {
             center_x: false,
@@ -2717,6 +2742,74 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 Label { content: "Accept terms and conditions".to_string() }
             }
         },
+        "layout" => rsx! {
+            fixed_width {
+                width: 560.0,
+                Col {
+                    width: "100%",
+                    demo_mode_label {
+                        title: "Col defaults to top-left".to_string(),
+                        detail: Some("No alignment attributes are required".to_string()),
+                    }
+                    Col {
+                        width: "100%",
+                        height: 144.0,
+                        padding: spacing::MD,
+                        background_color: arkit_shadcn::theme::with_alpha(
+                            theme.colors.secondary,
+                            0x80,
+                        ),
+                        border_width: 1.0,
+                        border_color: theme.colors.border,
+                        border_radius: theme.radii.lg,
+                        {layout_demo_item("First", 88.0, 32.0, theme)}
+                        v_gap { height: spacing::SM }
+                        {layout_demo_item("Second", 120.0, 32.0, theme)}
+                    }
+                    v_gap { height: spacing::XXL }
+                    demo_mode_label {
+                        title: "Row defaults to top-left".to_string(),
+                        detail: Some("Items start on both axes".to_string()),
+                    }
+                    Row {
+                        width: "100%",
+                        height: 104.0,
+                        padding: spacing::MD,
+                        background_color: arkit_shadcn::theme::with_alpha(
+                            theme.colors.secondary,
+                            0x80,
+                        ),
+                        border_width: 1.0,
+                        border_color: theme.colors.border,
+                        border_radius: theme.radii.lg,
+                        {layout_demo_item("One", 72.0, 32.0, theme)}
+                        h_gap { width: spacing::SM }
+                        {layout_demo_item("Two", 72.0, 48.0, theme)}
+                    }
+                    {demo_mode_divider()}
+                    demo_mode_label {
+                        title: "Native attributes still override defaults".to_string(),
+                        detail: Some(
+                            "align_items = center · justify_content = center".to_string(),
+                        ),
+                    }
+                    Row {
+                        width: "100%",
+                        height: 88.0,
+                        align_items: "center",
+                        justify_content: "center",
+                        background_color: arkit_shadcn::theme::with_alpha(
+                            theme.colors.secondary,
+                            0x80,
+                        ),
+                        border_width: 1.0,
+                        border_color: theme.colors.border,
+                        border_radius: theme.radii.lg,
+                        {layout_demo_item("Centered", 104.0, 36.0, theme)}
+                    }
+                }
+            }
+        },
         "code" => rsx! {
             fixed_width {
                 width: 640.0,
@@ -3081,6 +3174,9 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                 }
             }
+        },
+        "refresh-load-more" => rsx! {
+            RefreshLoadMoreDemo {}
         },
         "radio-group" => rsx! {
             fixed_width {
@@ -4079,6 +4175,319 @@ fn ComponentDemo(slug: &'static str) -> Element {
         _ => rsx! {
             Text { content: "Component not found".to_string(), variant: TextVariant::Muted }
         },
+    }
+}
+
+fn layout_demo_item(label: &'static str, width: f32, height: f32, theme: Theme) -> Element {
+    rsx! {
+        row {
+            width,
+            height,
+            align_items: "center",
+            justify_content: "center",
+            background_color: theme.colors.primary,
+            border_radius: theme.radii.md,
+            text {
+                content: label,
+                font_size: typography::SM,
+                font_weight: 600_i32,
+                font_color: theme.colors.primary_foreground,
+                line_height: 18.0,
+            }
+        }
+    }
+}
+
+#[component]
+fn RefreshLoadMoreDemo() -> Element {
+    const INITIAL_ITEMS: u32 = 24;
+    const PAGE_SIZE: u32 = 12;
+    const MAX_ITEMS: u32 = 60;
+
+    let theme = arkit_shadcn::theme::use_theme();
+    let mut virtual_mode = use_signal(|| true);
+    let mut item_count = use_signal(|| INITIAL_ITEMS);
+    let mut data_revision = use_signal(|| 0_u64);
+    let mut refreshing = use_signal(|| false);
+    let mut load_state = use_signal(LoadMoreState::default);
+    let mut operation_epoch = use_signal(|| 0_u64);
+    let mut refresh_request = use_signal(|| 0_u64);
+    let mut load_request = use_signal(|| 0_u64);
+    let async_runtime = arkit::tokio_handle();
+
+    let refresh_runtime = async_runtime.clone();
+    let _refresh_task = use_resource(move || {
+        let refresh_runtime = refresh_runtime.clone();
+        let request = refresh_request();
+        async move {
+            if request == 0 {
+                return;
+            }
+            let _ = refresh_runtime
+                .spawn(async {
+                    tokio::time::sleep(Duration::from_millis(700)).await;
+                })
+                .await;
+            if *operation_epoch.peek() != request {
+                return;
+            }
+            item_count.set(INITIAL_ITEMS);
+            data_revision += 1;
+            load_state.set(LoadMoreState::Idle);
+            refreshing.set(false);
+        }
+    });
+
+    let load_runtime = async_runtime;
+    let _load_task = use_resource(move || {
+        let load_runtime = load_runtime.clone();
+        let request = load_request();
+        async move {
+            if request == 0 {
+                return;
+            }
+            let _ = load_runtime
+                .spawn(async {
+                    tokio::time::sleep(Duration::from_millis(650)).await;
+                })
+                .await;
+            if *operation_epoch.peek() != request {
+                return;
+            }
+            let next = (*item_count.peek())
+                .saturating_add(PAGE_SIZE)
+                .min(MAX_ITEMS);
+            item_count.set(next);
+            load_state.set(if next >= MAX_ITEMS {
+                LoadMoreState::NoMore
+            } else {
+                LoadMoreState::Idle
+            });
+        }
+    });
+
+    let begin_refresh = EventHandler::new(move |()| {
+        if refreshing() {
+            return;
+        }
+        let request = operation_epoch().saturating_add(1);
+        operation_epoch.set(request);
+        refresh_request.set(request);
+        refreshing.set(true);
+        load_state.set(LoadMoreState::Idle);
+    });
+    let begin_load = EventHandler::new(move |()| {
+        if matches!(load_state(), LoadMoreState::Loading | LoadMoreState::NoMore) {
+            return;
+        }
+        let request = operation_epoch().saturating_add(1);
+        operation_epoch.set(request);
+        load_request.set(request);
+        load_state.set(LoadMoreState::Loading);
+    });
+
+    rsx! {
+        column {
+            width: "100%",
+            height: "100%",
+            background_color: theme.colors.background,
+            column {
+                width: "100%",
+                padding_top: spacing::SM,
+                padding_right: spacing::MD,
+                padding_bottom: spacing::SM,
+                padding_left: spacing::MD,
+                background_color: theme.colors.card,
+                border_width: 1.0,
+                border_color: theme.colors.border,
+                row {
+                    width: "100%",
+                    align_items: "center",
+                    Button {
+                        size: ButtonSize::Sm,
+                        variant: if virtual_mode() { ButtonVariant::Default } else { ButtonVariant::Outline },
+                        onclick: move |_| virtual_mode.set(true),
+                        "Virtual List"
+                    }
+                    h_gap { width: spacing::SM }
+                    Button {
+                        size: ButtonSize::Sm,
+                        variant: if virtual_mode() { ButtonVariant::Outline } else { ButtonVariant::Default },
+                        onclick: move |_| virtual_mode.set(false),
+                        "Regular Scroll"
+                    }
+                    row {
+                        layout_weight: 1.0,
+                        justify_content: "end",
+                        Button {
+                            size: ButtonSize::Sm,
+                            variant: ButtonVariant::Ghost,
+                            onclick: move |_| {
+                                operation_epoch += 1;
+                                refreshing.set(false);
+                                load_state.set(LoadMoreState::Failed);
+                            },
+                            "Test error"
+                        }
+                    }
+                }
+                text {
+                    margin_top: spacing::XS,
+                    font_size: typography::XS,
+                    font_color: theme.colors.muted_foreground,
+                    max_lines: 1_i32,
+                    text_overflow: "ellipsis",
+                    if virtual_mode() {
+                        "NodeAdapter · {item_count} items · pull down / scroll to bottom"
+                    } else {
+                        "Native Scroll · {item_count} items · pull down / scroll to bottom"
+                    }
+                }
+            }
+            column {
+                width: "100%",
+                layout_weight: 1.0,
+                if virtual_mode() {
+                    RefreshVirtualListDemo {
+                        item_count: item_count(),
+                        state: load_state(),
+                        data_revision: data_revision(),
+                        refreshing: refreshing(),
+                        on_refresh: begin_refresh,
+                        on_load_more: begin_load,
+                    }
+                } else {
+                    PullToRefresh {
+                        refreshing: refreshing(),
+                        on_refresh: move |_| begin_refresh.call(()),
+                        InfiniteScroll {
+                            item_count: item_count(),
+                            data_revision: data_revision(),
+                            state: load_state(),
+                            scroll_bar: "off".to_string(),
+                            on_load_more: move |_| begin_load.call(()),
+                            for index in 0..item_count() {
+                                {refresh_demo_row(index, theme)}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn RefreshVirtualListDemo(
+    item_count: u32,
+    state: LoadMoreState,
+    data_revision: u64,
+    refreshing: bool,
+    on_refresh: EventHandler<()>,
+    on_load_more: EventHandler<()>,
+) -> Element {
+    let theme = arkit_shadcn::theme::use_theme();
+    let controller = use_load_more(item_count, state, 3, on_load_more);
+    let reset_controller = controller.clone();
+    use_effect(use_reactive((&data_revision,), move |(_revision,)| {
+        reset_controller.reset()
+    }));
+
+    let mut item_keys: Vec<u64> = (0..u64::from(item_count)).collect();
+    item_keys.push(u64::MAX - load_more_state_key(state));
+    let item_controller = controller.clone();
+    let footer_controller = controller.clone();
+    let adapter =
+        use_virtual_node_adapter_rsx_items_keyed(VirtualKind::List, item_keys, move |index| {
+            if index < item_count {
+                let visible_controller = item_controller.clone();
+                arkit::queue_ui_loop(move || visible_controller.on_virtual_item(index));
+                refresh_demo_row(index, theme)
+            } else {
+                let retry_controller = footer_controller.clone();
+                rsx! {
+                    LoadMoreIndicator {
+                        state,
+                        on_retry: move |_| retry_controller.retry(),
+                    }
+                }
+            }
+        });
+    let scroll_controller = controller.clone();
+    let refresh_controller = controller;
+
+    rsx! {
+        PullToRefresh {
+            refreshing,
+            on_refresh: move |_| {
+                refresh_controller.reset();
+                on_refresh.call(());
+            },
+            ShowcaseVirtualListHost {
+                adapter,
+                on_scroll: move |data| scroll_controller.on_virtual_scroll(data),
+            }
+        }
+    }
+}
+
+#[component]
+fn ShowcaseVirtualListHost(
+    adapter: VirtualNodeAdapter,
+    on_scroll: EventHandler<dioxus_elements::event::ScrollData>,
+) -> Element {
+    let attach_adapter = adapter.clone();
+    use_layout_frame_node(move |host_node, _frame| {
+        let _ = attach_adapter.attach(&host_node);
+    });
+
+    rsx! {
+        list {
+            width: "100%",
+            height: "100%",
+            scroll_bar: "off",
+            list_cached_count: 6_i32,
+            onscroll: move |event| on_scroll.call(*event.data()),
+        }
+    }
+}
+
+fn load_more_state_key(state: LoadMoreState) -> u64 {
+    match state {
+        LoadMoreState::Idle => 0,
+        LoadMoreState::Loading => 1,
+        LoadMoreState::Failed => 2,
+        LoadMoreState::NoMore => 3,
+    }
+}
+
+fn refresh_demo_row(index: u32, theme: Theme) -> Element {
+    rsx! {
+        row {
+            width: "100%",
+            height: 58.0,
+            padding_left: spacing::MD,
+            padding_right: spacing::MD,
+            align_items: "center",
+            background_color: theme.colors.background,
+            border_width: 1.0,
+            border_color: theme.colors.border,
+            text {
+                font_size: typography::SM,
+                font_weight: 500_i32,
+                font_color: theme.colors.foreground,
+                "Activity #{index}"
+            }
+            row {
+                layout_weight: 1.0,
+                justify_content: "end",
+                text {
+                    font_size: typography::XS,
+                    font_color: theme.colors.muted_foreground,
+                    "virtual-ready"
+                }
+            }
+        }
     }
 }
 
