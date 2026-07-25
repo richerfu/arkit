@@ -22,6 +22,7 @@
 
 mod layout;
 mod lifecycle;
+mod load_more;
 mod node;
 mod overlay;
 mod safe_area;
@@ -40,6 +41,7 @@ pub use lifecycle::{
     use_app_foreground, use_application_lifecycle, use_application_lifecycle_event,
     use_component_lifecycle, use_component_visibility, ComponentLifecycleState,
 };
+pub use load_more::{use_load_more, LoadMoreController, LoadMoreState};
 pub use node::{
     use_ark_host_provider, use_ark_node, ArkHost, ArkNodeRef, HitTestMode, HostNode, OverlayRoot,
 };

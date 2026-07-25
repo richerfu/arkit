@@ -55,6 +55,7 @@ mod pagination;
 mod popover;
 mod progress;
 mod radio_group;
+mod refresh;
 mod resizable;
 mod scroll_area;
 mod select;
@@ -156,6 +157,10 @@ pub use pagination::{Pagination, PaginationProps};
 pub use popover::{Popover, PopoverProps};
 pub use progress::{Progress, ProgressProps};
 pub use radio_group::{RadioGroup, RadioGroupProps};
+pub use refresh::{
+    InfiniteScroll, InfiniteScrollProps, LoadMoreIndicator, LoadMoreIndicatorProps, LoadMoreLabels,
+    LoadMoreState, PullToRefresh, PullToRefreshProps,
+};
 pub use resizable::{Resizable, ResizableProps};
 pub use scroll_area::{ScrollArea, ScrollAreaProps};
 pub use select::{Select, SelectProps};

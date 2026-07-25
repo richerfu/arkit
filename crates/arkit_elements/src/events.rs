@@ -8,8 +8,8 @@
 //! [`ArkEventData`](crate::event::ArkEventData) into the typed event data.
 
 use crate::event::{
-    AreaData, ChangeData, ClickData, FocusData, HoverData, PointerData, RefreshData, ScrollData,
-    SubmitData, SwiperChangeData,
+    AreaData, ChangeData, ClickData, FocusData, HoverData, PointerData, ReachEndData, RefreshData,
+    ScrollData, SubmitData, SwiperChangeData,
 };
 
 macro_rules! impl_event {
@@ -60,6 +60,11 @@ impl_event! {
 impl_event! {
     ScrollData;
     onscroll on_scroll
+}
+
+impl_event! {
+    ReachEndData;
+    onreachend on_reach_end
 }
 
 impl_event! {
