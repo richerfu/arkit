@@ -247,6 +247,10 @@ const COMPONENTS: &[ComponentSpec] = &[
         name: "Label",
     },
     ComponentSpec {
+        slug: "layout",
+        name: "Col / Row",
+    },
+    ComponentSpec {
         slug: "code",
         name: "Code",
     },
@@ -2738,6 +2742,74 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 Label { content: "Accept terms and conditions".to_string() }
             }
         },
+        "layout" => rsx! {
+            fixed_width {
+                width: 560.0,
+                Col {
+                    width: "100%",
+                    demo_mode_label {
+                        title: "Col defaults to top-left".to_string(),
+                        detail: Some("No alignment attributes are required".to_string()),
+                    }
+                    Col {
+                        width: "100%",
+                        height: 144.0,
+                        padding: spacing::MD,
+                        background_color: arkit_shadcn::theme::with_alpha(
+                            theme.colors.secondary,
+                            0x80,
+                        ),
+                        border_width: 1.0,
+                        border_color: theme.colors.border,
+                        border_radius: theme.radii.lg,
+                        {layout_demo_item("First", 88.0, 32.0, theme)}
+                        v_gap { height: spacing::SM }
+                        {layout_demo_item("Second", 120.0, 32.0, theme)}
+                    }
+                    v_gap { height: spacing::XXL }
+                    demo_mode_label {
+                        title: "Row defaults to top-left".to_string(),
+                        detail: Some("Items start on both axes".to_string()),
+                    }
+                    Row {
+                        width: "100%",
+                        height: 104.0,
+                        padding: spacing::MD,
+                        background_color: arkit_shadcn::theme::with_alpha(
+                            theme.colors.secondary,
+                            0x80,
+                        ),
+                        border_width: 1.0,
+                        border_color: theme.colors.border,
+                        border_radius: theme.radii.lg,
+                        {layout_demo_item("One", 72.0, 32.0, theme)}
+                        h_gap { width: spacing::SM }
+                        {layout_demo_item("Two", 72.0, 48.0, theme)}
+                    }
+                    {demo_mode_divider()}
+                    demo_mode_label {
+                        title: "Native attributes still override defaults".to_string(),
+                        detail: Some(
+                            "align_items = center · justify_content = center".to_string(),
+                        ),
+                    }
+                    Row {
+                        width: "100%",
+                        height: 88.0,
+                        align_items: "center",
+                        justify_content: "center",
+                        background_color: arkit_shadcn::theme::with_alpha(
+                            theme.colors.secondary,
+                            0x80,
+                        ),
+                        border_width: 1.0,
+                        border_color: theme.colors.border,
+                        border_radius: theme.radii.lg,
+                        {layout_demo_item("Centered", 104.0, 36.0, theme)}
+                    }
+                }
+            }
+        },
         "code" => rsx! {
             fixed_width {
                 width: 640.0,
@@ -4103,6 +4175,26 @@ fn ComponentDemo(slug: &'static str) -> Element {
         _ => rsx! {
             Text { content: "Component not found".to_string(), variant: TextVariant::Muted }
         },
+    }
+}
+
+fn layout_demo_item(label: &'static str, width: f32, height: f32, theme: Theme) -> Element {
+    rsx! {
+        row {
+            width,
+            height,
+            align_items: "center",
+            justify_content: "center",
+            background_color: theme.colors.primary,
+            border_radius: theme.radii.md,
+            text {
+                content: label,
+                font_size: typography::SM,
+                font_weight: 600_i32,
+                font_color: theme.colors.primary_foreground,
+                line_height: 18.0,
+            }
+        }
     }
 }
 

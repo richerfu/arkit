@@ -13,6 +13,37 @@
 macro_rules! define_element {
     (
         $(#[$meta:meta])*
+        $name:ident => $tag:literal, $extension:ident {
+            $( $attr:ident ),* $(,)?
+        }
+    ) => {
+        define_element! {
+            $(#[$meta])*
+            $name => $tag {
+                $( $attr ),*
+            }
+        }
+
+        #[doc(hidden)]
+        pub trait $extension: dioxus_core::HasAttributes + Sized {
+            $(
+                fn $attr(
+                    self,
+                    value: impl dioxus_core::IntoAttributeValue,
+                ) -> Self {
+                    let description = $name::$attr;
+                    self.push_attribute(
+                        description.0,
+                        description.1,
+                        value,
+                        description.2,
+                    )
+                }
+            )*
+        }
+    };
+    (
+        $(#[$meta:meta])*
         $name:ident => $tag:literal {
             $( $attr:ident ),* $(,)?
         }
@@ -46,7 +77,7 @@ define_element! {
 
 define_element! {
     /// Column layout container (ArkUI `Column`).
-    column => "Column" {
+    column => "Column", ColumnExtension {
         font_size, font_color, font_weight, foreground_color, background_color, padding, padding_top, padding_right, padding_bottom, padding_left, padding_x, padding_y, padding_horizontal, padding_vertical, margin,
         margin_top, margin_bottom, margin_left, margin_right, margin_x, margin_y, margin_horizontal, margin_vertical,
         width, height, max_width_constraint, constraint_size, min_width, max_width, min_height, max_height, align_items, justify_content,
@@ -58,7 +89,7 @@ define_element! {
 
 define_element! {
     /// Row layout container (ArkUI `Row`).
-    row => "Row" {
+    row => "Row", RowExtension {
         font_size, font_color, font_weight, foreground_color, background_color, padding, padding_top, padding_right, padding_bottom, padding_left, padding_x, padding_y, padding_horizontal, padding_vertical, margin,
         margin_top, margin_bottom, margin_left, margin_right, margin_x, margin_y, margin_horizontal, margin_vertical,
         width, height, max_width_constraint, constraint_size, min_width, max_width, min_height, max_height, align_items, justify_content,
@@ -66,6 +97,12 @@ define_element! {
         border_color, border_style, shadow, visibility, enabled, clip, focusable,
         focus_on_touch, hit_test_behavior, alignment, aspect_ratio, position, z_index,
     }
+}
+
+/// Attribute-extension traits used by Dioxus component props.
+#[doc(hidden)]
+pub mod extensions {
+    pub use super::{ColumnExtension, RowExtension};
 }
 
 define_element! {
