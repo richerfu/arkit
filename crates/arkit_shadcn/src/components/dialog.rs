@@ -16,6 +16,9 @@ use arkit_prelude::*;
 pub(crate) const DIALOG_MAX_WIDTH: f32 = 512.0;
 const DIALOG_VIEWPORT_INSET: f32 = spacing::SM;
 const OVERLAY_BACKDROP_COLOR: u32 = 0x80000000;
+const DIALOG_CLOSE_BUTTON_SIZE: f32 = 28.0;
+const DIALOG_CLOSE_EDGE_INSET: f32 = 14.0;
+const DIALOG_HEADER_CLOSE_RESERVE: f32 = DIALOG_CLOSE_BUTTON_SIZE + spacing::XS;
 
 /// Close handle for dialog / alert-dialog content rendered inside the overlay
 /// portal. Buttons in `cancel` / `action` slots (or custom footer content)
@@ -141,13 +144,13 @@ pub fn Dialog(
                 row {
                     width: "100%",
                     justify_content: "end",
-                    padding_top: 14.0,
-                    padding_right: 14.0,
+                    padding_top: DIALOG_CLOSE_EDGE_INSET,
+                    padding_right: DIALOG_CLOSE_EDGE_INSET,
                     hit_test_behavior: "transparent",
                     button {
                         button_type: "normal",
-                        width: 28.0,
-                        height: 28.0,
+                        width: DIALOG_CLOSE_BUTTON_SIZE,
+                        height: DIALOG_CLOSE_BUTTON_SIZE,
                         padding: 0.0,
                         background_color: "#00000000",
                         border_width: 0.0,
@@ -180,14 +183,25 @@ pub fn DialogHeader(title: String, description: Option<String>) -> Element {
         column {
             width: "100%",
             align_items: "start",
-            text {
+            row {
                 width: "100%",
-                font_size: typography::XL,
-                font_weight: 600_i32,
-                font_color: theme.colors.foreground,
-                line_height: 20.0,
-                text_align: "start",
-                "{title}"
+                align_items: "start",
+                row {
+                    layout_weight: 1.0,
+                    text {
+                        width: "100%",
+                        font_size: typography::XL,
+                        font_weight: 600_i32,
+                        font_color: theme.colors.foreground,
+                        line_height: 20.0,
+                        text_align: "start",
+                        "{title}"
+                    }
+                }
+                row {
+                    width: DIALOG_HEADER_CLOSE_RESERVE,
+                    height: 1.0,
+                }
             }
             if let Some(description) = description.as_ref() {
                 if !description.is_empty() {

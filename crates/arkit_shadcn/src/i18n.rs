@@ -201,6 +201,18 @@ impl ComponentI18n {
     pub(crate) fn select_label(self) -> String {
         self.tr(messages::select_label())
     }
+
+    pub(crate) fn secure_keyboard_delete(self) -> String {
+        self.tr(messages::secure_keyboard_delete())
+    }
+
+    pub(crate) fn secure_keyboard_confirm(self) -> String {
+        self.tr(messages::secure_keyboard_confirm())
+    }
+
+    pub(crate) fn secure_keyboard_space(self) -> String {
+        self.tr(messages::secure_keyboard_space())
+    }
 }
 
 pub(crate) fn use_component_i18n() -> ComponentI18n {
@@ -233,6 +245,8 @@ mod tests {
         assert_eq!(i18n.time_picker_am(), "AM");
         assert_eq!(i18n.load_more_loading(), "Loading…");
         assert_eq!(i18n.load_more_no_more(), "No more items");
+        assert_eq!(i18n.secure_keyboard_confirm(), "Done");
+        assert_eq!(i18n.secure_keyboard_space(), "Space");
     }
 
     #[test]
@@ -254,6 +268,8 @@ mod tests {
         assert_eq!(i18n.time_picker_am(), "上午");
         assert_eq!(i18n.load_more_loading(), "加载中…");
         assert_eq!(i18n.load_more_no_more(), "没有更多了");
+        assert_eq!(i18n.secure_keyboard_confirm(), "完成");
+        assert_eq!(i18n.secure_keyboard_space(), "空格");
     }
 
     #[test]

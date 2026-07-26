@@ -35,6 +35,7 @@ arkit_prelude = { workspace = true }
 arkit_icon = { workspace = true }
 arkit_hooks = { workspace = true }
 arkit_runtime = { workspace = true }
+getrandom = { workspace = true }
 ohos-display-binding = { workspace = true }
 ohos-hilog-binding = { workspace = true }
 tokio = { workspace = true }

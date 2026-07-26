@@ -26,7 +26,12 @@ pub struct InputProps {
     /// Prevents editing while preserving the field's dimensions.
     #[props(default)]
     pub disabled: bool,
+    /// Keeps the normal input appearance while preventing focus and IME entry.
+    /// Pair with `on_click` to use the field as a custom-keyboard trigger.
+    #[props(default)]
+    pub read_only: bool,
     pub on_change: Option<EventHandler<String>>,
+    pub on_click: Option<EventHandler<()>>,
 }
 
 /// A single-line text input.
@@ -34,13 +39,18 @@ pub struct InputProps {
 pub fn Input(props: InputProps) -> Element {
     let theme = use_theme();
     let on_change = props.on_change;
+    let on_click = props.on_click;
 
     rsx! {
         textinput {
             value: if let Some(v) = props.value { v },
             placeholder: if let Some(p) = props.placeholder { p },
             placeholder_color: with_alpha(theme.colors.muted_foreground, 0x80),
-            caret_color: theme.colors.primary,
+            caret_color: if props.read_only {
+                0x00000000
+            } else {
+                theme.colors.primary
+            },
             font_size: typography::LG,
             line_height: 22.5,
             height: props.height.unwrap_or(48.0),
@@ -51,15 +61,24 @@ pub fn Input(props: InputProps) -> Element {
             background_color: theme.colors.background,
             opacity: if props.disabled { 0.5 } else { 1.0 },
             enabled: !props.disabled,
+            focusable: !props.read_only,
+            focus_on_touch: !props.read_only,
             padding_top: spacing::XXS,
             padding_right: spacing::MD,
             padding_bottom: spacing::XXS,
             padding_left: spacing::MD,
             width: if let Some(w) = props.width { w },
             on_change: move |evt| {
-                if !props.disabled {
+                if !props.disabled && !props.read_only {
                     if let Some(handler) = on_change {
                         handler.call(evt.data().string_value.clone());
+                    }
+                }
+            },
+            onclick: move |_| {
+                if !props.disabled {
+                    if let Some(handler) = on_click {
+                        handler.call(());
                     }
                 }
             },
