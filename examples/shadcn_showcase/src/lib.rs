@@ -2092,7 +2092,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 default_open: Some(false),
                 on_close: move |_| dialog_open.set(false),
                 DialogHeader {
-                    title: "Edit profile".to_string(),
+                    title: "Edit profile and manage account preferences".to_string(),
                     description: Some("Make changes to your profile here. Click save when you're done.".to_string()),
                 }
                 column {
