@@ -60,6 +60,7 @@ mod radio_group;
 mod refresh;
 mod resizable;
 mod scroll_area;
+mod secure_keyboard;
 mod select;
 mod separator;
 mod sheet;
@@ -165,6 +166,10 @@ pub use refresh::{
 };
 pub use resizable::{Resizable, ResizableProps};
 pub use scroll_area::{ScrollArea, ScrollAreaProps};
+pub use secure_keyboard::{
+    SecureKeyboard, SecureKeyboardLabels, SecureKeyboardMode, SecureKeyboardProps,
+    SecureKeyboardSheet, SecureKeyboardSheetProps, SecureKeyboardStyle,
+};
 pub use select::{Select, SelectProps};
 pub use separator::{Separator, SeparatorProps};
 pub use sheet::{Sheet, SheetProps};

@@ -51,3 +51,6 @@ pagination-previous = 上一页
 pagination-next = 下一页
 select-placeholder = 请选择
 select-label = 选项
+secure-keyboard-delete = 删除
+secure-keyboard-confirm = 完成
+secure-keyboard-space = 空格

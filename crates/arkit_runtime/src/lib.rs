@@ -163,6 +163,18 @@ pub fn register_back_press_handler(handler: Rc<dyn Fn() -> bool>) -> BackPressRe
     BackPressRegistration { id }
 }
 
+fn dispatch_back_press() -> bool {
+    let handlers = BACK_PRESS_HANDLERS.with(|state| {
+        state
+            .borrow()
+            .iter()
+            .rev()
+            .map(|(_, handler)| handler.clone())
+            .collect::<Vec<_>>()
+    });
+    handlers.into_iter().any(|handler| handler())
+}
+
 /// Queue a closure to run on the next UI loop tick, and wake the UI waker.
 pub fn queue_ui_loop(effect: impl FnOnce() + 'static) {
     let owner = UI_WAKERS.with(|wakers| wakers.borrow().last().map(|(id, _)| *id));
@@ -756,12 +768,9 @@ impl ArkRuntime {
 
         // Wire the OHOS back button: forward to the global back-press handler
         // (registered by `arkit_router::use_back_handler` or any component).
-        // Consumes the press when the handler returns `true`.
-        app.on_back_press_intercept(move || {
-            let handler = BACK_PRESS_HANDLERS
-                .with(|state| state.borrow().last().map(|(_, handler)| handler.clone()));
-            handler.is_some_and(|handler| handler())
-        });
+        // Walk newest-to-oldest so an inactive overlay can pass the event to
+        // the next active overlay or router handler.
+        app.on_back_press_intercept(dispatch_back_press);
 
         // `rebuild` does not finish a render cycle, so run one immediate pass
         // to publish mount-time effects. Then drain exactly the scheduler work
@@ -866,4 +875,49 @@ pub fn mount_virtual_dom_with_policy(
 
 fn map_arkui_error<E: ToString>(error: E) -> Error {
     Error::from_reason(error.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn back_press_falls_through_inactive_newer_handlers() {
+        let older_calls = Rc::new(Cell::new(0));
+        let newer_calls = Rc::new(Cell::new(0));
+        let older_counter = older_calls.clone();
+        let newer_counter = newer_calls.clone();
+        let _older = register_back_press_handler(Rc::new(move || {
+            older_counter.set(older_counter.get() + 1);
+            true
+        }));
+        let _newer = register_back_press_handler(Rc::new(move || {
+            newer_counter.set(newer_counter.get() + 1);
+            false
+        }));
+
+        assert!(dispatch_back_press());
+        assert_eq!(newer_calls.get(), 1);
+        assert_eq!(older_calls.get(), 1);
+    }
+
+    #[test]
+    fn back_press_stops_after_the_first_consuming_handler() {
+        let older_calls = Rc::new(Cell::new(0));
+        let newer_calls = Rc::new(Cell::new(0));
+        let older_counter = older_calls.clone();
+        let newer_counter = newer_calls.clone();
+        let _older = register_back_press_handler(Rc::new(move || {
+            older_counter.set(older_counter.get() + 1);
+            true
+        }));
+        let _newer = register_back_press_handler(Rc::new(move || {
+            newer_counter.set(newer_counter.get() + 1);
+            true
+        }));
+
+        assert!(dispatch_back_press());
+        assert_eq!(newer_calls.get(), 1);
+        assert_eq!(older_calls.get(), 0);
+    }
 }

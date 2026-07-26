@@ -2,9 +2,9 @@
 //!
 //! The sheet is mounted through the application overlay root, so it is not
 //! clipped by the page or showcase canvas. Its native presentation mirrors the
-//! React Native Reusables sheet: dimmed dismissible backdrop, rounded top
-//! corners, drag indicator, 60vp header, safe-area-aware body padding, and a
-//! pan-down handle that dismisses after crossing the drag threshold.
+//! React Native Reusables sheet: optional dismissible backdrop and drag
+//! indicator, rounded top corners, 60vp header, safe-area-aware body padding,
+//! and pan-down dismissal.
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -40,6 +40,7 @@ fn use_bottom_sheet_overlay(
     panel: Element,
     on_dismiss: EventHandler<()>,
     theme: Theme,
+    show_backdrop: bool,
 ) {
     let overlay = arkit_hooks::use_overlay();
     let last_open = use_hook(|| Rc::new(Cell::new(None::<bool>)));
@@ -50,7 +51,11 @@ fn use_bottom_sheet_overlay(
         open,
         presentation: arkit_hooks::ModalPresentation::BottomDrawer,
         dismiss_on_backdrop: true,
-        backdrop_color: bottom_sheet_backdrop(theme),
+        backdrop_color: if show_backdrop {
+            bottom_sheet_backdrop(theme)
+        } else {
+            0x00000000
+        },
         viewport_inset: 0.0,
     };
 
@@ -104,13 +109,17 @@ fn use_bottom_sheet_overlay(
 ///
 /// The trigger remains caller-owned, matching the other modal components in
 /// this crate. Set `open` from the trigger and handle `on_close` for backdrop,
-/// close-button, save-button, and drag dismissal paths.
+/// close-button, save-button, and drag dismissal paths. Set `show_backdrop` to
+/// `false` when the surrounding content should remain undimmed. The drag
+/// indicator can be hidden independently with `show_handle`.
 #[component]
 pub fn BottomSheet(
     title: String,
     open: Option<bool>,
     default_open: Option<bool>,
     show_header: Option<bool>,
+    show_backdrop: Option<bool>,
+    show_handle: Option<bool>,
     on_close: Option<EventHandler<()>>,
     children: Element,
 ) -> Element {
@@ -135,12 +144,13 @@ pub fn BottomSheet(
         BottomSheetPanel {
             title,
             show_header: show_header.unwrap_or(true),
+            show_handle: show_handle.unwrap_or(true),
             on_close: close,
             {children}
         }
     };
 
-    use_bottom_sheet_overlay(current, panel, close, theme);
+    use_bottom_sheet_overlay(current, panel, close, theme, show_backdrop.unwrap_or(true));
     rsx! {}
 }
 
@@ -148,6 +158,7 @@ pub fn BottomSheet(
 struct BottomSheetPanelProps {
     title: String,
     show_header: bool,
+    show_handle: bool,
     on_close: EventHandler<()>,
     children: Element,
 }
@@ -226,17 +237,19 @@ fn BottomSheetPanel(props: BottomSheetPanelProps) -> Element {
                     dioxus_elements::event::PointerAction::Unknown => {}
                 }
             },
-            row {
-                width: "100%",
-                height: BOTTOM_SHEET_HANDLE_HEIGHT,
-                align_items: "center",
-                justify_content: "center",
+            if props.show_handle {
                 row {
-                    width: 32.0,
-                    height: 4.0,
-                    border_radius: theme.radii.full,
-                    background_color: theme.colors.foreground,
-                    opacity: 0.4_f32,
+                    width: "100%",
+                    height: BOTTOM_SHEET_HANDLE_HEIGHT,
+                    align_items: "center",
+                    justify_content: "center",
+                    row {
+                        width: 32.0,
+                        height: 4.0,
+                        border_radius: theme.radii.full,
+                        background_color: theme.colors.foreground,
+                        opacity: 0.4_f32,
+                    }
                 }
             }
             if props.show_header {

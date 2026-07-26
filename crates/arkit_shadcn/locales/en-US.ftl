@@ -51,3 +51,6 @@ pagination-previous = Prev
 pagination-next = Next
 select-placeholder = Select an option
 select-label = Options
+secure-keyboard-delete = Delete
+secure-keyboard-confirm = Done
+secure-keyboard-space = Space

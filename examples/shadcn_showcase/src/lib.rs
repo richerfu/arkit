@@ -18,10 +18,10 @@ use arkit::shadcn::components::{
     FieldSet, FieldTitle, Form, FormItem, Guide, GuideSide, GuideStep, GuideTarget, HoverCard,
     InfiniteScroll, Input, InputOtp, InputOtpMode, InputOtpSeparator, Label, LoadMoreIndicator,
     LoadMoreState, Markdown, MenuEntry, Menubar, MenubarMenuSpec, MultiSlider, Popover, Progress,
-    PullToRefresh, RadioGroup, RangeSlider, Select, Separator, Skeleton, Slider, SliderOrientation,
-    SliderStyle, Sonner, SonnerPosition, SonnerToast, Spinner, Switch, Table, Tabs, Text,
-    TextVariant, Textarea, TimePicker, TimePickerFormat, TimeValue, ToastAppearance, Toggle,
-    ToggleGroup, ToggleVariant, Tooltip,
+    PullToRefresh, RadioGroup, RangeSlider, SecureKeyboardMode, SecureKeyboardSheet, Select,
+    Separator, Skeleton, Slider, SliderOrientation, SliderStyle, Sonner, SonnerPosition,
+    SonnerToast, Spinner, Switch, Table, Tabs, Text, TextVariant, Textarea, TimePicker,
+    TimePickerFormat, TimeValue, ToastAppearance, Toggle, ToggleGroup, ToggleVariant, Tooltip,
 };
 use arkit::shadcn::icon::icon_placeholder;
 use arkit::shadcn::theme::{
@@ -281,6 +281,10 @@ const COMPONENTS: &[ComponentSpec] = &[
     ComponentSpec {
         slug: "select",
         name: "Select",
+    },
+    ComponentSpec {
+        slug: "secure-keyboard",
+        name: "Secure Keyboard",
     },
     ComponentSpec {
         slug: "separator",
@@ -1079,7 +1083,7 @@ fn demo_canvas_policy(slug: &str) -> DemoCanvasPolicy {
             fill_height: true,
             padding: [spacing::XXL, spacing::LG, spacing::XXL, spacing::LG],
         },
-        "input-otp" => DemoCanvasPolicy {
+        "input-otp" | "secure-keyboard" => DemoCanvasPolicy {
             center_x: false,
             center_y: false,
             fill_height: true,
@@ -1172,6 +1176,13 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let mut otp_invalid = use_signal(|| false);
     let mut otp_status = use_signal(|| "Enter the six-digit code.".to_string());
     let mut invite_code = use_signal(|| "A7".to_string());
+    let mut secure_pin = use_signal(String::new);
+    let mut secure_keyboard_open = use_signal(|| false);
+    let mut secure_keyboard_status = use_signal(|| "No PIN has been submitted.".to_string());
+    let mut secure_text = use_signal(String::new);
+    let mut secure_text_open = use_signal(|| false);
+    let mut secure_text_status =
+        use_signal(|| "Letters, numbers, spaces, and symbols are accepted.".to_string());
     let mut form_name = use_signal(|| "Avery Stone".to_string());
     let mut form_email = use_signal(String::new);
     let mut form_bio = use_signal(|| "Product designer and weekend cyclist.".to_string());
@@ -2724,6 +2735,182 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         value: "123456".to_string(),
                         digits: 6,
                         disabled: true,
+                    }
+                }
+            }
+        },
+        "secure-keyboard" => rsx! {
+            fixed_width {
+                width: 420.0,
+                column {
+                    width: "100%",
+                    align_items: "start",
+                    text {
+                        width: "100%",
+                        content: "Confirm payment PIN".to_string(),
+                        font_size: typography::XXL,
+                        font_weight: 700_i32,
+                        font_color: theme.colors.foreground,
+                        line_height: 32.0,
+                    }
+                    v_gap { height: spacing::SM }
+                    text {
+                        width: "100%",
+                        content: "This keypad is rendered inside the app and never opens the system input method.".to_string(),
+                        font_size: typography::SM,
+                        font_color: theme.colors.muted_foreground,
+                        line_height: 20.0,
+                    }
+                    v_gap { height: spacing::XXL }
+                    Input {
+                        value: Some("•".repeat(secure_pin().chars().count())),
+                        placeholder: Some("Tap to enter payment PIN".to_string()),
+                        width: "100%",
+                        read_only: true,
+                        on_click: move |_| secure_keyboard_open.set(true),
+                    }
+                    SecureKeyboardSheet {
+                        value: Some(secure_pin()),
+                        open: Some(secure_keyboard_open()),
+                        max_length: 6,
+                        randomized: true,
+                        on_change: move |value: String| {
+                            secure_keyboard_status.set(format!(
+                                "{} of 6 digits entered.",
+                                value.chars().count(),
+                            ));
+                            secure_pin.set(value);
+                        },
+                        on_complete: move |_: String| {
+                            secure_keyboard_status.set(
+                                "Six digits entered. Press Done to submit.".to_string(),
+                            );
+                        },
+                        on_confirm: move |value: String| {
+                            secure_keyboard_status.set(format!(
+                                "Submitted a {}-digit PIN without displaying it.",
+                                value.chars().count(),
+                            ));
+                        },
+                        on_open_change: move |open| secure_keyboard_open.set(open),
+                    }
+                    v_gap { height: spacing::MD }
+                    row {
+                        width: "100%",
+                        align_items: "center",
+                        justify_content: "start",
+                        {icon_placeholder("shield-check", 16.0, theme.colors.primary)}
+                        h_gap { width: spacing::SM }
+                        row {
+                            layout_weight: 1.0,
+                            text {
+                                width: "100%",
+                                content: secure_keyboard_status(),
+                                font_size: typography::XS,
+                                font_color: theme.colors.muted_foreground,
+                                line_height: 18.0,
+                            }
+                        }
+                    }
+                    v_gap { height: spacing::MD }
+                    Button {
+                        variant: ButtonVariant::Outline,
+                        disabled: Some(secure_pin().is_empty()),
+                        onclick: move |_| {
+                            secure_pin.set(String::new());
+                            secure_keyboard_status.set(
+                                "PIN cleared from the controlled value.".to_string(),
+                            );
+                        },
+                        "Clear from parent"
+                    }
+                    v_gap { height: spacing::XXL }
+                    text {
+                        width: "100%",
+                        content: "Full secure text input".to_string(),
+                        font_size: typography::XXL,
+                        font_weight: 700_i32,
+                        font_color: theme.colors.foreground,
+                        line_height: 32.0,
+                    }
+                    v_gap { height: spacing::SM }
+                    text {
+                        width: "100%",
+                        content: "Use a familiar QWERTY layout with a digit row and a dedicated symbol page, without invoking the system input method.".to_string(),
+                        font_size: typography::SM,
+                        font_color: theme.colors.muted_foreground,
+                        line_height: 20.0,
+                    }
+                    v_gap { height: spacing::LG }
+                    Input {
+                        value: Some(secure_text()),
+                        placeholder: Some("Tap to enter secure text".to_string()),
+                        width: "100%",
+                        read_only: true,
+                        on_click: move |_| secure_text_open.set(true),
+                    }
+                    SecureKeyboardSheet {
+                        value: Some(secure_text()),
+                        open: Some(secure_text_open()),
+                        mode: SecureKeyboardMode::Full,
+                        max_length: 20,
+                        randomized: false,
+                        confirm_requires_complete: false,
+                        on_change: move |value: String| {
+                            secure_text_status.set(format!(
+                                "{} of 20 characters entered.",
+                                value.chars().count(),
+                            ));
+                            secure_text.set(value);
+                        },
+                        on_complete: move |_: String| {
+                            secure_text_status.set(
+                                "The 20-character limit has been reached.".to_string(),
+                            );
+                        },
+                        on_confirm: move |value: String| {
+                            secure_text_status.set(format!(
+                                "Submitted a {}-character value.",
+                                value.chars().count(),
+                            ));
+                        },
+                        on_open_change: move |open| secure_text_open.set(open),
+                    }
+                    v_gap { height: spacing::MD }
+                    text {
+                        width: "100%",
+                        content: secure_text_status(),
+                        font_size: typography::XS,
+                        font_color: theme.colors.muted_foreground,
+                        line_height: 18.0,
+                    }
+                    v_gap { height: spacing::MD }
+                    Button {
+                        variant: ButtonVariant::Outline,
+                        disabled: Some(secure_text().is_empty()),
+                        onclick: move |_| {
+                            secure_text.set(String::new());
+                            secure_text_status.set(
+                                "Secure text cleared from the controlled value.".to_string(),
+                            );
+                        },
+                        "Clear secure text"
+                    }
+                    v_gap { height: spacing::XXL }
+                    text {
+                        width: "100%",
+                        content: "Security boundary".to_string(),
+                        font_size: typography::SM,
+                        font_weight: 600_i32,
+                        font_color: theme.colors.foreground,
+                        line_height: 20.0,
+                    }
+                    text {
+                        width: "100%",
+                        content: "Randomized keys and IME avoidance reduce exposure, but this is not a hardware-backed trusted keyboard.".to_string(),
+                        font_size: typography::XS,
+                        font_color: theme.colors.muted_foreground,
+                        line_height: 18.0,
                     }
                 }
             }
