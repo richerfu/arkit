@@ -2,7 +2,7 @@
 
 use std::{rc::Rc, time::Duration};
 
-use arkit::dioxus_core::EventHandler;
+use arkit::dioxus_core::{AttributeValue, EventHandler};
 use arkit::dioxus_signals::WritableExt;
 use arkit::entry;
 use arkit::prelude::*;
@@ -22,7 +22,7 @@ use arkit::shadcn::components::{
     SecureKeyboardSheet, Select, Separator, Skeleton, Slider, SliderOrientation, SliderStyle,
     Sonner, SonnerPosition, SonnerToast, Spinner, Switch, Table, Tabs, Text, TextVariant, Textarea,
     TimePicker, TimePickerFormat, TimeValue, ToastAppearance, Toggle, ToggleGroup, ToggleVariant,
-    Tooltip,
+    Tooltip, Watermark, WatermarkFontStyle, WatermarkSource, WatermarkStyle,
 };
 use arkit::shadcn::icon::icon_placeholder;
 use arkit::shadcn::theme::{
@@ -34,6 +34,29 @@ const HOME_HEADER_HEIGHT: f32 = 80.0;
 const DETAIL_HEADER_HEIGHT: f32 = 48.0;
 const TRACKING_TIGHT: f32 = -0.35;
 const MARKDOWN_STREAM_INTERVAL_MS: u64 = 500;
+const WATERMARK_IMAGE_SAMPLE: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="840" height="472" viewBox="0 0 840 472">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f766e"/>
+      <stop offset="1" stop-color="#164e63"/>
+    </linearGradient>
+    <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#22c55e"/>
+      <stop offset="1" stop-color="#166534"/>
+    </linearGradient>
+  </defs>
+  <rect width="840" height="472" fill="url(#sky)"/>
+  <circle cx="664" cy="112" r="58" fill="#fde68a"/>
+  <path d="M0 374L194 174L340 323L470 210L720 397L840 304V472H0Z" fill="#d1fae5" opacity=".9"/>
+  <path d="M0 418L224 275L351 365L518 250L840 431V472H0Z" fill="url(#ground)"/>
+  <path d="M78 90h290" stroke="#ffffff" stroke-opacity=".42" stroke-width="8" stroke-linecap="round"/>
+  <path d="M78 118h210" stroke="#ffffff" stroke-opacity=".26" stroke-width="8" stroke-linecap="round"/>
+</svg>"##;
+const WATERMARK_LOGO_SAMPLE: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="512" height="160" viewBox="0 0 512 160">
+  <path d="M22 80L58 18h72l36 62-36 62H58L22 80Z" fill="#2563eb"/>
+  <path d="M67 106L94 54l27 52M76 88h36" fill="none" stroke="#fff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M205 112V48h19l28 38 28-38h19v64h-20V79l-24 32h-7l-23-32v33h-20Zm116 0V48h22v64h-22Zm45 0V48h22v24l24-24h27l-29 29 32 35h-29l-25-29v29h-22Z" fill="#0f172a"/>
+</svg>"##;
 
 arkit::i18n! {
     pub mod tr {
@@ -338,6 +361,10 @@ const COMPONENTS: &[ComponentSpec] = &[
     ComponentSpec {
         slug: "table",
         name: "Table",
+    },
+    ComponentSpec {
+        slug: "watermark",
+        name: "Watermark",
     },
 ];
 
@@ -1091,6 +1118,12 @@ fn demo_canvas_policy(slug: &str) -> DemoCanvasPolicy {
             padding: [spacing::XXL, spacing::LG, spacing::XXL, spacing::LG],
         },
         "code" | "markdown" => DemoCanvasPolicy {
+            center_x: true,
+            center_y: false,
+            fill_height: false,
+            padding: [spacing::XXL, spacing::LG, spacing::XXL, spacing::LG],
+        },
+        "watermark" => DemoCanvasPolicy {
             center_x: true,
             center_y: false,
             fill_height: false,
@@ -4386,9 +4419,274 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 }
             }
         },
+        "watermark" => rsx! { WatermarkDemo {} },
         _ => rsx! {
             Text { content: "Component not found".to_string(), variant: TextVariant::Muted }
         },
+    }
+}
+
+#[component]
+fn WatermarkDemo() -> Element {
+    let theme = arkit_shadcn::theme::use_theme();
+    let mut clicks = use_signal(|| 0_u32);
+    let sample_image =
+        ArkImageSource::svg("watermark-demo-landscape", WATERMARK_IMAGE_SAMPLE, 840, 472);
+    let logo_image = ArkImageSource::encoded(
+        "watermark-demo-logo",
+        WATERMARK_LOGO_SAMPLE.as_bytes().to_vec(),
+        512,
+        160,
+    );
+
+    rsx! {
+        fixed_width {
+            width: 420.0,
+            column {
+                width: "100%",
+                align_items: "start",
+
+                demo_mode_label {
+                    title: "Basic text watermark".to_string(),
+                    detail: Some("Theme-aware defaults over ordinary content.".to_string()),
+                }
+                Watermark {
+                    source: WatermarkSource::text("ARKIT · INTERNAL"),
+                    width: "100%".to_string(),
+                    height: "220".to_string(),
+                    column {
+                        width: "100%",
+                        height: 220.0,
+                        align_items: "start",
+                        padding_top: spacing::LG,
+                        padding_right: spacing::LG,
+                        padding_bottom: spacing::LG,
+                        padding_left: spacing::LG,
+                        background_color: theme.colors.card,
+                        border_radius: theme.radii.xl,
+                        text {
+                            content: "Quarterly report".to_string(),
+                            font_size: typography::XXL,
+                            font_weight: 700_i32,
+                            font_color: theme.colors.foreground,
+                            line_height: 30.0,
+                        }
+                        v_gap { height: spacing::SM }
+                        text {
+                            content: "Revenue and retention remained above the target range.".to_string(),
+                            font_size: typography::SM,
+                            font_weight: 400_i32,
+                            font_color: theme.colors.muted_foreground,
+                            line_height: 20.0,
+                        }
+                    }
+                }
+
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Custom multiline style".to_string(),
+                    detail: Some("Color, opacity, font, rotation, and spacing are configurable.".to_string()),
+                }
+                Watermark {
+                    source: WatermarkSource::text("ARKIT\nCONFIDENTIAL"),
+                    width: "100%".to_string(),
+                    height: "260".to_string(),
+                    style: WatermarkStyle {
+                        color: Some(theme.colors.primary),
+                        font_size: 15.0,
+                        font_weight: 700,
+                        font_style: WatermarkFontStyle::Italic,
+                        font_family: Some("HarmonyOS Sans".to_string()),
+                        opacity: 0.24,
+                        rotation_degrees: -18.0,
+                        gap_x: 72.0,
+                        gap_y: 56.0,
+                    },
+                    column {
+                        width: "100%",
+                        height: 260.0,
+                        align_items: "start",
+                        padding_top: spacing::LG,
+                        padding_right: spacing::LG,
+                        padding_bottom: spacing::LG,
+                        padding_left: spacing::LG,
+                        background_color: theme.colors.card,
+                        border_radius: theme.radii.xl,
+                        text {
+                            content: "Architecture decision".to_string(),
+                            font_size: typography::XL,
+                            font_weight: 700_i32,
+                            font_color: theme.colors.foreground,
+                            line_height: 26.0,
+                        }
+                        v_gap { height: spacing::SM }
+                        text {
+                            content: "The document can contain multiple paragraphs while the watermark itself uses multiple lines.".to_string(),
+                            font_size: typography::SM,
+                            font_weight: 400_i32,
+                            font_color: theme.colors.muted_foreground,
+                            line_height: 20.0,
+                        }
+                        v_gap { height: spacing::SM }
+                        text {
+                            content: "Only the watermark tile is rasterized; document text remains native ArkUI content.".to_string(),
+                            font_size: typography::SM,
+                            font_weight: 400_i32,
+                            font_color: theme.colors.muted_foreground,
+                            line_height: 20.0,
+                        }
+                    }
+                }
+
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Watermark over image content".to_string(),
+                    detail: Some("The child may be an image while the watermark remains independently styled.".to_string()),
+                }
+                Watermark {
+                    source: WatermarkSource::text("PREVIEW"),
+                    width: "100%".to_string(),
+                    height: "236".to_string(),
+                    style: WatermarkStyle {
+                        color: Some(0xFFFFFFFF),
+                        font_size: 16.0,
+                        font_weight: 700,
+                        opacity: 0.6,
+                        rotation_degrees: -24.0,
+                        gap_x: 84.0,
+                        gap_y: 64.0,
+                        ..WatermarkStyle::default()
+                    },
+                    image {
+                        src: AttributeValue::any_value(sample_image),
+                        width: "100%",
+                        height: 236.0,
+                        object_fit: "cover",
+                        border_radius: theme.radii.xl,
+                        clip: true,
+                    }
+                }
+
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Image watermark source".to_string(),
+                    detail: Some("An embedded image is decoded once, cached, and repeated by one shader.".to_string()),
+                }
+                Watermark {
+                    source: WatermarkSource::image(logo_image, 128.0, 40.0),
+                    width: "100%".to_string(),
+                    height: "240".to_string(),
+                    style: WatermarkStyle {
+                        opacity: 0.2,
+                        rotation_degrees: -16.0,
+                        gap_x: 72.0,
+                        gap_y: 58.0,
+                        ..WatermarkStyle::default()
+                    },
+                    column {
+                        width: "100%",
+                        height: 240.0,
+                        align_items: "start",
+                        padding_top: spacing::LG,
+                        padding_right: spacing::LG,
+                        padding_bottom: spacing::LG,
+                        padding_left: spacing::LG,
+                        background_color: theme.colors.card,
+                        border_radius: theme.radii.xl,
+                        text {
+                            content: "Brand asset review".to_string(),
+                            font_size: typography::XL,
+                            font_weight: 700_i32,
+                            font_color: theme.colors.foreground,
+                            line_height: 26.0,
+                        }
+                        v_gap { height: spacing::SM }
+                        text {
+                            content: "The watermark source is an embedded SVG image rather than text.".to_string(),
+                            font_size: typography::SM,
+                            font_weight: 400_i32,
+                            font_color: theme.colors.muted_foreground,
+                            line_height: 20.0,
+                        }
+                    }
+                }
+
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Long document stress sample".to_string(),
+                    detail: Some(
+                        "1,440vp content; the watermark remains one cached repeating texture."
+                            .to_string(),
+                    ),
+                }
+                Watermark {
+                    source: WatermarkSource::text("ARKIT · INTERNAL"),
+                    width: "100%".to_string(),
+                    height: "1440".to_string(),
+                    style: WatermarkStyle {
+                        opacity: 0.16,
+                        gap_x: 96.0,
+                        gap_y: 80.0,
+                        ..WatermarkStyle::default()
+                    },
+                    column {
+                        width: "100%",
+                        height: 1440.0,
+                        align_items: "start",
+                        padding_top: spacing::LG,
+                        padding_right: spacing::LG,
+                        padding_bottom: spacing::LG,
+                        padding_left: spacing::LG,
+                        background_color: theme.colors.card,
+                        border_radius: theme.radii.xl,
+                        text {
+                            content: "Deployment audit".to_string(),
+                            font_size: typography::XXL,
+                            font_weight: 700_i32,
+                            font_color: theme.colors.foreground,
+                            line_height: 30.0,
+                        }
+                        v_gap { height: spacing::SM }
+                        text {
+                            content: "The overlay does not intercept the button or scrolling.".to_string(),
+                            font_size: typography::SM,
+                            font_weight: 400_i32,
+                            font_color: theme.colors.muted_foreground,
+                            line_height: 20.0,
+                        }
+                        v_gap { height: spacing::LG }
+                        Button {
+                            variant: ButtonVariant::Outline,
+                            onclick: move |_| clicks += 1,
+                            "Button clicks: {clicks}"
+                        }
+                        v_gap { height: spacing::LG }
+                        for index in 1..=24 {
+                            row {
+                                width: "100%",
+                                height: 44.0,
+                                align_items: "center",
+                                text {
+                                    content: format!("Audit event #{index:02}"),
+                                    font_size: typography::SM,
+                                    font_weight: 500_i32,
+                                    font_color: theme.colors.foreground,
+                                    line_height: 20.0,
+                                }
+                                row { layout_weight: 1.0 }
+                                text {
+                                    content: "verified".to_string(),
+                                    font_size: typography::XS,
+                                    font_weight: 500_i32,
+                                    font_color: theme.colors.muted_foreground,
+                                    line_height: 18.0,
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

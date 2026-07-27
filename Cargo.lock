@@ -349,14 +349,18 @@ name = "arkit_shadcn"
 version = "0.0.1-beta.0"
 dependencies = [
  "arkit_animation",
+ "arkit_arkui",
  "arkit_hooks",
  "arkit_i18n",
  "arkit_icon",
  "arkit_prelude",
  "arkit_runtime",
  "getrandom 0.2.17",
+ "ohos-arkui-binding",
  "ohos-display-binding",
+ "ohos-drawing-binding",
  "ohos-hilog-binding",
+ "ohos-native-drawing-sys",
  "pulldown-cmark",
  "smallvec",
  "tokio",

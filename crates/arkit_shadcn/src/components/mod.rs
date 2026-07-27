@@ -78,6 +78,7 @@ mod time_picker;
 mod toggle;
 mod toggle_group;
 mod tooltip;
+mod watermark;
 
 pub use accordion::{Accordion, AccordionItemSpec, AccordionProps};
 pub use alert::{
@@ -197,3 +198,6 @@ pub use time_picker::{TimePicker, TimePickerFormat, TimePickerLabels, TimePicker
 pub use toggle::{Toggle, ToggleProps, ToggleVariant};
 pub use toggle_group::{ToggleGroup, ToggleGroupProps};
 pub use tooltip::{Tooltip, TooltipProps};
+pub use watermark::{
+    Watermark, WatermarkFontStyle, WatermarkImage, WatermarkProps, WatermarkSource, WatermarkStyle,
+};

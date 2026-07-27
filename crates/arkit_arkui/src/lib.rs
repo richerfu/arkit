@@ -53,7 +53,7 @@ use native::parse_color;
 pub use native::{canonical_tag, create_node, create_node_by_tag, kind_from_tag, NodeKind};
 
 pub mod image;
-pub use image::{ArkImageSource, RetainedImage};
+pub use image::{ArkImagePixels, ArkImageSource, RetainedImage};
 
 pub mod virtual_adapter;
 pub use virtual_adapter::{

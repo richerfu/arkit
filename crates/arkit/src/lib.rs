@@ -25,8 +25,8 @@ pub use arkit_runtime::{
 
 // --- Renderer + native node primitives ---
 pub use arkit_arkui::{
-    canonical_tag, create_node, create_node_by_tag, kind_from_tag, ArkUIRenderer, EventSink,
-    NativeNodeEvent, NodeBuilder, NodeEventType, NodeKind, PreDragStatus, VirtualKind,
+    canonical_tag, create_node, create_node_by_tag, kind_from_tag, ArkImageSource, ArkUIRenderer,
+    EventSink, NativeNodeEvent, NodeBuilder, NodeEventType, NodeKind, PreDragStatus, VirtualKind,
     VirtualNodeAdapter,
 };
 
@@ -290,8 +290,9 @@ pub mod prelude {
 
     // Native node primitives + virtual container builder.
     pub use crate::{
-        canonical_tag, create_node, create_node_by_tag, kind_from_tag, NativeNodeEvent,
-        NodeBuilder, NodeEventType, NodeKind, PreDragStatus, VirtualKind, VirtualNodeAdapter,
+        canonical_tag, create_node, create_node_by_tag, kind_from_tag, ArkImageSource,
+        NativeNodeEvent, NodeBuilder, NodeEventType, NodeKind, PreDragStatus, VirtualKind,
+        VirtualNodeAdapter,
     };
 
     // Escape-hatch hooks.

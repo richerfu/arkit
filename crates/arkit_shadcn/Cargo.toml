@@ -30,14 +30,18 @@ markdown-highlight = ["markdown", "code"]
 
 [dependencies]
 arkit_animation = { workspace = true }
+arkit_arkui = { workspace = true }
 arkit_i18n = { workspace = true }
 arkit_prelude = { workspace = true }
 arkit_icon = { workspace = true }
 arkit_hooks = { workspace = true }
 arkit_runtime = { workspace = true }
 getrandom = { workspace = true }
+ohos-arkui-binding = { workspace = true }
 ohos-display-binding = { workspace = true }
+ohos-drawing-binding = { workspace = true }
 ohos-hilog-binding = { workspace = true }
+ohos-native-drawing-sys = { workspace = true }
 tokio = { workspace = true }
 pulldown-cmark = { workspace = true, optional = true }
 smallvec = { workspace = true, optional = true }
