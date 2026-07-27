@@ -620,6 +620,18 @@ mod tests {
         );
         assert_eq!(input_filter.value, EncodedAttrValue::String("[0-9]".into()));
 
+        let show_password_icon = encode_attr(
+            "textinput",
+            "show_password_icon",
+            &AttributeValue::Bool(true),
+        )
+        .expect("password visibility icon is supported");
+        assert_eq!(
+            show_password_icon.ty,
+            ArkUINodeAttributeType::TextInputShowPasswordIcon
+        );
+        assert_eq!(show_password_icon.value, EncodedAttrValue::Bool(true));
+
         let max_length = encode_attr("textinput", "max_length", &AttributeValue::Int(6))
             .expect("text input max length is supported");
         assert_eq!(max_length.ty, ArkUINodeAttributeType::TextInputMaxLength);
@@ -895,6 +907,11 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
             name,
             ArkUINodeAttributeType::TextInputInputFilter,
             EncodedAttrValue::String(as_string(value)?),
+        ),
+        "show_password_icon" if tag == "textinput" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::TextInputShowPasswordIcon,
+            EncodedAttrValue::Bool(as_bool(value)?),
         ),
         "max_length" if tag == "textinput" => EncodedAttr::new(
             name,
