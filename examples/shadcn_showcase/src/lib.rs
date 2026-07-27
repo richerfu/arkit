@@ -22,7 +22,8 @@ use arkit::shadcn::components::{
     SecureKeyboardSheet, Select, Separator, Skeleton, Slider, SliderOrientation, SliderStyle,
     Sonner, SonnerPosition, SonnerToast, Spinner, Switch, Table, Tabs, Text, TextVariant, Textarea,
     TimePicker, TimePickerFormat, TimeValue, ToastAppearance, Toggle, ToggleGroup, ToggleVariant,
-    Tooltip, Watermark, WatermarkFontStyle, WatermarkSource, WatermarkStyle,
+    Tooltip, Watermark, WatermarkBlendMode, WatermarkFontStyle, WatermarkShadow, WatermarkSource,
+    WatermarkStroke, WatermarkStyle,
 };
 use arkit::shadcn::icon::icon_placeholder;
 use arkit::shadcn::theme::{
@@ -4485,7 +4486,10 @@ fn WatermarkDemo() -> Element {
                 {demo_mode_divider()}
                 demo_mode_label {
                     title: "Custom multiline style".to_string(),
-                    detail: Some("Color, opacity, font, rotation, and spacing are configurable.".to_string()),
+                    detail: Some(
+                        "Offset, repeat origin, blend, outline, shadow, font, and spacing are configurable."
+                            .to_string(),
+                    ),
                 }
                 Watermark {
                     source: WatermarkSource::text("ARKIT\nCONFIDENTIAL"),
@@ -4501,6 +4505,13 @@ fn WatermarkDemo() -> Element {
                         rotation_degrees: -18.0,
                         gap_x: 72.0,
                         gap_y: 56.0,
+                        offset_x: 18.0,
+                        offset_y: -8.0,
+                        repeat_origin_x: 28.0,
+                        repeat_origin_y: 20.0,
+                        blend_mode: WatermarkBlendMode::Multiply,
+                        stroke: Some(WatermarkStroke::new(0xCCFFFFFF, 1.2)),
+                        shadow: Some(WatermarkShadow::new(0x66000000, 4.0, 3.0, 4.0)),
                     },
                     column {
                         width: "100%",
@@ -4555,6 +4566,7 @@ fn WatermarkDemo() -> Element {
                         rotation_degrees: -24.0,
                         gap_x: 84.0,
                         gap_y: 64.0,
+                        blend_mode: WatermarkBlendMode::Difference,
                         ..WatermarkStyle::default()
                     },
                     image {
@@ -4581,6 +4593,7 @@ fn WatermarkDemo() -> Element {
                         rotation_degrees: -16.0,
                         gap_x: 72.0,
                         gap_y: 58.0,
+                        shadow: Some(WatermarkShadow::new(0x55000000, 5.0, 2.0, 3.0)),
                         ..WatermarkStyle::default()
                     },
                     column {

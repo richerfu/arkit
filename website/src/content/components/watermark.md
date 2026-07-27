@@ -33,7 +33,9 @@ Watermark {
 ## 自定义文字样式
 
 ```rust
-use arkit::shadcn::components::WatermarkFontStyle;
+use arkit::shadcn::components::{
+    WatermarkBlendMode, WatermarkFontStyle, WatermarkShadow, WatermarkStroke,
+};
 
 Watermark {
     source: WatermarkSource::text("ARKIT\nCONFIDENTIAL"),
@@ -47,6 +49,13 @@ Watermark {
         rotation_degrees: -18.0,
         gap_x: 72.0,
         gap_y: 56.0,
+        offset_x: 18.0,
+        offset_y: -8.0,
+        repeat_origin_x: 28.0,
+        repeat_origin_y: 20.0,
+        blend_mode: WatermarkBlendMode::Multiply,
+        stroke: Some(WatermarkStroke::new(0xCCFFFFFF, 1.2)),
+        shadow: Some(WatermarkShadow::new(0x66000000, 4.0, 3.0, 4.0)),
         ..WatermarkStyle::default()
     },
     column {
@@ -56,13 +65,38 @@ Watermark {
 }
 ```
 
+### 偏移与重复起点
+
+`offset_x`、`offset_y` 移动每一个重复单元里的水印标记，不改变单元尺寸和重复间距。标记跨过单元边界时会在相邻边缘连续绘制，不会被截断。
+
+`repeat_origin_x`、`repeat_origin_y` 移动整张重复网格相对容器左上角的起点。它只改变 shader 相位，不重新生成纹理。正值向右、向下移动。
+
+### 混合模式
+
+`blend_mode` 支持：
+
+- `Normal`、`Multiply`、`Screen`、`Overlay`；
+- `Darken`、`Lighten`、`ColorDodge`、`ColorBurn`；
+- `HardLight`、`SoftLight`、`Difference`、`Exclusion`；
+- `Hue`、`Saturation`、`Color`、`Luminosity`、`Plus`。
+
+混合发生在最终一次水印覆盖绘制中。默认值是 `Normal`。
+
+### 描边与阴影
+
+`WatermarkStroke` 设置文字轮廓颜色和宽度，只作用于文字源。图片源会忽略 `stroke`，避免将透明 Logo 错误地描成矩形边框。
+
+`WatermarkShadow` 设置阴影颜色、模糊半径以及水平、垂直偏移，文字和图片源都支持。描边和阴影只在缓存纹理生成时绘制一次；组件会把效果范围计入纹理边界，避免旋转后被裁切。
+
 ## 图片水印源
 
 图片水印支持 SVG 以及 PNG、WebP 等已编码图片数据。图片在生成水印纹理时解码一次，按指定尺寸绘制后由同一个重复 shader 覆盖内容。
 
 ```rust
 use arkit::ArkImageSource;
-use arkit::shadcn::components::{Watermark, WatermarkSource, WatermarkStyle};
+use arkit::shadcn::components::{
+    Watermark, WatermarkShadow, WatermarkSource, WatermarkStyle,
+};
 
 let logo = ArkImageSource::encoded(
     "brand-logo",
@@ -78,6 +112,7 @@ Watermark {
         rotation_degrees: -16.0,
         gap_x: 72.0,
         gap_y: 58.0,
+        shadow: Some(WatermarkShadow::new(0x55000000, 5.0, 2.0, 3.0)),
         ..WatermarkStyle::default()
     },
     column {
@@ -120,14 +155,28 @@ Watermark {
 | `source`   | `WatermarkSource` | 必填     | 重复绘制的文字或图片   |
 | `width`    | `String`          | `100%`   | 容器宽度               |
 | `height`   | `String`          | `auto`   | 容器高度               |
-| `style`    | `WatermarkStyle`  | 默认样式 | 字体、颜色、旋转和间距 |
+| `style`    | `WatermarkStyle`  | 默认样式 | 字体、效果、位置和间距 |
 | `children` | `Element`         | 必填     | 被水印覆盖的内容       |
 
-`WatermarkStyle` 提供：
+### WatermarkStyle
 
-- 通用样式：`opacity`、`rotation_degrees`、`gap_x`、`gap_y`；
-- 文字样式：`color`、`font_size`、`font_weight`、`font_style`、`font_family`；
-- 图片尺寸：通过 `WatermarkSource::image(source, width, height)` 设置。
+| 字段                                 | 默认值                       | 作用范围  | 说明                           |
+| ------------------------------------ | ---------------------------- | --------- | ------------------------------ |
+| `color`                              | 当前主题前景色               | 文字      | 填充颜色                       |
+| `font_size`                          | `14.0`                       | 文字      | 字号，单位 vp                  |
+| `font_weight`                        | `500`                        | 文字      | 字重，限制为 `100..=900`       |
+| `font_style`                         | `Normal`                     | 文字      | 正常、斜体或倾斜               |
+| `font_family`                        | `None`                       | 文字      | 自定义字体族                   |
+| `opacity`                            | `0.14`                       | 通用      | 最终覆盖透明度，限制为 `0..=1` |
+| `rotation_degrees`                   | `-22.0`                      | 通用      | 顺时针旋转角度                 |
+| `gap_x`、`gap_y`                     | `80.0`、`64.0`               | 通用      | 重复单元之间的空白             |
+| `offset_x`、`offset_y`               | `0.0`、`0.0`                 | 通用      | 标记在重复单元内的偏移         |
+| `repeat_origin_x`、`repeat_origin_y` | `0.0`、`0.0`                 | 通用      | 整张重复网格的起点             |
+| `blend_mode`                         | `WatermarkBlendMode::Normal` | 通用      | 与下层内容的混合方式           |
+| `stroke`                             | `None`                       | 文字      | 字形描边                       |
+| `shadow`                             | `None`                       | 文字/图片 | 阴影颜色、模糊和偏移           |
+
+图片尺寸通过 `WatermarkSource::image(source, width, height)` 设置。
 
 `color: None` 时使用当前主题前景色，最终透明度由 `opacity` 统一控制。图片源忽略文字专属字段。
 
@@ -137,7 +186,8 @@ Watermark {
 
 - 原生节点数量固定为 1 个水印绘制节点；
 - 每次重绘只有 1 次纹理填充，不随水印数量增长；
-- 文案和样式没有变化时复用缓存纹理；
+- 文案和纹理样式没有变化时复用缓存纹理；
+- 仅修改 `opacity`、`blend_mode` 或重复起点时不会重新栅格化；
 - 单张纹理限制为最长边 2048px、最多 2,097,152 像素，极端文案或间距会自动降低栅格分辨率，避免无界内存分配。
 
 水印节点使用 `hit_test_behavior: "none"`，不会影响下层交互。

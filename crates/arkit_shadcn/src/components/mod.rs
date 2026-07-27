@@ -199,5 +199,6 @@ pub use toggle::{Toggle, ToggleProps, ToggleVariant};
 pub use toggle_group::{ToggleGroup, ToggleGroupProps};
 pub use tooltip::{Tooltip, TooltipProps};
 pub use watermark::{
-    Watermark, WatermarkFontStyle, WatermarkImage, WatermarkProps, WatermarkSource, WatermarkStyle,
+    Watermark, WatermarkBlendMode, WatermarkFontStyle, WatermarkImage, WatermarkProps,
+    WatermarkShadow, WatermarkSource, WatermarkStroke, WatermarkStyle,
 };
