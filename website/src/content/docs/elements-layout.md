@@ -120,6 +120,7 @@ column {
 | `scroll_enabled`                           | bool / `"on"`/`"off"`                                            |
 | `list_sticky`                              | `none` · `header` · `footer` · `both`                            |
 | `input_type`                               | `text` · `number` · `phone` · `email` · `password` · `decimal` … |
+| `show_password_icon`（textinput）          | bool；显示密码显隐图标                                           |
 | `progress_type`                            | `linear`/`bar` · `ring` · `eclipse` · `scale-ring` · `capsule`   |
 | `button_type`                              | `normal` · `capsule` · `circle`                                  |
 | `swiper_curve`                             | `linear` · `ease` · `ease-in` · `ease-out` · `ease-in-out` · …   |

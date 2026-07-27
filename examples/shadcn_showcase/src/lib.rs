@@ -16,12 +16,13 @@ use arkit::shadcn::components::{
     Collapsible, ContextMenu, DatePicker, Dialog, DialogFooter, DialogHeader, DropdownMenu, Field,
     FieldContent, FieldDescription, FieldError, FieldGroup, FieldOrientation, FieldSeparator,
     FieldSet, FieldTitle, Form, FormItem, Guide, GuideSide, GuideStep, GuideTarget, HoverCard,
-    InfiniteScroll, Input, InputOtp, InputOtpMode, InputOtpSeparator, Label, LoadMoreIndicator,
-    LoadMoreState, Markdown, MenuEntry, Menubar, MenubarMenuSpec, MultiSlider, Popover, Progress,
-    PullToRefresh, RadioGroup, RangeSlider, SecureKeyboardMode, SecureKeyboardSheet, Select,
-    Separator, Skeleton, Slider, SliderOrientation, SliderStyle, Sonner, SonnerPosition,
-    SonnerToast, Spinner, Switch, Table, Tabs, Text, TextVariant, Textarea, TimePicker,
-    TimePickerFormat, TimeValue, ToastAppearance, Toggle, ToggleGroup, ToggleVariant, Tooltip,
+    InfiniteScroll, Input, InputMode, InputOtp, InputOtpMode, InputOtpSeparator, Label,
+    LoadMoreIndicator, LoadMoreState, Markdown, MenuEntry, Menubar, MenubarMenuSpec, MultiSlider,
+    Popover, Progress, PullToRefresh, RadioGroup, RangeSlider, SecureKeyboardMode,
+    SecureKeyboardSheet, Select, Separator, Skeleton, Slider, SliderOrientation, SliderStyle,
+    Sonner, SonnerPosition, SonnerToast, Spinner, Switch, Table, Tabs, Text, TextVariant, Textarea,
+    TimePicker, TimePickerFormat, TimeValue, ToastAppearance, Toggle, ToggleGroup, ToggleVariant,
+    Tooltip,
 };
 use arkit::shadcn::icon::icon_placeholder;
 use arkit::shadcn::theme::{
@@ -1171,6 +1172,8 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let mut context_uc_note = use_signal(|| "open unmanaged".to_string());
     let mut menubar_uc_note = use_signal(|| "active unmanaged".to_string());
     let mut input_controlled = use_signal(|| "hello".to_string());
+    let mut input_password = use_signal(|| "secret".to_string());
+    let mut input_number = use_signal(|| "2026".to_string());
     let mut textarea_controlled = use_signal(|| "Draft notes…".to_string());
     let mut otp_value = use_signal(String::new);
     let mut otp_invalid = use_signal(|| false);
@@ -2612,6 +2615,30 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     Input {
                         placeholder: Some("Uncontrolled input".to_string()),
                         width: "100%",
+                    }
+                    {demo_mode_divider()}
+                    demo_mode_label {
+                        title: "Password".to_string(),
+                        detail: Some(format!("{} characters", input_password().chars().count())),
+                    }
+                    Input {
+                        mode: InputMode::Password,
+                        placeholder: Some("Password".to_string()),
+                        value: Some(input_password()),
+                        width: "100%",
+                        on_change: move |value| input_password.set(value),
+                    }
+                    {demo_mode_divider()}
+                    demo_mode_label {
+                        title: "Number".to_string(),
+                        detail: Some(format!("value = {:?}", input_number())),
+                    }
+                    Input {
+                        mode: InputMode::Number,
+                        placeholder: Some("Digits only".to_string()),
+                        value: Some(input_number()),
+                        width: "100%",
+                        on_change: move |value| input_number.set(value),
                     }
                 }
             }

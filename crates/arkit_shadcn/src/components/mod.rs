@@ -140,7 +140,7 @@ pub use guide::{
     Guide, GuideLabels, GuideProps, GuideSide, GuideStep, GuideStyle, GuideTarget, GuideTargetProps,
 };
 pub use hover_card::{HoverCard, HoverCardProps};
-pub use input::{Input, InputProps};
+pub use input::{Input, InputMode, InputProps};
 pub use input_otp::{InputOtp, InputOtpMode, InputOtpProps, InputOtpSeparator, InputOtpStyle};
 pub use label::{Label, LabelProps};
 #[cfg(feature = "markdown")]
