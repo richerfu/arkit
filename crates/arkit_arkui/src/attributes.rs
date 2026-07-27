@@ -1,9 +1,9 @@
 //! Desired attribute storage + native element adapters.
 //!
 //! Dioxus mutations update a renderer-owned host tree. `DesiredAttrs` stores
-//! the declarative attributes for each host node, and every native write goes
-//! through the same encoder used for desired-state replay. This keeps immediate
-//! mutation writes and attach/patch replays byte-for-byte consistent.
+//! persistent declarative attributes for each host node, and every native
+//! write goes through the same encoder used for desired-state replay. Commands
+//! such as `scroll_offset` are typed separately and consumed exactly once.
 
 use ohos_arkui_binding::common::attribute::{ArkUINodeAttributeItem, ArkUINodeAttributeNumber};
 use ohos_arkui_binding::common::error::ArkUIResult;
@@ -101,6 +101,41 @@ impl EncodedAttr {
             ));
         }
         result
+    }
+}
+
+/// Imperative Scroll position change carried through Dioxus attributes.
+///
+/// ArkUI defines `NODE_SCROLL_OFFSET` as a scroll-to operation. It is not
+/// declarative node state and must never enter [`DesiredAttrs`], otherwise
+/// attach or global style replay can unexpectedly reset a user's live scroll.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct ScrollOffsetCommand {
+    x: f32,
+    y: f32,
+    options: Vec<i32>,
+}
+
+impl ScrollOffsetCommand {
+    pub(crate) fn from_attribute(value: &dioxus_core::AttributeValue) -> Option<Self> {
+        let dioxus_core::AttributeValue::Text(text) = value else {
+            return None;
+        };
+        let (x, y, options) = parse_scroll_offset(text)?;
+        Some(Self { x, y, options })
+    }
+
+    pub(crate) fn apply(&self, node: &mut ArkUINode) -> ArkUIResult<()> {
+        EncodedAttr::new(
+            "scroll_offset",
+            ArkUINodeAttributeType::ScrollOffset,
+            EncodedAttrValue::ScrollOffset {
+                x: self.x,
+                y: self.y,
+                options: self.options.clone(),
+            },
+        )
+        .apply(node, "scroll")
     }
 }
 
@@ -430,7 +465,10 @@ mod tests {
     use dioxus_core::AttributeValue;
     use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
 
-    use super::{encode_attr, parse_scroll_offset, EncodedAttrValue};
+    use super::{
+        encode_attr, parse_scroll_offset, AttrMutation, DesiredAttrs, EncodedAttrValue,
+        ScrollOffsetCommand,
+    };
 
     #[test]
     fn margin_padding_accept_css_shorthand() {
@@ -567,6 +605,19 @@ mod tests {
         assert_eq!(parse_scroll_offset("0"), None);
         assert_eq!(parse_scroll_offset("0,0,0,1,0,0,0,1"), None);
         assert_eq!(parse_scroll_offset("0,0,fast"), None);
+    }
+
+    #[test]
+    fn scroll_offset_is_a_command_not_declarative_state() {
+        let value = AttributeValue::Text("12.5,24.25,0".into());
+        assert!(ScrollOffsetCommand::from_attribute(&value).is_some());
+
+        let mut attrs = DesiredAttrs::default();
+        assert!(matches!(
+            attrs.set("scroll", "scroll_offset", &value),
+            AttrMutation::Unchanged
+        ));
+        assert!(attrs.get("scroll_offset").is_none());
     }
 
     #[test]
@@ -1204,18 +1255,6 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
                 css_value::scroll_edge_effect_keyword,
             )?),
         ),
-        "scroll_offset" if tag == "scroll" => {
-            let text = match value {
-                dioxus_core::AttributeValue::Text(text) => text,
-                _ => return None,
-            };
-            let (x, y, options) = parse_scroll_offset(text)?;
-            EncodedAttr::new(
-                name,
-                ArkUINodeAttributeType::ScrollOffset,
-                EncodedAttrValue::ScrollOffset { x, y, options },
-            )
-        }
         "swiper_index" if tag == "swiper" => EncodedAttr::new(
             name,
             ArkUINodeAttributeType::SwiperIndex,

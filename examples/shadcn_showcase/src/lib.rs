@@ -2,10 +2,13 @@
 
 use std::{rc::Rc, time::Duration};
 
-use arkit::dioxus_core::{AttributeValue, EventHandler};
+use arkit::dioxus_core::{AttributeValue, EventHandler, VNode};
 use arkit::dioxus_signals::WritableExt;
 use arkit::entry;
 use arkit::prelude::*;
+// The Routable derive emits `::dioxus_router` paths.
+use arkit::router::dioxus_router;
+use arkit::router::{use_navigator, Outlet, Routable, RouteProvider, Router};
 use arkit::shadcn as arkit_shadcn;
 use arkit::shadcn::components::{
     Accordion, AccordionItemSpec, Alert, AlertDescription, AlertDialog, AlertDialogAction,
@@ -369,16 +372,54 @@ const COMPONENTS: &[ComponentSpec] = &[
     },
 ];
 
+#[derive(Routable, Clone, PartialEq, Debug)]
+enum Route {
+    #[layout(ShowcaseShell)]
+    #[route("/")]
+    Home {},
+    #[route("/components/:slug")]
+    Detail { slug: String },
+}
+
+#[derive(Clone, Copy)]
+struct ShowcaseState {
+    mode: Signal<ThemeMode>,
+    preset: Signal<ThemePreset>,
+    custom: Signal<bool>,
+    theme_menu_open: Signal<bool>,
+    language_menu_open: Signal<bool>,
+    query: Signal<String>,
+}
+
 #[entry]
 fn app() -> Element {
     let _i18n = use_i18n_provider(&tr::CATALOG, tr::FALLBACK_LOCALE.id());
-    let mut mode = use_signal(|| ThemeMode::Light);
-    let mut preset = use_signal(|| ThemePreset::Zinc);
-    let mut custom = use_signal(|| false);
-    let mut theme_menu_open = use_signal(|| false);
-    let mut language_menu_open = use_signal(|| false);
-    let mut selected = use_signal(|| None::<&'static str>);
-    let mut query = use_signal(String::new);
+    let state = ShowcaseState {
+        mode: use_signal(|| ThemeMode::Light),
+        preset: use_signal(|| ThemePreset::Zinc),
+        custom: use_signal(|| false),
+        theme_menu_open: use_signal(|| false),
+        language_menu_open: use_signal(|| false),
+        query: use_signal(String::new),
+    };
+    use_context_provider(|| state);
+
+    let theme = resolve_theme((state.mode)(), (state.preset)(), (state.custom)());
+
+    rsx! {
+        ThemeProvider {
+            theme,
+            Router::<Route> {}
+        }
+    }
+}
+
+#[component]
+fn ShowcaseShell() -> Element {
+    let state = use_context::<ShowcaseState>();
+    let navigator = use_navigator();
+    let mut language_menu_open = state.language_menu_open;
+    let mut theme_menu_open = state.theme_menu_open;
 
     let scoped_back_press = dioxus_hooks::use_callback(move |()| {
         if language_menu_open() {
@@ -389,8 +430,8 @@ fn app() -> Element {
             theme_menu_open.set(false);
             return true;
         }
-        if selected().is_some() {
-            selected.set(None);
+        if navigator.can_go_back() {
+            navigator.go_back();
             return true;
         }
         false
@@ -399,102 +440,124 @@ fn app() -> Element {
     let _back_press_registration =
         use_hook(move || Rc::new(arkit::register_back_press_handler(back_press_handler)));
 
-    let theme = resolve_theme(mode(), preset(), custom());
+    rsx! { Outlet::<Route> {} }
+}
 
-    let selected_slug = selected();
-    let home_key = "home";
+#[component]
+fn Home() -> Element {
+    let state = use_context::<ShowcaseState>();
+    let navigator = use_navigator();
+    let mut query = state.query;
+    let mut mode = state.mode;
+    let mut preset = state.preset;
+    let mut custom = state.custom;
+    let mut theme_menu_open = state.theme_menu_open;
+    let mut language_menu_open = state.language_menu_open;
+    let route_key = "home";
 
     rsx! {
-        ThemeProvider {
-            theme,
-            column {
-                width: "100%",
-                height: "100%",
-                background_color: theme.colors.background,
-                if let Some(slug) = selected_slug {
-                    MountTransition {
-                        key: "{slug}",
-                        preset: TransitionPreset::SlideLeft,
-                        duration_ms: 220,
-                        fill: true,
-                        DetailView {
-                            slug,
-                            mode: mode(),
-                            preset: preset(),
-                            custom: custom(),
-                            theme_menu_open: theme_menu_open(),
-                            language_menu_open: language_menu_open(),
-                            on_back: move |_| selected.set(None),
-                            on_theme_menu_open: move |value| {
-                                theme_menu_open.set(value);
-                                if value {
-                                    language_menu_open.set(false);
-                                }
-                            },
-                            on_language_menu_open: move |value| {
-                                language_menu_open.set(value);
-                                if value {
-                                    theme_menu_open.set(false);
-                                }
-                            },
-                            on_mode: move |value| {
-                                mode.set(value);
-                                theme_menu_open.set(false);
-                            },
-                            on_preset: move |value| {
-                                preset.set(value);
-                                custom.set(false);
-                                theme_menu_open.set(false);
-                            },
-                            on_custom: move |value| {
-                                custom.set(value);
-                                theme_menu_open.set(false);
-                            },
-                        }
+        MountTransition {
+            key: "{route_key}",
+            preset: TransitionPreset::SlideRight,
+            duration_ms: 200,
+            fill: true,
+            HomeView {
+                query: query(),
+                mode: mode(),
+                preset: preset(),
+                custom: custom(),
+                theme_menu_open: theme_menu_open(),
+                language_menu_open: language_menu_open(),
+                on_query: move |value: String| query.set(value),
+                on_select: move |slug: &'static str| {
+                    navigator.push(Route::Detail {
+                        slug: slug.to_string(),
+                    });
+                },
+                on_theme_menu_open: move |value| {
+                    theme_menu_open.set(value);
+                    if value {
+                        language_menu_open.set(false);
                     }
-                } else {
-                    MountTransition {
-                        key: "{home_key}",
-                        preset: TransitionPreset::SlideRight,
-                        duration_ms: 200,
-                        fill: true,
-                        HomeView {
-                            query: query(),
-                            mode: mode(),
-                            preset: preset(),
-                            custom: custom(),
-                            theme_menu_open: theme_menu_open(),
-                            language_menu_open: language_menu_open(),
-                            on_query: move |value: String| query.set(value),
-                            on_select: move |slug: &'static str| selected.set(Some(slug)),
-                            on_theme_menu_open: move |value| {
-                                theme_menu_open.set(value);
-                                if value {
-                                    language_menu_open.set(false);
-                                }
-                            },
-                            on_language_menu_open: move |value| {
-                                language_menu_open.set(value);
-                                if value {
-                                    theme_menu_open.set(false);
-                                }
-                            },
-                            on_mode: move |value| {
-                                mode.set(value);
-                                theme_menu_open.set(false);
-                            },
-                            on_preset: move |value| {
-                                preset.set(value);
-                                custom.set(false);
-                                theme_menu_open.set(false);
-                            },
-                            on_custom: move |value| {
-                                custom.set(value);
-                                theme_menu_open.set(false);
-                            },
-                        }
+                },
+                on_language_menu_open: move |value| {
+                    language_menu_open.set(value);
+                    if value {
+                        theme_menu_open.set(false);
                     }
-                }
+                },
+                on_mode: move |value| {
+                    mode.set(value);
+                    theme_menu_open.set(false);
+                },
+                on_preset: move |value| {
+                    preset.set(value);
+                    custom.set(false);
+                    theme_menu_open.set(false);
+                },
+                on_custom: move |value| {
+                    custom.set(value);
+                    theme_menu_open.set(false);
+                },
+            }
+        }
+    }
+}
+
+#[component]
+fn Detail(slug: String) -> Element {
+    let state = use_context::<ShowcaseState>();
+    let navigator = use_navigator();
+    let mut mode = state.mode;
+    let mut preset = state.preset;
+    let mut custom = state.custom;
+    let mut theme_menu_open = state.theme_menu_open;
+    let mut language_menu_open = state.language_menu_open;
+    let slug = COMPONENTS
+        .iter()
+        .find(|item| item.slug == slug)
+        .map(|item| item.slug)
+        .unwrap_or("unknown");
+
+    rsx! {
+        MountTransition {
+            key: "{slug}",
+            preset: TransitionPreset::SlideLeft,
+            duration_ms: 220,
+            fill: true,
+            DetailView {
+                slug,
+                mode: mode(),
+                preset: preset(),
+                custom: custom(),
+                theme_menu_open: theme_menu_open(),
+                language_menu_open: language_menu_open(),
+                on_back: move |_| navigator.go_back(),
+                on_theme_menu_open: move |value| {
+                    theme_menu_open.set(value);
+                    if value {
+                        language_menu_open.set(false);
+                    }
+                },
+                on_language_menu_open: move |value| {
+                    language_menu_open.set(value);
+                    if value {
+                        theme_menu_open.set(false);
+                    }
+                },
+                on_mode: move |value| {
+                    mode.set(value);
+                    theme_menu_open.set(false);
+                },
+                on_preset: move |value| {
+                    preset.set(value);
+                    custom.set(false);
+                    theme_menu_open.set(false);
+                },
+                on_custom: move |value| {
+                    custom.set(value);
+                    theme_menu_open.set(false);
+                },
             }
         }
     }
@@ -582,15 +645,7 @@ fn HomeView(
             on_preset,
             on_custom,
         }
-        column {
-            width: "100%",
-            layout_weight: 1.0,
-            background_color: theme.colors.background,
-            scroll {
-                width: "100%",
-                height: "100%",
-                alignment: "top-start",
-                background_color: theme.colors.background,
+        RouteProvider {
             column {
                 width: "100%",
                 background_color: theme.colors.background,
@@ -635,7 +690,6 @@ fn HomeView(
                         }
                     }
                 }
-            }
             }
         }
     }
@@ -966,52 +1020,34 @@ fn DemoCanvas(slug: &'static str) -> Element {
 
     if policy.fill_height {
         rsx! {
-            column {
-                width: "100%",
-                layout_weight: 1.0,
-                background_color: theme.colors.surface,
-                scroll {
+            RouteProvider {
+                column {
                     width: "100%",
                     height: "100%",
                     background_color: theme.colors.surface,
-                    scroll_enabled: true,
-                    column {
-                        width: "100%",
-                        height: "100%",
-                        background_color: theme.colors.surface,
-                        align_items: if policy.center_x { "center" } else { "start" },
-                        justify_content: if policy.center_y { "center" } else { "start" },
-                        padding_top: policy.padding[0],
-                        padding_right: policy.padding[1],
-                        padding_bottom: bottom_padding,
-                        padding_left: policy.padding[3],
-                        ComponentDemo { slug }
-                    }
+                    align_items: if policy.center_x { "center" } else { "start" },
+                    justify_content: if policy.center_y { "center" } else { "start" },
+                    padding_top: policy.padding[0],
+                    padding_right: policy.padding[1],
+                    padding_bottom: bottom_padding,
+                    padding_left: policy.padding[3],
+                    ComponentDemo { slug }
                 }
             }
         }
     } else {
         rsx! {
-            column {
-                width: "100%",
-                layout_weight: 1.0,
-                background_color: theme.colors.surface,
-                scroll {
+            RouteProvider {
+                column {
                     width: "100%",
-                    height: "100%",
                     background_color: theme.colors.surface,
-                    scroll_enabled: true,
-                    column {
-                        width: "100%",
-                        background_color: theme.colors.surface,
-                        align_items: if policy.center_x { "center" } else { "start" },
-                        justify_content: if policy.center_y { "center" } else { "start" },
-                        padding_top: policy.padding[0],
-                        padding_right: policy.padding[1],
-                        padding_bottom: bottom_padding,
-                        padding_left: policy.padding[3],
-                        ComponentDemo { slug }
-                    }
+                    align_items: if policy.center_x { "center" } else { "start" },
+                    justify_content: if policy.center_y { "center" } else { "start" },
+                    padding_top: policy.padding[0],
+                    padding_right: policy.padding[1],
+                    padding_bottom: bottom_padding,
+                    padding_left: policy.padding[3],
+                    ComponentDemo { slug }
                 }
             }
         }

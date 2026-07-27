@@ -60,7 +60,9 @@ pub use arkit_i18n::{use_i18n, use_i18n_provider, I18nContext};
 pub use arkit_router as router;
 #[cfg(feature = "router")]
 pub use arkit_router::{
-    use_back_handler, AnimatedOutlet, Link, LinkProps, Routable, RouteTransition, Router,
+    use_back_handler, use_route_entry_id, use_scroll_restoration, AnimatedOutlet, Link, LinkProps,
+    Routable, RouteEntryId, RouteProvider, RouteProviderProps, RouteTransition, Router,
+    RouterProps, ScrollPosition, ScrollRestorationHandle, ScrollRestorationKey,
 };
 
 // --- Animation ---
@@ -325,7 +327,9 @@ pub mod prelude {
 
     #[cfg(feature = "router")]
     pub use crate::{
-        use_back_handler, AnimatedOutlet, Link, LinkProps, Routable, RouteTransition, Router,
+        use_back_handler, use_route_entry_id, use_scroll_restoration, AnimatedOutlet, Link,
+        LinkProps, Routable, RouteEntryId, RouteProvider, RouteProviderProps, RouteTransition,
+        Router, RouterProps, ScrollPosition, ScrollRestorationHandle, ScrollRestorationKey,
     };
 
     #[cfg(feature = "animation")]

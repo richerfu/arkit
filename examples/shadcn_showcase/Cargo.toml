@@ -14,8 +14,9 @@ workspace = true
 crate-type = ["cdylib"]
 
 [dependencies]
-arkit = { workspace = true, features = ["shadcn", "markdown", "code"] }
+arkit = { workspace = true, features = ["shadcn", "markdown", "code", "router"] }
 arkit_calendar_icu.workspace = true
+dioxus.workspace = true
 tokio = { workspace = true, features = ["time"] }
 napi-ohos.workspace = true
 napi-derive-ohos.workspace = true

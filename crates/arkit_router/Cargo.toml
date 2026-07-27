@@ -13,7 +13,9 @@ workspace = true
 arkit_animation.workspace = true
 arkit_runtime.workspace = true
 arkit_prelude.workspace = true
+dioxus-history.workspace = true
 dioxus-router.workspace = true
+rustc-hash.workspace = true
 
 [dev-dependencies]
 dioxus.workspace = true
