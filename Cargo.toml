@@ -101,7 +101,6 @@ dioxus-core = "0.7"
 dioxus-signals = "0.7"
 dioxus-hooks = "0.7"
 dioxus-core-macro = "0.7"
-dioxus-history = "0.7"
 dioxus-router = "0.7"
 getrandom = "0.2"
 

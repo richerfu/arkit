@@ -328,7 +328,6 @@ dependencies = [
  "arkit_prelude",
  "arkit_runtime",
  "dioxus",
- "dioxus-history",
  "dioxus-router",
  "rustc-hash 2.1.3",
 ]

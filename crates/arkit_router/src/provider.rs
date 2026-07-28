@@ -1,32 +1,25 @@
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 use arkit_prelude::*;
 use dioxus_core::Callback;
-use dioxus_history::History;
+use rustc_hash::FxHashMap;
 
-use crate::{
-    history::RouteHistory,
-    state::{PageStateStore, RouteEntryId},
-};
-
-#[derive(Clone)]
-pub(crate) struct RouteStateContext {
-    history: Rc<RouteHistory>,
-    pub(crate) page_states: PageStateStore,
+/// Scroll state owned by one Arkit router instance.
+///
+/// Positions are keyed by the router's complete route string. A mounted page
+/// takes its saved position and writes it back when the page unmounts.
+#[derive(Clone, Default)]
+pub(crate) struct RouteScrollStore {
+    positions: Rc<RefCell<FxHashMap<String, f32>>>,
 }
 
-impl RouteStateContext {
-    fn new() -> Self {
-        let page_states = PageStateStore::default();
-        let history = RouteHistory::new(dioxus_history::history(), page_states.clone());
-        Self {
-            history,
-            page_states,
-        }
+impl RouteScrollStore {
+    pub(crate) fn take(&self, route: &str) -> Option<f32> {
+        self.positions.borrow_mut().remove(route)
     }
 
-    pub(crate) fn current_entry_id(&self) -> RouteEntryId {
-        self.history.current_entry_id()
+    pub(crate) fn save(&self, route: String, position: f32) {
+        self.positions.borrow_mut().insert(route, position);
     }
 }
 
@@ -56,55 +49,44 @@ impl<R: Clone + 'static> Default for RouterProps<R> {
 
 impl<R: Clone> PartialEq for RouterProps<R> {
     fn eq(&self, _other: &Self) -> bool {
-        // Match dioxus-router: changing initial config does not rebuild a live
-        // router or its history stack.
         true
     }
 }
 
-/// Arkit router root with history-entry-scoped page state.
+/// Arkit router root with default page-scroll restoration.
 ///
 /// This is API-compatible with the upstream `Router::<Route> {}` component.
-/// The root instance wraps the renderer's history implementation so every
-/// navigation visit gets a stable identity. Nested routers reuse that root
-/// state instead of creating a second history.
+/// It adds only a router-scoped position store consumed by [`crate::RouteProvider`].
 #[allow(non_snake_case)]
 pub fn Router<R>(props: RouterProps<R>) -> Element
 where
     R: dioxus_router::Routable + Clone,
 {
-    if try_use_context::<RouteStateContext>().is_some() {
-        let config = props.config;
-        return rsx! {
-            dioxus_router::Router::<R> {
-                config: move |_| config.call(()),
-            }
-        };
-    }
+    let scroll = use_hook(RouteScrollStore::default);
+    use_context_provider(|| scroll);
 
-    let state = use_hook(RouteStateContext::new);
-    use_context_provider(|| state.clone());
-
-    let history = state.history.clone();
     let config = props.config;
     rsx! {
-        dioxus_router::components::HistoryProvider {
-            history: move |_| history.clone() as Rc<dyn History>,
-            dioxus_router::Router::<R> {
-                config: move |_| config.call(()),
-            }
+        dioxus_router::Router::<R> {
+            config: move |_| config.call(()),
         }
     }
 }
 
-/// Return the identity of the currently active route history entry.
-///
-/// The ID is stable while moving backward and forward through the same
-/// history visit. A new push or replace receives a new ID.
-///
-/// # Panics
-///
-/// Panics when called outside Arkit's [`Router`].
-pub fn use_route_entry_id() -> RouteEntryId {
-    use_context::<RouteStateContext>().current_entry_id()
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn route_position_is_consumed_once_and_can_be_saved_again() {
+        let store = RouteScrollStore::default();
+        let position = 120.0;
+        store.save("/components/button".to_string(), position);
+
+        assert_eq!(store.take("/components/button"), Some(position));
+        assert_eq!(store.take("/components/button"), None);
+
+        store.save("/components/button".to_string(), position);
+        assert_eq!(store.take("/components/button"), Some(position));
+    }
 }

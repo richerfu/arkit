@@ -11,13 +11,11 @@
 //! - [`use_back_handler`] — OHOS back-button integration.
 //! - [`RouteTransition`] / [`AnimatedOutlet`] — ArkUI-native route enter
 //!   transitions that compose with Dioxus `Router`/`Outlet`.
-//! - [`RouteProvider`] — a native page root with history-aware scroll
-//!   restoration.
+//! - [`RouteProvider`] — a native page root that restores its default scroll
+//!   position when navigating back.
 
-mod history;
 mod provider;
 mod scroll;
-mod state;
 
 // Keep the upstream crate available as an explicit namespace for advanced
 // APIs. The flattened facade is deliberately narrow so upstream additions do
@@ -35,11 +33,8 @@ pub use arkit_animation::TransitionPreset;
 use arkit_prelude::*;
 use dioxus_core::Element;
 use dioxus_core_macro::{component, rsx, Props};
-pub use provider::{use_route_entry_id, Router, RouterProps};
-pub use scroll::{
-    use_scroll_restoration, RouteProvider, RouteProviderProps, ScrollRestorationHandle,
-};
-pub use state::{RouteEntryId, ScrollPosition, ScrollRestorationKey};
+pub use provider::{Router, RouterProps};
+pub use scroll::{RouteProvider, RouteProviderProps};
 
 /// Register the OHOS back-button handler to navigate the dioxus-router history
 /// back. Call once near the app root (inside a component rendered by the
