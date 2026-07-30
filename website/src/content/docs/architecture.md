@@ -112,7 +112,7 @@ OpenHarmony binding 中部分 node/adapter handle 没有隐式 Drop：
 | ------------------------ | ------------------------------- |
 | 普通页面和组件           | `arkit::prelude` + RSX          |
 | 领域功能                 | facade feature + 对应 namespace |
-| 虚拟 RSX 列表            | `use_virtual_node_adapter_rsx`  |
+| 虚拟列表（RSX / native） | `use_virtual_node_adapter`      |
 | 布局观测/adapter/WebView | `arkit_hooks` / facade hooks    |
 | 自定义 native item       | `NodeBuilder`                   |
 | 框架贡献：渲染 mutation  | `arkit_arkui`                   |

@@ -1,9 +1,9 @@
 //! Complex cases — List / Grid / WaterFlow virtualized via ArkUI `NodeAdapter`.
 //!
-//! `use_virtual_node_adapter_rsx` attaches the matching adapter to the native
-//! host so only visible RSX items are created on demand (true virtualization).
-//! Each container also demonstrates item-local Dioxus state and adapter-driven
-//! invalidation of one data revision.
+//! `use_virtual_node_adapter` attaches the matching adapter to the native
+//! host so only visible items are created on demand (true virtualization).
+//! List/Grid/WaterFlow exercise RSX items and item-local invalidation; Native
+//! exercises the same public hook with `NodeBuilder` items.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -18,6 +18,7 @@ enum Case {
     List,
     Grid,
     WaterFlow,
+    Native,
 }
 
 const TOTAL: u32 = 10_000;
@@ -59,18 +60,27 @@ fn app() -> Element {
                     onclick: move |_| active.set(Case::WaterFlow),
                     "WaterFlow"
                 }
+                button {
+                    margin_left: 8.0,
+                    font_size: 14.0,
+                    background_color: if cur == Case::Native { "#ff111827" } else { "#ffffffff" },
+                    font_color: if cur == Case::Native { "#ffffffff" } else { "#ff111827" },
+                    onclick: move |_| active.set(Case::Native),
+                    "Native"
+                }
             }
 
             text {
                 padding: 16.0,
                 font_size: 13.0,
                 font_color: "#ff475569",
-                "total {TOTAL} (NodeAdapter + RSX virtualized)"
+                "total {TOTAL} (NodeAdapter + RSX / NodeBuilder)"
             }
 
             VirtualCaseView { kind: VirtualKind::List, active: cur == Case::List }
             VirtualCaseView { kind: VirtualKind::Grid, active: cur == Case::Grid }
             VirtualCaseView { kind: VirtualKind::WaterFlow, active: cur == Case::WaterFlow }
+            NativeVirtualCaseView { active: cur == Case::Native }
         }
     }
 }
@@ -79,7 +89,7 @@ fn app() -> Element {
 fn VirtualCaseView(kind: VirtualKind, active: bool) -> Element {
     let revisions = use_hook(|| Rc::new(RefCell::new(vec![0_u32; TOTAL as usize])));
     let render_revisions = revisions.clone();
-    let adapter = use_virtual_node_adapter_rsx(kind, TOTAL, move |index| {
+    let adapter = use_virtual_node_adapter(kind, TOTAL, move |index| {
         let revision = render_revisions.borrow()[index as usize];
         render_virtual_item(kind, index, revision)
     });
@@ -169,6 +179,41 @@ fn VirtualCaseView(kind: VirtualKind, active: bool) -> Element {
                 }
             }
             VirtualHost { kind, adapter }
+        }
+    }
+}
+
+#[component]
+fn NativeVirtualCaseView(active: bool) -> Element {
+    let adapter = use_virtual_node_adapter(VirtualKind::List, TOTAL, move |index| {
+        Ok(NodeBuilder::new("text")?
+            .percent_width(1.0)?
+            .height(44.0)?
+            .padding([12.0, 12.0, 12.0, 12.0])?
+            .background_color(if index % 2 == 0 {
+                "#ffffffff"
+            } else {
+                "#fff8fafc"
+            })?
+            .font_size(14.0)?
+            .font_color("#ff334155")?
+            .text_content(format!("Native #{index:05}"))?
+            .build())
+    });
+    let height = if active { "100%" } else { "0%" };
+    let visibility = if active { "visible" } else { "hidden" };
+    let opacity = if active { 1.0 } else { 0.0 };
+
+    rsx! {
+        column {
+            width: "100%",
+            height,
+            visibility,
+            opacity,
+            VirtualHost {
+                kind: VirtualKind::List,
+                adapter,
+            }
         }
     }
 }
