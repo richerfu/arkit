@@ -13,5 +13,6 @@ workspace = true
 arkit_elements.workspace = true
 dioxus-core.workspace = true
 ohos-arkui-binding.workspace = true
+ohos-arkui-sys.workspace = true
 ohos-hilog-binding.workspace = true
 rustc-hash.workspace = true

@@ -120,7 +120,9 @@ pub struct ScrollIndexPayload {
 
 #[derive(Default, Clone, Copy, Debug, PartialEq)]
 pub struct ScrollOffsetPayload {
+    /// Horizontal movement for this scroll frame, in vp.
     pub x: f32,
+    /// Vertical movement for this scroll frame, in vp.
     pub y: f32,
 }
 
@@ -379,9 +381,9 @@ pub struct ScrollData {
     pub last_index: i32,
     /// Center visible item index (list only).
     pub center_index: i32,
-    /// Horizontal scroll offset in physical pixels.
+    /// Horizontal movement for this scroll frame, in vp.
     pub offset_x: f32,
-    /// Vertical scroll offset in physical pixels.
+    /// Vertical movement for this scroll frame, in vp.
     pub offset_y: f32,
     /// Whether this event carried offsets instead of visible indices.
     pub has_offset: bool,

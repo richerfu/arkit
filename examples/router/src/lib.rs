@@ -8,7 +8,9 @@ use arkit::prelude::*;
 // The upstream derive emits `::dioxus_router` paths. Bind that name through
 // Arkit's supported router namespace instead of adding an internal crate edge.
 use arkit::router::dioxus_router;
-use arkit::router::{use_back_handler, Link, Outlet, Routable, RouteTransition, Router};
+use arkit::router::{
+    use_back_handler, Link, Outlet, Routable, RouteProvider, RouteTransition, Router,
+};
 
 #[derive(Routable, Clone, PartialEq, Debug)]
 enum Route {
@@ -38,18 +40,32 @@ fn AppShell() -> Element {
 fn Home() -> Element {
     rsx! {
         RouteTransition::<Route> {
-            column {
-                width: "100%",
-                height: "100%",
-                align_items: "center",
-                justify_content: "center",
-                background_color: "#fffef3c7",
+            RouteProvider {
+                column {
+                    width: "100%",
+                    align_items: "center",
+                    background_color: "#fffef3c7",
+                    padding_top: 48.0,
+                    padding_bottom: 48.0,
 
-                text { font_size: 32.0, "Home" }
-                text { margin_top: 12.0, font_size: 16.0, "Full-screen home page" }
+                    text { font_size: 32.0, "Home" }
+                    text {
+                        margin_top: 12.0,
+                        font_size: 16.0,
+                        "Scroll, open a route, then go back to verify restoration."
+                    }
 
-                Link { to: Route::Settings {}, "Go to Settings →" }
-                Link { to: Route::Users { id: 42 }, "Go to User 42 →" }
+                    Link { to: Route::Settings {}, "Go to Settings →" }
+                    Link { to: Route::Users { id: 42 }, "Go to User 42 →" }
+
+                    for index in 1..=30 {
+                        text {
+                            margin_top: 16.0,
+                            font_size: 16.0,
+                            "Scrollable row {index}"
+                        }
+                    }
+                }
             }
         }
     }
@@ -59,17 +75,19 @@ fn Home() -> Element {
 fn Settings() -> Element {
     rsx! {
         RouteTransition::<Route> {
-            column {
-                width: "100%",
-                height: "100%",
-                align_items: "center",
-                justify_content: "center",
-                background_color: "#ffe0f2fe",
+            RouteProvider {
+                column {
+                    width: "100%",
+                    height: "100%",
+                    align_items: "center",
+                    justify_content: "center",
+                    background_color: "#ffe0f2fe",
 
-                text { font_size: 32.0, "Settings" }
-                text { margin_top: 12.0, font_size: 16.0, "Full-screen settings page" }
+                    text { font_size: 32.0, "Settings" }
+                    text { margin_top: 12.0, font_size: 16.0, "Full-screen settings page" }
 
-                Link { to: Route::Home {}, "← Back to Home" }
+                    Link { to: Route::Home {}, "← Push a new Home visit" }
+                }
             }
         }
     }
@@ -79,17 +97,19 @@ fn Settings() -> Element {
 fn Users(id: u32) -> Element {
     rsx! {
         RouteTransition::<Route> {
-            column {
-                width: "100%",
-                height: "100%",
-                align_items: "center",
-                justify_content: "center",
-                background_color: "#fffdf2f8",
+            RouteProvider {
+                column {
+                    width: "100%",
+                    height: "100%",
+                    align_items: "center",
+                    justify_content: "center",
+                    background_color: "#fffdf2f8",
 
-                text { font_size: 32.0, "User {id}" }
-                text { margin_top: 12.0, font_size: 16.0, "Full-screen user detail page" }
+                    text { font_size: 32.0, "User {id}" }
+                    text { margin_top: 12.0, font_size: 16.0, "Full-screen user detail page" }
 
-                Link { to: Route::Home {}, "← Back to Home" }
+                    Link { to: Route::Home {}, "← Push a new Home visit" }
+                }
             }
         }
     }

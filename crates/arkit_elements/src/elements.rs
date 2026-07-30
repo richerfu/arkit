@@ -248,10 +248,13 @@ define_element! {
     ///
     /// `scroll_bar`: scrollbar visibility — `false`/`"off"`/`0` hide, `"auto"`/`1`
     /// auto-fade, `true`/`"on"`/`2` always show.
+    ///
+    /// `scroll_offset` is a one-shot `"x,y[,duration,...]"` scroll command.
+    /// It is consumed after native attachment and is not declarative state.
     scroll => "Scroll" {
         scroll_bar, scroll_enabled, scroll_edge_effect, scroll_offset, background_color, padding, margin,
         margin_top, margin_bottom, margin_left, margin_right, margin_x, margin_y, margin_horizontal, margin_vertical,
-        width, height, opacity, border_radius,
+        width, height, layout_weight, opacity, border_radius,
         border_width, border_color, visibility, enabled, clip, hit_test_behavior,
         alignment, aspect_ratio, position, z_index,
     }
