@@ -10,8 +10,13 @@ use crate::theme::*;
 use arkit_prelude::*;
 
 use super::ARKUI_BORDER_STYLE_SOLID;
+use crate::icon::icon_placeholder;
 
 const NUMBER_INPUT_FILTER: &str = "[0-9]";
+const PASSWORD_ICON_BUTTON_SIZE: f32 = 36.0;
+const PASSWORD_ICON_SIZE: f32 = 18.0;
+const PASSWORD_ICON_INSET: f32 = 6.0;
+const PASSWORD_TRAILING_PADDING: f32 = 48.0;
 
 /// Input semantics and native keyboard profile.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -26,9 +31,10 @@ pub enum InputMode {
 }
 
 impl InputMode {
-    const fn native_input_type(self) -> &'static str {
+    const fn native_input_type(self, password_visible: bool) -> &'static str {
         match self {
             Self::Text => "text",
+            Self::Password if password_visible => "text",
             Self::Password => "password",
             Self::Number => "number",
         }
@@ -82,23 +88,42 @@ pub struct InputProps {
 /// A single-line text input.
 #[component]
 pub fn Input(props: InputProps) -> Element {
+    let InputProps {
+        placeholder,
+        value,
+        mode,
+        height,
+        width,
+        invalid,
+        disabled,
+        read_only,
+        on_change,
+        on_click,
+    } = props;
     let theme = use_theme();
-    let mode = props.mode;
-    let value = props.value.map(|value| mode.sanitize(value));
-    let input_type = mode.native_input_type();
+    let mut password_visible = use_signal(|| false);
+    let is_password = mode == InputMode::Password;
+    let password_is_visible = is_password && password_visible();
+    let value = value.map(|value| mode.sanitize(value));
+    let input_type = mode.native_input_type(password_is_visible);
     let input_filter = mode.native_input_filter();
-    let on_change = props.on_change;
-    let on_click = props.on_click;
+    let field_height = height.unwrap_or(48.0);
+    let field_width = width.clone();
+    let icon_name = if password_is_visible {
+        "eye-off"
+    } else {
+        "eye"
+    };
 
-    rsx! {
+    let field = rsx! {
         textinput {
             value: if let Some(value) = value { value },
-            placeholder: if let Some(p) = props.placeholder { p },
+            placeholder: if let Some(placeholder) = placeholder { placeholder },
             input_type,
             input_filter: if let Some(filter) = input_filter { filter },
-            show_password_icon: mode == InputMode::Password,
+            show_password_icon: false,
             placeholder_color: with_alpha(theme.colors.muted_foreground, 0x80),
-            caret_color: if props.read_only {
+            caret_color: if read_only {
                 0x00000000
             } else {
                 theme.colors.primary
@@ -106,35 +131,82 @@ pub fn Input(props: InputProps) -> Element {
             font_size: typography::LG,
             font_color: theme.colors.foreground,
             line_height: 22.5,
-            height: props.height.unwrap_or(48.0),
+            height: field_height,
             border_style: ARKUI_BORDER_STYLE_SOLID,
             border_width: 1.0,
-            border_color: if props.invalid { theme.colors.destructive } else { theme.colors.input },
+            border_color: if invalid { theme.colors.destructive } else { theme.colors.input },
             border_radius: theme.radii.md,
             background_color: theme.colors.background,
-            opacity: if props.disabled { 0.5 } else { 1.0 },
-            enabled: !props.disabled,
-            focusable: !props.read_only,
-            focus_on_touch: !props.read_only,
+            opacity: if disabled { 0.5 } else { 1.0 },
+            enabled: !disabled,
+            focusable: !read_only,
+            focus_on_touch: !read_only,
             padding_top: spacing::XXS,
-            padding_right: spacing::MD,
+            padding_right: if is_password {
+                PASSWORD_TRAILING_PADDING
+            } else {
+                spacing::MD
+            },
             padding_bottom: spacing::XXS,
             padding_left: spacing::MD,
-            width: if let Some(w) = props.width { w },
+            width: if let Some(width) = field_width { width },
             on_change: move |evt| {
-                if !props.disabled && !props.read_only {
+                if !disabled && !read_only {
                     if let Some(handler) = on_change {
                         handler.call(mode.sanitize(evt.data().string_value.clone()));
                     }
                 }
             },
             onclick: move |_| {
-                if !props.disabled {
+                if !disabled {
                     if let Some(handler) = on_click {
                         handler.call(());
                     }
                 }
             },
+        }
+    };
+
+    if !is_password {
+        return field;
+    }
+
+    rsx! {
+        stack {
+            width: if let Some(width) = width { width },
+            height: field_height,
+            alignment: "center",
+            {field}
+            row {
+                width: "100%",
+                height: field_height,
+                padding_right: PASSWORD_ICON_INSET,
+                align_items: "center",
+                justify_content: "end",
+                hit_test_behavior: "transparent",
+                button {
+                    button_type: "normal",
+                    width: PASSWORD_ICON_BUTTON_SIZE,
+                    height: PASSWORD_ICON_BUTTON_SIZE,
+                    padding: 0.0,
+                    background_color: "#00000000",
+                    border_width: 0.0,
+                    border_style: ARKUI_BORDER_STYLE_SOLID,
+                    border_radius: theme.radii.sm,
+                    clip: true,
+                    focusable: false,
+                    focus_on_touch: false,
+                    alignment: "center",
+                    opacity: if disabled { 0.5 } else { 1.0 },
+                    enabled: !disabled,
+                    onclick: move |_| {
+                        if !disabled {
+                            password_visible.toggle();
+                        }
+                    },
+                    {icon_placeholder(icon_name, PASSWORD_ICON_SIZE, theme.colors.muted_foreground)}
+                }
+            }
         }
     }
 }
@@ -146,9 +218,10 @@ mod tests {
     #[test]
     fn modes_select_native_input_profiles() {
         assert_eq!(InputMode::default(), InputMode::Text);
-        assert_eq!(InputMode::Text.native_input_type(), "text");
-        assert_eq!(InputMode::Password.native_input_type(), "password");
-        assert_eq!(InputMode::Number.native_input_type(), "number");
+        assert_eq!(InputMode::Text.native_input_type(false), "text");
+        assert_eq!(InputMode::Password.native_input_type(false), "password");
+        assert_eq!(InputMode::Password.native_input_type(true), "text");
+        assert_eq!(InputMode::Number.native_input_type(false), "number");
         assert_eq!(
             InputMode::Number.native_input_filter(),
             Some(NUMBER_INPUT_FILTER)
