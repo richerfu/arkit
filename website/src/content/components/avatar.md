@@ -1,11 +1,11 @@
 ---
 title: Avatar
-description: "头像图片与 fallback。"
+description: "圆形头像；图片还没好时显示 fallback。"
 ---
 
 # Avatar
 
-Avatar 显示固定 40vp 头像，并在图片缺失或加载前展示 fallback。
+固定尺寸的头像。图片还在加载、或者干脆没有时，会显示 fallback。
 
 ## 用法
 

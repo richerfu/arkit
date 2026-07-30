@@ -1,11 +1,11 @@
 ---
 title: 路由概览
-description: "类型化 Route 与 RouterProvider。"
+description: "类型化路由和 RouterProvider：页面导航从这里开始。"
 ---
 
 # 路由概览
 
-启用 `router` 后，Arkit 复用 `dioxus-router` 0.7 的类型化路由和组件 scope，并增加 ArkUI 原生 Link、OpenHarmony 系统返回键与页面转场。该 feature 自动启用 `animation`。
+路由建立在 dioxus-router 上，并接好了 ArkUI 的 Link 和系统返回。先声明类型化 Route，再用 RouterProvider 包住应用。
 
 ## 定义 Route
 

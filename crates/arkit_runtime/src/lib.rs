@@ -26,6 +26,7 @@ use arkit_arkui::{ArkUIRenderer, EventSink};
 use dioxus_core::{DynamicNode, ElementId, Runtime as DioxusRuntime, VNode};
 use napi_ohos::{Error, Result};
 use ohos_arkui_binding::common::handle::ArkUIHandle;
+use ohos_arkui_binding::common::node::ArkUINode;
 use openharmony_ability::{Event as AbilityEvent, OpenHarmonyApp, OpenHarmonyWaker};
 
 mod lifecycle;
@@ -57,6 +58,8 @@ thread_local! {
     static UI_LOOP_EFFECTS: RefCell<Vec<UiLoopEffect>> = const { RefCell::new(Vec::new()) };
     static UI_WAKERS: RefCell<Vec<(RegistrationId, UiWakeCallback)>> = const { RefCell::new(Vec::new()) };
     static ASYNC_HANDLES: RefCell<Vec<(u64, tokio::runtime::Handle)>> = const { RefCell::new(Vec::new()) };
+    static EMBEDDED_RUNTIMES: RefCell<Vec<(u64, std::rc::Weak<RefCell<EmbeddedRuntimeInner>>)>> =
+        const { RefCell::new(Vec::new()) };
 }
 
 struct UiLoopEffect {
@@ -160,6 +163,18 @@ pub fn register_back_press_handler(handler: Rc<dyn Fn() -> bool>) -> BackPressRe
     BackPressRegistration { id }
 }
 
+fn dispatch_back_press() -> bool {
+    let handlers = BACK_PRESS_HANDLERS.with(|state| {
+        state
+            .borrow()
+            .iter()
+            .rev()
+            .map(|(_, handler)| handler.clone())
+            .collect::<Vec<_>>()
+    });
+    handlers.into_iter().any(|handler| handler())
+}
+
 /// Queue a closure to run on the next UI loop tick, and wake the UI waker.
 pub fn queue_ui_loop(effect: impl FnOnce() + 'static) {
     let owner = UI_WAKERS.with(|wakers| wakers.borrow().last().map(|(id, _)| *id));
@@ -259,6 +274,14 @@ fn resolve_pending(dom: &VirtualDom, renderer: &ArkUIRenderer) {
         return;
     };
 
+    resolve_pending_with(dom, renderer, resolver.as_ref());
+}
+
+fn resolve_pending_with(
+    dom: &VirtualDom,
+    renderer: &ArkUIRenderer,
+    resolver: &dyn ScopeNodeResolver,
+) {
     for scope in resolver.pending_scopes() {
         let node_id_opt = dom
             .get_scope(scope)
@@ -333,6 +356,13 @@ struct RuntimeInner {
     renderer: ArkUIRenderer,
 }
 
+struct EmbeddedRuntimeInner {
+    dom: VirtualDom,
+    renderer: ArkUIRenderer,
+    sink: Rc<RuntimeEventSink>,
+    resolver: Option<Rc<dyn ScopeNodeResolver>>,
+}
+
 /// Wakes the OpenHarmony event loop when dioxus' scheduler receives work.
 ///
 /// `VirtualDom::wait_for_work` registers this waker with its scheduler queue.
@@ -347,6 +377,18 @@ impl Wake for DioxusUiWaker {
 
     fn wake_by_ref(self: &Arc<Self>) {
         self.0.wake();
+    }
+}
+
+struct EmbeddedUiWaker;
+
+impl Wake for EmbeddedUiWaker {
+    fn wake(self: Arc<Self>) {
+        wake_ui_loop();
+    }
+
+    fn wake_by_ref(self: &Arc<Self>) {
+        wake_ui_loop();
     }
 }
 
@@ -377,12 +419,105 @@ fn render_ready_work(inner: &Rc<RefCell<RuntimeInner>>, task_waker: &Waker) {
     }
 }
 
+fn render_embedded(inner: &Rc<RefCell<EmbeddedRuntimeInner>>) {
+    let mut borrowed = inner.borrow_mut();
+    let EmbeddedRuntimeInner {
+        dom,
+        renderer,
+        resolver,
+        ..
+    } = &mut *borrowed;
+    dom.render_immediate(renderer);
+    if let Some(resolver) = resolver {
+        resolve_pending_with(dom, renderer, resolver.as_ref());
+    }
+}
+
+fn render_ready_embedded_work(inner: &Rc<RefCell<EmbeddedRuntimeInner>>, task_waker: &Waker) {
+    loop {
+        let is_ready = {
+            let mut borrowed = inner.borrow_mut();
+            let mut wait_for_work = std::pin::pin!(borrowed.dom.wait_for_work());
+            let mut context = Context::from_waker(task_waker);
+            matches!(wait_for_work.as_mut().poll(&mut context), Poll::Ready(()))
+        };
+
+        if !is_ready {
+            return;
+        }
+        render_embedded(inner);
+    }
+}
+
+fn pump_embedded_runtimes() {
+    let runtimes = EMBEDDED_RUNTIMES.with(|registered| {
+        let mut registered = registered.borrow_mut();
+        registered.retain(|(_, runtime)| runtime.strong_count() > 0);
+        registered
+            .iter()
+            .filter_map(|(_, runtime)| runtime.upgrade())
+            .collect::<Vec<_>>()
+    });
+    if runtimes.is_empty() {
+        return;
+    }
+
+    let task_waker = Waker::from(Arc::new(EmbeddedUiWaker));
+    for inner in runtimes {
+        let (sink, runtime) = {
+            let borrowed = inner.borrow();
+            (borrowed.sink.clone(), borrowed.dom.runtime())
+        };
+        sink.dispatch_pending(&runtime);
+        render_ready_embedded_work(&inner, &task_waker);
+    }
+}
+
 /// Owns the dioxus VirtualDom and ArkUI renderer for one entry point.
 pub struct ArkRuntime {
     inner: Rc<RefCell<RuntimeInner>>,
     _ui_waker_registration: UiWakerRegistration,
     async_runtime: Option<tokio::runtime::Runtime>,
     async_registration: Option<AsyncRuntimeRegistration>,
+}
+
+struct EmbeddedRuntimeRegistration {
+    id: u64,
+}
+
+impl Drop for EmbeddedRuntimeRegistration {
+    fn drop(&mut self) {
+        EMBEDDED_RUNTIMES.with(|runtimes| {
+            runtimes.borrow_mut().retain(|(id, _)| *id != self.id);
+        });
+    }
+}
+
+/// Item-local Dioxus runtime projected into an adapter-owned native wrapper.
+///
+/// This runtime participates in the application's existing UI loop, so item
+/// signals, hooks, async work, and event handlers remain live while ArkUI keeps
+/// the virtual item mounted.
+pub struct EmbeddedArkRuntime {
+    registration: Option<EmbeddedRuntimeRegistration>,
+    inner: Option<Rc<RefCell<EmbeddedRuntimeInner>>>,
+}
+
+impl EmbeddedArkRuntime {
+    /// Stop scheduling this runtime without touching an already-invalid native
+    /// root.
+    ///
+    /// ArkUI normally emits item-removal events while wrappers are still live,
+    /// so regular `Drop` performs full listener cleanup. This path is reserved
+    /// for a host that disappeared without those callbacks: unregister the
+    /// scheduler and intentionally retain the inert subtree state to avoid
+    /// native use-after-free during Dioxus hook destruction.
+    pub fn abandon(mut self) {
+        self.registration.take();
+        if let Some(inner) = self.inner.take() {
+            std::mem::forget(inner);
+        }
+    }
 }
 
 struct PendingNativeEvent {
@@ -619,8 +754,10 @@ impl ArkRuntime {
                             if let Some(runtime) = weak_runtime.upgrade() {
                                 loop_sink.dispatch_pending(&runtime);
                             }
+                            pump_embedded_runtimes();
                         }
                         render_ready_work(&inner, &loop_task_waker);
+                        pump_embedded_runtimes();
                     }
                 })) {
                     log_panic_payload("ui_loop", payload.as_ref());
@@ -631,12 +768,9 @@ impl ArkRuntime {
 
         // Wire the OHOS back button: forward to the global back-press handler
         // (registered by `arkit_router::use_back_handler` or any component).
-        // Consumes the press when the handler returns `true`.
-        app.on_back_press_intercept(move || {
-            let handler = BACK_PRESS_HANDLERS
-                .with(|state| state.borrow().last().map(|(_, handler)| handler.clone()));
-            handler.is_some_and(|handler| handler())
-        });
+        // Walk newest-to-oldest so an inactive overlay can pass the event to
+        // the next active overlay or router handler.
+        app.on_back_press_intercept(dispatch_back_press);
 
         // `rebuild` does not finish a render cycle, so run one immediate pass
         // to publish mount-time effects. Then drain exactly the scheduler work
@@ -680,6 +814,46 @@ impl Drop for ArkRuntime {
     }
 }
 
+/// Mount a Dioxus subtree directly into an existing native node.
+///
+/// The caller retains ownership of `root` and must drop the returned runtime
+/// before disposing that node. `resolver` is optional, but supplying one
+/// enables `use_ark_node` and layout hooks inside the embedded subtree.
+pub fn mount_embedded_virtual_dom(
+    root: Rc<RefCell<ArkUINode>>,
+    mut dom: VirtualDom,
+    resolver: Option<Rc<dyn ScopeNodeResolver>>,
+) -> EmbeddedArkRuntime {
+    let mut renderer = ArkUIRenderer::new_embedded(root);
+    let sink = Rc::new(RuntimeEventSink::default());
+    renderer.set_sink(sink.clone());
+
+    dom.rebuild(&mut renderer);
+    if let Some(resolver) = &resolver {
+        resolve_pending_with(&dom, &renderer, resolver.as_ref());
+    }
+
+    let inner = Rc::new(RefCell::new(EmbeddedRuntimeInner {
+        dom,
+        renderer,
+        sink,
+        resolver,
+    }));
+    let id = next_registration_id();
+    EMBEDDED_RUNTIMES.with(|runtimes| {
+        runtimes.borrow_mut().push((id, Rc::downgrade(&inner)));
+    });
+
+    render_embedded(&inner);
+    let task_waker = Waker::from(Arc::new(EmbeddedUiWaker));
+    render_ready_embedded_work(&inner, &task_waker);
+
+    EmbeddedArkRuntime {
+        registration: Some(EmbeddedRuntimeRegistration { id }),
+        inner: Some(inner),
+    }
+}
+
 /// Mount an already-configured dioxus [`VirtualDom`] into a NodeContent slot.
 pub fn mount_virtual_dom(
     slot: ArkUIHandle,
@@ -701,4 +875,49 @@ pub fn mount_virtual_dom_with_policy(
 
 fn map_arkui_error<E: ToString>(error: E) -> Error {
     Error::from_reason(error.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn back_press_falls_through_inactive_newer_handlers() {
+        let older_calls = Rc::new(Cell::new(0));
+        let newer_calls = Rc::new(Cell::new(0));
+        let older_counter = older_calls.clone();
+        let newer_counter = newer_calls.clone();
+        let _older = register_back_press_handler(Rc::new(move || {
+            older_counter.set(older_counter.get() + 1);
+            true
+        }));
+        let _newer = register_back_press_handler(Rc::new(move || {
+            newer_counter.set(newer_counter.get() + 1);
+            false
+        }));
+
+        assert!(dispatch_back_press());
+        assert_eq!(newer_calls.get(), 1);
+        assert_eq!(older_calls.get(), 1);
+    }
+
+    #[test]
+    fn back_press_stops_after_the_first_consuming_handler() {
+        let older_calls = Rc::new(Cell::new(0));
+        let newer_calls = Rc::new(Cell::new(0));
+        let older_counter = older_calls.clone();
+        let newer_counter = newer_calls.clone();
+        let _older = register_back_press_handler(Rc::new(move || {
+            older_counter.set(older_counter.get() + 1);
+            true
+        }));
+        let _newer = register_back_press_handler(Rc::new(move || {
+            newer_counter.set(newer_counter.get() + 1);
+            true
+        }));
+
+        assert!(dispatch_back_press());
+        assert_eq!(newer_calls.get(), 1);
+        assert_eq!(older_calls.get(), 0);
+    }
 }

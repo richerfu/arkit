@@ -4,10 +4,11 @@
 //! the ArkUI element registry, renderer, runtime, and host hooks. Domain
 //! libraries are opt-in through the `animation`, `barcode`, `camera`, `canvas`,
 //! `chart`, `code`, `i18n`, `icon`, `lottie`, `markdown`, `router`, and `shadcn`
-//! features (or `full`). Barcode/QR generation is the `barcode` feature (no
-//! camera). Code highlighting uses `code`; Markdown fences need `markdown` +
-//! `code`. The `#[entry]` macro mounts a `fn() -> Element` root component into
-//! a NodeContent slot.
+//! and `terminal` features (or `full`). Barcode/QR generation is the `barcode`
+//! feature (no camera). Code highlighting uses `code`; Markdown fences need
+//! `markdown` + `code`. Terminal uses `terminal` (libghostty-vt).
+//! The `#[entry]` macro mounts a `fn() -> Element` root component into a
+//! NodeContent slot.
 
 // --- Entry macro ---
 pub use arkit_derive::entry;
@@ -24,8 +25,8 @@ pub use arkit_runtime::{
 
 // --- Renderer + native node primitives ---
 pub use arkit_arkui::{
-    canonical_tag, create_node, create_node_by_tag, kind_from_tag, ArkUIRenderer, EventSink,
-    NativeNodeEvent, NodeBuilder, NodeEventType, NodeKind, PreDragStatus, VirtualKind,
+    canonical_tag, create_node, create_node_by_tag, kind_from_tag, ArkImageSource, ArkUIRenderer,
+    EventSink, NativeNodeEvent, NodeBuilder, NodeEventType, NodeKind, PreDragStatus, VirtualKind,
     VirtualNodeAdapter,
 };
 
@@ -34,11 +35,13 @@ pub use arkit_hooks as hooks;
 pub use arkit_hooks::{
     use_app_foreground, use_application_lifecycle, use_application_lifecycle_event,
     use_ark_host_provider, use_ark_node, use_component_lifecycle, use_component_visibility,
-    use_layout_frame, use_layout_frame_node, use_layout_size, use_overlay, use_safe_area,
-    use_safe_area_policy, use_virtual_node_adapter, use_virtual_node_adapter_items_keyed,
-    use_virtual_range, use_window_metrics, ArkHost, ArkNodeRef, ComponentLifecycleState,
-    HitTestMode, LayoutFrame, LayoutSize, OverlayLayer, OverlayRoot, OverlayViewport, SafeArea,
-    SafeAreaEdges, SafeAreaProps, VirtualVisibleRange,
+    use_layout_frame, use_layout_frame_node, use_layout_size, use_load_more, use_overlay,
+    use_safe_area, use_safe_area_policy, use_virtual_node_adapter,
+    use_virtual_node_adapter_items_keyed, use_virtual_node_adapter_rsx,
+    use_virtual_node_adapter_rsx_items_keyed, use_virtual_range, use_window_metrics, ArkHost,
+    ArkNodeRef, ComponentLifecycleState, HitTestMode, LayoutFrame, LayoutSize, LoadMoreController,
+    LoadMoreState, OverlayLayer, OverlayRoot, OverlayViewport, SafeArea, SafeAreaEdges,
+    SafeAreaProps, VirtualVisibleRange,
 };
 
 // --- i18n ---
@@ -57,7 +60,8 @@ pub use arkit_i18n::{use_i18n, use_i18n_provider, I18nContext};
 pub use arkit_router as router;
 #[cfg(feature = "router")]
 pub use arkit_router::{
-    use_back_handler, AnimatedOutlet, Link, LinkProps, Routable, RouteTransition, Router,
+    use_back_handler, AnimatedOutlet, Link, LinkProps, Routable, RouteProvider, RouteProviderProps,
+    RouteTransition, Router, RouterProps,
 };
 
 // --- Animation ---
@@ -172,6 +176,17 @@ pub use arkit_chart::{
     LabelLayoutCallbackParams, LabelLayoutCallbackResult, LabelLayoutOptions, LabelStyle, Legend,
     LineStyle, LinkData, MapFeature, MapOptions, MapPolygon, MapSeries, NodeData, SankeySeries,
     Series, SeriesOptions, Title, Tooltip, VisualStyle,
+};
+
+// --- Embedded terminal (libghostty-vt) ---
+#[cfg(feature = "terminal")]
+pub use arkit_terminal as terminal;
+#[cfg(feature = "terminal")]
+pub use arkit_terminal::{
+    rgb_to_argb, CursorVisualStyle, KeyChord, KeyMods, MouseAction, MouseButton, MouseInput, Rgb,
+    Terminal, TerminalCell, TerminalConfig, TerminalController, TerminalCursor, TerminalEffects,
+    TerminalEngine, TerminalError, TerminalErrorKind, TerminalFrame, TerminalProps, TerminalResult,
+    TerminalRun, TerminalScrollbar, TerminalSize,
 };
 
 // --- shadcn component library ---
@@ -295,18 +310,21 @@ pub mod prelude {
 
     // Native node primitives + virtual container builder.
     pub use crate::{
-        canonical_tag, create_node, create_node_by_tag, kind_from_tag, NativeNodeEvent,
-        NodeBuilder, NodeEventType, NodeKind, PreDragStatus, VirtualKind, VirtualNodeAdapter,
+        canonical_tag, create_node, create_node_by_tag, kind_from_tag, ArkImageSource,
+        NativeNodeEvent, NodeBuilder, NodeEventType, NodeKind, PreDragStatus, VirtualKind,
+        VirtualNodeAdapter,
     };
 
     // Escape-hatch hooks.
     pub use crate::{
         use_app_foreground, use_application_lifecycle, use_application_lifecycle_event,
         use_ark_host_provider, use_ark_node, use_component_lifecycle, use_component_visibility,
-        use_layout_frame, use_layout_frame_node, use_layout_size, use_overlay, use_safe_area,
-        use_safe_area_policy, use_virtual_node_adapter, use_virtual_node_adapter_items_keyed,
-        use_virtual_range, use_window_metrics, ArkHost, ArkNodeRef, ComponentLifecycleState,
-        HitTestMode, LayoutFrame, LayoutSize, OverlayLayer, OverlayRoot, OverlayViewport, SafeArea,
+        use_layout_frame, use_layout_frame_node, use_layout_size, use_load_more, use_overlay,
+        use_safe_area, use_safe_area_policy, use_virtual_node_adapter,
+        use_virtual_node_adapter_items_keyed, use_virtual_node_adapter_rsx,
+        use_virtual_node_adapter_rsx_items_keyed, use_virtual_range, use_window_metrics, ArkHost,
+        ArkNodeRef, ComponentLifecycleState, HitTestMode, LayoutFrame, LayoutSize,
+        LoadMoreController, LoadMoreState, OverlayLayer, OverlayRoot, OverlayViewport, SafeArea,
         SafeAreaEdges, SafeAreaProps, VirtualVisibleRange,
     };
 
@@ -328,7 +346,8 @@ pub mod prelude {
 
     #[cfg(feature = "router")]
     pub use crate::{
-        use_back_handler, AnimatedOutlet, Link, LinkProps, Routable, RouteTransition, Router,
+        use_back_handler, AnimatedOutlet, Link, LinkProps, Routable, RouteProvider,
+        RouteProviderProps, RouteTransition, Router, RouterProps,
     };
 
     #[cfg(feature = "animation")]
@@ -412,6 +431,14 @@ pub mod prelude {
         CameraScanConfiguration, CameraScanFormat, CameraScanModeConfiguration,
         CameraScanPreviewInteractions, CameraScanRegion, CameraScanResult,
         CameraScanToolbarConfiguration,
+    };
+
+    #[cfg(feature = "terminal")]
+    pub use crate::{
+        rgb_to_argb, CursorVisualStyle, KeyChord, KeyMods, MouseAction, MouseButton, MouseInput,
+        Rgb, Terminal, TerminalCell, TerminalConfig, TerminalController, TerminalCursor,
+        TerminalEffects, TerminalEngine, TerminalError, TerminalErrorKind, TerminalFrame,
+        TerminalProps, TerminalResult, TerminalRun, TerminalScrollbar, TerminalSize,
     };
 
     #[cfg(feature = "shadcn")]

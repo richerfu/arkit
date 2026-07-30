@@ -1,0 +1,98 @@
+---
+import { getCollection, render } from "astro:content";
+import type { CollectionEntry } from "astro:content";
+import DocsPager from "@/components/DocsPager.astro";
+import DocsSidebar from "@/components/DocsSidebar.astro";
+import DocsToc from "@/components/DocsToc.astro";
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import { catalogSectionIds, getContentCatalog } from "@/lib/catalog";
+import { formatLastUpdatedZh, lastUpdatedIso } from "@/lib/last-updated";
+import type { ContentArea } from "@/lib/types";
+
+interface Props {
+  area: ContentArea;
+  entry: CollectionEntry<"docs"> | CollectionEntry<"components"> | CollectionEntry<"charts">;
+}
+
+const { area, entry } = Astro.props;
+const catalog = getContentCatalog(area);
+const { Content, headings } = await render(entry);
+const entries = await getCollection(area);
+const titleById = Object.fromEntries(entries.map((item) => [item.id, item.data.title]));
+const orderedIds = catalogSectionIds(catalog);
+const activeIndex = orderedIds.indexOf(entry.id);
+if (activeIndex < 0) {
+  throw new Error(`entry ${entry.id} is not listed in ${area} catalog`);
+}
+
+const previousId = activeIndex > 0 ? orderedIds[activeIndex - 1] : undefined;
+const nextId =
+  activeIndex < orderedIds.length - 1 ? orderedIds[activeIndex + 1] : undefined;
+
+const previous = previousId
+  ? { id: previousId, title: titleById[previousId] ?? previousId }
+  : undefined;
+const next = nextId ? { id: nextId, title: titleById[nextId] ?? nextId } : undefined;
+
+const lastUpdated = formatLastUpdatedZh(
+  lastUpdatedIso(`src/content/${area}/${entry.id}.md`),
+);
+
+const pageTitle = `${entry.data.title} · ${catalog.title} · Arkit`;
+---
+
+<BaseLayout title={pageTitle} description={entry.data.description} active={area}>
+  <div class="border-b border-border">
+    <div class="mx-auto flex w-full max-w-[90rem]">
+      {/* Desktop sidebar */}
+      <aside
+        class="sticky top-14 hidden h-[calc(100vh-3.5rem)] w-64 shrink-0 overflow-y-auto border-r border-border lg:block"
+      >
+        <div class="px-4 py-6">
+          <p class="mb-3 px-2 text-xs font-medium text-muted-foreground">{catalog.title}</p>
+          <DocsSidebar area={area} activeId={entry.id} />
+        </div>
+      </aside>
+
+      <div class="min-w-0 flex-1">
+        {/* Mobile nav */}
+        <details class="border-b border-border lg:hidden">
+          <summary
+            class="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm text-muted-foreground sm:px-6"
+          >
+            <span>菜单 · {catalog.title}</span>
+            <span aria-hidden="true" class="text-xs">▾</span>
+          </summary>
+          <div class="border-t border-border px-2 pb-4">
+            <DocsSidebar area={area} activeId={entry.id} mobile />
+          </div>
+        </details>
+
+        <div class="flex">
+          <div class="min-w-0 flex-1 px-4 py-8 sm:px-8 lg:px-10 lg:py-10">
+            <div class="mx-auto max-w-3xl">
+              {
+                lastUpdated ? (
+                  <p class="mb-2 text-xs text-muted-foreground">最后更新：{lastUpdated}</p>
+                ) : null
+              }
+              <p class="mb-2 text-sm font-medium text-primary">{catalog.title}</p>
+              <p class="sr-only">{entry.data.description}</p>
+              <article class="docs-prose">
+                <Content />
+              </article>
+              <DocsPager
+                area={area}
+                previous={previous}
+                next={next}
+                catalogTitle={catalog.title}
+              />
+            </div>
+          </div>
+
+          <DocsToc headings={headings} />
+        </div>
+      </div>
+    </div>
+  </div>
+</BaseLayout>

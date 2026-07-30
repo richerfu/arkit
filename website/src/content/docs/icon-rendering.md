@@ -1,11 +1,11 @@
 ---
 title: 渲染与缓存
-description: "尺寸、颜色、描边、raster 与缓存。"
+description: "图标尺寸、颜色和描边，以及栅格缓存怎么工作。"
 ---
 
 # 渲染与缓存
 
-`icon` 返回一个完整 Dioxus `Element`。它把内嵌 SVG 组合成 `ArkImageSource`，renderer 在提交 `src` 时 raster 为 PixelMap/DrawableDescriptor，并让 image node 持有 native resource。
+图标最终会栅格成位图再画上去。尺寸、颜色、描边宽度都可以配，结果会进有界缓存，避免同一图标反复解码。
 
 ## 基础与描边
 

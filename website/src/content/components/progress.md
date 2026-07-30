@@ -1,21 +1,11 @@
 ---
 title: Progress
-description: "确定性进度展示。"
+description: "能算出百分比时的进度条。"
 ---
 
 # Progress
 
-Progress 是受控水平进度条，值变化通过 Arkit Animatable 平滑过渡。
-
-```rust
-Progress {
-    value: uploaded(),
-    total: 100.0,
-    height: 8.0,
-    animated: true,
-    animation_duration_ms: 150,
-}
-```
+进度确定时用的进度条。
 
 ## Props
 

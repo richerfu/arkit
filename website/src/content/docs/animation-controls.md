@@ -1,11 +1,11 @@
 ---
 title: 播放控制
-description: "play、seek、reverse、cancel 与快照。"
+description: "对已注册的 timeline 发播放、暂停、seek 等命令。"
 ---
 
 # 播放控制
 
-`AnimationControls` 操作一个已注册 Timeline。命令语义与 sampled/native backend 无关；无法保持契约的 native 计划会回退或报错。
+拿到 `AnimationControls` 之后，就可以对已注册的 timeline 发命令：播、停、seek、反向或取消。语义和底层用采样还是原生 lowering 无关。
 
 ## 控制命令
 

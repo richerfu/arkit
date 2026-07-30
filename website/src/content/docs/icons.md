@@ -1,11 +1,11 @@
 ---
 title: 图标概览
-description: "Lucide 图标目录与 feature 接入。"
+description: "内置 Lucide 图标怎么启用、怎么在 RSX 里用。"
 ---
 
 # 图标概览
 
-启用 `icon` 后，`arkit_icon` 提供编译进二进制的 Lucide SVG。运行时按名称查找、应用颜色/尺寸/描边配置，再生成 ArkUI `image` 可持有的资源。
+图标来自内嵌的 Lucide 目录。打开 `icon` feature 后，在组件里按名字引用即可。
 
 ## 基础用法
 

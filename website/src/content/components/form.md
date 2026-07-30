@@ -1,30 +1,11 @@
 ---
 title: Form
-description: "Form 与完整 Field primitive。"
+description: "表单容器和一组 Field 原语，方便统一校验与布局。"
 ---
 
 # Form
 
-Form 提供表单布局与语义 primitive，不包含业务 schema。字段值、校验时机、提交任务和服务端错误由页面状态拥有。
-
-```rust
-Form {
-    submit_label: "保存",
-    submit_disabled: submitting(),
-    on_submit: move |_| save(),
-    FieldGroup {
-        Field {
-            invalid: error().is_some(),
-            FieldLabel { content: "用户名", required: true }
-            FieldContent {
-                Input { value: name(), on_change: move |v| name.set(v) }
-                FieldDescription { content: "最多 20 个字符" }
-                FieldError { message: error() }
-            }
-        }
-    }
-}
-```
+表单容器和一组 Field 原语，方便统一布局、标签和校验状态。
 
 ## 组合组件
 

@@ -26,6 +26,7 @@ pub enum ArkEventKind {
     Change,
     Submit,
     Scroll,
+    ReachEnd,
     SwiperChange,
     Refresh,
     AreaChange,
@@ -59,6 +60,7 @@ pub fn classify_event_name(name: &str) -> Option<ArkEventKind> {
         "change" | "input" | "toggle" => ArkEventKind::Change,
         "submit" => ArkEventKind::Submit,
         "scroll" => ArkEventKind::Scroll,
+        "reachend" | "reach_end" => ArkEventKind::ReachEnd,
         "swiperchange" | "swiper_change" | "swiper" => ArkEventKind::SwiperChange,
         "refresh" => ArkEventKind::Refresh,
         "area" | "area_change" | "layout" | "layout_change" => ArkEventKind::AreaChange,
@@ -118,7 +120,9 @@ pub struct ScrollIndexPayload {
 
 #[derive(Default, Clone, Copy, Debug, PartialEq)]
 pub struct ScrollOffsetPayload {
+    /// Horizontal movement for this scroll frame, in vp.
     pub x: f32,
+    /// Vertical movement for this scroll frame, in vp.
     pub y: f32,
 }
 
@@ -377,9 +381,9 @@ pub struct ScrollData {
     pub last_index: i32,
     /// Center visible item index (list only).
     pub center_index: i32,
-    /// Horizontal scroll offset in physical pixels.
+    /// Horizontal movement for this scroll frame, in vp.
     pub offset_x: f32,
-    /// Vertical scroll offset in physical pixels.
+    /// Vertical movement for this scroll frame, in vp.
     pub offset_y: f32,
     /// Whether this event carried offsets instead of visible indices.
     pub has_offset: bool,
@@ -472,6 +476,22 @@ impl From<&ArkEventData> for RefreshData {
     }
 }
 
+/// Data for a scroll-container reach-end event. No payload.
+#[derive(Default, Clone, Copy, Debug)]
+pub struct ReachEndData;
+
+impl From<ArkEventData> for ReachEndData {
+    fn from(_data: ArkEventData) -> Self {
+        ReachEndData
+    }
+}
+
+impl From<&ArkEventData> for ReachEndData {
+    fn from(_data: &ArkEventData) -> Self {
+        ReachEndData
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{classify_event_name, ArkEventKind};
@@ -489,6 +509,9 @@ mod tests {
         }
         for name in ["onblur", "blur", "on_blur", "_blur"] {
             assert_eq!(classify_event_name(name), Some(ArkEventKind::Blur));
+        }
+        for name in ["onreachend", "reachend", "on_reach_end", "_reach_end"] {
+            assert_eq!(classify_event_name(name), Some(ArkEventKind::ReachEnd));
         }
         assert!(ArkEventKind::Click.bubbles());
         assert!(ArkEventKind::LongPress.bubbles());

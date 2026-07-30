@@ -1,9 +1,9 @@
 //! Desired attribute storage + native element adapters.
 //!
 //! Dioxus mutations update a renderer-owned host tree. `DesiredAttrs` stores
-//! the declarative attributes for each host node, and every native write goes
-//! through the same encoder used for desired-state replay. This keeps immediate
-//! mutation writes and attach/patch replays byte-for-byte consistent.
+//! persistent declarative attributes for each host node, and every native
+//! write goes through the same encoder used for desired-state replay. Commands
+//! such as `scroll_offset` are typed separately and consumed exactly once.
 
 use ohos_arkui_binding::common::attribute::{ArkUINodeAttributeItem, ArkUINodeAttributeNumber};
 use ohos_arkui_binding::common::error::ArkUIResult;
@@ -101,6 +101,41 @@ impl EncodedAttr {
             ));
         }
         result
+    }
+}
+
+/// Imperative Scroll position change carried through Dioxus attributes.
+///
+/// ArkUI defines `NODE_SCROLL_OFFSET` as a scroll-to operation. It is not
+/// declarative node state and must never enter [`DesiredAttrs`], otherwise
+/// attach or global style replay can unexpectedly reset a user's live scroll.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct ScrollOffsetCommand {
+    x: f32,
+    y: f32,
+    options: Vec<i32>,
+}
+
+impl ScrollOffsetCommand {
+    pub(crate) fn from_attribute(value: &dioxus_core::AttributeValue) -> Option<Self> {
+        let dioxus_core::AttributeValue::Text(text) = value else {
+            return None;
+        };
+        let (x, y, options) = parse_scroll_offset(text)?;
+        Some(Self { x, y, options })
+    }
+
+    pub(crate) fn apply(&self, node: &mut ArkUINode) -> ArkUIResult<()> {
+        EncodedAttr::new(
+            "scroll_offset",
+            ArkUINodeAttributeType::ScrollOffset,
+            EncodedAttrValue::ScrollOffset {
+                x: self.x,
+                y: self.y,
+                options: self.options.clone(),
+            },
+        )
+        .apply(node, "scroll")
     }
 }
 
@@ -430,7 +465,10 @@ mod tests {
     use dioxus_core::AttributeValue;
     use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
 
-    use super::{encode_attr, parse_scroll_offset, EncodedAttrValue};
+    use super::{
+        encode_attr, parse_scroll_offset, AttrMutation, DesiredAttrs, EncodedAttrValue,
+        ScrollOffsetCommand,
+    };
 
     #[test]
     fn margin_padding_accept_css_shorthand() {
@@ -570,6 +608,19 @@ mod tests {
     }
 
     #[test]
+    fn scroll_offset_is_a_command_not_declarative_state() {
+        let value = AttributeValue::Text("12.5,24.25,0".into());
+        assert!(ScrollOffsetCommand::from_attribute(&value).is_some());
+
+        let mut attrs = DesiredAttrs::default();
+        assert!(matches!(
+            attrs.set("scroll", "scroll_offset", &value),
+            AttrMutation::Unchanged
+        ));
+        assert!(attrs.get("scroll_offset").is_none());
+    }
+
+    #[test]
     fn loading_progress_attributes_use_native_types() {
         let color = encode_attr(
             "loadingprogress",
@@ -619,6 +670,18 @@ mod tests {
             ArkUINodeAttributeType::TextInputInputFilter
         );
         assert_eq!(input_filter.value, EncodedAttrValue::String("[0-9]".into()));
+
+        let show_password_icon = encode_attr(
+            "textinput",
+            "show_password_icon",
+            &AttributeValue::Bool(true),
+        )
+        .expect("password visibility icon is supported");
+        assert_eq!(
+            show_password_icon.ty,
+            ArkUINodeAttributeType::TextInputShowPasswordIcon
+        );
+        assert_eq!(show_password_icon.value, EncodedAttrValue::Bool(true));
 
         let max_length = encode_attr("textinput", "max_length", &AttributeValue::Int(6))
             .expect("text input max length is supported");
@@ -716,6 +779,9 @@ enum AttrGroup {
 
 fn attr_group(name: &str) -> AttrGroup {
     match name {
+        "focusable" | "focus_on_touch" | "focused" | "focus_status" | "enabled" => {
+            AttrGroup::Control
+        }
         "font_size"
         | "font_color"
         | "font_weight"
@@ -745,7 +811,6 @@ fn attr_group(name: &str) -> AttrGroup {
         | "opacity"
         | "clip"
         | "visibility"
-        | "enabled"
         | "foreground_color"
         | "progress_color"
         | "loading_progress_color"
@@ -893,6 +958,11 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
             name,
             ArkUINodeAttributeType::TextInputInputFilter,
             EncodedAttrValue::String(as_string(value)?),
+        ),
+        "show_password_icon" if tag == "textinput" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::TextInputShowPasswordIcon,
+            EncodedAttrValue::Bool(as_bool(value)?),
         ),
         "max_length" if tag == "textinput" => EncodedAttr::new(
             name,
@@ -1073,6 +1143,20 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
             ArkUINodeAttributeType::FocusOnTouch,
             EncodedAttrValue::Bool(as_bool(value)?),
         ),
+        // ArkUI NODE_FOCUS_STATUS: 1 = request focus.
+        // Only encode when true — writing 0 on every idle frame would steal
+        // focus from sibling inputs (SSH form, etc.).
+        "focused" | "focus_status" => {
+            if as_bool(value)? {
+                EncodedAttr::new(
+                    name,
+                    ArkUINodeAttributeType::FocusStatus,
+                    EncodedAttrValue::I32(1),
+                )
+            } else {
+                return None;
+            }
+        }
         "hit_test_behavior" => EncodedAttr::new(
             name,
             ArkUINodeAttributeType::HitTestBehavior,
@@ -1171,18 +1255,6 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
                 css_value::scroll_edge_effect_keyword,
             )?),
         ),
-        "scroll_offset" if tag == "scroll" => {
-            let text = match value {
-                dioxus_core::AttributeValue::Text(text) => text,
-                _ => return None,
-            };
-            let (x, y, options) = parse_scroll_offset(text)?;
-            EncodedAttr::new(
-                name,
-                ArkUINodeAttributeType::ScrollOffset,
-                EncodedAttrValue::ScrollOffset { x, y, options },
-            )
-        }
         "swiper_index" if tag == "swiper" => EncodedAttr::new(
             name,
             ArkUINodeAttributeType::SwiperIndex,

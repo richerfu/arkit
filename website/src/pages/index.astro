@@ -1,0 +1,344 @@
+---
+import Badge from "@/components/ui/Badge.astro";
+import Button from "@/components/ui/Button.astro";
+import Card from "@/components/ui/Card.astro";
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import { joinBase } from "@/lib/catalog";
+
+const base = import.meta.env.BASE_URL;
+
+const capabilities = [
+  {
+    title: "Dioxus 原生渲染",
+    body: "以 VirtualDom、signals、hooks 与 rsx! 直接驱动 ArkUI 原生节点，不维护第二套 UI 状态树。",
+  },
+  {
+    title: "完整应用能力",
+    body: "路由、国际化、动画、Lottie、图表、图标、WebView、GPU 终端与 shadcn 风格组件库开箱即用。",
+  },
+  {
+    title: "原生性能路径",
+    body: "事件排队、NodeAdapter 虚拟化、Drawing canvas、Lottie NativeWindow 与有界缓存。",
+  },
+  {
+    title: "OpenHarmony 生命周期",
+    body: "#[entry] 生成 N-API init/render/destroy，并接入窗口、安全区与系统返回键。",
+  },
+];
+
+const contentEntries = [
+  {
+    step: "01",
+    title: "文档",
+    href: joinBase(base, "docs/"),
+    body: "从 RSX、状态与 Hooks 开始，再进入 i18n、路由、动画、相机、终端与平台能力。",
+  },
+  {
+    step: "02",
+    title: "组件",
+    href: joinBase(base, "components/"),
+    body: "Theme、表单、内容、导航、浮层与反馈组件的独立使用手册，对齐 shadcn 语义。",
+  },
+  {
+    step: "03",
+    title: "图表",
+    href: joinBase(base, "charts/"),
+    body: "22 类原生 series、ECharts 风格 Option、Action、实时更新与导出。",
+  },
+];
+
+const featureRows = [
+  ["默认能力", "renderer、runtime、ArkUI elements、hooks、safe area、overlay、WebView"],
+  ["animation", "类型化 Timeline、controls、layout/presence、drag、scroll、native lowering"],
+  ["chart", "22 类原生 series、ECharts 风格 option/action/event；自动启用 animation"],
+  ["router", "dioxus-router、原生 Link、系统返回键、页面转场；自动启用 animation"],
+  ["i18n", "编译期 Fluent catalog、类型安全消息、响应式 locale"],
+  ["icon", "内嵌 Lucide 图标、SVG raster、可配置描边与颜色"],
+  ["lottie", "ThorVG worker、XComponent 帧同步、NativeWindow 直写；网络源见 lottie-network"],
+  ["camera / camera-scan", "CameraKit 预览与 JPEG 拍照；camera-scan 增加可配置扫码解码"],
+  ["barcode", "独立二维码/条形码生成（rxing），不依赖相机"],
+  ["terminal", "GPU 加速终端（libghostty-vt），应用自管本地 shell / SSH I/O"],
+  ["shadcn", "主题 tokens 与 50+ 业务组件；自动启用 animation、i18n、icon"],
+  ["markdown / code", "原生 Markdown 渲染与 tree-sitter 代码高亮；可单独或组合启用"],
+  ["full", "启用全部领域能力（含 terminal、barcode、markdown-highlight 等）"],
+];
+
+type CodeTone =
+  | "keyword"
+  | "macro"
+  | "type"
+  | "function"
+  | "namespace"
+  | "tag"
+  | "property"
+  | "number"
+  | "string"
+  | "variable"
+  | "operator";
+
+type CodeToken = readonly [text: string, tone?: CodeTone];
+
+const counterCode: ReadonlyArray<ReadonlyArray<CodeToken>> = [
+  [["use", "keyword"], [" arkit", "namespace"], ["::prelude::"], ["*", "operator"], [";"]],
+  [],
+  [["#[entry]", "macro"]],
+  [["fn", "keyword"], [" app", "function"], ["() -> "], ["Element", "type"], [" {"]],
+  [
+    ["    let", "keyword"],
+    [" mut", "keyword"],
+    [" count", "variable"],
+    [" = "],
+    ["use_signal", "function"],
+    ["(|| "],
+    ["0", "number"],
+    [");"],
+  ],
+  [],
+  [["    rsx!", "macro"], [" {"]],
+  [["        column", "tag"], [" {"]],
+  [["            width", "property"], [": "], ['"100%"', "string"], [","]],
+  [["            height", "property"], [": "], ['"100%"', "string"], [","]],
+  [["            align_items", "property"], [": "], ['"center"', "string"], [","]],
+  [["            justify_content", "property"], [": "], ['"center"', "string"], [","]],
+  [],
+  [
+    ["            text", "tag"],
+    [" { "],
+    ["font_size", "property"],
+    [": "],
+    ["28.0", "number"],
+    [", "],
+    ['"count = {count}"', "string"],
+    [" }"],
+  ],
+  [["            button", "tag"], [" {"]],
+  [
+    ["                onclick", "property"],
+    [": "],
+    ["move", "keyword"],
+    [" |_| "],
+    ["count", "variable"],
+    [" += ", "operator"],
+    ["1", "number"],
+    [","],
+  ],
+  [['                "increment"', "string"]],
+  [["            }"]],
+  [["        }"]],
+  [["    }"]],
+  [["}"]],
+];
+
+const toneClass: Record<CodeTone, string> = {
+  keyword: "syntax-keyword",
+  macro: "syntax-macro",
+  type: "syntax-type",
+  function: "syntax-function",
+  namespace: "syntax-namespace",
+  tag: "syntax-tag",
+  property: "syntax-property",
+  number: "syntax-number",
+  string: "syntax-string",
+  variable: "syntax-variable",
+  operator: "syntax-operator",
+};
+
+const pipeline = [
+  ["业务组件", "rsx! · signals · hooks"],
+  ["VirtualDom", "diff · scheduler · events"],
+  ["HostTree", "确定性 ArkUI 投影"],
+  ["原生节点", "ArkUI · Drawing · WebView"],
+];
+---
+
+<BaseLayout
+  title="Arkit"
+  description="Arkit：面向 OpenHarmony ArkUI 的 Dioxus 原生渲染器与应用框架。"
+  active="home"
+>
+  <main>
+    <section class="relative overflow-hidden border-b border-border">
+      <div
+        class="pointer-events-none absolute inset-0 bg-[radial-gradient(50%_50%_at_15%_20%,color-mix(in_oklch,var(--primary)_14%,transparent),transparent_70%)]"
+        aria-hidden="true"
+      >
+      </div>
+      <div
+        class="relative mx-auto grid w-full max-w-7xl gap-10 px-4 py-16 sm:px-6 lg:grid-cols-2 lg:items-center lg:gap-12 lg:py-24"
+      >
+        <div class="min-w-0">
+          <img
+            src={joinBase(base, "logo.svg")}
+            alt=""
+            width="56"
+            height="56"
+            class="mb-6 size-14 rounded-2xl border border-border bg-card shadow-sm"
+          />
+          <Badge class="mb-4 border-primary/25 bg-primary/10 text-primary">
+            Dioxus 0.7 × OpenHarmony ArkUI
+          </Badge>
+          <h1 class="text-5xl font-bold tracking-tight sm:text-6xl lg:text-7xl">Arkit</h1>
+          <p class="mt-5 max-w-xl text-base leading-8 text-muted-foreground sm:text-lg">
+            用 Dioxus 组件、Signals 与 Hooks 直接渲染 ArkUI。路由、动画、图表、终端和 shadcn
+            组件库按 feature 组合，默认只带小内核。
+          </p>
+          <div class="mt-8 flex flex-wrap gap-3">
+            <Button href={joinBase(base, "docs/")} variant="default" size="lg">开始使用</Button>
+            <Button href={joinBase(base, "components/")} variant="secondary" size="lg">
+              浏览组件
+            </Button>
+          </div>
+        </div>
+
+        <div
+          class="min-w-0 overflow-hidden rounded-xl border border-[var(--code-border)] bg-[var(--code-bg)] shadow-2xl shadow-black/20 dark:shadow-black/40"
+          aria-label="Arkit counter 示例"
+        >
+          <div
+            class="flex items-center justify-between border-b border-[var(--code-border)] px-4 py-2.5 text-xs text-white/50"
+          >
+            <span>counter/src/lib.rs</span>
+            <span>Rust</span>
+          </div>
+          <div
+            class="overflow-x-auto p-5 font-mono text-[0.78rem] leading-[1.7] text-[var(--code-fg)]"
+            role="region"
+            aria-label="Rust counter 源码"
+          >
+            {
+              counterCode.map((line) => (
+                <div class="whitespace-pre">
+                  {line.length === 0 ? (
+                    "\u00A0"
+                  ) : (
+                    line.map(([value, tone]) =>
+                      tone ? <span class={toneClass[tone]}>{value}</span> : <span>{value}</span>,
+                    )
+                  )}
+                </div>
+              ))
+            }
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="border-b border-border py-20">
+      <div class="mx-auto w-full max-w-7xl px-4 sm:px-6">
+        <p class="text-xs font-medium tracking-[0.14em] text-primary uppercase">能力地图</p>
+        <h2 class="mt-3 max-w-3xl text-3xl font-semibold tracking-tight sm:text-4xl">
+          一套 Dioxus 模型，覆盖完整原生应用
+        </h2>
+        <div class="mt-10 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {
+            capabilities.map((item) => (
+              <Card class="min-h-44 p-5">
+                <h3 class="text-base font-semibold">{item.title}</h3>
+                <p class="mt-3 text-sm leading-7 text-muted-foreground">{item.body}</p>
+              </Card>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+
+    <section class="border-b border-border bg-muted/20 py-20">
+      <div class="mx-auto w-full max-w-7xl px-4 sm:px-6">
+        <p class="text-xs font-medium tracking-[0.14em] text-primary uppercase">内容中心</p>
+        <h2 class="mt-3 max-w-3xl text-3xl font-semibold tracking-tight sm:text-4xl">
+          按开发任务查阅，不在一条长目录里迷路
+        </h2>
+        <div class="mt-10 grid gap-4 md:grid-cols-3">
+          {
+            contentEntries.map((item) => (
+              <Card href={item.href} class="flex min-h-48 flex-col p-5">
+                <span class="text-xs text-primary">{item.step}</span>
+                <h3 class="mt-auto text-2xl font-semibold tracking-tight">{item.title}</h3>
+                <p class="mt-2 text-sm leading-7 text-muted-foreground">{item.body}</p>
+              </Card>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+
+    <section class="border-b border-border py-20">
+      <div class="mx-auto w-full max-w-7xl px-4 sm:px-6">
+        <p class="text-xs font-medium tracking-[0.14em] text-primary uppercase">运行模型</p>
+        <h2 class="mt-3 max-w-3xl text-3xl font-semibold tracking-tight sm:text-4xl">
+          Dioxus 是唯一的 UI 真相来源
+        </h2>
+        <div class="mt-10 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Arkit 渲染流程">
+          {
+            pipeline.map((node, index) => (
+              <div class="relative flex min-h-28 flex-col justify-center rounded-xl border border-border bg-card p-4">
+                <span class="mb-2 text-[0.65rem] font-medium tracking-wider text-primary uppercase">
+                  Step {String(index + 1).padStart(2, "0")}
+                </span>
+                <strong class="text-base">{node[0]}</strong>
+                <small class="mt-2 text-sm text-muted-foreground">{node[1]}</small>
+              </div>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+
+    <section class="border-b border-border py-20">
+      <div
+        class="mx-auto grid w-full max-w-7xl gap-12 px-4 sm:px-6 lg:grid-cols-[0.85fr_1.15fr] lg:items-start"
+      >
+        <div>
+          <p class="text-xs font-medium tracking-[0.14em] text-primary uppercase">按需组合</p>
+          <h2 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
+            小内核，领域能力显式启用
+          </h2>
+          <p class="mt-4 text-sm leading-8 text-muted-foreground sm:text-base">
+            默认 facade 只带渲染、运行时和核心 hooks。业务通过 Cargo feature
+            选择领域能力，避免基础应用自动链接完整图表、终端与组件栈。
+          </p>
+          <a
+            class="mt-4 inline-flex text-sm font-medium text-primary underline-offset-4 hover:underline"
+            href={joinBase(base, "docs/")}
+          >
+            查看 feature 与公开 API →
+          </a>
+        </div>
+        <div class="overflow-hidden rounded-xl border border-border">
+          {
+            featureRows.map(([feature, body], index) => (
+              <div
+                class:list={[
+                  "grid gap-2 px-4 py-3 sm:grid-cols-[11rem_1fr] sm:gap-4 sm:px-5",
+                  index > 0 && "border-t border-border",
+                  index % 2 === 0 ? "bg-card/40" : "bg-transparent",
+                ]}
+              >
+                <code class="text-sm text-primary">{feature}</code>
+                <span class="text-sm leading-6 text-muted-foreground">{body}</span>
+              </div>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+
+    <section class="bg-primary/5 py-16">
+      <div
+        class="mx-auto flex w-full max-w-7xl flex-col items-start justify-between gap-6 px-4 sm:px-6 md:flex-row md:items-end"
+      >
+        <div>
+          <p class="text-xs font-medium tracking-[0.14em] text-primary uppercase">
+            从可运行代码开始
+          </p>
+          <h2 class="mt-3 max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl">
+            13 个示例覆盖从计数器到终端、扫码与图表
+          </h2>
+        </div>
+        <Button href={joinBase(base, "docs/examples/")} variant="default" size="lg">
+          查看示例索引
+        </Button>
+      </div>
+    </section>
+  </main>
+</BaseLayout>

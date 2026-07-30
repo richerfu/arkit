@@ -1,11 +1,11 @@
 ---
 title: 运行时切换
-description: "Provider、语言回退与响应式刷新。"
+description: "Provider 怎么挂、语言回退怎么走，界面何时会跟着刷新。"
 ---
 
 # 运行时切换
 
-`use_i18n_provider` 为 subtree 安装 `I18nContext`，并持有当前 locale Signal。`t!`/`I18nContext::tr` 读取该 Signal，因此切换语言只重渲染依赖翻译的 scope。
+在 root 挂上 i18n Provider 后，组件和 shadcn 内置文案会读同一套 locale。切换语言时，订阅了的 UI 会自动重绘。
 
 ## 安装与读取
 

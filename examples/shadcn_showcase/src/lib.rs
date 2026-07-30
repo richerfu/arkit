@@ -1,35 +1,74 @@
 //! shadcn showcase aligned with the pre-Dioxus React Native Reusables demo.
 
-use std::time::Duration;
+use std::{rc::Rc, time::Duration};
 
-use arkit::dioxus_core::EventHandler;
+use arkit::dioxus_core::{AttributeValue, EventHandler, VNode};
 use arkit::dioxus_signals::WritableExt;
 use arkit::entry;
 use arkit::prelude::*;
+// The Routable derive emits `::dioxus_router` paths.
+use arkit::router::dioxus_router;
+use arkit::router::{use_navigator, Outlet, Routable, RouteProvider, Router};
 use arkit::shadcn as arkit_shadcn;
 use arkit::shadcn::components::{
     Accordion, AccordionItemSpec, Alert, AlertDescription, AlertDialog, AlertDialogAction,
     AlertList, AlertTitle, AlertVariant, AspectRatio, Avatar, AvatarFallback, Badge, BadgeVariant,
     BottomNavigation, BottomNavigationItem, BottomSheet, BottomSheetTextInput, Button, ButtonSize,
-    ButtonVariant, Calendar, Card, CardContent, CardFooter, CardHeader, Carousel,
-    CarouselControlsPlacement, CarouselIndicatorVariant, CarouselStyle, Checkbox, Code,
+    ButtonVariant, Calendar, CalendarYearRange, Card, CardContent, CardFooter, CardHeader,
+    Carousel, CarouselControlsPlacement, CarouselIndicatorVariant, CarouselStyle, Checkbox, Code,
     Collapsible, ContextMenu, DatePicker, Dialog, DialogFooter, DialogHeader, DropdownMenu, Field,
     FieldContent, FieldDescription, FieldError, FieldGroup, FieldOrientation, FieldSeparator,
-    FieldSet, FieldTitle, Form, FormItem, HoverCard, Input, InputOtp, InputOtpMode,
-    InputOtpSeparator, Label, Markdown, MenuEntry, Menubar, MenubarMenuSpec, MultiSlider, Popover,
-    Progress, RadioGroup, RangeSlider, Select, Separator, Skeleton, Slider, SliderOrientation,
-    SliderStyle, Sonner, SonnerPosition, SonnerToast, Spinner, Switch, Table, Tabs, Text,
-    TextVariant, Textarea, ToastAppearance, Toggle, ToggleGroup, ToggleVariant, Tooltip,
+    FieldSet, FieldTitle, Form, FormItem, Guide, GuideSide, GuideStep, GuideTarget, HoverCard,
+    InfiniteScroll, Input, InputMode, InputOtp, InputOtpMode, InputOtpSeparator, Label,
+    LoadMoreIndicator, LoadMoreState, Markdown, MenuEntry, Menubar, MenubarMenuSpec, MultiSlider,
+    Popover, Progress, PullToRefresh, RadioGroup, RangeSlider, SecureKeyboardMode,
+    SecureKeyboardSheet, Select, Separator, Skeleton, Slider, SliderOrientation, SliderStyle,
+    Sonner, SonnerPosition, SonnerToast, Spinner, Switch, Table, Tabs, Text, TextVariant, Textarea,
+    TimePicker, TimePickerFormat, TimeValue, ToastAppearance, Toggle, ToggleGroup, ToggleVariant,
+    Tooltip, Watermark, WatermarkBlendMode, WatermarkFontStyle, WatermarkShadow, WatermarkSource,
+    WatermarkStroke, WatermarkStyle,
 };
 use arkit::shadcn::icon::icon_placeholder;
 use arkit::shadcn::theme::{
     spacing, typography, ColorTokens, RadiusTokens, Theme, ThemeMode, ThemePreset, ThemeProvider,
 };
+use arkit_calendar_icu::{use_chinese_lunar_plugin, ChineseLunarOptions};
 
 const HOME_HEADER_HEIGHT: f32 = 80.0;
 const DETAIL_HEADER_HEIGHT: f32 = 48.0;
 const TRACKING_TIGHT: f32 = -0.35;
 const MARKDOWN_STREAM_INTERVAL_MS: u64 = 500;
+const WATERMARK_IMAGE_SAMPLE: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="840" height="472" viewBox="0 0 840 472">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f766e"/>
+      <stop offset="1" stop-color="#164e63"/>
+    </linearGradient>
+    <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#22c55e"/>
+      <stop offset="1" stop-color="#166534"/>
+    </linearGradient>
+  </defs>
+  <rect width="840" height="472" fill="url(#sky)"/>
+  <circle cx="664" cy="112" r="58" fill="#fde68a"/>
+  <path d="M0 374L194 174L340 323L470 210L720 397L840 304V472H0Z" fill="#d1fae5" opacity=".9"/>
+  <path d="M0 418L224 275L351 365L518 250L840 431V472H0Z" fill="url(#ground)"/>
+  <path d="M78 90h290" stroke="#ffffff" stroke-opacity=".42" stroke-width="8" stroke-linecap="round"/>
+  <path d="M78 118h210" stroke="#ffffff" stroke-opacity=".26" stroke-width="8" stroke-linecap="round"/>
+</svg>"##;
+const WATERMARK_LOGO_SAMPLE: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="512" height="160" viewBox="0 0 512 160">
+  <path d="M22 80L58 18h72l36 62-36 62H58L22 80Z" fill="#2563eb"/>
+  <path d="M67 106L94 54l27 52M76 88h36" fill="none" stroke="#fff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M205 112V48h19l28 38 28-38h19v64h-20V79l-24 32h-7l-23-32v33h-20Zm116 0V48h22v64h-22Zm45 0V48h22v24l24-24h27l-29 29 32 35h-29l-25-29v29h-22Z" fill="#0f172a"/>
+</svg>"##;
+
+arkit::i18n! {
+    pub mod tr {
+        path: "locales",
+        fallback: "en-US",
+        locales: ["en-US", "zh-CN"],
+    }
+}
 
 /// Static sample for tree-sitter fenced-code highlighting (`markdown` + `code`).
 const MARKDOWN_HIGHLIGHT_SAMPLE: &str = r#"## Syntax highlighting
@@ -196,6 +235,10 @@ const COMPONENTS: &[ComponentSpec] = &[
         name: "Date Picker",
     },
     ComponentSpec {
+        slug: "time-picker",
+        name: "Time Picker",
+    },
+    ComponentSpec {
         slug: "dialog",
         name: "Dialog",
     },
@@ -206,6 +249,10 @@ const COMPONENTS: &[ComponentSpec] = &[
     ComponentSpec {
         slug: "form",
         name: "Form",
+    },
+    ComponentSpec {
+        slug: "guide",
+        name: "Guide",
     },
     ComponentSpec {
         slug: "hover-card",
@@ -228,6 +275,10 @@ const COMPONENTS: &[ComponentSpec] = &[
         name: "Label",
     },
     ComponentSpec {
+        slug: "layout",
+        name: "Col / Row",
+    },
+    ComponentSpec {
         slug: "code",
         name: "Code",
     },
@@ -248,12 +299,20 @@ const COMPONENTS: &[ComponentSpec] = &[
         name: "Progress",
     },
     ComponentSpec {
+        slug: "refresh-load-more",
+        name: "Refresh & Load More",
+    },
+    ComponentSpec {
         slug: "radio-group",
         name: "Radio Group",
     },
     ComponentSpec {
         slug: "select",
         name: "Select",
+    },
+    ComponentSpec {
+        slug: "secure-keyboard",
+        name: "Secure Keyboard",
     },
     ComponentSpec {
         slug: "separator",
@@ -307,89 +366,198 @@ const COMPONENTS: &[ComponentSpec] = &[
         slug: "table",
         name: "Table",
     },
+    ComponentSpec {
+        slug: "watermark",
+        name: "Watermark",
+    },
 ];
+
+#[derive(Routable, Clone, PartialEq, Debug)]
+enum Route {
+    #[layout(ShowcaseShell)]
+    #[route("/")]
+    Home {},
+    #[route("/components/:slug")]
+    Detail { slug: String },
+}
+
+#[derive(Clone, Copy)]
+struct ShowcaseState {
+    mode: Signal<ThemeMode>,
+    preset: Signal<ThemePreset>,
+    custom: Signal<bool>,
+    theme_menu_open: Signal<bool>,
+    language_menu_open: Signal<bool>,
+    query: Signal<String>,
+}
 
 #[entry]
 fn app() -> Element {
-    let mut mode = use_signal(|| ThemeMode::Light);
-    let mut preset = use_signal(|| ThemePreset::Zinc);
-    let mut custom = use_signal(|| false);
-    let mut theme_menu_open = use_signal(|| false);
-    let mut selected = use_signal(|| None::<&'static str>);
-    let mut query = use_signal(String::new);
+    let _i18n = use_i18n_provider(&tr::CATALOG, tr::FALLBACK_LOCALE.id());
+    let state = ShowcaseState {
+        mode: use_signal(|| ThemeMode::Light),
+        preset: use_signal(|| ThemePreset::Zinc),
+        custom: use_signal(|| false),
+        theme_menu_open: use_signal(|| false),
+        language_menu_open: use_signal(|| false),
+        query: use_signal(String::new),
+    };
+    use_context_provider(|| state);
 
-    let theme = resolve_theme(mode(), preset(), custom());
-
-    let selected_slug = selected();
-    let home_key = "home";
+    let theme = resolve_theme((state.mode)(), (state.preset)(), (state.custom)());
 
     rsx! {
         ThemeProvider {
             theme,
-            column {
-                width: "100%",
-                height: "100%",
-                background_color: theme.colors.background,
-                if let Some(slug) = selected_slug {
-                    MountTransition {
-                        key: "{slug}",
-                        preset: TransitionPreset::SlideLeft,
-                        duration_ms: 220,
-                        fill: true,
-                        DetailView {
-                            slug,
-                            mode: mode(),
-                            preset: preset(),
-                            custom: custom(),
-                            theme_menu_open: theme_menu_open(),
-                            on_back: move |_| selected.set(None),
-                            on_theme_menu_open: move |value| theme_menu_open.set(value),
-                            on_mode: move |value| {
-                                mode.set(value);
-                                theme_menu_open.set(false);
-                            },
-                            on_preset: move |value| {
-                                preset.set(value);
-                                custom.set(false);
-                                theme_menu_open.set(false);
-                            },
-                            on_custom: move |value| {
-                                custom.set(value);
-                                theme_menu_open.set(false);
-                            },
-                        }
+            Router::<Route> {}
+        }
+    }
+}
+
+#[component]
+fn ShowcaseShell() -> Element {
+    let state = use_context::<ShowcaseState>();
+    let navigator = use_navigator();
+    let mut language_menu_open = state.language_menu_open;
+    let mut theme_menu_open = state.theme_menu_open;
+
+    let scoped_back_press = dioxus_hooks::use_callback(move |()| {
+        if language_menu_open() {
+            language_menu_open.set(false);
+            return true;
+        }
+        if theme_menu_open() {
+            theme_menu_open.set(false);
+            return true;
+        }
+        if navigator.can_go_back() {
+            navigator.go_back();
+            return true;
+        }
+        false
+    });
+    let back_press_handler: Rc<dyn Fn() -> bool> = Rc::new(move || scoped_back_press.call(()));
+    let _back_press_registration =
+        use_hook(move || Rc::new(arkit::register_back_press_handler(back_press_handler)));
+
+    rsx! { Outlet::<Route> {} }
+}
+
+#[component]
+fn Home() -> Element {
+    let state = use_context::<ShowcaseState>();
+    let navigator = use_navigator();
+    let mut query = state.query;
+    let mut mode = state.mode;
+    let mut preset = state.preset;
+    let mut custom = state.custom;
+    let mut theme_menu_open = state.theme_menu_open;
+    let mut language_menu_open = state.language_menu_open;
+    let route_key = "home";
+
+    rsx! {
+        MountTransition {
+            key: "{route_key}",
+            preset: TransitionPreset::SlideRight,
+            duration_ms: 200,
+            fill: true,
+            HomeView {
+                query: query(),
+                mode: mode(),
+                preset: preset(),
+                custom: custom(),
+                theme_menu_open: theme_menu_open(),
+                language_menu_open: language_menu_open(),
+                on_query: move |value: String| query.set(value),
+                on_select: move |slug: &'static str| {
+                    navigator.push(Route::Detail {
+                        slug: slug.to_string(),
+                    });
+                },
+                on_theme_menu_open: move |value| {
+                    theme_menu_open.set(value);
+                    if value {
+                        language_menu_open.set(false);
                     }
-                } else {
-                    MountTransition {
-                        key: "{home_key}",
-                        preset: TransitionPreset::SlideRight,
-                        duration_ms: 200,
-                        fill: true,
-                        HomeView {
-                            query: query(),
-                            mode: mode(),
-                            preset: preset(),
-                            custom: custom(),
-                            theme_menu_open: theme_menu_open(),
-                            on_query: move |value: String| query.set(value),
-                            on_select: move |slug: &'static str| selected.set(Some(slug)),
-                            on_theme_menu_open: move |value| theme_menu_open.set(value),
-                            on_mode: move |value| {
-                                mode.set(value);
-                                theme_menu_open.set(false);
-                            },
-                            on_preset: move |value| {
-                                preset.set(value);
-                                custom.set(false);
-                                theme_menu_open.set(false);
-                            },
-                            on_custom: move |value| {
-                                custom.set(value);
-                                theme_menu_open.set(false);
-                            },
-                        }
+                },
+                on_language_menu_open: move |value| {
+                    language_menu_open.set(value);
+                    if value {
+                        theme_menu_open.set(false);
                     }
-                }
+                },
+                on_mode: move |value| {
+                    mode.set(value);
+                    theme_menu_open.set(false);
+                },
+                on_preset: move |value| {
+                    preset.set(value);
+                    custom.set(false);
+                    theme_menu_open.set(false);
+                },
+                on_custom: move |value| {
+                    custom.set(value);
+                    theme_menu_open.set(false);
+                },
+            }
+        }
+    }
+}
+
+#[component]
+fn Detail(slug: String) -> Element {
+    let state = use_context::<ShowcaseState>();
+    let navigator = use_navigator();
+    let mut mode = state.mode;
+    let mut preset = state.preset;
+    let mut custom = state.custom;
+    let mut theme_menu_open = state.theme_menu_open;
+    let mut language_menu_open = state.language_menu_open;
+    let slug = COMPONENTS
+        .iter()
+        .find(|item| item.slug == slug)
+        .map(|item| item.slug)
+        .unwrap_or("unknown");
+
+    rsx! {
+        MountTransition {
+            key: "{slug}",
+            preset: TransitionPreset::SlideLeft,
+            duration_ms: 220,
+            fill: true,
+            DetailView {
+                slug,
+                mode: mode(),
+                preset: preset(),
+                custom: custom(),
+                theme_menu_open: theme_menu_open(),
+                language_menu_open: language_menu_open(),
+                on_back: move |_| navigator.go_back(),
+                on_theme_menu_open: move |value| {
+                    theme_menu_open.set(value);
+                    if value {
+                        language_menu_open.set(false);
+                    }
+                },
+                on_language_menu_open: move |value| {
+                    language_menu_open.set(value);
+                    if value {
+                        theme_menu_open.set(false);
+                    }
+                },
+                on_mode: move |value| {
+                    mode.set(value);
+                    theme_menu_open.set(false);
+                },
+                on_preset: move |value| {
+                    preset.set(value);
+                    custom.set(false);
+                    theme_menu_open.set(false);
+                },
+                on_custom: move |value| {
+                    custom.set(value);
+                    theme_menu_open.set(false);
+                },
             }
         }
     }
@@ -444,9 +612,11 @@ fn HomeView(
     preset: ThemePreset,
     custom: bool,
     theme_menu_open: bool,
+    language_menu_open: bool,
     on_query: EventHandler<String>,
     on_select: EventHandler<&'static str>,
     on_theme_menu_open: EventHandler<bool>,
+    on_language_menu_open: EventHandler<bool>,
     on_mode: EventHandler<ThemeMode>,
     on_preset: EventHandler<ThemePreset>,
     on_custom: EventHandler<bool>,
@@ -461,27 +631,21 @@ fn HomeView(
 
     rsx! {
         NavBar {
-            title: "Showcase".to_string(),
+            title: "Arkit".to_string(),
             back: false,
             mode,
             preset,
             custom,
             open: theme_menu_open,
+            language_open: language_menu_open,
             on_back: move |_| {},
             on_open: on_theme_menu_open,
+            on_language_open: on_language_menu_open,
             on_mode,
             on_preset,
             on_custom,
         }
-        column {
-            width: "100%",
-            layout_weight: 1.0,
-            background_color: theme.colors.background,
-            scroll {
-                width: "100%",
-                height: "100%",
-                alignment: "top-start",
-                background_color: theme.colors.background,
+        RouteProvider {
             column {
                 width: "100%",
                 background_color: theme.colors.background,
@@ -527,7 +691,6 @@ fn HomeView(
                     }
                 }
             }
-            }
         }
     }
 }
@@ -539,8 +702,10 @@ fn DetailView(
     preset: ThemePreset,
     custom: bool,
     theme_menu_open: bool,
+    language_menu_open: bool,
     on_back: EventHandler<()>,
     on_theme_menu_open: EventHandler<bool>,
+    on_language_menu_open: EventHandler<bool>,
     on_mode: EventHandler<ThemeMode>,
     on_preset: EventHandler<ThemePreset>,
     on_custom: EventHandler<bool>,
@@ -553,8 +718,10 @@ fn DetailView(
             preset,
             custom,
             open: theme_menu_open,
+            language_open: language_menu_open,
             on_back,
             on_open: on_theme_menu_open,
+            on_language_open: on_language_menu_open,
             on_mode,
             on_preset,
             on_custom,
@@ -573,8 +740,10 @@ fn NavBar(
     preset: ThemePreset,
     custom: bool,
     open: bool,
+    language_open: bool,
     on_back: EventHandler<()>,
     on_open: EventHandler<bool>,
+    on_language_open: EventHandler<bool>,
     on_mode: EventHandler<ThemeMode>,
     on_preset: EventHandler<ThemePreset>,
     on_custom: EventHandler<bool>,
@@ -602,6 +771,7 @@ fn NavBar(
             row {
                 layout_weight: 1.0,
                 align_items: if back { "center" } else { "bottom" },
+                clip: true,
                 if back {
                     Button {
                         variant: ButtonVariant::Ghost,
@@ -611,13 +781,20 @@ fn NavBar(
                     }
                     row { width: spacing::SM }
                 }
-                text {
-                    content: title,
-                    font_size: title_size,
-                    font_weight: title_weight,
-                    line_height: title_line_height,
-                    font_color: theme.colors.foreground,
-                    text_letter_spacing: TRACKING_TIGHT,
+                row {
+                    layout_weight: 1.0,
+                    clip: true,
+                    text {
+                        width: "100%",
+                        content: title,
+                        font_size: title_size,
+                        font_weight: title_weight,
+                        line_height: title_line_height,
+                        font_color: theme.colors.foreground,
+                        text_letter_spacing: TRACKING_TIGHT,
+                        max_lines: 1_i32,
+                        text_overflow: "ellipsis",
+                    }
                 }
             }
             ThemeMenu {
@@ -629,6 +806,56 @@ fn NavBar(
                 on_mode,
                 on_preset,
                 on_custom,
+            }
+            row { width: spacing::SM }
+            LanguageMenu {
+                open: language_open,
+                on_open: on_language_open,
+            }
+        }
+    }
+}
+
+#[component]
+fn LanguageMenu(open: bool, on_open: EventHandler<bool>) -> Element {
+    let theme = arkit_shadcn::theme::use_theme();
+    let i18n = use_i18n();
+    let selected = i18n.locale_id();
+    let items = vec![
+        MenuEntry::radio(
+            "简体中文",
+            "zh-CN",
+            selected.clone(),
+            EventHandler::new(move |_| i18n.set_locale_id("zh-CN")),
+        )
+        .close_on_select(),
+        MenuEntry::radio(
+            "English",
+            "en-US",
+            selected,
+            EventHandler::new(move |_| i18n.set_locale_id("en-US")),
+        )
+        .close_on_select(),
+    ];
+
+    rsx! {
+        DropdownMenu {
+            items,
+            open: Some(open),
+            default_open: false,
+            on_open_change: Some(on_open),
+            trigger_capture: Some(false),
+            width: Some(176.0),
+            row {
+                width: 40.0,
+                height: 40.0,
+                align_items: "center",
+                justify_content: "center",
+                border_radius: theme.radii.md,
+                border_width: 1.0,
+                border_color: theme.colors.border,
+                background_color: theme.colors.background,
+                {icon_placeholder("languages", 18.0, theme.colors.foreground)}
             }
         }
     }
@@ -652,11 +879,6 @@ fn ThemeMenu(
         theme_preset_key(preset).to_string()
     };
     let selected_mode = theme_mode_key(mode).to_string();
-    let active_theme_label = if custom {
-        "Custom"
-    } else {
-        theme_preset_label(preset)
-    };
     let icon = match mode {
         ThemeMode::Light => "sun",
         ThemeMode::Dark => "moon",
@@ -712,38 +934,15 @@ fn ThemeMenu(
             on_open_change: Some(on_open),
             trigger_capture: Some(false),
             row {
-                width: 120.0,
-                height: 36.0,
+                width: 40.0,
+                height: 40.0,
                 align_items: "center",
-                padding_right: spacing::SM,
-                padding_left: spacing::SM,
+                justify_content: "center",
                 border_radius: theme.radii.md,
                 border_width: 1.0,
                 border_color: theme.colors.border,
-                background_color: theme.colors.secondary,
-                row {
-                    width: 12.0,
-                    height: 12.0,
-                    border_radius: theme.radii.full,
-                    background_color: theme.colors.primary,
-                }
-                row { width: spacing::SM }
-                row {
-                    layout_weight: 1.0,
-                    clip: true,
-                    text {
-                        width: "100%",
-                        content: active_theme_label.to_string(),
-                        font_size: typography::SM,
-                        font_weight: 500_i32,
-                        font_color: theme.colors.secondary_foreground,
-                        line_height: 18.0,
-                        max_lines: 1_i32,
-                        text_overflow: "ellipsis",
-                    }
-                }
-                row { width: spacing::XS }
-                {icon_placeholder(icon, 16.0, theme.colors.secondary_foreground)}
+                background_color: theme.colors.background,
+                {icon_placeholder(icon, 18.0, theme.colors.foreground)}
             }
         }
     }
@@ -802,6 +1001,16 @@ fn ComponentListItem(
 #[component]
 fn DemoCanvas(slug: &'static str) -> Element {
     let theme = arkit_shadcn::theme::use_theme();
+    if slug == "refresh-load-more" {
+        return rsx! {
+            column {
+                width: "100%",
+                layout_weight: 1.0,
+                background_color: theme.colors.surface,
+                ComponentDemo { slug }
+            }
+        };
+    }
     let policy = demo_canvas_policy(slug);
     let bottom_padding = if slug == "bottom-navigation" {
         policy.padding[2]
@@ -811,52 +1020,34 @@ fn DemoCanvas(slug: &'static str) -> Element {
 
     if policy.fill_height {
         rsx! {
-            column {
-                width: "100%",
-                layout_weight: 1.0,
-                background_color: theme.colors.surface,
-                scroll {
+            RouteProvider {
+                column {
                     width: "100%",
                     height: "100%",
                     background_color: theme.colors.surface,
-                    scroll_enabled: true,
-                    column {
-                        width: "100%",
-                        height: "100%",
-                        background_color: theme.colors.surface,
-                        align_items: if policy.center_x { "center" } else { "start" },
-                        justify_content: if policy.center_y { "center" } else { "start" },
-                        padding_top: policy.padding[0],
-                        padding_right: policy.padding[1],
-                        padding_bottom: bottom_padding,
-                        padding_left: policy.padding[3],
-                        ComponentDemo { slug }
-                    }
+                    align_items: if policy.center_x { "center" } else { "start" },
+                    justify_content: if policy.center_y { "center" } else { "start" },
+                    padding_top: policy.padding[0],
+                    padding_right: policy.padding[1],
+                    padding_bottom: bottom_padding,
+                    padding_left: policy.padding[3],
+                    ComponentDemo { slug }
                 }
             }
         }
     } else {
         rsx! {
-            column {
-                width: "100%",
-                layout_weight: 1.0,
-                background_color: theme.colors.surface,
-                scroll {
+            RouteProvider {
+                column {
                     width: "100%",
-                    height: "100%",
                     background_color: theme.colors.surface,
-                    scroll_enabled: true,
-                    column {
-                        width: "100%",
-                        background_color: theme.colors.surface,
-                        align_items: if policy.center_x { "center" } else { "start" },
-                        justify_content: if policy.center_y { "center" } else { "start" },
-                        padding_top: policy.padding[0],
-                        padding_right: policy.padding[1],
-                        padding_bottom: bottom_padding,
-                        padding_left: policy.padding[3],
-                        ComponentDemo { slug }
-                    }
+                    align_items: if policy.center_x { "center" } else { "start" },
+                    justify_content: if policy.center_y { "center" } else { "start" },
+                    padding_top: policy.padding[0],
+                    padding_right: policy.padding[1],
+                    padding_bottom: bottom_padding,
+                    padding_left: policy.padding[3],
+                    ComponentDemo { slug }
                 }
             }
         }
@@ -939,19 +1130,37 @@ fn demo_canvas_policy(slug: &str) -> DemoCanvasPolicy {
             fill_height: false,
             padding: [spacing::XXL, spacing::LG, spacing::XXL, spacing::LG],
         },
+        "guide" => DemoCanvasPolicy {
+            center_x: true,
+            center_y: true,
+            fill_height: true,
+            padding: [spacing::LG, spacing::LG, spacing::LG, spacing::LG],
+        },
+        "refresh-load-more" => DemoCanvasPolicy {
+            center_x: false,
+            center_y: false,
+            fill_height: true,
+            padding: [0.0, 0.0, 0.0, 0.0],
+        },
         "sonner" => DemoCanvasPolicy {
             center_x: false,
             center_y: false,
             fill_height: true,
             padding: [spacing::XXL, spacing::LG, spacing::XXL, spacing::LG],
         },
-        "input-otp" => DemoCanvasPolicy {
+        "input-otp" | "secure-keyboard" => DemoCanvasPolicy {
             center_x: false,
             center_y: false,
             fill_height: true,
             padding: [spacing::XXL, spacing::LG, spacing::XXL, spacing::LG],
         },
         "code" | "markdown" => DemoCanvasPolicy {
+            center_x: true,
+            center_y: false,
+            fill_height: false,
+            padding: [spacing::XXL, spacing::LG, spacing::XXL, spacing::LG],
+        },
+        "watermark" => DemoCanvasPolicy {
             center_x: true,
             center_y: false,
             fill_height: false,
@@ -968,6 +1177,7 @@ fn demo_canvas_policy(slug: &str) -> DemoCanvasPolicy {
 
 #[component]
 fn ComponentDemo(slug: &'static str) -> Element {
+    let lunar_calendar_plugin = use_chinese_lunar_plugin(ChineseLunarOptions::default());
     let mut page = use_signal(|| 1_i32);
     let mut dialog_open = use_signal(|| false);
     let mut dialog_name = use_signal(|| "Pedro Duarte".to_string());
@@ -983,6 +1193,8 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let mut carousel_overlay_index = use_signal(|| 0_usize);
     let mut date_picker_selected = use_signal(|| None::<String>);
     let mut date_picker_open = use_signal(|| false);
+    let mut time_picker_selected = use_signal(|| TimeValue::new(9, 30));
+    let mut time_picker_open = use_signal(|| false);
     let mut popover_open = use_signal(|| false);
     let mut hover_open = use_signal(|| false);
     let mut tooltip_open = use_signal(|| false);
@@ -1019,6 +1231,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let mut carousel_uc_note = use_signal(|| "default_index=0".to_string());
     let mut date_picker_uc_selected = use_signal(|| None::<String>);
     let mut date_picker_uc_note = use_signal(|| "selection/open unmanaged".to_string());
+    let mut time_picker_uc_note = use_signal(|| "default: 03:30 PM".to_string());
     let mut dialog_uc_gen = use_signal(|| 0_u64);
     let mut alert_uc_gen = use_signal(|| 0_u64);
     let mut sheet_uc_gen = use_signal(|| 0_u64);
@@ -1029,11 +1242,20 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let mut context_uc_note = use_signal(|| "open unmanaged".to_string());
     let mut menubar_uc_note = use_signal(|| "active unmanaged".to_string());
     let mut input_controlled = use_signal(|| "hello".to_string());
+    let mut input_password = use_signal(|| "secret".to_string());
+    let mut input_number = use_signal(|| "2026".to_string());
     let mut textarea_controlled = use_signal(|| "Draft notes…".to_string());
     let mut otp_value = use_signal(String::new);
     let mut otp_invalid = use_signal(|| false);
     let mut otp_status = use_signal(|| "Enter the six-digit code.".to_string());
     let mut invite_code = use_signal(|| "A7".to_string());
+    let mut secure_pin = use_signal(String::new);
+    let mut secure_keyboard_open = use_signal(|| false);
+    let mut secure_keyboard_status = use_signal(|| "No PIN has been submitted.".to_string());
+    let mut secure_text = use_signal(String::new);
+    let mut secure_text_open = use_signal(|| false);
+    let mut secure_text_status =
+        use_signal(|| "Letters, numbers, spaces, and symbols are accepted.".to_string());
     let mut form_name = use_signal(|| "Avery Stone".to_string());
     let mut form_email = use_signal(String::new);
     let mut form_bio = use_signal(|| "Product designer and weekend cyclist.".to_string());
@@ -1041,6 +1263,9 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let mut form_terms_accepted = use_signal(|| false);
     let mut form_attempted = use_signal(|| false);
     let mut form_status = use_signal(|| None::<bool>);
+    let mut guide_open = use_signal(|| false);
+    let mut guide_step = use_signal(|| 0_usize);
+    let mut guide_status = use_signal(|| "Start the guide to preview all steps.".to_string());
     let mut playback_position = use_signal(|| 92.0_f32);
     let mut media_volume = use_signal(|| 68.0_f32);
     let mut notification_strength = use_signal(|| 6.0_f32);
@@ -1439,6 +1664,8 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 width: "100%",
                 Calendar {
                     selected: calendar_selected(),
+                    year_range: CalendarYearRange::new(1900, 2100),
+                    day_plugin: lunar_calendar_plugin,
                     on_day_press: move |date| calendar_selected.set(Some(date)),
                 }
                 v_gap { height: spacing::XXL }
@@ -1858,6 +2085,8 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 DatePicker {
                     selected: date_picker_selected(),
                     open: Some(date_picker_open()),
+                    calendar_year_range: CalendarYearRange::new(1900, 2100),
+                    calendar_day_plugin: lunar_calendar_plugin,
                     on_change: move |date| date_picker_selected.set(date),
                     on_open_change: move |open| date_picker_open.set(open),
                 }
@@ -1869,12 +2098,51 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 DatePicker {
                     selected: date_picker_uc_selected(),
                     default_open: false,
+                    calendar_year_range: CalendarYearRange::new(1900, 2100),
+                    calendar_day_plugin: lunar_calendar_plugin,
                     on_change: move |date: Option<String>| {
                         date_picker_uc_selected.set(date.clone());
                         date_picker_uc_note.set(format!("on_change = {:?}", date));
                     },
                     on_open_change: move |open| {
                         date_picker_uc_note.set(format!("on_open_change = {open}"));
+                    },
+                }
+            }
+        },
+        "time-picker" => rsx! {
+            column {
+                align_items: "start",
+                demo_mode_label {
+                    title: "Controlled · 24 hour".to_string(),
+                    detail: Some(format!(
+                        "selected = {:?}, open = {}",
+                        time_picker_selected(),
+                        time_picker_open()
+                    )),
+                }
+                TimePicker {
+                    selected: time_picker_selected(),
+                    open: Some(time_picker_open()),
+                    minute_step: 5,
+                    on_change: move |time| time_picker_selected.set(time),
+                    on_open_change: move |open| time_picker_open.set(open),
+                }
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Uncontrolled · 12 hour".to_string(),
+                    detail: Some(time_picker_uc_note()),
+                }
+                TimePicker {
+                    default_selected: TimeValue::new(15, 30),
+                    format: TimePickerFormat::TwelveHour,
+                    minute_step: 15,
+                    default_open: false,
+                    on_change: move |time| {
+                        time_picker_uc_note.set(format!("on_change = {:?}", time));
+                    },
+                    on_open_change: move |open| {
+                        time_picker_uc_note.set(format!("on_open_change = {open}"));
                     },
                 }
             }
@@ -1897,7 +2165,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 default_open: Some(false),
                 on_close: move |_| dialog_open.set(false),
                 DialogHeader {
-                    title: "Edit profile".to_string(),
+                    title: "Edit profile and manage account preferences".to_string(),
                     description: Some("Make changes to your profile here. Click save when you're done.".to_string()),
                 }
                 column {
@@ -2175,6 +2443,139 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 }
             }
         },
+        "guide" => rsx! {
+            fixed_width {
+                width: 420.0,
+                Guide {
+                    steps: vec![
+                        GuideStep::new(
+                            "guide-profile",
+                            "Your workspace",
+                            "This summary keeps the active project and its recent activity in one place.",
+                        )
+                        .side(GuideSide::Bottom),
+                        GuideStep::new(
+                            "guide-search",
+                            "Find anything",
+                            "Search across components, examples, and documentation without leaving the page.",
+                        )
+                        .side(GuideSide::Bottom),
+                        GuideStep::new(
+                            "guide-settings",
+                            "Tune the experience",
+                            "Open preferences to change appearance, notifications, and workspace defaults.",
+                        )
+                        .side(GuideSide::Top),
+                    ],
+                    open: Some(guide_open()),
+                    step: Some(guide_step()),
+                    on_open_change: move |open| guide_open.set(open),
+                    on_step_change: move |step| {
+                        guide_step.set(step);
+                        guide_status.set(format!("Showing step {} of 3.", step + 1));
+                    },
+                    on_skip: move |_| {
+                        guide_status.set("Guide skipped. You can restart it anytime.".to_string());
+                    },
+                    on_finish: move |_| {
+                        guide_status.set("Guide completed.".to_string());
+                    },
+                    column {
+                        width: "100%",
+                        align_items: "start",
+                        row {
+                            width: "100%",
+                            align_items: "center",
+                            justify_content: "space_between",
+                            column {
+                                align_items: "start",
+                                text {
+                                    content: "Product tour".to_string(),
+                                    font_size: typography::XXL,
+                                    font_weight: 700_i32,
+                                    font_color: theme.colors.foreground,
+                                    line_height: 32.0,
+                                }
+                                text {
+                                    content: guide_status(),
+                                    font_size: typography::XS,
+                                    font_color: theme.colors.muted_foreground,
+                                    line_height: 18.0,
+                                }
+                            }
+                            Button {
+                                size: ButtonSize::Sm,
+                                onclick: move |_| {
+                                    guide_step.set(0);
+                                    guide_status.set("Showing step 1 of 3.".to_string());
+                                    guide_open.set(true);
+                                },
+                                "Start guide"
+                            }
+                        }
+                        v_gap { height: spacing::XXL }
+                        GuideTarget {
+                            id: "guide-profile".to_string(),
+                            Card {
+                                CardHeader {
+                                    title: "Arkit workspace".to_string(),
+                                    description: "12 components updated this week".to_string(),
+                                }
+                                CardContent {
+                                    row {
+                                        width: "100%",
+                                        align_items: "center",
+                                        justify_content: "space_between",
+                                        Badge {
+                                            content: "Active".to_string(),
+                                            variant: BadgeVariant::Secondary,
+                                        }
+                                        text {
+                                            content: "Last opened today".to_string(),
+                                            font_size: typography::XS,
+                                            font_color: theme.colors.muted_foreground,
+                                            line_height: 18.0,
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        v_gap { height: spacing::XL }
+                        row {
+                            width: "100%",
+                            align_items: "center",
+                            justify_content: "space_between",
+                            GuideTarget {
+                                id: "guide-search".to_string(),
+                                Button {
+                                    variant: ButtonVariant::Outline,
+                                    onclick: move |_| {},
+                                    row {
+                                        align_items: "center",
+                                        {icon_placeholder("search", 18.0, theme.colors.foreground)}
+                                        h_gap { width: spacing::SM }
+                                        "Search"
+                                    }
+                                }
+                            }
+                            GuideTarget {
+                                id: "guide-settings".to_string(),
+                                Button {
+                                    variant: ButtonVariant::Outline,
+                                    onclick: move |_| {},
+                                    row {
+                                        align_items: "center",
+                                        {icon_placeholder("settings-2", 18.0, theme.colors.foreground)}
+                                        h_gap { width: spacing::SM }
+                                        "Preferences"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "hover-card" => rsx! {
             fixed_width {
                 width: 320.0,
@@ -2284,6 +2685,30 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     Input {
                         placeholder: Some("Uncontrolled input".to_string()),
                         width: "100%",
+                    }
+                    {demo_mode_divider()}
+                    demo_mode_label {
+                        title: "Password".to_string(),
+                        detail: Some(format!("{} characters", input_password().chars().count())),
+                    }
+                    Input {
+                        mode: InputMode::Password,
+                        placeholder: Some("Password".to_string()),
+                        value: Some(input_password()),
+                        width: "100%",
+                        on_change: move |value| input_password.set(value),
+                    }
+                    {demo_mode_divider()}
+                    demo_mode_label {
+                        title: "Number".to_string(),
+                        detail: Some(format!("value = {:?}", input_number())),
+                    }
+                    Input {
+                        mode: InputMode::Number,
+                        placeholder: Some("Digits only".to_string()),
+                        value: Some(input_number()),
+                        width: "100%",
+                        on_change: move |value| input_number.set(value),
                     }
                 }
             }
@@ -2411,6 +2836,182 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 }
             }
         },
+        "secure-keyboard" => rsx! {
+            fixed_width {
+                width: 420.0,
+                column {
+                    width: "100%",
+                    align_items: "start",
+                    text {
+                        width: "100%",
+                        content: "Confirm payment PIN".to_string(),
+                        font_size: typography::XXL,
+                        font_weight: 700_i32,
+                        font_color: theme.colors.foreground,
+                        line_height: 32.0,
+                    }
+                    v_gap { height: spacing::SM }
+                    text {
+                        width: "100%",
+                        content: "This keypad is rendered inside the app and never opens the system input method.".to_string(),
+                        font_size: typography::SM,
+                        font_color: theme.colors.muted_foreground,
+                        line_height: 20.0,
+                    }
+                    v_gap { height: spacing::XXL }
+                    Input {
+                        value: Some("•".repeat(secure_pin().chars().count())),
+                        placeholder: Some("Tap to enter payment PIN".to_string()),
+                        width: "100%",
+                        read_only: true,
+                        on_click: move |_| secure_keyboard_open.set(true),
+                    }
+                    SecureKeyboardSheet {
+                        value: Some(secure_pin()),
+                        open: Some(secure_keyboard_open()),
+                        max_length: 6,
+                        randomized: true,
+                        on_change: move |value: String| {
+                            secure_keyboard_status.set(format!(
+                                "{} of 6 digits entered.",
+                                value.chars().count(),
+                            ));
+                            secure_pin.set(value);
+                        },
+                        on_complete: move |_: String| {
+                            secure_keyboard_status.set(
+                                "Six digits entered. Press Done to submit.".to_string(),
+                            );
+                        },
+                        on_confirm: move |value: String| {
+                            secure_keyboard_status.set(format!(
+                                "Submitted a {}-digit PIN without displaying it.",
+                                value.chars().count(),
+                            ));
+                        },
+                        on_open_change: move |open| secure_keyboard_open.set(open),
+                    }
+                    v_gap { height: spacing::MD }
+                    row {
+                        width: "100%",
+                        align_items: "center",
+                        justify_content: "start",
+                        {icon_placeholder("shield-check", 16.0, theme.colors.primary)}
+                        h_gap { width: spacing::SM }
+                        row {
+                            layout_weight: 1.0,
+                            text {
+                                width: "100%",
+                                content: secure_keyboard_status(),
+                                font_size: typography::XS,
+                                font_color: theme.colors.muted_foreground,
+                                line_height: 18.0,
+                            }
+                        }
+                    }
+                    v_gap { height: spacing::MD }
+                    Button {
+                        variant: ButtonVariant::Outline,
+                        disabled: Some(secure_pin().is_empty()),
+                        onclick: move |_| {
+                            secure_pin.set(String::new());
+                            secure_keyboard_status.set(
+                                "PIN cleared from the controlled value.".to_string(),
+                            );
+                        },
+                        "Clear from parent"
+                    }
+                    v_gap { height: spacing::XXL }
+                    text {
+                        width: "100%",
+                        content: "Full secure text input".to_string(),
+                        font_size: typography::XXL,
+                        font_weight: 700_i32,
+                        font_color: theme.colors.foreground,
+                        line_height: 32.0,
+                    }
+                    v_gap { height: spacing::SM }
+                    text {
+                        width: "100%",
+                        content: "Use a familiar QWERTY layout with a digit row and a dedicated symbol page, without invoking the system input method.".to_string(),
+                        font_size: typography::SM,
+                        font_color: theme.colors.muted_foreground,
+                        line_height: 20.0,
+                    }
+                    v_gap { height: spacing::LG }
+                    Input {
+                        value: Some(secure_text()),
+                        placeholder: Some("Tap to enter secure text".to_string()),
+                        width: "100%",
+                        read_only: true,
+                        on_click: move |_| secure_text_open.set(true),
+                    }
+                    SecureKeyboardSheet {
+                        value: Some(secure_text()),
+                        open: Some(secure_text_open()),
+                        mode: SecureKeyboardMode::Full,
+                        max_length: 20,
+                        randomized: false,
+                        confirm_requires_complete: false,
+                        on_change: move |value: String| {
+                            secure_text_status.set(format!(
+                                "{} of 20 characters entered.",
+                                value.chars().count(),
+                            ));
+                            secure_text.set(value);
+                        },
+                        on_complete: move |_: String| {
+                            secure_text_status.set(
+                                "The 20-character limit has been reached.".to_string(),
+                            );
+                        },
+                        on_confirm: move |value: String| {
+                            secure_text_status.set(format!(
+                                "Submitted a {}-character value.",
+                                value.chars().count(),
+                            ));
+                        },
+                        on_open_change: move |open| secure_text_open.set(open),
+                    }
+                    v_gap { height: spacing::MD }
+                    text {
+                        width: "100%",
+                        content: secure_text_status(),
+                        font_size: typography::XS,
+                        font_color: theme.colors.muted_foreground,
+                        line_height: 18.0,
+                    }
+                    v_gap { height: spacing::MD }
+                    Button {
+                        variant: ButtonVariant::Outline,
+                        disabled: Some(secure_text().is_empty()),
+                        onclick: move |_| {
+                            secure_text.set(String::new());
+                            secure_text_status.set(
+                                "Secure text cleared from the controlled value.".to_string(),
+                            );
+                        },
+                        "Clear secure text"
+                    }
+                    v_gap { height: spacing::XXL }
+                    text {
+                        width: "100%",
+                        content: "Security boundary".to_string(),
+                        font_size: typography::SM,
+                        font_weight: 600_i32,
+                        font_color: theme.colors.foreground,
+                        line_height: 20.0,
+                    }
+                    text {
+                        width: "100%",
+                        content: "Randomized keys and IME avoidance reduce exposure, but this is not a hardware-backed trusted keyboard.".to_string(),
+                        font_size: typography::XS,
+                        font_color: theme.colors.muted_foreground,
+                        line_height: 18.0,
+                    }
+                }
+            }
+        },
         "label" => rsx! {
             row {
                 align_items: "center",
@@ -2423,6 +3024,74 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 }
                 h_gap { width: spacing::SM }
                 Label { content: "Accept terms and conditions".to_string() }
+            }
+        },
+        "layout" => rsx! {
+            fixed_width {
+                width: 560.0,
+                Col {
+                    width: "100%",
+                    demo_mode_label {
+                        title: "Col defaults to top-left".to_string(),
+                        detail: Some("No alignment attributes are required".to_string()),
+                    }
+                    Col {
+                        width: "100%",
+                        height: 144.0,
+                        padding: spacing::MD,
+                        background_color: arkit_shadcn::theme::with_alpha(
+                            theme.colors.secondary,
+                            0x80,
+                        ),
+                        border_width: 1.0,
+                        border_color: theme.colors.border,
+                        border_radius: theme.radii.lg,
+                        {layout_demo_item("First", 88.0, 32.0, theme)}
+                        v_gap { height: spacing::SM }
+                        {layout_demo_item("Second", 120.0, 32.0, theme)}
+                    }
+                    v_gap { height: spacing::XXL }
+                    demo_mode_label {
+                        title: "Row defaults to top-left".to_string(),
+                        detail: Some("Items start on both axes".to_string()),
+                    }
+                    Row {
+                        width: "100%",
+                        height: 104.0,
+                        padding: spacing::MD,
+                        background_color: arkit_shadcn::theme::with_alpha(
+                            theme.colors.secondary,
+                            0x80,
+                        ),
+                        border_width: 1.0,
+                        border_color: theme.colors.border,
+                        border_radius: theme.radii.lg,
+                        {layout_demo_item("One", 72.0, 32.0, theme)}
+                        h_gap { width: spacing::SM }
+                        {layout_demo_item("Two", 72.0, 48.0, theme)}
+                    }
+                    {demo_mode_divider()}
+                    demo_mode_label {
+                        title: "Native attributes still override defaults".to_string(),
+                        detail: Some(
+                            "align_items = center · justify_content = center".to_string(),
+                        ),
+                    }
+                    Row {
+                        width: "100%",
+                        height: 88.0,
+                        align_items: "center",
+                        justify_content: "center",
+                        background_color: arkit_shadcn::theme::with_alpha(
+                            theme.colors.secondary,
+                            0x80,
+                        ),
+                        border_width: 1.0,
+                        border_color: theme.colors.border,
+                        border_radius: theme.radii.lg,
+                        {layout_demo_item("Centered", 104.0, 36.0, theme)}
+                    }
+                }
             }
         },
         "code" => rsx! {
@@ -2789,6 +3458,9 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                 }
             }
+        },
+        "refresh-load-more" => rsx! {
+            RefreshLoadMoreDemo {}
         },
         "radio-group" => rsx! {
             fixed_width {
@@ -3784,9 +4456,599 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 }
             }
         },
+        "watermark" => rsx! { WatermarkDemo {} },
         _ => rsx! {
             Text { content: "Component not found".to_string(), variant: TextVariant::Muted }
         },
+    }
+}
+
+#[component]
+fn WatermarkDemo() -> Element {
+    let theme = arkit_shadcn::theme::use_theme();
+    let mut clicks = use_signal(|| 0_u32);
+    let sample_image =
+        ArkImageSource::svg("watermark-demo-landscape", WATERMARK_IMAGE_SAMPLE, 840, 472);
+    let logo_image = ArkImageSource::encoded(
+        "watermark-demo-logo",
+        WATERMARK_LOGO_SAMPLE.as_bytes().to_vec(),
+        512,
+        160,
+    );
+
+    rsx! {
+        fixed_width {
+            width: 420.0,
+            column {
+                width: "100%",
+                align_items: "start",
+
+                demo_mode_label {
+                    title: "Basic text watermark".to_string(),
+                    detail: Some("Theme-aware defaults over ordinary content.".to_string()),
+                }
+                Watermark {
+                    source: WatermarkSource::text("ARKIT · INTERNAL"),
+                    width: "100%".to_string(),
+                    height: "220".to_string(),
+                    column {
+                        width: "100%",
+                        height: 220.0,
+                        align_items: "start",
+                        padding_top: spacing::LG,
+                        padding_right: spacing::LG,
+                        padding_bottom: spacing::LG,
+                        padding_left: spacing::LG,
+                        background_color: theme.colors.card,
+                        border_radius: theme.radii.xl,
+                        text {
+                            content: "Quarterly report".to_string(),
+                            font_size: typography::XXL,
+                            font_weight: 700_i32,
+                            font_color: theme.colors.foreground,
+                            line_height: 30.0,
+                        }
+                        v_gap { height: spacing::SM }
+                        text {
+                            content: "Revenue and retention remained above the target range.".to_string(),
+                            font_size: typography::SM,
+                            font_weight: 400_i32,
+                            font_color: theme.colors.muted_foreground,
+                            line_height: 20.0,
+                        }
+                    }
+                }
+
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Custom multiline style".to_string(),
+                    detail: Some(
+                        "Offset, repeat origin, blend, outline, shadow, font, and spacing are configurable."
+                            .to_string(),
+                    ),
+                }
+                Watermark {
+                    source: WatermarkSource::text("ARKIT\nCONFIDENTIAL"),
+                    width: "100%".to_string(),
+                    height: "260".to_string(),
+                    style: WatermarkStyle {
+                        color: Some(theme.colors.primary),
+                        font_size: 15.0,
+                        font_weight: 700,
+                        font_style: WatermarkFontStyle::Italic,
+                        font_family: Some("HarmonyOS Sans".to_string()),
+                        opacity: 0.24,
+                        rotation_degrees: -18.0,
+                        gap_x: 72.0,
+                        gap_y: 56.0,
+                        offset_x: 18.0,
+                        offset_y: -8.0,
+                        repeat_origin_x: 28.0,
+                        repeat_origin_y: 20.0,
+                        blend_mode: WatermarkBlendMode::Multiply,
+                        stroke: Some(WatermarkStroke::new(0xCCFFFFFF, 1.2)),
+                        shadow: Some(WatermarkShadow::new(0x66000000, 4.0, 3.0, 4.0)),
+                    },
+                    column {
+                        width: "100%",
+                        height: 260.0,
+                        align_items: "start",
+                        padding_top: spacing::LG,
+                        padding_right: spacing::LG,
+                        padding_bottom: spacing::LG,
+                        padding_left: spacing::LG,
+                        background_color: theme.colors.card,
+                        border_radius: theme.radii.xl,
+                        text {
+                            content: "Architecture decision".to_string(),
+                            font_size: typography::XL,
+                            font_weight: 700_i32,
+                            font_color: theme.colors.foreground,
+                            line_height: 26.0,
+                        }
+                        v_gap { height: spacing::SM }
+                        text {
+                            content: "The document can contain multiple paragraphs while the watermark itself uses multiple lines.".to_string(),
+                            font_size: typography::SM,
+                            font_weight: 400_i32,
+                            font_color: theme.colors.muted_foreground,
+                            line_height: 20.0,
+                        }
+                        v_gap { height: spacing::SM }
+                        text {
+                            content: "Only the watermark tile is rasterized; document text remains native ArkUI content.".to_string(),
+                            font_size: typography::SM,
+                            font_weight: 400_i32,
+                            font_color: theme.colors.muted_foreground,
+                            line_height: 20.0,
+                        }
+                    }
+                }
+
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Watermark over image content".to_string(),
+                    detail: Some("The child may be an image while the watermark remains independently styled.".to_string()),
+                }
+                Watermark {
+                    source: WatermarkSource::text("PREVIEW"),
+                    width: "100%".to_string(),
+                    height: "236".to_string(),
+                    style: WatermarkStyle {
+                        color: Some(0xFFFFFFFF),
+                        font_size: 16.0,
+                        font_weight: 700,
+                        opacity: 0.6,
+                        rotation_degrees: -24.0,
+                        gap_x: 84.0,
+                        gap_y: 64.0,
+                        blend_mode: WatermarkBlendMode::Difference,
+                        ..WatermarkStyle::default()
+                    },
+                    image {
+                        src: AttributeValue::any_value(sample_image),
+                        width: "100%",
+                        height: 236.0,
+                        object_fit: "cover",
+                        border_radius: theme.radii.xl,
+                        clip: true,
+                    }
+                }
+
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Image watermark source".to_string(),
+                    detail: Some("An embedded image is decoded once, cached, and repeated by one shader.".to_string()),
+                }
+                Watermark {
+                    source: WatermarkSource::image(logo_image, 128.0, 40.0),
+                    width: "100%".to_string(),
+                    height: "240".to_string(),
+                    style: WatermarkStyle {
+                        opacity: 0.2,
+                        rotation_degrees: -16.0,
+                        gap_x: 72.0,
+                        gap_y: 58.0,
+                        shadow: Some(WatermarkShadow::new(0x55000000, 5.0, 2.0, 3.0)),
+                        ..WatermarkStyle::default()
+                    },
+                    column {
+                        width: "100%",
+                        height: 240.0,
+                        align_items: "start",
+                        padding_top: spacing::LG,
+                        padding_right: spacing::LG,
+                        padding_bottom: spacing::LG,
+                        padding_left: spacing::LG,
+                        background_color: theme.colors.card,
+                        border_radius: theme.radii.xl,
+                        text {
+                            content: "Brand asset review".to_string(),
+                            font_size: typography::XL,
+                            font_weight: 700_i32,
+                            font_color: theme.colors.foreground,
+                            line_height: 26.0,
+                        }
+                        v_gap { height: spacing::SM }
+                        text {
+                            content: "The watermark source is an embedded SVG image rather than text.".to_string(),
+                            font_size: typography::SM,
+                            font_weight: 400_i32,
+                            font_color: theme.colors.muted_foreground,
+                            line_height: 20.0,
+                        }
+                    }
+                }
+
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Long document stress sample".to_string(),
+                    detail: Some(
+                        "1,440vp content; the watermark remains one cached repeating texture."
+                            .to_string(),
+                    ),
+                }
+                Watermark {
+                    source: WatermarkSource::text("ARKIT · INTERNAL"),
+                    width: "100%".to_string(),
+                    height: "1440".to_string(),
+                    style: WatermarkStyle {
+                        opacity: 0.16,
+                        gap_x: 96.0,
+                        gap_y: 80.0,
+                        ..WatermarkStyle::default()
+                    },
+                    column {
+                        width: "100%",
+                        height: 1440.0,
+                        align_items: "start",
+                        padding_top: spacing::LG,
+                        padding_right: spacing::LG,
+                        padding_bottom: spacing::LG,
+                        padding_left: spacing::LG,
+                        background_color: theme.colors.card,
+                        border_radius: theme.radii.xl,
+                        text {
+                            content: "Deployment audit".to_string(),
+                            font_size: typography::XXL,
+                            font_weight: 700_i32,
+                            font_color: theme.colors.foreground,
+                            line_height: 30.0,
+                        }
+                        v_gap { height: spacing::SM }
+                        text {
+                            content: "The overlay does not intercept the button or scrolling.".to_string(),
+                            font_size: typography::SM,
+                            font_weight: 400_i32,
+                            font_color: theme.colors.muted_foreground,
+                            line_height: 20.0,
+                        }
+                        v_gap { height: spacing::LG }
+                        Button {
+                            variant: ButtonVariant::Outline,
+                            onclick: move |_| clicks += 1,
+                            "Button clicks: {clicks}"
+                        }
+                        v_gap { height: spacing::LG }
+                        for index in 1..=24 {
+                            row {
+                                width: "100%",
+                                height: 44.0,
+                                align_items: "center",
+                                text {
+                                    content: format!("Audit event #{index:02}"),
+                                    font_size: typography::SM,
+                                    font_weight: 500_i32,
+                                    font_color: theme.colors.foreground,
+                                    line_height: 20.0,
+                                }
+                                row { layout_weight: 1.0 }
+                                text {
+                                    content: "verified".to_string(),
+                                    font_size: typography::XS,
+                                    font_weight: 500_i32,
+                                    font_color: theme.colors.muted_foreground,
+                                    line_height: 18.0,
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn layout_demo_item(label: &'static str, width: f32, height: f32, theme: Theme) -> Element {
+    rsx! {
+        row {
+            width,
+            height,
+            align_items: "center",
+            justify_content: "center",
+            background_color: theme.colors.primary,
+            border_radius: theme.radii.md,
+            text {
+                content: label,
+                font_size: typography::SM,
+                font_weight: 600_i32,
+                font_color: theme.colors.primary_foreground,
+                line_height: 18.0,
+            }
+        }
+    }
+}
+
+#[component]
+fn RefreshLoadMoreDemo() -> Element {
+    const INITIAL_ITEMS: u32 = 24;
+    const PAGE_SIZE: u32 = 12;
+    const MAX_ITEMS: u32 = 60;
+
+    let theme = arkit_shadcn::theme::use_theme();
+    let mut virtual_mode = use_signal(|| true);
+    let mut item_count = use_signal(|| INITIAL_ITEMS);
+    let mut data_revision = use_signal(|| 0_u64);
+    let mut refreshing = use_signal(|| false);
+    let mut load_state = use_signal(LoadMoreState::default);
+    let mut operation_epoch = use_signal(|| 0_u64);
+    let mut refresh_request = use_signal(|| 0_u64);
+    let mut load_request = use_signal(|| 0_u64);
+    let async_runtime = arkit::tokio_handle();
+
+    let refresh_runtime = async_runtime.clone();
+    let _refresh_task = use_resource(move || {
+        let refresh_runtime = refresh_runtime.clone();
+        let request = refresh_request();
+        async move {
+            if request == 0 {
+                return;
+            }
+            let _ = refresh_runtime
+                .spawn(async {
+                    tokio::time::sleep(Duration::from_millis(700)).await;
+                })
+                .await;
+            if *operation_epoch.peek() != request {
+                return;
+            }
+            item_count.set(INITIAL_ITEMS);
+            data_revision += 1;
+            load_state.set(LoadMoreState::Idle);
+            refreshing.set(false);
+        }
+    });
+
+    let load_runtime = async_runtime;
+    let _load_task = use_resource(move || {
+        let load_runtime = load_runtime.clone();
+        let request = load_request();
+        async move {
+            if request == 0 {
+                return;
+            }
+            let _ = load_runtime
+                .spawn(async {
+                    tokio::time::sleep(Duration::from_millis(650)).await;
+                })
+                .await;
+            if *operation_epoch.peek() != request {
+                return;
+            }
+            let next = (*item_count.peek())
+                .saturating_add(PAGE_SIZE)
+                .min(MAX_ITEMS);
+            item_count.set(next);
+            load_state.set(if next >= MAX_ITEMS {
+                LoadMoreState::NoMore
+            } else {
+                LoadMoreState::Idle
+            });
+        }
+    });
+
+    let begin_refresh = EventHandler::new(move |()| {
+        if refreshing() {
+            return;
+        }
+        let request = operation_epoch().saturating_add(1);
+        operation_epoch.set(request);
+        refresh_request.set(request);
+        refreshing.set(true);
+        load_state.set(LoadMoreState::Idle);
+    });
+    let begin_load = EventHandler::new(move |()| {
+        if matches!(load_state(), LoadMoreState::Loading | LoadMoreState::NoMore) {
+            return;
+        }
+        let request = operation_epoch().saturating_add(1);
+        operation_epoch.set(request);
+        load_request.set(request);
+        load_state.set(LoadMoreState::Loading);
+    });
+
+    rsx! {
+        column {
+            width: "100%",
+            height: "100%",
+            background_color: theme.colors.background,
+            column {
+                width: "100%",
+                padding_top: spacing::SM,
+                padding_right: spacing::MD,
+                padding_bottom: spacing::SM,
+                padding_left: spacing::MD,
+                background_color: theme.colors.card,
+                border_width: 1.0,
+                border_color: theme.colors.border,
+                row {
+                    width: "100%",
+                    align_items: "center",
+                    Button {
+                        size: ButtonSize::Sm,
+                        variant: if virtual_mode() { ButtonVariant::Default } else { ButtonVariant::Outline },
+                        onclick: move |_| virtual_mode.set(true),
+                        "Virtual List"
+                    }
+                    h_gap { width: spacing::SM }
+                    Button {
+                        size: ButtonSize::Sm,
+                        variant: if virtual_mode() { ButtonVariant::Outline } else { ButtonVariant::Default },
+                        onclick: move |_| virtual_mode.set(false),
+                        "Regular Scroll"
+                    }
+                    row {
+                        layout_weight: 1.0,
+                        justify_content: "end",
+                        Button {
+                            size: ButtonSize::Sm,
+                            variant: ButtonVariant::Ghost,
+                            onclick: move |_| {
+                                operation_epoch += 1;
+                                refreshing.set(false);
+                                load_state.set(LoadMoreState::Failed);
+                            },
+                            "Test error"
+                        }
+                    }
+                }
+                text {
+                    margin_top: spacing::XS,
+                    font_size: typography::XS,
+                    font_color: theme.colors.muted_foreground,
+                    max_lines: 1_i32,
+                    text_overflow: "ellipsis",
+                    if virtual_mode() {
+                        "NodeAdapter · {item_count} items · pull down / scroll to bottom"
+                    } else {
+                        "Native Scroll · {item_count} items · pull down / scroll to bottom"
+                    }
+                }
+            }
+            column {
+                width: "100%",
+                layout_weight: 1.0,
+                if virtual_mode() {
+                    RefreshVirtualListDemo {
+                        item_count: item_count(),
+                        state: load_state(),
+                        data_revision: data_revision(),
+                        refreshing: refreshing(),
+                        on_refresh: begin_refresh,
+                        on_load_more: begin_load,
+                    }
+                } else {
+                    PullToRefresh {
+                        refreshing: refreshing(),
+                        on_refresh: move |_| begin_refresh.call(()),
+                        InfiniteScroll {
+                            item_count: item_count(),
+                            data_revision: data_revision(),
+                            state: load_state(),
+                            scroll_bar: "off".to_string(),
+                            on_load_more: move |_| begin_load.call(()),
+                            for index in 0..item_count() {
+                                {refresh_demo_row(index, theme)}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn RefreshVirtualListDemo(
+    item_count: u32,
+    state: LoadMoreState,
+    data_revision: u64,
+    refreshing: bool,
+    on_refresh: EventHandler<()>,
+    on_load_more: EventHandler<()>,
+) -> Element {
+    let theme = arkit_shadcn::theme::use_theme();
+    let controller = use_load_more(item_count, state, 3, on_load_more);
+    let reset_controller = controller.clone();
+    use_effect(use_reactive((&data_revision,), move |(_revision,)| {
+        reset_controller.reset()
+    }));
+
+    let mut item_keys: Vec<u64> = (0..u64::from(item_count)).collect();
+    item_keys.push(u64::MAX - load_more_state_key(state));
+    let item_controller = controller.clone();
+    let footer_controller = controller.clone();
+    let adapter =
+        use_virtual_node_adapter_rsx_items_keyed(VirtualKind::List, item_keys, move |index| {
+            if index < item_count {
+                let visible_controller = item_controller.clone();
+                arkit::queue_ui_loop(move || visible_controller.on_virtual_item(index));
+                refresh_demo_row(index, theme)
+            } else {
+                let retry_controller = footer_controller.clone();
+                rsx! {
+                    LoadMoreIndicator {
+                        state,
+                        on_retry: move |_| retry_controller.retry(),
+                    }
+                }
+            }
+        });
+    let scroll_controller = controller.clone();
+    let refresh_controller = controller;
+
+    rsx! {
+        PullToRefresh {
+            refreshing,
+            on_refresh: move |_| {
+                refresh_controller.reset();
+                on_refresh.call(());
+            },
+            ShowcaseVirtualListHost {
+                adapter,
+                on_scroll: move |data| scroll_controller.on_virtual_scroll(data),
+            }
+        }
+    }
+}
+
+#[component]
+fn ShowcaseVirtualListHost(
+    adapter: VirtualNodeAdapter,
+    on_scroll: EventHandler<dioxus_elements::event::ScrollData>,
+) -> Element {
+    let attach_adapter = adapter.clone();
+    use_layout_frame_node(move |host_node, _frame| {
+        let _ = attach_adapter.attach(&host_node);
+    });
+
+    rsx! {
+        list {
+            width: "100%",
+            height: "100%",
+            scroll_bar: "off",
+            list_cached_count: 6_i32,
+            onscroll: move |event| on_scroll.call(*event.data()),
+        }
+    }
+}
+
+fn load_more_state_key(state: LoadMoreState) -> u64 {
+    match state {
+        LoadMoreState::Idle => 0,
+        LoadMoreState::Loading => 1,
+        LoadMoreState::Failed => 2,
+        LoadMoreState::NoMore => 3,
+    }
+}
+
+fn refresh_demo_row(index: u32, theme: Theme) -> Element {
+    rsx! {
+        row {
+            width: "100%",
+            height: 58.0,
+            padding_left: spacing::MD,
+            padding_right: spacing::MD,
+            align_items: "center",
+            background_color: theme.colors.background,
+            border_width: 1.0,
+            border_color: theme.colors.border,
+            text {
+                font_size: typography::SM,
+                font_weight: 500_i32,
+                font_color: theme.colors.foreground,
+                "Activity #{index}"
+            }
+            row {
+                layout_weight: 1.0,
+                justify_content: "end",
+                text {
+                    font_size: typography::XS,
+                    font_color: theme.colors.muted_foreground,
+                    "virtual-ready"
+                }
+            }
+        }
     }
 }
 

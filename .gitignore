@@ -3,6 +3,7 @@
 
 dist
 node_modules
+website/.astro
 website/.void
 website/dist
 

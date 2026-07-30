@@ -1,11 +1,11 @@
 ---
 title: 事件与 Action
-description: "Controller、选择、缩放与事件。"
+description: "用 Controller 做选择、缩放，或发命令式操作。"
 ---
 
 # 事件与 Action
 
-`ChartController` 提供 imperative action 与查询。mount 前 action 会排队，bind 后按顺序执行；组件卸载后检查 `is_mounted`。
+`ChartController` 提供命令式操作和查询。组件还没挂上时 action 会排队，卸掉之后记得看 `is_mounted`。
 
 ## 安装 Controller
 

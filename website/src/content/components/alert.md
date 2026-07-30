@@ -1,11 +1,11 @@
 ---
 title: Alert
-description: "提示容器及标题、说明和列表。"
+description: "页内提示条：标题、说明和补充列表。"
 ---
 
 # Alert
 
-Alert 展示页内提示或错误，由 root、标题、说明和列表 primitive 组合。
+页内提示条，用来放警告、错误或补充说明，而不是打断当前流程的模态框。
 
 ## 用法
 

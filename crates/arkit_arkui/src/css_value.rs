@@ -31,10 +31,7 @@ pub fn expand_box_shorthand(value: &AttributeValue) -> Option<[f32; 4]> {
         AttributeValue::Int(i) => Some([*i as f32; 4]),
         AttributeValue::Text(s) => {
             let parts = split_css_list(s);
-            let nums: Option<Vec<f32>> = parts
-                .into_iter()
-                .map(|part| parse_vp_number(part))
-                .collect();
+            let nums: Option<Vec<f32>> = parts.into_iter().map(parse_vp_number).collect();
             let nums = nums?;
             match nums.as_slice() {
                 [a] => Some([*a, *a, *a, *a]),

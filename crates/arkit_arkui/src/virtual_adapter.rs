@@ -6,10 +6,12 @@
 //! `WaterFlowNodeAdapter`; [`VirtualKind`] selects the matching host attribute
 //! and item wrapper.
 //!
-//! `render_item` is a callback invoked on-demand by ArkUI for each visible
-//! index; it receives the index and must return a fresh [`ArkUINode`] for that
-//! item. Items are disposed when ArkUI removes them from the adapter.
+//! The adapter supports both a native `render_item` callback returning a fresh
+//! [`ArkUINode`] and a direct wrapper mount callback used by the RSX
+//! integration. Items and their retained Rust-side owners are released when
+//! ArkUI removes them from the adapter.
 
+use std::any::Any;
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
@@ -54,15 +56,94 @@ impl VirtualKind {
 /// Callback that renders a single item's content node for the given index.
 pub type RenderItem = Rc<dyn Fn(u32) -> ArkUIResult<ArkUINode>>;
 
+/// Callback that mounts an item directly into its adapter-owned native wrapper.
+///
+/// This lower-level boundary powers RSX-backed virtual items. The callback
+/// receives the actual ListItem/GridItem/FlowItem wrapper and returns an owner
+/// that must stay alive for as long as that wrapper is mounted.
+pub type MountItem = Rc<dyn Fn(u32, Rc<RefCell<ArkUINode>>) -> ArkUIResult<VirtualItemMount>>;
+type AbandonItemOwner = Box<dyn FnOnce(Box<dyn Any>)>;
+
+/// Rust-side lifetime owner retained alongside one mounted virtual item.
+///
+/// Dropping this value tears down item-local state before the adapter disposes
+/// the corresponding native wrapper.
+pub struct VirtualItemMount {
+    owner: Option<Box<dyn Any>>,
+    abandon_owner: Option<AbandonItemOwner>,
+}
+
+impl VirtualItemMount {
+    /// Retain an arbitrary item-local owner until ArkUI removes the item.
+    pub fn retain(owner: impl Any) -> Self {
+        Self {
+            owner: Some(Box::new(owner)),
+            abandon_owner: None,
+        }
+    }
+
+    /// Retain an owner with a custom invalid-native-root abandonment path.
+    ///
+    /// The callback is used only when ArkUI has already destroyed the host
+    /// subtree without delivering normal item-removal events.
+    pub fn retain_with_abandon<T: Any>(owner: T, abandon_owner: impl FnOnce(T) + 'static) -> Self {
+        Self {
+            owner: Some(Box::new(owner)),
+            abandon_owner: Some(Box::new(move |owner| {
+                let owner = owner
+                    .downcast::<T>()
+                    .expect("virtual item owner type changed before abandonment");
+                abandon_owner(*owner);
+            })),
+        }
+    }
+
+    fn abandon(mut self) {
+        if let Some(owner) = self.owner.take() {
+            if let Some(abandon_owner) = self.abandon_owner.take() {
+                abandon_owner(owner);
+            }
+        }
+    }
+}
+
+enum ItemRenderer {
+    Content(RenderItem),
+    Mounted(MountItem),
+}
+
+struct MountedItem {
+    node: Rc<RefCell<ArkUINode>>,
+    mount: Option<VirtualItemMount>,
+}
+
+impl MountedItem {
+    fn dispose(mut self) {
+        // Item-local runtimes/listeners must stop touching native nodes before
+        // the adapter-owned wrapper is destroyed.
+        self.mount.take();
+        let _ = self.node.borrow_mut().dispose();
+    }
+
+    fn abandon(mut self) {
+        // The host subtree is already invalid, so item-local cleanup must not
+        // call back into its native root. Leaking the retained integration
+        // owner is safer than a use-after-free on this exceptional path.
+        if let Some(mount) = self.mount.take() {
+            mount.abandon();
+        }
+    }
+}
+
 struct AdapterState {
     kind: VirtualKind,
     total_count: u32,
-    render_item: RenderItem,
+    renderer: ItemRenderer,
     /// Mounted items keyed by native handle. During a reload ArkUI may add the
     /// replacement for an index before removing the old node for that same
     /// index. Keying by index would overwrite and then dispose the replacement
     /// when the old removal arrives.
-    mounted: FxHashMap<usize, ArkUINode>,
+    mounted: FxHashMap<usize, MountedItem>,
     adapter: Option<NodeAdapter>,
     attached_host: Option<ArkUINode>,
 }
@@ -90,7 +171,23 @@ impl VirtualNodeAdapter {
             state: Rc::new(RefCell::new(AdapterState {
                 kind,
                 total_count,
-                render_item,
+                renderer: ItemRenderer::Content(render_item),
+                mounted: FxHashMap::default(),
+                adapter: None,
+                attached_host: None,
+            })),
+        }
+    }
+
+    /// Create an adapter whose callback mounts directly into the generated item
+    /// wrapper. Most applications should use the RSX hook exposed by
+    /// `arkit_hooks`; this constructor exists for renderer integrations.
+    pub fn new_mounted(kind: VirtualKind, total_count: u32, mount_item: MountItem) -> Self {
+        Self {
+            state: Rc::new(RefCell::new(AdapterState {
+                kind,
+                total_count,
+                renderer: ItemRenderer::Mounted(mount_item),
                 mounted: FxHashMap::default(),
                 adapter: None,
                 attached_host: None,
@@ -150,7 +247,12 @@ impl VirtualNodeAdapter {
     /// ArkUI. Call [`reload_items`](Self::reload_items) after changing the
     /// backing data for already-mounted rows.
     pub fn set_render_item(&self, render_item: RenderItem) {
-        self.state.borrow_mut().render_item = render_item;
+        self.state.borrow_mut().renderer = ItemRenderer::Content(render_item);
+    }
+
+    /// Replace the direct item mounter used by future creates and reloads.
+    pub fn set_mount_item(&self, mount_item: MountItem) {
+        self.state.borrow_mut().renderer = ItemRenderer::Mounted(mount_item);
     }
 
     /// Return the current logical item count.
@@ -179,8 +281,12 @@ impl VirtualNodeAdapter {
         // risk a use-after-free.
         let mounted = std::mem::take(&mut self.state.borrow_mut().mounted);
         if reset_result.is_ok() {
-            for (_, mut node) in mounted {
-                let _ = node.dispose();
+            for (_, item) in mounted {
+                item.dispose();
+            }
+        } else {
+            for (_, item) in mounted {
+                item.abandon();
             }
         }
         reset_result
@@ -323,7 +429,10 @@ impl Drop for VirtualNodeAdapter {
                 // handles instead of issuing another native dispose.
                 adapter.dispose();
             }
-            self.state.borrow_mut().mounted.clear();
+            let mounted = std::mem::take(&mut self.state.borrow_mut().mounted);
+            for (_, item) in mounted {
+                item.abandon();
+            }
         }
     }
 }
@@ -339,22 +448,32 @@ fn handle_adapter_event(state: &Weak<RefCell<AdapterState>>, event: &mut NodeAda
         }
         NodeAdapterEventType::OnAddNodeToAdapter => {
             let index = event.item_index();
-            let (kind, render_item) = {
+            let (kind, renderer) = {
                 let s = state.borrow();
-                (s.kind, s.render_item.clone())
+                let renderer = match &s.renderer {
+                    ItemRenderer::Content(render_item) => {
+                        ItemRenderer::Content(render_item.clone())
+                    }
+                    ItemRenderer::Mounted(mount_item) => ItemRenderer::Mounted(mount_item.clone()),
+                };
+                (s.kind, renderer)
             };
-            match build_item(kind, index, &render_item) {
-                Ok(mut node) => {
-                    if let Err(e) = event.set_item(&node) {
-                        let _ = node.dispose();
+            match build_item(kind, index, &renderer) {
+                Ok(item) => {
+                    let set_item_result = {
+                        let node = item.node.borrow();
+                        event.set_item(&node)
+                    };
+                    if let Err(e) = set_item_result {
+                        item.dispose();
                         ohos_hilog_binding::error(format!(
                             "arkit_arkui: virtual adapter set_item failed: {e}"
                         ));
                         return;
                     }
-                    let node_key = node.raw_handle() as usize;
-                    if let Some(mut replaced) = state.borrow_mut().mounted.insert(node_key, node) {
-                        let _ = replaced.dispose();
+                    let node_key = item.node.borrow().raw_handle() as usize;
+                    if let Some(replaced) = state.borrow_mut().mounted.insert(node_key, item) {
+                        replaced.dispose();
                     }
                 }
                 Err(e) => {
@@ -372,8 +491,8 @@ fn handle_adapter_event(state: &Weak<RefCell<AdapterState>>, event: &mut NodeAda
                 return;
             };
             let node_key = removed.raw_handle() as usize;
-            if let Some(mut node) = state.borrow_mut().mounted.remove(&node_key) {
-                let _ = node.dispose();
+            if let Some(item) = state.borrow_mut().mounted.remove(&node_key) {
+                item.dispose();
             }
         }
         NodeAdapterEventType::WillAttachToNode => {}
@@ -388,20 +507,35 @@ fn handle_adapter_event(state: &Weak<RefCell<AdapterState>>, event: &mut NodeAda
 
 /// Build a single virtual item: a wrapper (ListItem/GridItem/FlowItem)
 /// containing the content node returned by `render_item`.
-fn build_item(kind: VirtualKind, index: u32, render_item: &RenderItem) -> ArkUIResult<ArkUINode> {
-    let mut wrapper = kind.create_item_wrapper()?;
-    let content = match render_item(index) {
-        Ok(content) => content,
-        Err(error) => {
-            let _ = wrapper.dispose();
-            return Err(error);
+fn build_item(kind: VirtualKind, index: u32, renderer: &ItemRenderer) -> ArkUIResult<MountedItem> {
+    let wrapper = Rc::new(RefCell::new(kind.create_item_wrapper()?));
+    let mount = match renderer {
+        ItemRenderer::Content(render_item) => {
+            let content = match render_item(index) {
+                Ok(content) => content,
+                Err(error) => {
+                    let _ = wrapper.borrow_mut().dispose();
+                    return Err(error);
+                }
+            };
+            if let Err(error) = wrapper.borrow_mut().add_child(content) {
+                let _ = wrapper.borrow_mut().dispose();
+                return Err(error);
+            }
+            None
         }
+        ItemRenderer::Mounted(mount_item) => match mount_item(index, wrapper.clone()) {
+            Ok(mount) => Some(mount),
+            Err(error) => {
+                let _ = wrapper.borrow_mut().dispose();
+                return Err(error);
+            }
+        },
     };
-    if let Err(error) = wrapper.add_child(content) {
-        let _ = wrapper.dispose();
-        return Err(error);
-    }
-    Ok(wrapper)
+    Ok(MountedItem {
+        node: wrapper,
+        mount,
+    })
 }
 
 fn validate_item_index(total: u32, index: u32) -> ArkUIResult<()> {
@@ -450,9 +584,20 @@ fn invalid_parameter(message: impl Into<String>) -> ohos_arkui_binding::common::
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
     use std::rc::Rc;
 
-    use super::{validate_insert, validate_item_range, VirtualKind, VirtualNodeAdapter};
+    use super::{
+        validate_insert, validate_item_range, VirtualItemMount, VirtualKind, VirtualNodeAdapter,
+    };
+
+    struct DropProbe(Rc<Cell<u32>>);
+
+    impl Drop for DropProbe {
+        fn drop(&mut self) {
+            self.0.set(self.0.get() + 1);
+        }
+    }
 
     #[test]
     fn item_ranges_accept_empty_tail_and_bounded_content() {
@@ -487,5 +632,27 @@ mod tests {
         adapter.reload_items(1, 2).unwrap();
         adapter.remove_items(2, 3).unwrap();
         assert_eq!(adapter.total_count(), 2);
+    }
+
+    #[test]
+    fn virtual_item_mount_drops_its_owner_normally() {
+        let drops = Rc::new(Cell::new(0));
+        drop(VirtualItemMount::retain(DropProbe(drops.clone())));
+        assert_eq!(drops.get(), 1);
+    }
+
+    #[test]
+    fn virtual_item_mount_uses_custom_abandonment() {
+        let drops = Rc::new(Cell::new(0));
+        let abandons = Rc::new(Cell::new(0));
+        let count_abandons = abandons.clone();
+        let mount =
+            VirtualItemMount::retain_with_abandon(DropProbe(drops.clone()), move |_owner| {
+                count_abandons.set(count_abandons.get() + 1);
+            });
+
+        mount.abandon();
+        assert_eq!(abandons.get(), 1);
+        assert_eq!(drops.get(), 1);
     }
 }

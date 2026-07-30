@@ -1,11 +1,11 @@
 ---
 title: 主题系统
-description: "预设、明暗模式、tokens 与运行时切换。"
+description: "主题预设和明暗模式，以及运行时如何换肤。"
 ---
 
 # 主题系统
 
-`ThemeProvider` 把一个 `Signal<Theme>` 放入 Dioxus Context。组件调用 `use_theme()` 响应式读取；没有 provider 时回退 `Theme::default()`，便于独立 snippet 与测试。
+主题预设、明暗模式，以及运行时怎么切换 token。
 
 ## 安装主题
 

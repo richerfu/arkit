@@ -1,11 +1,11 @@
 ---
 title: 虚拟列表与可见范围
-description: "List、Grid、WaterFlow 的 NodeAdapter。"
+description: "在 List / Grid / WaterFlow 里用 RSX 做真正的虚拟列表。"
 ---
 
 # 虚拟列表与可见范围
 
-`use_virtual_node_adapter` 把 ArkUI NodeAdapter 挂到 `list`、`grid` 或 `waterflow`。只有进入可见区域的 item 才调用 `render_item` 创建原生节点；这是真虚拟化，不是先构建完整 Dioxus subtree 再隐藏。
+列表特别长时，不要把所有 item 一次性挂进树上。用 NodeAdapter 做真正的虚拟化：只挂可见项，RSX 仍然负责每一项长什么样。
 
 ## 支持的容器
 
@@ -15,7 +15,7 @@ description: "List、Grid、WaterFlow 的 NodeAdapter。"
 | `Grid`        | `grid`      | GridItem     |
 | `WaterFlow`   | `waterflow` | FlowItem     |
 
-List、Grid 和 WaterFlow 统一使用 `use_virtual_node_adapter`。容器差异只由 `VirtualKind` 表达，一套 hook 覆盖三种容器与更新策略。
+三种容器使用同一套 hook 和更新策略，容器差异只由 `VirtualKind` 表达。
 
 ## 基本用法
 
@@ -24,25 +24,30 @@ const TOTAL: u32 = 10_000;
 
 #[component]
 fn VirtualList() -> Element {
-    let adapter = use_virtual_node_adapter(
+    let adapter = use_virtual_node_adapter_rsx(
         VirtualKind::List,
         TOTAL,
         move |index| {
-            let text = NodeBuilder::new("text")?
-                .text_content(format!("#{index:05}"))?
-                .font_size(14.0)?
-                .build();
-            Ok(NodeBuilder::new("row")?
-                .percent_width(1.0)?
-                .height(44.0)?
-                .padding([12.0; 4])?
-                .child(text)?
-                .build())
+            let mut selected = use_signal(|| false);
+            rsx! {
+                row {
+                    width: "100%",
+                    height: 44.0,
+                    padding: 12.0,
+                    background_color: if selected() { "#ffdbeafe" } else { "#ffffffff" },
+                    onclick: move |_| selected.toggle(),
+                    text {
+                        font_size: 14.0,
+                        "#{index:05}"
+                    }
+                }
+            }
         },
     );
 
+    let attach_adapter = adapter.clone();
     use_layout_frame_node(move |host, _frame| {
-        let _ = adapter.attach(&host);
+        let _ = attach_adapter.attach(&host);
     });
 
     rsx! {
@@ -54,11 +59,13 @@ fn VirtualList() -> Element {
 }
 ```
 
-`attach` 是幂等的。通过 layout hook attach 的好处是 host node 与可用尺寸已经建立，也能处理 Dioxus 替换 native wrapper 的情况。
+`attach` 是幂等的。通过 layout hook attach 时，host node 与可用尺寸已经建立，也能处理 Dioxus 替换 native wrapper 的情况。
 
-## Grid
+每个可见 item 都有独立的 component scope。上例中的 `selected` 只更新被点击的 item；item 离开 ArkUI 缓存并被回收时，对应的 effect、event listener、task、hook 状态和 native wrapper 会一起清理。
 
-adapter 只负责 item 生命周期；列模板和间距仍在声明式 host 上配置：
+## Grid 与 WaterFlow
+
+adapter 负责 item 生命周期；列模板、间距和缓存数量仍在声明式 host 上配置：
 
 ```rust
 grid {
@@ -66,57 +73,40 @@ grid {
     height: "100%",
     grid_column_template: "1fr 1fr",
 }
-```
 
-`render_item` 返回 item content，adapter 自动创建 GridItem wrapper。
-
-## WaterFlow
-
-```rust
-let adapter = use_virtual_node_adapter(
-    VirtualKind::WaterFlow,
-    TOTAL,
-    render_waterfall_item,
-);
-
-rsx! {
-    waterflow {
-        width: "100%",
-        height: "100%",
-        padding: 12.0,
-        water_flow_column_template: "repeat(auto-fill, 104vp)",
-        water_flow_column_gap: 12.0,
-        water_flow_row_gap: 12.0,
-        water_flow_cached_count: 6_i32,
-    }
+waterflow {
+    width: "100%",
+    height: "100%",
+    padding: 12.0,
+    water_flow_column_template: "repeat(auto-fill, 104vp)",
+    water_flow_column_gap: 12.0,
+    water_flow_row_gap: 12.0,
+    water_flow_cached_count: 6_i32,
 }
 ```
 
-WaterFlow item 可以返回不同高度。列宽由 host template 决定；如果百分比宽度会按 host 而非 FlowItem 计算，可像 `examples/complex_cases` 一样给 content 显式设置 track width。
+WaterFlow item 可以返回不同高度。列宽由 host template 决定；如果百分比宽度会按 host 而非 FlowItem 计算，可像 `examples/complex_cases` 一样给 item root 显式设置 track width。
 
 ## 更新数据
 
-`VirtualNodeAdapter` 是 cloneable 的轻量共享控制器。业务数据由稳定 owner 持有，`render_item` 每次被调用时从这个 owner 读取当前值。数据变化后直接调用 adapter 的更新方法，不需要为 revision、key 或更新范围引入额外 hook。
+item 内读取的 signal 会按正常 Dioxus 规则局部重渲染。不经过响应式状态的外部数据变化，可使用 keyed hook：
 
 ```rust
-let rows = use_hook(|| Rc::new(RefCell::new(load_rows())));
-let render_rows = rows.clone();
-let adapter = use_virtual_node_adapter(
+let rows = use_signal(load_rows);
+let keys = rows().iter().map(|row| row.revision).collect();
+let adapter = use_virtual_node_adapter_rsx_items_keyed(
     VirtualKind::List,
-    rows.borrow().len() as u32,
-    move |index| render_row(&render_rows.borrow()[index as usize]),
+    keys,
+    move |index| {
+        let row = &rows()[index as usize];
+        rsx! { RowView { row: row.clone() } }
+    },
 );
-
-// 先更新数据，再通知 adapter。只有第 42 行的可见原生节点会重建。
-let update_rows = rows.clone();
-let update_adapter = adapter.clone();
-let update_row = move || {
-    update_rows.borrow_mut()[42].selected = true;
-    let _ = update_adapter.reload_items(42, 1);
-};
 ```
 
-更新能力都由 `VirtualNodeAdapter` 本身提供：
+`item_keys[index]` 应覆盖该 item 的全部非响应式视觉输入。长度不变时，hook 只 reload 发生变化的连续区间。
+
+`VirtualNodeAdapter` 本身也提供命令式结构更新：
 
 | 方法                         | 语义                                               |
 | ---------------------------- | -------------------------------------------------- |
@@ -127,9 +117,38 @@ let update_row = move || {
 | `move_item(from, to)`        | 移动单项，尽量复用现有原生节点                     |
 | `set_total_count(total)`     | 总数变化但无法描述具体结构时同步数量并重建可见节点 |
 
-`insert_items`、`remove_items` 和 `move_item` 调用前必须先更新业务数据，因为 ArkUI 可能在方法内部同步请求新位置的 item。局部 reload 使用 ArkUI NodeAdapter 原生更新路径，不替换 host adapter，也不创建新的 Dioxus scope。
+`insert_items`、`remove_items` 和 `move_item` 调用前必须先更新业务数据，因为 ArkUI 可能在方法内部同步请求新位置的 item。被 reload 的可见 item 会卸载旧 subtree 并创建新 scope，因此 item-local hook 状态也会重置。
 
-`render_item` 捕获的数据必须在 adapter 生命周期内有效。不要捕获临时 borrow；优先捕获 `Rc`、signal handle 或不可变数据 owner。
+`render_item` 捕获的数据必须在 adapter 生命周期内有效。不要捕获临时 borrow；优先捕获 `Rc`、signal handle 或不可变数据 owner。框架会自动把窗口指标、应用生命周期、安全区策略和 item-local `ArkHost` 提供给 RSX item。业务自定义 context 不会跨独立的虚拟 item scope 自动继承；需要时先在父组件取得 cloneable context handle，再在 `render_item` 中用 `use_context_provider` 提供。
+
+## RSX render_item 约束
+
+- callback 本身就是一个 item component scope，可以使用 Dioxus hooks。
+- 不假定 callback 按 index 顺序执行，ArkUI 可按 viewport 需求请求、回收或重建。
+- item 构建应短小确定；图片解码、网络请求等工作仍应使用 resource 或外部预取。
+- `reload_items` 表示重新挂载，不用于本可由 item-local signal 完成的普通状态更新。
+
+## NodeBuilder 底层路径
+
+只有直接集成原生 node 或追求最小 Dioxus 开销时，才使用原有 hook：
+
+```rust
+let adapter = use_virtual_node_adapter(
+    VirtualKind::List,
+    TOTAL,
+    move |index| {
+        Ok(NodeBuilder::new("text")?
+            .text_content(format!("#{index:05}"))?
+            .build())
+    },
+);
+```
+
+这个 callback 在 Dioxus render cycle 外执行，必须返回全新的 `ArkUINode`，不能调用 hook。adapter 仍会自动创建 ListItem/GridItem/FlowItem wrapper，并负责原生节点清理。
+
+## 选择普通 keyed 列表还是虚拟 RSX
+
+小列表直接在 `rsx!` 中 keyed render，结构和状态最简单。item 数量上千、首屏 native 创建成本明显或需要 WaterFlow 回收时，使用 `use_virtual_node_adapter_rsx`。它只为 ArkUI 当前保留的 item 建立独立 Dioxus scope，保留声明式能力的同时限制节点与 hook 数量。
 
 ## 可见范围
 
@@ -137,31 +156,14 @@ let update_row = move || {
 
 ```rust
 let (range, mut set_range) = use_virtual_range();
-
-// 在容器的 scroll-index 回调中：
 set_range.set(VirtualVisibleRange::new(first, last));
 ```
 
-index 是 inclusive。默认 `first_index = 0`、`last_index = -1` 表示尚无可见项，`is_empty()` 返回 true。
-
-NodeAdapter 本身不依赖这个 signal；它适用于预取、埋点、可见曝光或与外部分页数据同步。
-
-## render_item 约束
-
-- 每次调用返回一个全新的 content node。
-- 不在 callback 中调用 Dioxus hooks。
-- 不持有 renderer tree 中 node 的可变 borrow。
-- 所有 early-error path 由 `NodeBuilder` 或显式 cleanup 处理。
-- item 构建应短小确定；图片解码、网络请求等工作在外部预取。
-- 不假定 callback 按 index 顺序执行，ArkUI 可按 viewport 需求请求/回收。
-
-## 选择声明式列表还是 NodeAdapter
-
-小列表、item 需要完整 Dioxus component/hooks 时，直接在 `rsx!` 中 keyed render 最简单。大列表、item 数量上千或 native 创建成本明显时使用 NodeAdapter。NodeAdapter item 是原生节点，不具有独立 Dioxus component scope；复杂响应式 item 在数据更新后通过 `reload_items` 精确失效。需要在 item 内使用 Dioxus hooks 时，应直接渲染 keyed component，而不是给 NodeAdapter 叠加另一套 hook 生命周期。
+index 是 inclusive。默认 `first_index = 0`、`last_index = -1` 表示尚无可见项，`is_empty()` 返回 true。NodeAdapter 本身不依赖这个 signal；它适用于预取、埋点、可见曝光或与外部分页数据同步。
 
 ## 验证
 
-`examples/complex_cases` 同时覆盖 10,000 条 List、两列 Grid、变高 WaterFlow，以及三种容器的单项动态更新：
+`examples/complex_cases` 同时覆盖 10,000 条 List、两列 Grid、变高 WaterFlow、item-local signal 和三种容器的单项动态更新：
 
 ```sh
 cd examples/complex_cases
@@ -170,7 +172,7 @@ ohrs build --arch aarch
 
 真机检查：
 
-- 初始目标 `#00002` 可见时，连续点击“更新单项”，只有该 item 的 revision 和颜色变化。
+- 点击任一可见 item，其 `taps` signal 独立更新，不影响相邻 item。
+- 初始目标 `#00002` 可见时，连续点击“更新单项”，只有该 item 的 revision、颜色和本地状态变化。
 - WaterFlow 每次更新目标 item 时高度随 revision 改变，其他 item 不应重建或丢失滚动锚点。
-- “上一项/下一项”只改变目标，不应触发 item reload。
 - 快速滚动、切换容器、item 回收以及返回页面后的 native 资源释放保持正常。

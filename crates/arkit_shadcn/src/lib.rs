@@ -16,6 +16,7 @@
 //! `code` (alone or with Markdown) for syntax highlighting.
 
 pub mod components;
+mod i18n;
 pub mod icon;
 pub mod styles;
 pub mod theme;

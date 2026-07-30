@@ -1,16 +1,11 @@
 ---
 title: Barcode
-description: "二维码 / 条形码生成（独立 barcode feature）。"
+description: "生成二维码和条形码，不依赖相机。"
 ---
 
 # Barcode
 
-`Barcode` 与 `encode_barcode` / `use_barcode` 提供二维码与条形码**生成**能力，基于 rxing（ZXing Rust 移植）。与 `camera-scan` 扫码完全解耦：不需要相机权限，也不依赖 CameraKit。
-
-```toml
-[dependencies]
-arkit = { version = "*", features = ["barcode"] }
-```
+生成二维码和常见条形码。这是独立的 `barcode` feature，和相机扫码完全分开，也不需要相机权限。
 
 ## 三层 API
 

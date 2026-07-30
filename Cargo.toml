@@ -8,6 +8,7 @@ members = [
     "crates/arkit_prelude",
     "crates/arkit_hooks",
     "crates/arkit_shadcn",
+    "plugins/arkit_calendar_icu",
     "crates/arkit_router",
     "crates/arkit_i18n",
     "crates/arkit_i18n_macros",
@@ -19,6 +20,7 @@ members = [
     "crates/arkit_camera",
     "crates/arkit_barcode",
     "crates/arkit_icon",
+    "crates/arkit_terminal",
     "examples/counter",
     "examples/async_task",
     "examples/animation",
@@ -31,6 +33,7 @@ members = [
     "examples/lottie",
     "examples/router",
     "examples/shadcn_showcase",
+    "examples/terminal",
     "examples/webview",
 ]
 # `app/` is an OpenHarmony application shell (ArkTS + hvigor), not a Rust crate.
@@ -66,6 +69,7 @@ arkit_canvas = { path = "crates/arkit_canvas" }
 arkit_chart = { path = "crates/arkit_chart" }
 arkit_camera = { path = "crates/arkit_camera" }
 arkit_barcode = { path = "crates/arkit_barcode" }
+arkit_terminal = { path = "crates/arkit_terminal" }
 arkit_derive = { path = "crates/arkit_derive" }
 arkit_icon = { path = "crates/arkit_icon" }
 arkit_i18n = { path = "crates/arkit_i18n" }
@@ -74,15 +78,21 @@ arkit_lottie = { path = "crates/arkit_lottie" }
 arkit_router = { path = "crates/arkit_router" }
 arkit_runtime = { path = "crates/arkit_runtime" }
 arkit_shadcn = { path = "crates/arkit_shadcn" }
+arkit_calendar_icu = { path = "plugins/arkit_calendar_icu" }
 arkit_arkui = { path = "crates/arkit_arkui" }
 arkit_elements = { path = "crates/arkit_elements" }
 arkit_prelude = { path = "crates/arkit_prelude" }
 arkit_hooks = { path = "crates/arkit_hooks" }
+bindgen = "0.72"
+bytemuck = { version = "1.23", features = ["derive"] }
+glyphon = "0.12"
+pollster = "0.4"
 rust-embed = { version = "8.11.0", features = ["debug-embed"] }
 tokio = { version = "1.52", features = ["rt-multi-thread", "sync", "time"] }
 # Reqwest 0.12 exposes a WebPKI-root feature that avoids relying on platform
 # certificate-store discovery, which is not portable to the OHOS target.
 reqwest = { version = "0.12.28", default-features = false, features = ["brotli", "deflate", "gzip", "rustls-tls-webpki-roots"] }
+russh = { version = "0.54", default-features = false, features = ["flate2", "rsa", "ring"] }
 rxing = { version = "0.9.1", default-features = false, features = ["decoders", "encoders", "encoding_rs", "full_barcode_format_support"] }
 png = "0.17"
 
@@ -94,6 +104,7 @@ dioxus-signals = "0.7"
 dioxus-hooks = "0.7"
 dioxus-core-macro = "0.7"
 dioxus-router = "0.7"
+getrandom = "0.2"
 
 syn = { version = "2.0", features = ["full"] }
 quote = "1.0"
@@ -114,6 +125,7 @@ half = { version = "2.7.1", default-features = false }
 csscolorparser = { version = "0.8.3", default-features = false, features = ["named-colors"] }
 pulldown-cmark = { version = "0.13.4", default-features = false }
 base64 = "0.22.1"
+icu_calendar = { version = "2.2.1", default-features = false }
 
 # Tree-sitter syntax highlighting for Markdown fenced code (optional feature).
 tree-sitter = "0.25"
@@ -134,10 +146,12 @@ openharmony-ability = { git = "https://github.com/harmony-contrib/openharmony-ab
 
 ohos-arkui-binding = { version = "0.2.3", default-features = false, features = ["napi", "image", "drawing", "api-20"] }
 ohos-arkui-sys = { version = "0.1.1", default-features = false, features = ["api-20"] }
-ohos-drawing-binding = { path = "../ohos-native-bindings/crates/drawing", features = ["api-20"] }
-ohos-image-native-binding = { path = "../ohos-native-bindings/crates/image_native", default-features = false, features = ["api-20"] }
+ohos-drawing-binding = { version = "0.2.2", default-features = false, features = ["api-20"] }
+ohos-native-drawing-sys = { version = "0.2.2", default-features = false, features = ["api-20"] }
+ohos-image-native-binding = { version = "0.0.5", default-features = false, features = ["api-20"] }
 ohos-display-binding = "0.1.1"
 ohos-hilog-binding = "0.2.1"
+ohos-ime-binding = "0.2.0"
 ohos-ability-access-control-binding = "0.1.1"
 ohos-camera-binding = { version = "0.1.1", default-features = false, features = ["api-20", "xcomponent"] }
 ohos-xcomponent-binding = { version = "0.3.1", default-features = false, features = ["callbacks", "multi_mode", "api-20"] }
@@ -145,3 +159,4 @@ ohos-xcomponent-sys = { version = "0.1.1", default-features = false, features = 
 ohos-native-window-binding = { version = "0.2.3", default-features = false, features = ["api-20"] }
 thorvg = { version = "0.5.0", default-features = false, features = ["vendored", "lottie", "png", "fonts", "threads"] }
 thorvg-sys = { version = "0.3.0", default-features = false }
+wgpu = { version = "30.0.0", default-features = false, features = ["std", "gles", "wgsl"] }

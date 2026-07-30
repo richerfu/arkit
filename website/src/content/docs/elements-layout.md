@@ -1,13 +1,13 @@
 ---
 title: 元素与布局
-description: "ArkUI 元素与 CSS 风格 RSX 属性。"
+description: "有哪些原生元素可用，以及如何用接近 CSS 的写法描述布局。"
 ---
 
 # 元素与布局
 
-`arkit::prelude::*` re-export ArkUI element registry。RSX tag 创建原生节点。
+`arkit::prelude::*` 会带上 ArkUI 元素表。RSX 里的 tag 对应原生节点。
 
-**属性值按 CSS 语义编码**：长度用 vp 或 `"N%"`，盒模型支持简写，枚举类属性使用字符串关键字。
+属性尽量按 **CSS 语义** 写：长度用 vp 或 `"N%"`，盒模型支持简写，枚举类属性用字符串关键字。
 
 ## 元素一览
 
@@ -120,6 +120,7 @@ column {
 | `scroll_enabled`                           | bool / `"on"`/`"off"`                                            |
 | `list_sticky`                              | `none` · `header` · `footer` · `both`                            |
 | `input_type`                               | `text` · `number` · `phone` · `email` · `password` · `decimal` … |
+| `show_password_icon`（textinput）          | bool；显示密码显隐图标                                           |
 | `progress_type`                            | `linear`/`bar` · `ring` · `eclipse` · `scale-ring` · `capsule`   |
 | `button_type`                              | `normal` · `capsule` · `circle`                                  |
 | `swiper_curve`                             | `linear` · `ease` · `ease-in` · `ease-out` · `ease-in-out` · …   |

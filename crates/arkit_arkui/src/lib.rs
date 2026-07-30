@@ -38,6 +38,7 @@ use ohos_arkui_binding::gesture::gesture_data::GestureEventData;
 use ohos_arkui_binding::gesture::inner_gesture::Gesture;
 use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
 use ohos_arkui_binding::types::gesture_event::GestureEventAction;
+use ohos_arkui_sys::ArkUI_NodeComponentEvent;
 use rustc_hash::FxHashMap;
 // Re-export the shared event-payload types (owned by `arkit_elements`, whose
 // lib name is `dioxus_elements`).
@@ -53,16 +54,18 @@ use native::parse_color;
 pub use native::{canonical_tag, create_node, create_node_by_tag, kind_from_tag, NodeKind};
 
 pub mod image;
-pub use image::{ArkImageSource, RetainedImage};
+pub use image::{ArkImagePixels, ArkImageSource, RetainedImage};
 
 pub mod virtual_adapter;
-pub use virtual_adapter::{RenderItem, VirtualKind, VirtualNodeAdapter};
+pub use virtual_adapter::{
+    MountItem, RenderItem, VirtualItemMount, VirtualKind, VirtualNodeAdapter,
+};
 
 pub mod node_builder;
 pub use node_builder::{NativeNodeEvent, NodeBuilder, NodeEventType, PreDragStatus};
 
 mod attributes;
-use attributes::{AttrMutation, DesiredAttrs};
+use attributes::{AttrMutation, DesiredAttrs, ScrollOffsetCommand};
 
 fn log_arkui_result<T, E: ToString>(context: &str, result: Result<T, E>) -> Option<T> {
     match result {
@@ -198,6 +201,9 @@ struct HostNode {
     /// node at lifecycle points (after create, after attach) so ArkUI's
     /// internal control skin does not clobber declarative styles.
     desired_attrs: Rc<RefCell<DesiredAttrs>>,
+    /// Pending one-shot scroll operation. Unlike `desired_attrs`, this is
+    /// consumed after native attachment and is never replayed.
+    pending_scroll_offset: Option<ScrollOffsetCommand>,
     /// Declarative image source carried through Dioxus `AttributeValue::Any`.
     ///
     /// Native image resources are not normal scalar attrs: applying the same
@@ -224,6 +230,7 @@ impl HostNode {
             registered_event_listeners: Vec::new(),
             registered_gesture_listeners: Vec::new(),
             desired_attrs: Rc::new(RefCell::new(DesiredAttrs::default())),
+            pending_scroll_offset: None,
             image_source: None,
             retained_image_src: None,
             bound_elements: Vec::new(),
@@ -266,10 +273,19 @@ pub struct ArkUIRenderer {
     /// entry is a ready-to-clone host subtree (kinds + structure) that
     /// `load_template` instantiates.
     templates: FxHashMap<usize, Vec<TemplateHostNode>>,
-    /// The NodeContent slot root, owning the mounted base node.
-    root_node: RootNode,
+    /// Ownership boundary for the synthetic host root.
+    root_mount: RendererRootMount,
     /// Event sink (set by the runtime after construction).
     sink: Option<Rc<dyn EventSink>>,
+}
+
+enum RendererRootMount {
+    /// Normal application renderer: the root is mounted in and owned through a
+    /// NodeContent slot.
+    NodeContent(RootNode),
+    /// Embedded renderer: the caller owns the supplied native root and keeps it
+    /// alive until after this renderer is dropped.
+    Embedded,
 }
 
 /// A template's static structure, mirroring [`TemplateNode`] but in host terms.
@@ -345,7 +361,25 @@ impl ArkUIRenderer {
             return Err(error);
         }
         let root = Rc::new(RefCell::new(root_ark));
+        Ok(Self::from_root(
+            root,
+            RendererRootMount::NodeContent(root_node),
+        ))
+    }
 
+    /// Create a renderer that projects a Dioxus subtree directly into an
+    /// existing native root.
+    ///
+    /// The caller owns `root` and must keep it alive until this renderer is
+    /// dropped. Embedded renderers do not dispose or detach the root; they only
+    /// tear down renderer-owned listeners. This is the mount boundary used by
+    /// RSX-backed NodeAdapter items, whose ListItem/GridItem/FlowItem wrapper
+    /// remains owned by ArkUI's adapter.
+    pub fn new_embedded(root: Rc<RefCell<ArkUINode>>) -> Self {
+        Self::from_root(root, RendererRootMount::Embedded)
+    }
+
+    fn from_root(root: Rc<RefCell<ArkUINode>>, root_mount: RendererRootMount) -> Self {
         let mut hosts = Vec::new();
         let mut root_host = HostNode::new(HostKind::Root);
         root_host.native = Some(root);
@@ -355,15 +389,15 @@ impl ArkUIRenderer {
 
         let element_to_host = vec![Some(0)];
 
-        Ok(Self {
+        Self {
             hosts,
             free_hosts: Vec::new(),
             element_to_host,
             stack: Vec::new(),
             templates: FxHashMap::default(),
-            root_node,
+            root_mount,
             sink: None,
-        })
+        }
     }
 
     /// Install the event sink used to forward native events into the VirtualDom.
@@ -499,6 +533,19 @@ impl ArkUIRenderer {
                 ohos_hilog_binding::warn(format!("arkit_arkui: image src resolve failed: {error}"));
             }
         }
+    }
+
+    fn apply_pending_scroll_offset(&mut self, host: HostId) {
+        if !self.hosts[host].native_attached {
+            return;
+        }
+        let Some(command) = self.hosts[host].pending_scroll_offset.take() else {
+            return;
+        };
+        let Some(native) = self.hosts[host].native.clone() else {
+            return;
+        };
+        let _ = command.apply(&mut native.borrow_mut());
     }
 
     fn set_host_image_source(&mut self, host: HostId, source: ArkImageSource) {
@@ -773,6 +820,7 @@ impl ArkUIRenderer {
         self.apply_host_image_source(child);
         self.replay_composite_content(child);
         self.replay_event_listeners(child);
+        self.apply_pending_scroll_offset(child);
     }
 
     /// Ensure a host node has a native node allocated if its kind projects one.
@@ -1007,6 +1055,7 @@ impl ArkUIRenderer {
             }
             self.replay_composite_content(child);
             self.replay_event_listeners(child);
+            self.apply_pending_scroll_offset(child);
         }
     }
 
@@ -1034,6 +1083,7 @@ impl ArkUIRenderer {
         self.hosts[host].event_listeners.clear();
         self.hosts[host].registered_event_listeners.clear();
         self.hosts[host].registered_gesture_listeners.clear();
+        self.hosts[host].pending_scroll_offset = None;
         self.hosts[host].children.clear();
         self.hosts[host].parent = None;
         self.clear_host_image_source(host);
@@ -1068,6 +1118,7 @@ impl ArkUIRenderer {
         self.hosts[host].event_listeners.clear();
         self.hosts[host].registered_event_listeners.clear();
         self.hosts[host].registered_gesture_listeners.clear();
+        self.hosts[host].pending_scroll_offset = None;
         self.hosts[host].children.clear();
         self.hosts[host].parent = None;
         self.clear_host_image_source(host);
@@ -1393,6 +1444,12 @@ impl WriteMutations for ArkUIRenderer {
             }
         }
 
+        if name == "scroll_offset" && tag == "scroll" {
+            self.hosts[host].pending_scroll_offset = ScrollOffsetCommand::from_attribute(value);
+            self.apply_pending_scroll_offset(host);
+            return;
+        }
+
         // Store in desired_attrs (the source of truth for replay).
         let mutation = self.hosts[host]
             .desired_attrs
@@ -1547,7 +1604,10 @@ impl ArkUIRenderer {
         // rely on active tokens. Tear both down before RootNode destroys the
         // native subtree.
         self.clear_subtree_native_listeners(0);
-        self.root_node.unmount()
+        match &mut self.root_mount {
+            RendererRootMount::NodeContent(root_node) => root_node.unmount(),
+            RendererRootMount::Embedded => Ok(()),
+        }
     }
 
     /// Look up the native ArkUI node backing the given dioxus [`ElementId`], if
@@ -1741,9 +1801,9 @@ fn extract_payload(
             last: event.i32_value(1).unwrap_or(0),
             center: 0,
         }),
-        ScrollEventOnScroll => ArkEventPayload::ScrollOffset(ScrollOffsetPayload {
-            x: event.f32_value(0).unwrap_or_default(),
-            y: event.f32_value(1).unwrap_or_default(),
+        ScrollEventOnDidScroll => ArkEventPayload::ScrollOffset(ScrollOffsetPayload {
+            x: component_event_f32(event, 0).unwrap_or_default(),
+            y: component_event_f32(event, 1).unwrap_or_default(),
         }),
         EventOnAreaChange => node
             .and_then(extract_layout_payload)
@@ -1774,6 +1834,25 @@ fn extract_payload(
         }
         _ => ArkEventPayload::None,
     }
+}
+
+/// Read the component-event union used by Scroll's `OnDidScroll`.
+///
+/// `OH_ArkUI_NodeEvent_GetNumberValue` returns zero for Scroll component data
+/// on current API-20 devices even though `ArkUI_NodeComponentEvent::data`
+/// contains the documented per-frame offsets. The pointer is owned by ArkUI
+/// and remains valid only for the duration of the callback.
+fn component_event_f32(event: &ArkNativeEvent, index: usize) -> Option<f32> {
+    if index >= 12 {
+        return None;
+    }
+    let component = event
+        .node_component_event()?
+        .cast::<ArkUI_NodeComponentEvent>();
+    // SAFETY: ArkUI returned this pointer for the active synchronous callback.
+    // `ArkUI_NodeComponentEvent` has a fixed 12-element `data` array, and the
+    // index is checked above.
+    Some(unsafe { component.as_ref().data[index].f32_ })
 }
 
 fn extract_pointer_payload(event: &ArkNativeEvent) -> Option<PointerPayload> {
@@ -1872,7 +1951,8 @@ fn event_type_for_name(name: &str, tag: &str) -> Option<NodeEventType> {
         // payload shape.
         (ArkEventKind::Scroll, "list") => ListOnScrollIndex,
         (ArkEventKind::Scroll, "waterflow") => WaterFlowOnScrollIndex,
-        (ArkEventKind::Scroll, "scroll") => ScrollEventOnScroll,
+        (ArkEventKind::Scroll, "scroll") => ScrollEventOnDidScroll,
+        (ArkEventKind::ReachEnd, "scroll") => ScrollEventOnReachEnd,
 
         // Swiper change. Animation-end is used as the stable selection
         // boundary: unlike the early change callback, it fires after the
@@ -1923,7 +2003,16 @@ mod event_tests {
             event_type_for_name("_hover_move", "column"),
             Some(NodeEventType::OnHoverMove)
         );
+        assert_eq!(
+            event_type_for_name("scroll", "scroll"),
+            Some(NodeEventType::ScrollEventOnDidScroll)
+        );
         assert_eq!(event_type_for_name("scroll", "grid"), None);
+        assert_eq!(
+            event_type_for_name("_reach_end", "scroll"),
+            Some(NodeEventType::ScrollEventOnReachEnd)
+        );
+        assert_eq!(event_type_for_name("reach_end", "list"), None);
         assert_eq!(
             event_type_for_name("_swiper_change", "swiper"),
             Some(NodeEventType::SwiperEventOnAnimationEnd)

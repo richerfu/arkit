@@ -1,22 +1,115 @@
 //! Virtual List, Grid, and WaterFlow containers backed by ArkUI `NodeAdapter`.
 //!
-//! [`use_virtual_node_adapter`] creates a [`VirtualNodeAdapter`] that,
-//! once the host `list`/`grid`/`waterflow` node is resolved (via
-//! [`use_ark_node`]), attaches the matching ArkUI `NodeAdapter` so only visible
-//! items are created on demand — true virtualization, not full instantiation.
+//! [`use_virtual_node_adapter_rsx`] creates a [`VirtualNodeAdapter`] whose
+//! visible items are ordinary Dioxus RSX subtrees. Once the host
+//! `list`/`grid`/`waterflow` node is resolved (via [`use_ark_node`]), ArkUI
+//! requests only the visible items — true virtualization, not full
+//! instantiation.
 //!
-//! `render_item` is invoked by ArkUI on demand for each visible index and must
-//! return a fresh [`ArkUINode`] for that item's content (the adapter wraps it
-//! in a ListItem/GridItem/FlowItem automatically).
+//! [`use_virtual_node_adapter`] remains the lower-level native-node path for
+//! callers that deliberately want to build item content with `NodeBuilder`.
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use arkit_prelude::{use_effect, use_hook, use_reactive};
+use arkit_prelude::{dioxus_core, use_effect, use_hook, use_reactive, Element};
 use ohos_arkui_binding::common::error::ArkUIResult;
 use ohos_arkui_binding::common::node::ArkUINode;
 
-use arkit_arkui::{RenderItem, VirtualKind, VirtualNodeAdapter};
+use arkit_arkui::{MountItem, RenderItem, VirtualItemMount, VirtualKind, VirtualNodeAdapter};
+
+use crate::ArkHost;
+
+type RsxRenderItem = Rc<dyn Fn(u32) -> Element>;
+
+#[derive(Clone, arkit_prelude::Props)]
+struct VirtualRsxItemProps {
+    index: u32,
+    render_item: RsxRenderItem,
+}
+
+impl PartialEq for VirtualRsxItemProps {
+    fn eq(&self, other: &Self) -> bool {
+        self.index == other.index && Rc::ptr_eq(&self.render_item, &other.render_item)
+    }
+}
+
+fn virtual_rsx_item_root(props: VirtualRsxItemProps) -> Element {
+    (props.render_item)(props.index)
+}
+
+/// Create a true virtual List, Grid, or WaterFlow whose visible items are RSX.
+///
+/// Each visible item owns a small Dioxus subtree mounted directly into the
+/// adapter-created ListItem/GridItem/FlowItem wrapper. Components, hooks,
+/// signals, event handlers, fragments, and `use_ark_node` therefore work inside
+/// an item without constructing the full data set.
+///
+/// ```ignore
+/// let adapter = use_virtual_node_adapter_rsx(
+///     VirtualKind::List,
+///     rows.len() as u32,
+///     move |index| {
+///         let row = &rows[index as usize];
+///         rsx! {
+///             row {
+///                 width: "100%",
+///                 height: 48.0,
+///                 text { "{row.title}" }
+///             }
+///         }
+///     },
+/// );
+/// ```
+#[track_caller]
+pub fn use_virtual_node_adapter_rsx(
+    kind: VirtualKind,
+    total_count: u32,
+    render_item: impl Fn(u32) -> Element + 'static,
+) -> VirtualNodeAdapter {
+    let render_item: RsxRenderItem = Rc::new(render_item);
+    let mount_item = rsx_mount_item(render_item);
+    let initial_mount_item = mount_item.clone();
+    let adapter =
+        use_hook(move || VirtualNodeAdapter::new_mounted(kind, total_count, initial_mount_item));
+
+    adapter.set_mount_item(mount_item);
+    use_virtual_adapter_count(adapter.clone(), total_count);
+    adapter
+}
+
+fn rsx_mount_item(render_item: RsxRenderItem) -> MountItem {
+    let window_metrics = dioxus_core::try_consume_context::<arkit_runtime::WindowMetricsHandle>();
+    let application_lifecycle =
+        dioxus_core::try_consume_context::<arkit_runtime::ApplicationLifecycleHandle>();
+    let safe_area_policy = dioxus_core::try_consume_context::<arkit_runtime::SafeAreaPolicy>();
+
+    Rc::new(move |index, wrapper| {
+        let host = ArkHost::new();
+        let dom = arkit_runtime::VirtualDom::new_with_props(
+            virtual_rsx_item_root,
+            VirtualRsxItemProps {
+                index,
+                render_item: render_item.clone(),
+            },
+        );
+        dom.provide_root_context(host.clone());
+        if let Some(window_metrics) = &window_metrics {
+            dom.provide_root_context(window_metrics.clone());
+        }
+        if let Some(application_lifecycle) = &application_lifecycle {
+            dom.provide_root_context(application_lifecycle.clone());
+        }
+        if let Some(safe_area_policy) = safe_area_policy {
+            dom.provide_root_context(safe_area_policy);
+        }
+
+        let runtime = arkit_runtime::mount_embedded_virtual_dom(wrapper, dom, Some(Rc::new(host)));
+        Ok(VirtualItemMount::retain_with_abandon(runtime, |runtime| {
+            runtime.abandon();
+        }))
+    })
+}
 
 /// Create a [`VirtualNodeAdapter`] for a virtual List, Grid, or WaterFlow.
 ///
@@ -58,20 +151,21 @@ pub fn use_virtual_node_adapter(
     // its callback with the latest closure. This is Rust-owned state only and
     // cannot re-enter the native event receiver.
     adapter.set_render_item(render_item);
+    use_virtual_adapter_count(adapter.clone(), total_count);
+    adapter
+}
 
+fn use_virtual_adapter_count(adapter: VirtualNodeAdapter, total_count: u32) {
     // Count changes mutate ArkUI and may synchronously emit adapter events.
     // Defer them until after Dioxus commits the render that supplied the new
     // callback and backing data.
-    let update_adapter = adapter.clone();
     use_effect(use_reactive((&total_count,), move |(next_total,)| {
-        if let Err(error) = update_adapter.set_total_count(next_total) {
+        if let Err(error) = adapter.set_total_count(next_total) {
             ohos_hilog_binding::error(format!(
                 "arkit_hooks: virtual adapter count update failed: {error}"
             ));
         }
     }));
-
-    adapter
 }
 
 /// Create a virtual adapter with item-local invalidation.
@@ -92,8 +186,34 @@ where
 {
     let total_count = item_keys.len() as u32;
     let adapter = use_virtual_node_adapter(kind, total_count, render_item);
+    use_virtual_item_keys(adapter.clone(), item_keys);
+    adapter
+}
+
+/// RSX virtual adapter with item-local invalidation.
+///
+/// `item_keys[index]` must cover every non-reactive visual input used to build
+/// that item. Equal-size updates rebuild only changed contiguous ranges.
+#[track_caller]
+pub fn use_virtual_node_adapter_rsx_items_keyed<K>(
+    kind: VirtualKind,
+    item_keys: Vec<K>,
+    render_item: impl Fn(u32) -> Element + 'static,
+) -> VirtualNodeAdapter
+where
+    K: Clone + PartialEq + 'static,
+{
+    let total_count = item_keys.len() as u32;
+    let adapter = use_virtual_node_adapter_rsx(kind, total_count, render_item);
+    use_virtual_item_keys(adapter.clone(), item_keys);
+    adapter
+}
+
+fn use_virtual_item_keys<K>(adapter: VirtualNodeAdapter, item_keys: Vec<K>)
+where
+    K: Clone + PartialEq + 'static,
+{
     let previous_item_keys = use_hook(|| Rc::new(RefCell::new(item_keys.clone())));
-    let update_adapter = adapter.clone();
     let effect_previous_item_keys = previous_item_keys.clone();
 
     use_effect(use_reactive((&item_keys,), move |(next_item_keys,)| {
@@ -111,7 +231,7 @@ where
             return;
         }
         for (start, count) in changed_ranges {
-            if let Err(error) = update_adapter.reload_items(start, count) {
+            if let Err(error) = adapter.reload_items(start, count) {
                 ohos_hilog_binding::error(format!(
                     "arkit_hooks: item-keyed virtual adapter update failed: {error}"
                 ));
@@ -120,8 +240,6 @@ where
         }
         *effect_previous_item_keys.borrow_mut() = next_item_keys;
     }));
-
-    adapter
 }
 
 fn changed_item_ranges<K: PartialEq>(previous: &[K], next: &[K]) -> Vec<(u32, u32)> {

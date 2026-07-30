@@ -1,0 +1,17 @@
+[package]
+name = "arkit_calendar_icu"
+description = "ICU4X calendar plugins for Arkit calendar components"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+arkit_i18n.workspace = true
+arkit_prelude.workspace = true
+arkit_shadcn.workspace = true
+dioxus-hooks.workspace = true
+icu_calendar.workspace = true
