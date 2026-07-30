@@ -40,6 +40,7 @@ pub fn Textarea(props: TextareaProps) -> Element {
             placeholder_color: with_alpha(theme.colors.muted_foreground, 0x80),
             caret_color: theme.colors.primary,
             font_size: typography::MD,
+            font_color: theme.colors.foreground,
             line_height: 20.0,
             height: props.height.unwrap_or(64.0),
             border_style: ARKUI_BORDER_STYLE_SOLID,

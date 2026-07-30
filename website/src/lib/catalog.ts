@@ -25,6 +25,7 @@ const docsGroups: readonly NavGroup[] = [
       "virtualization",
       "window-metrics",
       "safe-area-overlay",
+      "canvas",
       "camera",
       "lottie",
       "terminal",
@@ -73,7 +74,17 @@ const componentGroups: readonly NavGroup[] = [
   },
   {
     title: "内容与反馈",
-    sections: ["alert", "card", "barcode", "code", "markdown", "skeleton", "spinner", "progress"],
+    sections: [
+      "alert",
+      "card",
+      "barcode",
+      "code",
+      "markdown",
+      "watermark",
+      "skeleton",
+      "spinner",
+      "progress",
+    ],
   },
   {
     title: "输入与表单",

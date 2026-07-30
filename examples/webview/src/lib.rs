@@ -88,6 +88,7 @@ fn app() -> Element {
                     margin_top: 12.0,
                     padding: 10.0,
                     font_size: 14.0,
+                    font_color: "#FF0F172A",
                     background_color: "#FFF1F5F9",
                     border_radius: 8.0,
                     value: url_display.clone(),

@@ -104,6 +104,7 @@ pub fn Input(props: InputProps) -> Element {
                 theme.colors.primary
             },
             font_size: typography::LG,
+            font_color: theme.colors.foreground,
             line_height: 22.5,
             height: props.height.unwrap_or(48.0),
             border_style: ARKUI_BORDER_STYLE_SOLID,
