@@ -2,9 +2,9 @@
 //!
 //! The default facade exports Dioxus core (`rsx!`, `use_signal`, `Element`),
 //! the ArkUI element registry, renderer, runtime, and host hooks. Domain
-//! libraries are opt-in through the `animation`, `barcode`, `camera`, `chart`,
-//! `code`, `i18n`, `icon`, `lottie`, `markdown`, `router`, `shadcn`, and
-//! `terminal` features (or `full`). Barcode/QR generation is the `barcode`
+//! libraries are opt-in through the `animation`, `barcode`, `camera`, `canvas`,
+//! `chart`, `code`, `i18n`, `icon`, `lottie`, `markdown`, `router`, and `shadcn`
+//! and `terminal` features (or `full`). Barcode/QR generation is the `barcode`
 //! feature (no camera). Code highlighting uses `code`; Markdown fences need
 //! `markdown` + `code`. Terminal uses `terminal` (libghostty-vt).
 //! The `#[entry]` macro mounts a `fn() -> Element` root component into a
@@ -123,11 +123,29 @@ pub use arkit_camera::{
     CameraSessionInfo, CameraSize, CameraStabilizationMode, CameraStatus, CameraTorchMode,
     CameraView, CameraViewProps, CameraWhiteBalanceMode, CapturedPhoto,
 };
+
 #[cfg(feature = "camera-scan")]
 pub use arkit_camera::{
     CameraScanConfiguration, CameraScanFormat, CameraScanModeConfiguration,
     CameraScanPreviewInteractions, CameraScanRegion, CameraScanResult,
     CameraScanToolbarConfiguration,
+};
+
+// --- W3C-aligned Canvas 2D ---
+#[cfg(feature = "canvas")]
+pub use arkit_canvas as canvas;
+#[cfg(feature = "canvas")]
+pub use arkit_canvas::{
+    Canvas, CanvasColor, CanvasColorSpace, CanvasColorType, CanvasController, CanvasError,
+    CanvasFont, CanvasFontFace, CanvasFontKerning, CanvasFontRegistry, CanvasFontStretch,
+    CanvasFontStyle, CanvasFontVariantCaps, CanvasGradient, CanvasImage, CanvasImageDecodeOptions,
+    CanvasImageEncodeOptions, CanvasImageFormat, CanvasImageSmoothingQuality, CanvasLineCap,
+    CanvasLineJoin, CanvasPattern, CanvasPatternRepetition, CanvasRadius, CanvasRenderer,
+    CanvasRenderingContext2D, CanvasRenderingContext2DSettings, CanvasResult, CanvasStyle,
+    CanvasTextAlign, CanvasTextBaseline, CanvasTextDirection, CanvasTextMetrics,
+    CanvasTextRendering, DomMatrix2D, FillRule, Float16, GlobalCompositeOperation, ImageData,
+    ImageDataArray, ImageDataPixelFormat, ImageDataSettings, IntoCanvasFont, IntoCanvasRadii,
+    IntoCanvasStyle, OffscreenCanvas, Path2D,
 };
 
 // --- Icon ---
@@ -140,8 +158,9 @@ pub use arkit_lottie as lottie;
 #[cfg(feature = "lottie")]
 pub use arkit_lottie::{
     LottieAlignment, LottieComposition, LottieController, LottieError, LottieErrorKind, LottieFit,
-    LottieFrame, LottieNetworkSource, LottiePlayer, LottiePlayerProps, LottieRepeatMode,
-    LottieResult, LottieSource, LottieStatus,
+    LottieFrame, LottieFrameRenderOptions, LottieFrameRenderer, LottieNetworkSource, LottiePlayer,
+    LottiePlayerProps, LottieRenderedFrame, LottieRepeatMode, LottieResult, LottieSource,
+    LottieStatus,
 };
 
 // --- Native ECharts-compatible charts ---
@@ -320,8 +339,9 @@ pub mod prelude {
     #[cfg(feature = "lottie")]
     pub use crate::{
         lottie, LottieAlignment, LottieComposition, LottieController, LottieError, LottieErrorKind,
-        LottieFit, LottieFrame, LottieNetworkSource, LottiePlayer, LottiePlayerProps,
-        LottieRepeatMode, LottieResult, LottieSource, LottieStatus,
+        LottieFit, LottieFrame, LottieFrameRenderOptions, LottieFrameRenderer, LottieNetworkSource,
+        LottiePlayer, LottiePlayerProps, LottieRenderedFrame, LottieRepeatMode, LottieResult,
+        LottieSource, LottieStatus,
     };
 
     #[cfg(feature = "router")]
@@ -372,6 +392,21 @@ pub mod prelude {
         LabelLayoutOptions, LabelStyle, Legend, LineStyle, LinkData, MapFeature, MapOptions,
         MapPolygon, MapSeries, NodeData, SankeySeries, Series, SeriesOptions, Title, Tooltip,
         VisualStyle,
+    };
+
+    #[cfg(feature = "canvas")]
+    pub use crate::{
+        canvas, Canvas, CanvasColor, CanvasColorSpace, CanvasColorType, CanvasController,
+        CanvasError, CanvasFont, CanvasFontFace, CanvasFontKerning, CanvasFontRegistry,
+        CanvasFontStretch, CanvasFontStyle, CanvasFontVariantCaps, CanvasGradient, CanvasImage,
+        CanvasImageDecodeOptions, CanvasImageEncodeOptions, CanvasImageFormat,
+        CanvasImageSmoothingQuality, CanvasLineCap, CanvasLineJoin, CanvasPattern,
+        CanvasPatternRepetition, CanvasRadius, CanvasRenderer, CanvasRenderingContext2D,
+        CanvasRenderingContext2DSettings, CanvasResult, CanvasStyle, CanvasTextAlign,
+        CanvasTextBaseline, CanvasTextDirection, CanvasTextMetrics, CanvasTextRendering,
+        DomMatrix2D, FillRule, Float16, GlobalCompositeOperation, ImageData, ImageDataArray,
+        ImageDataPixelFormat, ImageDataSettings, IntoCanvasFont, IntoCanvasRadii, IntoCanvasStyle,
+        OffscreenCanvas, Path2D,
     };
 
     #[cfg(feature = "barcode")]

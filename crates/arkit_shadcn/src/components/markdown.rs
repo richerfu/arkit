@@ -944,14 +944,14 @@ fn render_code_block(
             style.radius,
             style.code_highlight,
         );
-        return rsx! {
+        rsx! {
             Code {
                 source: content.to_string(),
                 language: language.map(|value| value.to_string()),
                 highlight: code_highlight,
                 style: Some(code_style),
             }
-        };
+        }
     }
 
     #[cfg(not(feature = "code"))]

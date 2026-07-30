@@ -178,6 +178,7 @@ pub(crate) fn render_code_body(
 
 /// Build a [`CodeStyle`] from Markdown code-related tokens (same feature set).
 #[cfg(feature = "markdown")]
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn code_style_from_markdown(
     foreground: u32,
     muted_foreground: u32,

@@ -12,7 +12,7 @@ use std::{
     sync::Arc,
 };
 
-use arkit_arkui::{ArkImagePixels, ArkImageSource};
+use arkit_arkui::ArkImageSource;
 use arkit_hooks::use_ark_node;
 use arkit_prelude::*;
 use ohos_arkui_binding::{
@@ -21,36 +21,14 @@ use ohos_arkui_binding::{
     types::advanced::NodeDirtyFlag,
 };
 use ohos_drawing_binding::{
-    Brush, Canvas, FontCollection, Pen, Point, Rect, TextStyle, TypographyBuilder, TypographyStyle,
+    AlphaFormat, Bitmap, BitmapFormat, BlendMode, Brush, Canvas, ColorFormat, FilterMode,
+    FontCollection, FontSlant, FontStyle, FontWeight, FontWidth, Image, Matrix, MipmapMode, Pen,
+    Rect, SamplingOptions, ShaderEffect, ShadowLayer, TextStyle, TileMode, TypographyBuilder,
+    TypographyStyle,
 };
 use ohos_native_drawing_sys::{
-    OH_Drawing_AlphaFormat, OH_Drawing_AlphaFormat_ALPHA_FORMAT_OPAQUE,
-    OH_Drawing_AlphaFormat_ALPHA_FORMAT_PREMUL, OH_Drawing_AlphaFormat_ALPHA_FORMAT_UNPREMUL,
-    OH_Drawing_Bitmap, OH_Drawing_BitmapBuild, OH_Drawing_BitmapCreate,
-    OH_Drawing_BitmapCreateFromPixels, OH_Drawing_BitmapDestroy, OH_Drawing_BitmapFormat,
-    OH_Drawing_BlendMode, OH_Drawing_BlendMode_BLEND_MODE_COLOR,
-    OH_Drawing_BlendMode_BLEND_MODE_COLOR_BURN, OH_Drawing_BlendMode_BLEND_MODE_COLOR_DODGE,
-    OH_Drawing_BlendMode_BLEND_MODE_DARKEN, OH_Drawing_BlendMode_BLEND_MODE_DIFFERENCE,
-    OH_Drawing_BlendMode_BLEND_MODE_EXCLUSION, OH_Drawing_BlendMode_BLEND_MODE_HARD_LIGHT,
-    OH_Drawing_BlendMode_BLEND_MODE_HUE, OH_Drawing_BlendMode_BLEND_MODE_LIGHTEN,
-    OH_Drawing_BlendMode_BLEND_MODE_LUMINOSITY, OH_Drawing_BlendMode_BLEND_MODE_MULTIPLY,
-    OH_Drawing_BlendMode_BLEND_MODE_OVERLAY, OH_Drawing_BlendMode_BLEND_MODE_PLUS,
-    OH_Drawing_BlendMode_BLEND_MODE_SATURATION, OH_Drawing_BlendMode_BLEND_MODE_SCREEN,
-    OH_Drawing_BlendMode_BLEND_MODE_SOFT_LIGHT, OH_Drawing_BlendMode_BLEND_MODE_SRC_OVER,
-    OH_Drawing_BrushSetShaderEffect, OH_Drawing_BrushSetShadowLayer, OH_Drawing_CanvasBind,
-    OH_Drawing_CanvasDrawImageRect, OH_Drawing_CanvasRotate,
-    OH_Drawing_ColorFormat_COLOR_FORMAT_RGBA_8888, OH_Drawing_CreateTextShadow,
-    OH_Drawing_DestroyTextShadow, OH_Drawing_FilterMode_FILTER_MODE_LINEAR,
-    OH_Drawing_FontStyle_FONT_STYLE_ITALIC, OH_Drawing_FontStyle_FONT_STYLE_NORMAL,
-    OH_Drawing_FontStyle_FONT_STYLE_OBLIQUE, OH_Drawing_Image, OH_Drawing_ImageBuildFromBitmap,
-    OH_Drawing_ImageCreate, OH_Drawing_ImageDestroy, OH_Drawing_Image_Info, OH_Drawing_Matrix,
-    OH_Drawing_MatrixCreateScale, OH_Drawing_MatrixDestroy, OH_Drawing_MipmapMode_MIPMAP_MODE_NONE,
-    OH_Drawing_SamplingOptions, OH_Drawing_SamplingOptionsCreate,
-    OH_Drawing_SamplingOptionsDestroy, OH_Drawing_SetTextShadow,
-    OH_Drawing_SetTextStyleForegroundBrush, OH_Drawing_SetTextStyleForegroundPen,
-    OH_Drawing_ShaderEffect, OH_Drawing_ShaderEffectCreateImageShader,
-    OH_Drawing_ShaderEffectDestroy, OH_Drawing_ShadowLayer, OH_Drawing_ShadowLayerCreate,
-    OH_Drawing_ShadowLayerDestroy, OH_Drawing_TextStyleAddShadow, OH_Drawing_TileMode_REPEAT,
+    OH_Drawing_CreateTextShadow, OH_Drawing_DestroyTextShadow, OH_Drawing_PointCreate,
+    OH_Drawing_PointDestroy, OH_Drawing_SetTextShadow, OH_Drawing_TextStyleAddShadow,
 };
 
 use crate::theme::use_theme;
@@ -81,11 +59,11 @@ pub enum WatermarkFontStyle {
 }
 
 impl WatermarkFontStyle {
-    fn native_value(self) -> i32 {
+    fn native_value(self) -> FontSlant {
         match self {
-            Self::Normal => OH_Drawing_FontStyle_FONT_STYLE_NORMAL as i32,
-            Self::Italic => OH_Drawing_FontStyle_FONT_STYLE_ITALIC as i32,
-            Self::Oblique => OH_Drawing_FontStyle_FONT_STYLE_OBLIQUE as i32,
+            Self::Normal => FontSlant::Normal,
+            Self::Italic => FontSlant::Italic,
+            Self::Oblique => FontSlant::Oblique,
         }
     }
 }
@@ -114,25 +92,25 @@ pub enum WatermarkBlendMode {
 }
 
 impl WatermarkBlendMode {
-    fn native_value(self) -> OH_Drawing_BlendMode {
+    fn native_value(self) -> BlendMode {
         match self {
-            Self::Normal => OH_Drawing_BlendMode_BLEND_MODE_SRC_OVER,
-            Self::Multiply => OH_Drawing_BlendMode_BLEND_MODE_MULTIPLY,
-            Self::Screen => OH_Drawing_BlendMode_BLEND_MODE_SCREEN,
-            Self::Overlay => OH_Drawing_BlendMode_BLEND_MODE_OVERLAY,
-            Self::Darken => OH_Drawing_BlendMode_BLEND_MODE_DARKEN,
-            Self::Lighten => OH_Drawing_BlendMode_BLEND_MODE_LIGHTEN,
-            Self::ColorDodge => OH_Drawing_BlendMode_BLEND_MODE_COLOR_DODGE,
-            Self::ColorBurn => OH_Drawing_BlendMode_BLEND_MODE_COLOR_BURN,
-            Self::HardLight => OH_Drawing_BlendMode_BLEND_MODE_HARD_LIGHT,
-            Self::SoftLight => OH_Drawing_BlendMode_BLEND_MODE_SOFT_LIGHT,
-            Self::Difference => OH_Drawing_BlendMode_BLEND_MODE_DIFFERENCE,
-            Self::Exclusion => OH_Drawing_BlendMode_BLEND_MODE_EXCLUSION,
-            Self::Hue => OH_Drawing_BlendMode_BLEND_MODE_HUE,
-            Self::Saturation => OH_Drawing_BlendMode_BLEND_MODE_SATURATION,
-            Self::Color => OH_Drawing_BlendMode_BLEND_MODE_COLOR,
-            Self::Luminosity => OH_Drawing_BlendMode_BLEND_MODE_LUMINOSITY,
-            Self::Plus => OH_Drawing_BlendMode_BLEND_MODE_PLUS,
+            Self::Normal => BlendMode::SrcOver,
+            Self::Multiply => BlendMode::Multiply,
+            Self::Screen => BlendMode::Screen,
+            Self::Overlay => BlendMode::Overlay,
+            Self::Darken => BlendMode::Darken,
+            Self::Lighten => BlendMode::Lighten,
+            Self::ColorDodge => BlendMode::ColorDodge,
+            Self::ColorBurn => BlendMode::ColorBurn,
+            Self::HardLight => BlendMode::HardLight,
+            Self::SoftLight => BlendMode::SoftLight,
+            Self::Difference => BlendMode::Difference,
+            Self::Exclusion => BlendMode::Exclusion,
+            Self::Hue => BlendMode::Hue,
+            Self::Saturation => BlendMode::Saturation,
+            Self::Color => BlendMode::Color,
+            Self::Luminosity => BlendMode::Luminosity,
+            Self::Plus => BlendMode::Plus,
         }
     }
 }
@@ -484,7 +462,7 @@ fn WatermarkCanvas(props: WatermarkCanvasProps) -> Element {
                 // SAFETY: ArkUI owns the canvas for this synchronous callback.
                 // The borrowed wrapper is destroyed without releasing it and
                 // cannot escape this closure.
-                let canvas = unsafe { Canvas::from_raw_borrowed(raw_canvas.as_ptr().cast()) };
+                let canvas = unsafe { Canvas::from_raw_borrowed(raw_canvas.cast()) };
                 draw_state.paint(&canvas, width, height, pixel_ratio);
             });
             registered_for_effect.set(Some(native_key));
@@ -556,15 +534,9 @@ struct WatermarkTile {
 }
 
 struct WatermarkTileResources {
-    // Drop order matters: the brush references the shader, the shader
-    // references the image and auxiliary objects, and the image may share the
-    // bitmap's pixels.
+    // Drop order matters: the brush references the shader.
     brush: Brush,
-    _shader: OwnedNative<OH_Drawing_ShaderEffect>,
-    _matrix: OwnedNative<OH_Drawing_Matrix>,
-    _sampling: OwnedNative<OH_Drawing_SamplingOptions>,
-    _image: OwnedNative<OH_Drawing_Image>,
-    _bitmap: OwnedNative<OH_Drawing_Bitmap>,
+    _shader: ShaderEffect,
     tile_width: f32,
     tile_height: f32,
 }
@@ -597,8 +569,11 @@ impl WatermarkTile {
         let mut text_style = TextStyle::new();
         text_style.set_color(style.color);
         text_style.set_font_size(style.font_size as f64);
-        text_style.set_font_weight(style.font_weight);
-        text_style.set_font_style(style.font_style.native_value());
+        text_style.set_font_style(FontStyle::new(
+            FontWeight::from_css(style.font_weight as u16),
+            FontWidth::Normal,
+            style.font_style.native_value(),
+        ));
         if let Some(font_family) = style.font_family.as_deref() {
             text_style.set_font_families(&[font_family]);
         }
@@ -608,18 +583,14 @@ impl WatermarkTile {
             let mut brush = Brush::new();
             brush.set_anti_alias(true);
             brush.set_color(style.color);
-            // SAFETY: The native text style copies the foreground paint
-            // configuration. The brush remains live through tile painting.
-            unsafe { OH_Drawing_SetTextStyleForegroundBrush(text_style.as_ptr(), brush.as_ptr()) };
+            text_style.set_foreground_brush(&brush);
             fill_brush = Some(brush);
 
             let mut pen = Pen::new();
             pen.set_anti_alias(true);
             pen.set_color(stroke.color);
             pen.set_width(stroke.width);
-            // SAFETY: The native text style copies the foreground paint
-            // configuration. The pen remains live through tile painting.
-            unsafe { OH_Drawing_SetTextStyleForegroundPen(text_style.as_ptr(), pen.as_ptr()) };
+            text_style.set_foreground_pen(&pen);
             stroke_pen = Some(pen);
         }
         let text_shadow = style.shadow.and_then(|shadow| {
@@ -628,7 +599,11 @@ impl WatermarkTile {
                 unsafe { OH_Drawing_CreateTextShadow() },
                 OH_Drawing_DestroyTextShadow,
             )?;
-            let offset = Point::new(shadow.offset_x, shadow.offset_y);
+            let offset = OwnedNative::new(
+                // SAFETY: The returned native owner is immediately wrapped.
+                unsafe { OH_Drawing_PointCreate(shadow.offset_x, shadow.offset_y) },
+                OH_Drawing_PointDestroy,
+            )?;
             // SAFETY: All arguments remain live through this call. Adding the
             // shadow copies its values into the native text style.
             unsafe {
@@ -707,94 +682,43 @@ impl WatermarkTile {
         let layout = MarkTileLayout::new(mark_width, mark_height, effect_outsets, style);
         let raster = TileRasterPlan::new(layout.tile_width, layout.tile_height, pixel_ratio);
 
-        let bitmap = OwnedNative::new(
-            // SAFETY: The returned native owner is immediately wrapped and
-            // released by `OwnedNative`.
-            unsafe { OH_Drawing_BitmapCreate() },
-            OH_Drawing_BitmapDestroy,
-        )?;
-        let bitmap_format = OH_Drawing_BitmapFormat {
-            colorFormat: OH_Drawing_ColorFormat_COLOR_FORMAT_RGBA_8888,
-            alphaFormat: OH_Drawing_AlphaFormat_ALPHA_FORMAT_PREMUL,
-        };
-        // SAFETY: `bitmap` and `bitmap_format` remain live for this call.
-        unsafe {
-            OH_Drawing_BitmapBuild(
-                bitmap.as_ptr(),
-                raster.width_pixels,
-                raster.height_pixels,
-                &bitmap_format,
-            );
-        }
-
-        {
-            let tile_canvas = Canvas::new();
-            // SAFETY: Both native objects remain live throughout the scoped
-            // CPU render. The canvas is dropped before the bitmap is reused.
-            unsafe { OH_Drawing_CanvasBind(tile_canvas.as_ptr(), bitmap.as_ptr()) };
-            tile_canvas.clear(0x00000000);
-            tile_canvas.scale(raster.scale, raster.scale);
-            if !layout.paint_marks(&tile_canvas, style.rotation_degrees, |canvas, left, top| {
-                paint_mark(canvas, left, top, &raster)
-            }) {
-                return None;
-            }
-        }
-
-        let image = OwnedNative::new(
-            // SAFETY: The returned native owner is immediately wrapped.
-            unsafe { OH_Drawing_ImageCreate() },
-            OH_Drawing_ImageDestroy,
-        )?;
-        // SAFETY: The image and bitmap are live. They are retained in the tile
-        // in dependency order in case the native image shares bitmap pixels.
-        if !unsafe { OH_Drawing_ImageBuildFromBitmap(image.as_ptr(), bitmap.as_ptr()) } {
+        let bitmap = Bitmap::new(
+            raster.width_pixels,
+            raster.height_pixels,
+            BitmapFormat {
+                color: ColorFormat::Rgba8888,
+                alpha: AlphaFormat::Premul,
+            },
+        );
+        let tile_canvas = Canvas::with_bitmap(bitmap);
+        tile_canvas.clear(0x00000000);
+        tile_canvas.scale(raster.scale, raster.scale);
+        if !layout.paint_marks(&tile_canvas, style.rotation_degrees, |canvas, left, top| {
+            paint_mark(canvas, left, top, &raster)
+        }) {
             return None;
         }
-        let sampling = OwnedNative::new(
-            // SAFETY: The returned native owner is immediately wrapped.
-            unsafe {
-                OH_Drawing_SamplingOptionsCreate(
-                    OH_Drawing_FilterMode_FILTER_MODE_LINEAR,
-                    OH_Drawing_MipmapMode_MIPMAP_MODE_NONE,
-                )
-            },
-            OH_Drawing_SamplingOptionsDestroy,
-        )?;
+
+        let image = Image::from_bitmap(tile_canvas.bitmap()?)?;
+        let sampling = SamplingOptions::new(FilterMode::Linear, MipmapMode::None);
         // The shader matrix maps the high-density raster tile back to logical
         // canvas coordinates.
         let inverse_scale = raster.scale.recip();
-        let matrix = OwnedNative::new(
-            // SAFETY: The returned native owner is immediately wrapped.
-            unsafe { OH_Drawing_MatrixCreateScale(inverse_scale, inverse_scale, 0.0, 0.0) },
-            OH_Drawing_MatrixDestroy,
-        )?;
-        let shader = OwnedNative::new(
-            // SAFETY: All referenced native resources are kept alive in the
-            // returned tile until after the shader is destroyed.
-            unsafe {
-                OH_Drawing_ShaderEffectCreateImageShader(
-                    image.as_ptr(),
-                    OH_Drawing_TileMode_REPEAT,
-                    OH_Drawing_TileMode_REPEAT,
-                    sampling.as_ptr(),
-                    matrix.as_ptr(),
-                )
-            },
-            OH_Drawing_ShaderEffectDestroy,
+        let matrix = Matrix::from_affine(inverse_scale, 0.0, 0.0, inverse_scale, 0.0, 0.0);
+        let shader = ShaderEffect::image(
+            &image,
+            TileMode::Repeat,
+            TileMode::Repeat,
+            &sampling,
+            Some(&matrix),
         )?;
         let mut brush = Brush::new();
         brush.set_anti_alias(true);
-        // SAFETY: `shader` outlives `brush` by the field declaration order.
-        unsafe { OH_Drawing_BrushSetShaderEffect(brush.as_ptr(), shader.as_ptr()) };
+        brush.set_shader_effect(Some(&shader));
 
         Some(WatermarkTileResources {
             brush,
             _shader: shader,
-            _matrix: matrix,
-            _sampling: sampling,
-            _image: image,
-            _bitmap: bitmap,
             tile_width: layout.tile_width,
             tile_height: layout.tile_height,
         })
@@ -827,14 +751,11 @@ impl WatermarkTile {
 }
 
 struct ImageMarkPainter {
-    // Drop order matters: the brush references the shadow layer, and the
-    // image may share the bitmap's pixel storage.
+    // Drop order matters: the brush references the shadow layer.
     shadow_brush: Option<Brush>,
-    _shadow_layer: Option<OwnedNative<OH_Drawing_ShadowLayer>>,
-    image: OwnedNative<OH_Drawing_Image>,
-    _bitmap: OwnedNative<OH_Drawing_Bitmap>,
-    _pixels: ArkImagePixels,
-    sampling: OwnedNative<OH_Drawing_SamplingOptions>,
+    _shadow_layer: Option<ShadowLayer>,
+    bitmap: Bitmap,
+    sampling: SamplingOptions,
 }
 
 impl ImageMarkPainter {
@@ -862,7 +783,10 @@ impl ImageMarkPainter {
         let width = pixels.width();
         let height = pixels.height();
         let row_stride = pixels.row_stride();
-        let alpha_format = drawing_alpha_format(pixels.alpha_type());
+        let bitmap_format = BitmapFormat {
+            color: ColorFormat::Rgba8888,
+            alpha: drawing_alpha_format(pixels.alpha_type()),
+        };
         let minimum_len = usize::try_from(row_stride)
             .ok()
             .and_then(|stride| {
@@ -880,92 +804,56 @@ impl ImageMarkPainter {
             return None;
         }
 
-        let mut image_info = OH_Drawing_Image_Info {
-            width: width as i32,
-            height: height as i32,
-            colorType: OH_Drawing_ColorFormat_COLOR_FORMAT_RGBA_8888,
-            alphaType: alpha_format,
-        };
-        let bitmap = OwnedNative::new(
-            // SAFETY: The pixel buffer is retained by this painter until after
-            // the image and bitmap are destroyed.
-            unsafe {
-                OH_Drawing_BitmapCreateFromPixels(
-                    &mut image_info,
-                    pixels.pixels_mut().as_mut_ptr().cast(),
-                    row_stride,
-                )
-            },
-            OH_Drawing_BitmapDestroy,
-        )?;
-        let native_image = OwnedNative::new(
-            // SAFETY: The returned native owner is immediately wrapped.
-            unsafe { OH_Drawing_ImageCreate() },
-            OH_Drawing_ImageDestroy,
-        )?;
-        // SAFETY: Both native objects remain live in the returned painter.
-        if !unsafe { OH_Drawing_ImageBuildFromBitmap(native_image.as_ptr(), bitmap.as_ptr()) } {
-            return None;
+        let mut bitmap = Bitmap::new(width, height, bitmap_format);
+        let tight_stride = usize::try_from(width).ok()?.checked_mul(4)?;
+        let source_stride = usize::try_from(row_stride).ok()?;
+        for row in 0..usize::try_from(height).ok()? {
+            let source_start = row.checked_mul(source_stride)?;
+            let source_end = source_start.checked_add(tight_stride)?;
+            let destination_start = row.checked_mul(tight_stride)?;
+            let destination_end = destination_start.checked_add(tight_stride)?;
+            bitmap.pixels_mut()[destination_start..destination_end]
+                .copy_from_slice(&pixels.pixels_mut()[source_start..source_end]);
         }
-        let sampling = OwnedNative::new(
-            // SAFETY: The returned native owner is immediately wrapped.
-            unsafe {
-                OH_Drawing_SamplingOptionsCreate(
-                    OH_Drawing_FilterMode_FILTER_MODE_LINEAR,
-                    OH_Drawing_MipmapMode_MIPMAP_MODE_NONE,
-                )
-            },
-            OH_Drawing_SamplingOptionsDestroy,
-        )?;
+        let sampling = SamplingOptions::new(FilterMode::Linear, MipmapMode::None);
         let shadow_layer = shadow.and_then(|shadow| {
-            OwnedNative::new(
-                // SAFETY: The returned native owner is immediately wrapped.
-                unsafe {
-                    OH_Drawing_ShadowLayerCreate(
-                        shadow.blur_radius,
-                        shadow.offset_x,
-                        shadow.offset_y,
-                        shadow.color,
-                    )
-                },
-                OH_Drawing_ShadowLayerDestroy,
+            ShadowLayer::new(
+                shadow.blur_radius,
+                shadow.offset_x,
+                shadow.offset_y,
+                shadow.color,
             )
         });
         let shadow_brush = shadow_layer.as_ref().map(|shadow_layer| {
             let mut brush = Brush::new();
             brush.set_anti_alias(true);
-            // SAFETY: The layer remains live until after the brush is dropped.
-            unsafe {
-                OH_Drawing_BrushSetShadowLayer(brush.as_ptr(), shadow_layer.as_ptr());
-            }
+            brush.set_shadow_layer(Some(shadow_layer));
             brush
         });
 
         Some(Self {
             shadow_brush,
             _shadow_layer: shadow_layer,
-            image: native_image,
-            _bitmap: bitmap,
-            _pixels: pixels,
+            bitmap,
             sampling,
         })
     }
 
     fn paint(&self, canvas: &Canvas, left: f32, top: f32, width: f32, height: f32) {
+        let Some(image) = Image::from_bitmap(&self.bitmap) else {
+            return;
+        };
+        let source = Rect::new(
+            0.0,
+            0.0,
+            self.bitmap.width() as f32,
+            self.bitmap.height() as f32,
+        );
         let destination = Rect::new(left, top, left + width, top + height);
         if let Some(brush) = &self.shadow_brush {
             canvas.attach_brush(brush);
         }
-        // SAFETY: Canvas, image, destination, and sampling options all remain
-        // valid for this synchronous draw call.
-        unsafe {
-            OH_Drawing_CanvasDrawImageRect(
-                canvas.as_ptr(),
-                self.image.as_ptr(),
-                destination.as_ptr(),
-                self.sampling.as_ptr(),
-            );
-        }
+        canvas.draw_image_rect(&image, &source, &destination, &self.sampling);
         if self.shadow_brush.is_some() {
             canvas.detach_brush();
         }
@@ -1110,10 +998,7 @@ impl MarkTileLayout {
                     continue;
                 }
                 canvas.save();
-                // SAFETY: The transform is local to this scoped tile paint.
-                unsafe {
-                    OH_Drawing_CanvasRotate(canvas.as_ptr(), rotation_degrees, center_x, center_y);
-                }
+                canvas.rotate_degrees_around(rotation_degrees, center_x, center_y);
                 let painted = paint(
                     canvas,
                     center_x - self.mark_width / 2.0,
@@ -1129,11 +1014,11 @@ impl MarkTileLayout {
     }
 }
 
-fn drawing_alpha_format(alpha_type: i32) -> OH_Drawing_AlphaFormat {
+fn drawing_alpha_format(alpha_type: i32) -> AlphaFormat {
     match alpha_type {
-        1 => OH_Drawing_AlphaFormat_ALPHA_FORMAT_OPAQUE,
-        3 => OH_Drawing_AlphaFormat_ALPHA_FORMAT_UNPREMUL,
-        _ => OH_Drawing_AlphaFormat_ALPHA_FORMAT_PREMUL,
+        1 => AlphaFormat::Opaque,
+        3 => AlphaFormat::Unpremul,
+        _ => AlphaFormat::Premul,
     }
 }
 

@@ -6,15 +6,10 @@ use std::fmt;
 use std::os::fd::AsRawFd;
 use std::path::{Path, PathBuf};
 
-use ohos_drawing_binding::Canvas;
+use ohos_drawing_binding::{AlphaFormat, Bitmap, BitmapFormat, Canvas, ColorFormat};
 use ohos_image_native_binding::{
-    ImagePacker, ImageString, PackingOptions, PixelFormat, PixelMap, PixelMapInitializationOptions,
-};
-use ohos_native_drawing_sys::{
-    OH_Drawing_AlphaFormat_ALPHA_FORMAT_PREMUL, OH_Drawing_Bitmap, OH_Drawing_BitmapBuild,
-    OH_Drawing_BitmapCreate, OH_Drawing_BitmapDestroy, OH_Drawing_BitmapFormat,
-    OH_Drawing_BitmapGetPixels, OH_Drawing_CanvasBind,
-    OH_Drawing_ColorFormat_COLOR_FORMAT_BGRA_8888,
+    ImagePacker, ImageString, PackingOptions, PixelFormat, PixelMap, PixelMapAlphaType,
+    PixelMapInitializationOptions,
 };
 
 use crate::model::{ChartEvent, ChartOption};
@@ -34,7 +29,6 @@ pub(crate) enum ChartExportError {
         height: u32,
     },
     BufferSizeOverflow,
-    Native(&'static str),
     Image(String),
     Io {
         operation: &'static str,
@@ -54,7 +48,6 @@ impl fmt::Display for ChartExportError {
                 "export dimensions {width}x{height} exceed the supported limit"
             ),
             Self::BufferSizeOverflow => formatter.write_str("export pixel buffer is too large"),
-            Self::Native(message) => formatter.write_str(message),
             Self::Image(message) => formatter.write_str(message),
             Self::Io {
                 operation,
@@ -157,28 +150,33 @@ pub(crate) fn save_chart_image(context: ExportContext<'_>) -> Result<PathBuf, Ch
     }
     crate::state::apply_states(&mut option, context.selected, context.selected_items);
 
-    let bitmap = NativeBitmap::new(width, height)?;
-    {
-        let canvas = Canvas::new();
-        // SAFETY: both handles are live for this scope; `bitmap` outlives the
-        // borrowed canvas binding and is not accessed concurrently.
-        unsafe { OH_Drawing_CanvasBind(canvas.as_ptr(), bitmap.raw) };
-        canvas.save();
-        canvas.scale(pixel_ratio, pixel_ratio);
-        draw_option(
-            &option,
-            context.selected,
-            context.hidden_series,
-            context.zoom_windows,
-            context.selected_items,
-            Some(&canvas),
-            context.width,
-            context.height,
-        );
-        canvas.restore();
-    }
-    let pixels = bitmap.copy_pixels(byte_len)?;
-    let mut pixels = pixels;
+    let bitmap = Bitmap::new(
+        width,
+        height,
+        BitmapFormat {
+            color: ColorFormat::Bgra8888,
+            alpha: AlphaFormat::Premul,
+        },
+    );
+    let canvas = Canvas::with_bitmap(bitmap);
+    canvas.save();
+    canvas.scale(pixel_ratio, pixel_ratio);
+    draw_option(
+        &option,
+        context.selected,
+        context.hidden_series,
+        context.zoom_windows,
+        context.selected_items,
+        Some(&canvas),
+        context.width,
+        context.height,
+    );
+    canvas.restore();
+    let mut pixels = canvas
+        .bitmap()
+        .map(|bitmap| bitmap.pixels().to_vec())
+        .filter(|pixels| pixels.len() == byte_len)
+        .ok_or(ChartExportError::BufferSizeOverflow)?;
     let mut initialization = PixelMapInitializationOptions::new().map_err(image_error)?;
     initialization.set_width(width).map_err(image_error)?;
     initialization.set_height(height).map_err(image_error)?;
@@ -196,7 +194,9 @@ pub(crate) fn save_chart_image(context: ExportContext<'_>) -> Result<PathBuf, Ch
                 .ok_or(ChartExportError::BufferSizeOverflow)?,
         )
         .map_err(image_error)?;
-    initialization.set_alpha_type(2).map_err(image_error)?;
+    initialization
+        .set_alpha_type(PixelMapAlphaType::Premultiplied)
+        .map_err(image_error)?;
     let pixelmap = PixelMap::create(&mut pixels, &mut initialization).map_err(image_error)?;
 
     let path = export_path(context.option, feature, extension);
@@ -271,52 +271,6 @@ fn sanitize_filename(value: &str) -> String {
 
 fn image_error(error: impl std::fmt::Display) -> ChartExportError {
     ChartExportError::Image(error.to_string())
-}
-
-struct NativeBitmap {
-    raw: *mut OH_Drawing_Bitmap,
-}
-
-impl NativeBitmap {
-    fn new(width: u32, height: u32) -> Result<Self, ChartExportError> {
-        // SAFETY: creates a fresh native bitmap handle with no aliases.
-        let raw = unsafe { OH_Drawing_BitmapCreate() };
-        if raw.is_null() {
-            return Err(ChartExportError::Native(
-                "OH_Drawing_BitmapCreate returned null",
-            ));
-        }
-        let format = OH_Drawing_BitmapFormat {
-            colorFormat: OH_Drawing_ColorFormat_COLOR_FORMAT_BGRA_8888,
-            alphaFormat: OH_Drawing_AlphaFormat_ALPHA_FORMAT_PREMUL,
-        };
-        // SAFETY: `raw` is the live handle created above and `format` remains
-        // valid for the duration of the synchronous build call.
-        unsafe { OH_Drawing_BitmapBuild(raw, width, height, &format) };
-        Ok(Self { raw })
-    }
-
-    fn copy_pixels(&self, byte_len: usize) -> Result<Vec<u8>, ChartExportError> {
-        // SAFETY: the bitmap is live and fully built before its pixel pointer
-        // is queried.
-        let pixels = unsafe { OH_Drawing_BitmapGetPixels(self.raw) }.cast::<u8>();
-        if pixels.is_null() {
-            return Err(ChartExportError::Native(
-                "OH_Drawing_BitmapGetPixels returned null",
-            ));
-        }
-        // SAFETY: `byte_len` was checked from the exact bitmap dimensions and
-        // BGRA8888 format (four bytes per pixel); the returned pointer remains
-        // valid until `self` is dropped after this copy.
-        Ok(unsafe { std::slice::from_raw_parts(pixels, byte_len) }.to_vec())
-    }
-}
-
-impl Drop for NativeBitmap {
-    fn drop(&mut self) {
-        // SAFETY: `raw` is owned by this guard and destroyed exactly once.
-        unsafe { OH_Drawing_BitmapDestroy(self.raw) };
-    }
 }
 
 #[cfg(test)]

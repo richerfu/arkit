@@ -5,9 +5,7 @@ description: "仓库里有哪些示例、各自练什么，以及怎么编进真
 
 # 示例索引
 
-仓库里目前有 **13** 个可在设备上跑的示例（见 workspace 的 `members`）。它们既是上手材料，也是公开 API 是否还能编译、能否上真机的活合同。
-
-如果磁盘上还有 `examples/canvas` 但没进 members，说明它目前不算正式示例，文档也不覆盖。
+仓库里目前有 **14** 个可在设备上跑的示例（见 workspace 的 `members`）。它们既是上手材料，也是公开 API 是否还能编译、能否上真机的活合同。
 
 ## 一览
 
@@ -17,6 +15,7 @@ description: "仓库里有哪些示例、各自练什么，以及怎么编进真
 | `async_task`      | `use_resource`、Tokio timer、UI wake                                      | `examples/async_task/src/lib.rs`      |
 | `animation`       | timeline、easing、controls、layout/presence、drag/scroll、lowering        | `examples/animation/src/lib.rs`       |
 | `camera`          | CameraKit 拍照/扫码双模式、可配置工具栏、分辨率与完整控制项               | `examples/camera/src/lib.rs`          |
+| `canvas`          | W3C Canvas 2D 完整绘制面：Path2D、paint、文字、图片与像素                 | `examples/canvas/src/lib.rs`          |
 | `barcode`         | 独立二维码/条形码生成、`Barcode` / `use_barcode`、PNG 导出                | `examples/barcode/src/lib.rs`         |
 | `chart`           | 22 series、realtime option、actions、events、appendData、coordinate query | `examples/chart/src/lib.rs`           |
 | `complex_cases`   | 10,000 item List/Grid/WaterFlow、单项动态更新与变高重排                   | `examples/complex_cases/src/lib.rs`   |
@@ -73,6 +72,10 @@ ohrs build --arch aarch
 ## chart
 
 展示全部 series family 与图表 instance operations。除画面外检查 tooltip/hit-test、legend/dataZoom、selection state、realtime transition、appendData、coordinate conversion 和图片导出。
+
+## canvas
+
+通过 `canvas` feature 使用持久化 ArkUI Custom + Native Drawing backing store，不创建额外 XComponent。示例验证高 DPI logical pixel、gradient/pattern/shadow、roundRect/arcTo/ellipse、SVG Path2D、dash、affine transform、ImageData/drawImage、fill/stroke text 与完整文字测量。
 
 ## camera
 

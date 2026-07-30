@@ -11,12 +11,13 @@ workspace = true
 
 [features]
 default = []
-full = ["animation", "barcode", "camera-scan", "chart", "code", "i18n", "icon", "lottie-network", "markdown", "router", "shadcn", "terminal"]
+full = ["animation", "barcode", "camera-scan", "canvas", "chart", "code", "i18n", "icon", "lottie-network", "markdown", "router", "shadcn", "terminal"]
 animation = ["dep:arkit_animation"]
 # Standalone barcode / QR generation (no camera required).
 barcode = ["dep:arkit_barcode"]
 camera = ["dep:arkit_camera"]
 camera-scan = ["animation", "camera", "arkit_camera/scan"]
+canvas = ["dep:arkit_canvas"]
 chart = ["animation", "dep:arkit_chart"]
 # Standalone Code component + tree-sitter highlighting (no markdown required).
 code = ["shadcn", "arkit_shadcn/code"]
@@ -44,6 +45,7 @@ arkit_router = { workspace = true, optional = true }
 arkit_animation = { workspace = true, optional = true }
 arkit_barcode = { workspace = true, optional = true }
 arkit_camera = { workspace = true, optional = true }
+arkit_canvas = { workspace = true, optional = true }
 arkit_chart = { workspace = true, optional = true }
 arkit_shadcn = { workspace = true, optional = true }
 arkit_icon = { workspace = true, optional = true }

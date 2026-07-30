@@ -194,9 +194,6 @@ impl<'engine> LottieRenderer<'engine> {
                 "surface returned invalid buffer geometry",
             ));
         }
-        let color_space = native_color_space(buffer.format())?;
-        self.update_transform(width, height)?;
-
         let pixel_len = usize::try_from(u64::from(stride) * u64::from(height)).map_err(|_| {
             LottieError::render("LottieRenderer::render", "surface pixel count overflowed")
         })?;
@@ -205,6 +202,46 @@ impl<'engine> LottieRenderer<'engine> {
         // exactly four bytes per pixel, mmap is suitably aligned for u32, and
         // the slice is used only until draw+sync complete below.
         let pixels = unsafe { std::slice::from_raw_parts_mut(buffer.bits().cast(), pixel_len) };
+        self.render_to_pixels(
+            pixels,
+            stride,
+            width,
+            height,
+            native_color_space(buffer.format())?,
+        )
+    }
+
+    pub(crate) fn render_to_pixels(
+        &mut self,
+        pixels: &mut [u32],
+        stride: u32,
+        width: u32,
+        height: u32,
+        color_space: ColorSpace,
+    ) -> LottieResult<()> {
+        if self.animation.is_none() {
+            return Ok(());
+        }
+        if width == 0 || height == 0 || stride < width {
+            return Err(LottieError::render(
+                "LottieRenderer::render_to_pixels",
+                "target returned invalid buffer geometry",
+            ));
+        }
+        let required = usize::try_from(u64::from(stride) * u64::from(height)).map_err(|_| {
+            LottieError::render(
+                "LottieRenderer::render_to_pixels",
+                "target pixel count overflowed",
+            )
+        })?;
+        if pixels.len() < required {
+            return Err(LottieError::render(
+                "LottieRenderer::render_to_pixels",
+                "target pixel buffer is too small",
+            ));
+        }
+        pixels[..required].fill(0);
+        self.update_transform(width, height)?;
         // SAFETY: `pixels` remains alive and exclusively borrowed until the
         // canvas is synchronized and retargeted to the stable fallback.
         unsafe {

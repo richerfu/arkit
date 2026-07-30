@@ -1,4 +1,4 @@
-use ohos_drawing_binding::{Canvas, Path, Rect};
+use ohos_drawing_binding::{Canvas, ClipOperation, Path, PathDirection, Rect};
 
 use super::super::prelude::*;
 use super::super::symbol::{draw_symbol, resolve_symbol};
@@ -261,16 +261,7 @@ fn draw_end_label(canvas: &Canvas, series: &BasicSeries, points: &[ScreenPoint<'
 fn begin_clip(canvas: &Canvas, plot: &crate::render::geometry::Plot) {
     canvas.save();
     let rect = Rect::new(plot.x, plot.y, plot.x + plot.width, plot.y + plot.height);
-    // SAFETY: canvas and rect are live for the synchronous clip call; the
-    // matching end-clip path restores the saved canvas state.
-    unsafe {
-        ohos_native_drawing_sys::OH_Drawing_CanvasClipRect(
-            canvas.as_ptr(),
-            rect.as_ptr(),
-            ohos_native_drawing_sys::OH_Drawing_CanvasClipOp_INTERSECT,
-            true,
-        );
-    }
+    canvas.clip_rect(&rect, ClipOperation::Intersect, true);
 }
 
 fn line_polyline(
@@ -581,18 +572,9 @@ fn begin_polar_clip(canvas: &Canvas, config: &PolarConfig) {
         config.center.0,
         config.center.1,
         config.outer_radius,
-        ohos_native_drawing_sys::OH_Drawing_PathDirection_PATH_DIRECTION_CW,
+        PathDirection::Cw,
     );
-    // SAFETY: canvas and clip path are live for this synchronous call; the
-    // saved canvas state is restored by the matching polar clip teardown.
-    unsafe {
-        ohos_native_drawing_sys::OH_Drawing_CanvasClipPath(
-            canvas.as_ptr(),
-            clip.as_ptr(),
-            ohos_native_drawing_sys::OH_Drawing_CanvasClipOp_INTERSECT,
-            true,
-        );
-    }
+    canvas.clip_path(&clip, ClipOperation::Intersect, true);
 }
 
 fn draw_polar_segment(

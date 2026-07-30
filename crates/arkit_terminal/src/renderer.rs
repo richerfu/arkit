@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::ffi::c_void;
 use std::mem;
 use std::ptr::NonNull;
 use std::sync::Arc;
@@ -11,15 +10,8 @@ use glyphon::{
     Resolution, SwashCache, TextArea, TextAtlas, TextBounds, TextRenderer, Viewport,
 };
 use ohos_drawing_binding::{
-    Canvas, FontCollection, TextStyle, Typography, TypographyBuilder, TypographyStyle,
-};
-use ohos_native_drawing_sys::{
-    OH_Drawing_AlphaFormat_ALPHA_FORMAT_PREMUL, OH_Drawing_Bitmap,
-    OH_Drawing_BitmapCreateFromPixels, OH_Drawing_BitmapDestroy, OH_Drawing_CanvasBind,
-    OH_Drawing_ColorFormat_COLOR_FORMAT_RGBA_8888, OH_Drawing_FontStyle_FONT_STYLE_ITALIC,
-    OH_Drawing_FontStyle_FONT_STYLE_NORMAL, OH_Drawing_FontWeight_FONT_WEIGHT_400,
-    OH_Drawing_FontWeight_FONT_WEIGHT_700, OH_Drawing_Image_Info,
-    OH_Drawing_SetTextStyleLetterSpacing,
+    AlphaFormat, Bitmap, BitmapFormat, Canvas, ColorFormat, FontCollection, FontSlant, FontStyle,
+    FontWeight, FontWidth, TextStyle, Typography, TypographyBuilder, TypographyStyle,
 };
 use rustc_hash::FxHashMap;
 use wgpu::rwh::{OhosDisplayHandle, OhosNdkWindowHandle, RawDisplayHandle, RawWindowHandle};
@@ -809,34 +801,15 @@ impl GlyphRasterizer {
         spec: &GlyphSpec,
         request: RasterizeCustomGlyphRequest,
     ) -> Result<RasterizedCustomGlyph, String> {
-        let width = usize::from(request.width);
-        let height = usize::from(request.height);
-        let byte_len = width
-            .checked_mul(height)
-            .and_then(|pixels| pixels.checked_mul(4))
-            .ok_or_else(|| "glyph bitmap size overflowed".to_string())?;
-        let mut rgba = vec![0u8; byte_len];
-        let mut image_info = OH_Drawing_Image_Info {
-            width: i32::from(request.width),
-            height: i32::from(request.height),
-            colorType: OH_Drawing_ColorFormat_COLOR_FORMAT_RGBA_8888,
-            alphaType: OH_Drawing_AlphaFormat_ALPHA_FORMAT_PREMUL,
-        };
-        // SAFETY: `rgba` remains allocated and writable until the bound canvas
-        // and bitmap are both destroyed below.
-        let raw_bitmap = unsafe {
-            OH_Drawing_BitmapCreateFromPixels(
-                &mut image_info,
-                rgba.as_mut_ptr().cast::<c_void>(),
-                u32::from(request.width) * 4,
-            )
-        };
-        let bitmap = BorrowedBitmap::new(raw_bitmap)
-            .ok_or_else(|| "OH_Drawing_BitmapCreateFromPixels returned null".to_string())?;
-        let canvas = Canvas::new();
-        // SAFETY: the canvas and bitmap are live for all synchronous paint
-        // operations, and the pixel buffer outlives both.
-        unsafe { OH_Drawing_CanvasBind(canvas.as_ptr(), bitmap.as_ptr()) };
+        let bitmap = Bitmap::new(
+            u32::from(request.width),
+            u32::from(request.height),
+            BitmapFormat {
+                color: ColorFormat::Rgba8888,
+                alpha: AlphaFormat::Premul,
+            },
+        );
+        let canvas = Canvas::with_bitmap(bitmap);
         canvas.clear(0);
 
         let mut typography = build_typography(&mut self.fonts, spec);
@@ -852,10 +825,14 @@ impl GlyphRasterizer {
         canvas.scale(scale_x as f32, 1.0);
         typography.paint(&canvas, 0.0, 0.0);
         canvas.restore();
-        drop(canvas);
-        drop(bitmap);
 
-        let mask = rgba.chunks_exact(4).map(|pixel| pixel[3]).collect();
+        let mask = canvas
+            .bitmap()
+            .expect("Canvas::with_bitmap must retain its bitmap")
+            .pixels()
+            .chunks_exact(4)
+            .map(|pixel| pixel[3])
+            .collect();
         Ok(RasterizedCustomGlyph {
             data: mask,
             content_type: ContentType::Mask,
@@ -888,25 +865,21 @@ fn build_typography(fonts: &mut FontCollection, spec: &GlyphSpec) -> Typography 
     let mut text_style = TextStyle::new();
     text_style.set_color(0xFFFF_FFFF);
     text_style.set_font_size(f64::from_bits(spec.style.font_size_bits));
-    text_style.set_font_weight(if spec.style.bold {
-        OH_Drawing_FontWeight_FONT_WEIGHT_700 as i32
-    } else {
-        OH_Drawing_FontWeight_FONT_WEIGHT_400 as i32
-    });
-    text_style.set_font_style(if spec.style.italic {
-        OH_Drawing_FontStyle_FONT_STYLE_ITALIC as i32
-    } else {
-        OH_Drawing_FontStyle_FONT_STYLE_NORMAL as i32
-    });
+    text_style.set_font_style(FontStyle::new(
+        if spec.style.bold {
+            FontWeight::W700
+        } else {
+            FontWeight::W400
+        },
+        FontWidth::Normal,
+        if spec.style.italic {
+            FontSlant::Italic
+        } else {
+            FontSlant::Normal
+        },
+    ));
     text_style.set_font_families(&["monospace"]);
-    // The safe wrapper has not exposed letter spacing yet.
-    // SAFETY: `text_style` owns a live native style for this call.
-    unsafe {
-        OH_Drawing_SetTextStyleLetterSpacing(
-            text_style.as_ptr(),
-            f64::from_bits(spec.style.letter_spacing_bits),
-        );
-    }
+    text_style.set_letter_spacing(f64::from_bits(spec.style.letter_spacing_bits));
     let mut builder = TypographyBuilder::new(&mut typography_style, fonts);
     builder.push_text_style(&mut text_style);
     builder.add_text(&spec.text);
@@ -957,26 +930,6 @@ fn argb_to_wgpu(color: u32, srgb_target: bool) -> wgpu::Color {
         g: f64::from(rgba[1]),
         b: f64::from(rgba[2]),
         a: f64::from(rgba[3]),
-    }
-}
-
-struct BorrowedBitmap(NonNull<OH_Drawing_Bitmap>);
-
-impl BorrowedBitmap {
-    fn new(raw: *mut OH_Drawing_Bitmap) -> Option<Self> {
-        NonNull::new(raw).map(Self)
-    }
-
-    fn as_ptr(&self) -> *mut OH_Drawing_Bitmap {
-        self.0.as_ptr()
-    }
-}
-
-impl Drop for BorrowedBitmap {
-    fn drop(&mut self) {
-        // SAFETY: this wrapper owns the bitmap object but not its external
-        // pixels, and destroys it exactly once before the pixel Vec is moved.
-        unsafe { OH_Drawing_BitmapDestroy(self.0.as_ptr()) };
     }
 }
 

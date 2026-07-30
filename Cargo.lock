@@ -112,6 +112,7 @@ dependencies = [
  "arkit_arkui",
  "arkit_barcode",
  "arkit_camera",
+ "arkit_canvas",
  "arkit_chart",
  "arkit_derive",
  "arkit_hooks",
@@ -207,6 +208,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "arkit_canvas"
+version = "0.0.1-beta.0"
+dependencies = [
+ "arkit_hooks",
+ "arkit_prelude",
+ "base64",
+ "csscolorparser",
+ "half",
+ "ohos-arkui-binding",
+ "ohos-display-binding",
+ "ohos-drawing-binding",
+ "ohos-image-native-binding 0.0.5",
+ "smallvec",
+]
+
+[[package]]
 name = "arkit_chart"
 version = "0.0.1-beta.0"
 dependencies = [
@@ -216,8 +233,7 @@ dependencies = [
  "ohos-arkui-binding",
  "ohos-display-binding",
  "ohos-drawing-binding",
- "ohos-image-native-binding",
- "ohos-native-drawing-sys",
+ "ohos-image-native-binding 0.0.5",
  "rustc-hash 2.1.3",
  "serde_json",
 ]
@@ -693,6 +709,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "canvas_example"
+version = "0.0.1-beta.0"
+dependencies = [
+ "arkit",
+ "napi-build-ohos",
+ "napi-derive-ohos",
+ "napi-ohos",
+ "serde_json",
+]
+
+[[package]]
 name = "cbc"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1016,6 +1043,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce6e4c961d6cd6c9a86db418387425e8bdeaf05b3c8bc1411e6dca4c252f1453"
 dependencies = [
  "hybrid-array",
+]
+
+[[package]]
+name = "csscolorparser"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "199f851bd3cb5004c09474252c7f74e7c047441ed0979bf3688a7106a13da952"
+dependencies = [
+ "num-traits",
+ "phf",
+ "uncased",
 ]
 
 [[package]]
@@ -1553,6 +1591,12 @@ checksum = "f1a05365e3b1c6d1650318537c7460c6923f1abdd272ad6842baa2b509957a06"
 dependencies = [
  "num-traits",
 ]
+
+[[package]]
+name = "fastrand"
+version = "2.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
 name = "fdeflate"
@@ -2866,7 +2910,7 @@ dependencies = [
  "ohos-drawing-binding",
  "ohos-enum-derive",
  "ohos-image-binding",
- "ohos-image-native-binding",
+ "ohos-image-native-binding 0.0.4",
  "ohos-udmf-binding",
  "ohos-xcomponent-binding",
  "ohos-xcomponent-sys",
@@ -2896,7 +2940,7 @@ checksum = "f03318dacc6add03bd1f1adf05ec349febaf7e0614090d8021b315a262038b4f"
 dependencies = [
  "napi-sys-ohos",
  "ohos-arkui-input-sys",
- "ohos-image-native-sys",
+ "ohos-image-native-sys 0.0.2",
  "ohos-native-drawing-sys",
  "ohos-udmf-sys",
 ]
@@ -2909,7 +2953,7 @@ checksum = "b1a6b7555d1772098317dadbc3f4ac68405c4753b4a9838f24d09d4e97ff0f71"
 dependencies = [
  "ohos-camera-sys",
  "ohos-enum-derive",
- "ohos-image-native-binding",
+ "ohos-image-native-binding 0.0.4",
  "ohos-native-window-sys",
  "ohos-xcomponent-binding",
 ]
@@ -2920,7 +2964,7 @@ version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4721c3e18eaf9e99c6f6db46ea3973aeb3bc7788d50d285a3af7d991c806e9f7"
 dependencies = [
- "ohos-image-native-sys",
+ "ohos-image-native-sys 0.0.2",
 ]
 
 [[package]]
@@ -2941,9 +2985,9 @@ checksum = "76a7f281a4946086162214c948b805673b00f37f5eb9da8198034c356152aac6"
 
 [[package]]
 name = "ohos-drawing-binding"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6015f537c48205cb21e0dcd26fc13634b124bef9bc1e900153605cdaa7a5394"
+checksum = "f35fe3103e7ff9cdbfe3f3067988032c3df7516fa678ca985567c79f03ab84b1"
 dependencies = [
  "ohos-enum-derive",
  "ohos-native-drawing-sys",
@@ -2986,7 +3030,7 @@ dependencies = [
  "napi-ohos",
  "napi-sys-ohos",
  "ohos-enum-derive",
- "ohos-image-sys",
+ "ohos-image-sys 0.0.2",
  "ohos-resource-manager-sys",
 ]
 
@@ -2999,7 +3043,22 @@ dependencies = [
  "libc",
  "napi-sys-ohos",
  "ohos-enum-derive",
- "ohos-image-native-sys",
+ "ohos-image-native-sys 0.0.2",
+ "ohos-native-buffer-binding",
+ "ohos-native-buffer-sys",
+ "ohos-resource-manager-sys",
+]
+
+[[package]]
+name = "ohos-image-native-binding"
+version = "0.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c7dfe4ed7d71441c408ac5453176b448ddb673567a1f01508ac168a600a7f38"
+dependencies = [
+ "libc",
+ "napi-sys-ohos",
+ "ohos-enum-derive",
+ "ohos-image-native-sys 0.0.3",
  "ohos-native-buffer-binding",
  "ohos-native-buffer-sys",
  "ohos-resource-manager-sys",
@@ -3017,10 +3076,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "ohos-image-native-sys"
+version = "0.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "331baf1db1c885dcbcdb81dce0563fa9f9fd3a27802ddcbf1726eb6784bd020e"
+dependencies = [
+ "napi-sys-ohos",
+ "ohos-native-buffer-sys",
+ "ohos-resource-manager-sys",
+]
+
+[[package]]
 name = "ohos-image-sys"
 version = "0.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4a94ccf32afe0522c34647e17a9ba1ab39b39399207b3b3ffc21d03cd9cb152"
+dependencies = [
+ "napi-sys-ohos",
+ "ohos-resource-manager-sys",
+]
+
+[[package]]
+name = "ohos-image-sys"
+version = "0.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e367c84b78af5ae77d5335601396c1d0af89543becca08f75aedf4ba5258d74c"
 dependencies = [
  "napi-sys-ohos",
  "ohos-resource-manager-sys",
@@ -3044,9 +3124,9 @@ checksum = "855c631663b49706aee58d0a446568aefeb85ccf95180a059d020c00b1187ad2"
 
 [[package]]
 name = "ohos-native-buffer-binding"
-version = "0.2.3"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d4a45e3c9677f30976646a6d6cf3c55bb50c70df0fb991b4d946a5da404134cd"
+checksum = "a4a89ed541cc93d59c31b2ad73e9bdb1efe0f38c6ee538581517bbbe32bc47d2"
 dependencies = [
  "ohos-native-buffer-sys",
  "ohos-native-window-sys",
@@ -3054,18 +3134,18 @@ dependencies = [
 
 [[package]]
 name = "ohos-native-buffer-sys"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4642c79ad9743a8bc3e0c46d8a8c8c87cc2b4f03b0fc6f2c049606ae47a5ff16"
+checksum = "d1b754679463a2af38c3381936eec015bab187963bd97a6802e5a61ce362573f"
 
 [[package]]
 name = "ohos-native-drawing-sys"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45fcbb5139439d4dc7ac630fe3d02a9980687f8f56295799f842ef260e315c12"
+checksum = "f8d58d6a1f1d65d0597c56f1920d86028241ac9cc91c56c9dac41a680f68ac6e"
 dependencies = [
- "ohos-image-native-sys",
- "ohos-image-sys",
+ "ohos-image-native-sys 0.0.3",
+ "ohos-image-sys 0.0.3",
 ]
 
 [[package]]
@@ -3082,9 +3162,9 @@ dependencies = [
 
 [[package]]
 name = "ohos-native-window-sys"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "275c2d2352f3dfaf5c6f467ef7c1c01d859071732346cdab3c1dc6598d5458dc"
+checksum = "c63464c0eb8cfb9ad1eb9d12531acea37f5b3280f40bb902f861e2108155d140"
 dependencies = [
  "ohos-native-buffer-sys",
 ]
@@ -3101,9 +3181,9 @@ dependencies = [
 
 [[package]]
 name = "ohos-resource-manager-sys"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf0e3a4f14001ff137b01a80d021b436c4777a4b8cd2a318c9575b796ba9c918"
+checksum = "86fbffb79d6e26b845e77653590e6d8951baeaa6c1a307417e917f37dcf3843a"
 dependencies = [
  "napi-sys-ohos",
 ]
@@ -3115,7 +3195,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a9699946b8e5d7e3e4ffbc53749d79e4614009cb3bfab5831691018bf3157d3d"
 dependencies = [
  "ohos-enum-derive",
- "ohos-image-native-binding",
+ "ohos-image-native-binding 0.0.4",
  "ohos-udmf-sys",
 ]
 
@@ -3125,7 +3205,7 @@ version = "0.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5a0e5ea4015c1c365841419a0aaf1ca266fbfdfc93465e79a4f2ad826072a98f"
 dependencies = [
- "ohos-image-native-sys",
+ "ohos-image-native-sys 0.0.2",
 ]
 
 [[package]]
@@ -3319,6 +3399,50 @@ name = "percent-encoding"
 version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
+
+[[package]]
+name = "phf"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c1562dc717473dbaa4c1f85a36410e03c047b2e7df7f45ee938fbef64ae7fadf"
+dependencies = [
+ "phf_macros",
+ "phf_shared",
+]
+
+[[package]]
+name = "phf_generator"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "135ace3a761e564ec88c03a77317a7c6b80bb7f7135ef2544dbe054243b89737"
+dependencies = [
+ "fastrand",
+ "phf_shared",
+]
+
+[[package]]
+name = "phf_macros"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "812f032b54b1e759ccd5f8b6677695d5268c588701effba24601f6932f8269ef"
+dependencies = [
+ "phf_generator",
+ "phf_shared",
+ "proc-macro2",
+ "quote",
+ "syn",
+ "uncased",
+]
+
+[[package]]
+name = "phf_shared"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e57fef6bc5981e38c2ce2d63bfa546861309f875b8a75f092d1d54ae2d64f266"
+dependencies = [
+ "siphasher",
+ "uncased",
+]
 
 [[package]]
 name = "pin-project"
@@ -4268,6 +4392,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a219298ac11a56ea9a6d2120044824d6f01aeb034955e7af7bc16858527deea"
 
 [[package]]
+name = "siphasher"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8ee5873ec9cce0195efcb7a4e9507a04cd49aec9c83d0389df45b1ef7ba2e649"
+
+[[package]]
 name = "skrifa"
 version = "0.40.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4925,6 +5055,15 @@ name = "typenum"
 version = "1.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
+
+[[package]]
+name = "uncased"
+version = "0.9.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1b88fcfe09e89d3866a5c11019378088af2d24c3fbd4f0543f96b479ec90697"
+dependencies = [
+ "version_check",
+]
 
 [[package]]
 name = "unic-langid"

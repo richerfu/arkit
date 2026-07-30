@@ -1,4 +1,4 @@
-use ohos_drawing_binding::{Canvas, Rect};
+use ohos_drawing_binding::{Canvas, ClipOperation, Rect};
 
 use super::super::compat;
 use super::super::label_layout::draw_rotated_text;
@@ -593,16 +593,7 @@ fn draw_label(
 fn begin_clip(canvas: &Canvas, plot: &crate::render::geometry::Plot) {
     canvas.save();
     let rect = Rect::new(plot.x, plot.y, plot.x + plot.width, plot.y + plot.height);
-    // SAFETY: canvas and rect are live for the synchronous clip call; the
-    // caller restores the saved canvas state after rendering the series.
-    unsafe {
-        ohos_native_drawing_sys::OH_Drawing_CanvasClipRect(
-            canvas.as_ptr(),
-            rect.as_ptr(),
-            ohos_native_drawing_sys::OH_Drawing_CanvasClipOp_INTERSECT,
-            true,
-        );
-    }
+    canvas.clip_rect(&rect, ClipOperation::Intersect, true);
 }
 
 #[cfg(test)]

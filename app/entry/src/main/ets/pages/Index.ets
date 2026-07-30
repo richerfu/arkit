@@ -10,7 +10,7 @@ interface NativeBackPressModule {
 @Entry
 @Component
 struct Index {
-  @State moduleName: string = "shadcn_showcase";
+  @State moduleName: string = "canvas_example";
 
   aboutToAppear(): void {
     const stored = AppStorage.get<string>("moduleName");

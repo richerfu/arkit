@@ -6,7 +6,7 @@ import window from "@ohos.window";
 // moduleName 由 run.sh 按当前部署的 example 写入（对应 lib<crate>.so）。
 // NativeAbility 据此 Loadable.load 加载并调 init/render/destroy。
 export default class EntryAbility extends NativeAbility {
-  public moduleName: string = "shadcn_showcase";
+  public moduleName: string = "canvas_example";
   public defaultPage: boolean = false;
 
   async onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): Promise<void> {

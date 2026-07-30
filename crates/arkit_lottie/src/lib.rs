@@ -9,6 +9,7 @@
 mod component;
 mod controller;
 mod error;
+mod frame_exporter;
 mod model;
 #[cfg(feature = "network")]
 mod network;
@@ -22,6 +23,7 @@ mod worker;
 pub use component::{LottiePlayer, LottiePlayerProps};
 pub use controller::LottieController;
 pub use error::{LottieError, LottieErrorKind, LottieResult};
+pub use frame_exporter::{LottieFrameRenderOptions, LottieFrameRenderer, LottieRenderedFrame};
 pub use model::{
     LottieAlignment, LottieComposition, LottieFit, LottieFrame, LottieNetworkSource,
     LottieRepeatMode, LottieSource, LottieStatus,

@@ -2,7 +2,7 @@
 # 把指定 arkit example 打包成 hap 安装到 OpenHarmony 模拟器并启动。
 #
 # 用法: ./run.sh <example-dir> [install|build|start|log]
-#   example-dir: counter | async_task | animation | barcode | camera | chart | complex_cases | i18n | lottie | router | shadcn_showcase | terminal | webview
+#   example-dir: counter | async_task | animation | barcode | camera | canvas | chart | complex_cases | i18n | lottie | router | shadcn_showcase | terminal | webview
 #
 # 每个 example 的 .so 名 = lib<crate-name>.so（crate-name 取自 examples/<dir>/Cargo.toml）。
 # 切换 example 时同步更新 app 壳的 moduleName / lib 依赖 / cpp/types，保持名字一致。
@@ -14,7 +14,7 @@ HVIGWORW="/Users/ranger/Downloads/command-line-tools/bin/hvigorw"
 OHPM="/Users/ranger/Downloads/command-line-tools/bin/ohpm"
 BUNDLE="com.arkit.example"
 ABILITY="EntryAbility"
-HDC_TARGET="${HDC_TARGET:-$(hdc list targets -v 2>/dev/null | sed -n '1s/[[:space:]].*//p')}"
+HDC_TARGET="${HDC_TARGET:-$(hdc list targets -v 2>/dev/null | awk '$3 == "Connected" { print $1; exit }')}"
 HDC=(hdc)
 if [ -n "$HDC_TARGET" ]; then
   HDC+=(-t "$HDC_TARGET")
@@ -28,7 +28,9 @@ run_hdc() {
   local attempt
   for attempt in 1 2 3; do
     output=$("${HDC[@]}" "$@" 2>&1) || true
-    if [[ "$output" != *"Connect server failed"* ]]; then
+    if [[ "$output" != *"Connect server failed"* && \
+      "$output" != *"[Fail]"* && \
+      "$output" != *"Device not found or connected"* ]]; then
       printf '%s\n' "$output"
       return 0
     fi

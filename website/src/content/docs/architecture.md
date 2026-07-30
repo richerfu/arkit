@@ -20,6 +20,7 @@ Arkit 的 UI 只走 Dioxus 这一条路：业务写出组件树，运行时 diff
 | `arkit_hooks`                      | native node、layout、overlay、safe area、virtualization hooks               |
 | `arkit_animation_core`             | 无 ArkUI 依赖的 resolve/compile/sample/state engine                         |
 | `arkit_animation`                  | root frame driver、ArkUI/Drawing adapter、native lowering、交互             |
+| `arkit_canvas`                     | W3C Canvas 2D 状态、路径、样式与 ArkUI Custom 原生绘制                      |
 | `arkit_chart`                      | option/parser、series render、hit test、ECharts component                   |
 | `arkit_router`                     | dioxus-router 的 ArkUI Link/back/transition 集成                            |
 | `arkit_i18n` / `arkit_i18n_macros` | runtime locale 与编译期 Fluent catalog                                      |
@@ -99,7 +100,7 @@ OpenHarmony binding 中部分 node/adapter handle 没有隐式 Drop：
 - `markdown` / `code` → `shadcn`（`markdown-highlight` = 二者组合）
 - `camera-scan` → `animation` + `camera` + scan decoder
 - `lottie-network` → `lottie` + HTTP 栈；`lottie-expressions` 可选
-- `barcode`、`terminal`、`camera`、`lottie` 各自独立可选
+- `barcode`、`canvas`、`terminal`、`camera`、`lottie` 各自独立可选；`canvas` 独立引入 native drawing
 
 这些关系只在 root `Cargo.toml`/crate manifest 中声明，业务 crate 用 `arkit` features 选择。
 
