@@ -1,11 +1,11 @@
 ---
 title: 虚拟列表与可见范围
-description: "在 List / Grid / WaterFlow 里用 RSX 做真正的虚拟列表。"
+description: "在 List / Grid / WaterFlow 里用 RSX 或 NodeBuilder 做真正的虚拟列表。"
 ---
 
 # 虚拟列表与可见范围
 
-列表特别长时，不要把所有 item 一次性挂进树上。用 NodeAdapter 做真正的虚拟化：只挂可见项，RSX 仍然负责每一项长什么样。
+列表特别长时，不要把所有 item 一次性挂进树上。用 NodeAdapter 做真正的虚拟化：只挂可见项；同一个 hook 支持用 RSX 或 NodeBuilder 描述每一项。
 
 ## 支持的容器
 
@@ -24,7 +24,7 @@ const TOTAL: u32 = 10_000;
 
 #[component]
 fn VirtualList() -> Element {
-    let adapter = use_virtual_node_adapter_rsx(
+    let adapter = use_virtual_node_adapter(
         VirtualKind::List,
         TOTAL,
         move |index| {
@@ -94,7 +94,7 @@ item 内读取的 signal 会按正常 Dioxus 规则局部重渲染。不经过�
 ```rust
 let rows = use_signal(load_rows);
 let keys = rows().iter().map(|row| row.revision).collect();
-let adapter = use_virtual_node_adapter_rsx_items_keyed(
+let adapter = use_virtual_node_adapter_items_keyed(
     VirtualKind::List,
     keys,
     move |index| {
@@ -130,7 +130,7 @@ let adapter = use_virtual_node_adapter_rsx_items_keyed(
 
 ## NodeBuilder 底层路径
 
-只有直接集成原生 node 或追求最小 Dioxus 开销时，才使用原有 hook：
+直接集成原生 node 或追求最小 Dioxus 开销时，仍使用同一个 hook；返回类型会选择 `NodeBuilder` 路径：
 
 ```rust
 let adapter = use_virtual_node_adapter(
@@ -148,7 +148,7 @@ let adapter = use_virtual_node_adapter(
 
 ## 选择普通 keyed 列表还是虚拟 RSX
 
-小列表直接在 `rsx!` 中 keyed render，结构和状态最简单。item 数量上千、首屏 native 创建成本明显或需要 WaterFlow 回收时，使用 `use_virtual_node_adapter_rsx`。它只为 ArkUI 当前保留的 item 建立独立 Dioxus scope，保留声明式能力的同时限制节点与 hook 数量。
+小列表直接在 `rsx!` 中 keyed render，结构和状态最简单。item 数量上千、首屏 native 创建成本明显或需要 WaterFlow 回收时，使用 `use_virtual_node_adapter`。RSX 返回值只为 ArkUI 当前保留的 item 建立独立 Dioxus scope，保留声明式能力的同时限制节点与 hook 数量；`ArkUIResult<ArkUINode>` 返回值则直接使用原生节点。
 
 ## 可见范围
 

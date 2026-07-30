@@ -1,13 +1,11 @@
 //! Virtual List, Grid, and WaterFlow containers backed by ArkUI `NodeAdapter`.
 //!
-//! [`use_virtual_node_adapter_rsx`] creates a [`VirtualNodeAdapter`] whose
-//! visible items are ordinary Dioxus RSX subtrees. Once the host
+//! [`use_virtual_node_adapter`] accepts either an RSX [`Element`] or an
+//! [`ArkUIResult<ArkUINode>`] from its item callback. Once the host
 //! `list`/`grid`/`waterflow` node is resolved (via [`use_ark_node`]), ArkUI
 //! requests only the visible items — true virtualization, not full
-//! instantiation.
-//!
-//! [`use_virtual_node_adapter`] remains the lower-level native-node path for
-//! callers that deliberately want to build item content with `NodeBuilder`.
+//! instantiation. RSX items own an embedded Dioxus subtree; native items can be
+//! built directly with `NodeBuilder`.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -21,6 +19,66 @@ use arkit_arkui::{MountItem, RenderItem, VirtualItemMount, VirtualKind, VirtualN
 use crate::ArkHost;
 
 type RsxRenderItem = Rc<dyn Fn(u32) -> Element>;
+
+mod sealed {
+    pub trait Sealed {}
+}
+
+/// A supported item result for [`use_virtual_node_adapter`].
+///
+/// The framework implements this sealed trait for [`Element`] and
+/// [`ArkUIResult<ArkUINode>`]. It exists so one virtual-list hook can select
+/// the RSX or native `NodeBuilder` path from the callback's return type.
+pub trait VirtualAdapterItem: sealed::Sealed + 'static {
+    #[doc(hidden)]
+    fn use_adapter(
+        kind: VirtualKind,
+        total_count: u32,
+        render_item: Rc<dyn Fn(u32) -> Self>,
+    ) -> VirtualNodeAdapter;
+}
+
+impl sealed::Sealed for Element {}
+
+impl VirtualAdapterItem for Element {
+    fn use_adapter(
+        kind: VirtualKind,
+        total_count: u32,
+        render_item: Rc<dyn Fn(u32) -> Self>,
+    ) -> VirtualNodeAdapter {
+        let mount_item = rsx_mount_item(render_item);
+        let initial_mount_item = mount_item.clone();
+        let adapter = use_hook(move || {
+            VirtualNodeAdapter::new_mounted(kind, total_count, initial_mount_item)
+        });
+
+        adapter.set_mount_item(mount_item);
+        use_virtual_adapter_count(adapter.clone(), total_count);
+        adapter
+    }
+}
+
+impl sealed::Sealed for ArkUIResult<ArkUINode> {}
+
+impl VirtualAdapterItem for ArkUIResult<ArkUINode> {
+    fn use_adapter(
+        kind: VirtualKind,
+        total_count: u32,
+        render_item: Rc<dyn Fn(u32) -> Self>,
+    ) -> VirtualNodeAdapter {
+        let render_item: RenderItem = render_item;
+        let initial_render_item = render_item.clone();
+        let adapter =
+            use_hook(move || VirtualNodeAdapter::new(kind, total_count, initial_render_item));
+
+        // The adapter outlives an individual component render, so always
+        // replace its callback with the latest closure. This is Rust-owned
+        // state only and cannot re-enter the native event receiver.
+        adapter.set_render_item(render_item);
+        use_virtual_adapter_count(adapter.clone(), total_count);
+        adapter
+    }
+}
 
 #[derive(Clone, arkit_prelude::Props)]
 struct VirtualRsxItemProps {
@@ -38,15 +96,16 @@ fn virtual_rsx_item_root(props: VirtualRsxItemProps) -> Element {
     (props.render_item)(props.index)
 }
 
-/// Create a true virtual List, Grid, or WaterFlow whose visible items are RSX.
+/// Create a true virtual List, Grid, or WaterFlow.
 ///
-/// Each visible item owns a small Dioxus subtree mounted directly into the
-/// adapter-created ListItem/GridItem/FlowItem wrapper. Components, hooks,
-/// signals, event handlers, fragments, and `use_ark_node` therefore work inside
-/// an item without constructing the full data set.
+/// The callback can return either an RSX [`Element`] or an
+/// [`ArkUIResult<ArkUINode>`]. Each visible RSX item owns a small Dioxus subtree
+/// mounted directly into the adapter-created ListItem/GridItem/FlowItem
+/// wrapper. Native results use the same adapter lifecycle without an embedded
+/// Dioxus runtime.
 ///
 /// ```ignore
-/// let adapter = use_virtual_node_adapter_rsx(
+/// let adapter = use_virtual_node_adapter(
 ///     VirtualKind::List,
 ///     rows.len() as u32,
 ///     move |index| {
@@ -61,21 +120,26 @@ fn virtual_rsx_item_root(props: VirtualRsxItemProps) -> Element {
 ///     },
 /// );
 /// ```
+///
+/// The same hook accepts native items without a mode flag:
+///
+/// ```ignore
+/// let adapter = use_virtual_node_adapter(VirtualKind::List, 10_000, move |index| {
+///     Ok(NodeBuilder::new("text")?
+///         .text_content(format!("Item {index}"))?
+///         .build())
+/// });
+/// ```
 #[track_caller]
-pub fn use_virtual_node_adapter_rsx(
+pub fn use_virtual_node_adapter<I>(
     kind: VirtualKind,
     total_count: u32,
-    render_item: impl Fn(u32) -> Element + 'static,
-) -> VirtualNodeAdapter {
-    let render_item: RsxRenderItem = Rc::new(render_item);
-    let mount_item = rsx_mount_item(render_item);
-    let initial_mount_item = mount_item.clone();
-    let adapter =
-        use_hook(move || VirtualNodeAdapter::new_mounted(kind, total_count, initial_mount_item));
-
-    adapter.set_mount_item(mount_item);
-    use_virtual_adapter_count(adapter.clone(), total_count);
-    adapter
+    render_item: impl Fn(u32) -> I + 'static,
+) -> VirtualNodeAdapter
+where
+    I: VirtualAdapterItem,
+{
+    I::use_adapter(kind, total_count, Rc::new(render_item))
 }
 
 fn rsx_mount_item(render_item: RsxRenderItem) -> MountItem {
@@ -111,50 +175,6 @@ fn rsx_mount_item(render_item: RsxRenderItem) -> MountItem {
     })
 }
 
-/// Create a [`VirtualNodeAdapter`] for a virtual List, Grid, or WaterFlow.
-///
-/// `kind` selects the container; `total_count` is the full item count;
-/// `render_item` returns the content node for a given index (invoked on demand
-/// by ArkUI as items scroll into view).
-///
-/// The adapter must be attached to the host node once it is resolved. The
-/// simplest pattern is to use this inside a component that renders a `list`/
-/// `grid` element and attach in a `use_effect`:
-///
-/// ```ignore
-/// fn my_list() -> Element {
-///     let adapter = use_virtual_node_adapter(VirtualKind::List, 10_000, move |index| {
-///         let mut node = create_node_by_tag("row")?;
-///         // ... set attributes ...
-///         Ok(node)
-///     });
-///     let node_ref = use_ark_node();
-///     use_effect(move || {
-///         if let Some(node) = node_ref.peek() {
-///             let _ = adapter.attach(&node.borrow());
-///         }
-///     });
-///     rsx! { list { width: "100%", height: "100%" } }
-/// }
-/// ```
-#[track_caller]
-pub fn use_virtual_node_adapter(
-    kind: VirtualKind,
-    total_count: u32,
-    render_item: impl Fn(u32) -> ArkUIResult<ArkUINode> + 'static,
-) -> VirtualNodeAdapter {
-    let render_item: RenderItem = Rc::new(render_item);
-    let initial_render_item = render_item.clone();
-    let adapter = use_hook(move || VirtualNodeAdapter::new(kind, total_count, initial_render_item));
-
-    // The adapter outlives an individual component render, so always replace
-    // its callback with the latest closure. This is Rust-owned state only and
-    // cannot re-enter the native event receiver.
-    adapter.set_render_item(render_item);
-    use_virtual_adapter_count(adapter.clone(), total_count);
-    adapter
-}
-
 fn use_virtual_adapter_count(adapter: VirtualNodeAdapter, total_count: u32) {
     // Count changes mutate ArkUI and may synchronously emit adapter events.
     // Defer them until after Dioxus commits the render that supplied the new
@@ -176,35 +196,17 @@ fn use_virtual_adapter_count(adapter: VirtualNodeAdapter, total_count: u32) {
 /// is important for selection updates: reloading the entire range between the
 /// previous and next selection can disturb a List's scroll anchor.
 #[track_caller]
-pub fn use_virtual_node_adapter_items_keyed<K>(
+pub fn use_virtual_node_adapter_items_keyed<K, I>(
     kind: VirtualKind,
     item_keys: Vec<K>,
-    render_item: impl Fn(u32) -> ArkUIResult<ArkUINode> + 'static,
+    render_item: impl Fn(u32) -> I + 'static,
 ) -> VirtualNodeAdapter
 where
     K: Clone + PartialEq + 'static,
+    I: VirtualAdapterItem,
 {
     let total_count = item_keys.len() as u32;
     let adapter = use_virtual_node_adapter(kind, total_count, render_item);
-    use_virtual_item_keys(adapter.clone(), item_keys);
-    adapter
-}
-
-/// RSX virtual adapter with item-local invalidation.
-///
-/// `item_keys[index]` must cover every non-reactive visual input used to build
-/// that item. Equal-size updates rebuild only changed contiguous ranges.
-#[track_caller]
-pub fn use_virtual_node_adapter_rsx_items_keyed<K>(
-    kind: VirtualKind,
-    item_keys: Vec<K>,
-    render_item: impl Fn(u32) -> Element + 'static,
-) -> VirtualNodeAdapter
-where
-    K: Clone + PartialEq + 'static,
-{
-    let total_count = item_keys.len() as u32;
-    let adapter = use_virtual_node_adapter_rsx(kind, total_count, render_item);
     use_virtual_item_keys(adapter.clone(), item_keys);
     adapter
 }

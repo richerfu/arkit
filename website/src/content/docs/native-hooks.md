@@ -52,7 +52,7 @@ use_layout_frame_node(move |mut node, frame| {
 
 ## NodeBuilder
 
-`use_virtual_node_adapter` 的底层 `render_item` 在 Dioxus render cycle 外执行，必须返回原生 `ArkUINode`。`NodeBuilder` 为这个边界提供链式、可清理的构造器：
+`use_virtual_node_adapter` 根据 `render_item` 返回类型选择渲染路径。返回 `ArkUIResult<ArkUINode>` 时 callback 在 Dioxus render cycle 外执行；`NodeBuilder` 为这个原生边界提供链式、可清理的构造器：
 
 ```rust
 fn render_item(index: u32) -> ArkUIResult<ArkUINode> {
@@ -81,7 +81,7 @@ fn render_item(index: u32) -> ArkUIResult<ArkUINode> {
 | `padding` / `margin` / `child`                                   | 盒模型与子节点                             |
 | `attr`                                                           | 任意 `ArkUINodeAttributeType`              |
 
-声明式 RSX 使用 CSS 写法（`width: "100%"`、`height: 48.0`）；`NodeBuilder` 是 render cycle 外的命令式路径。虚拟 item 默认使用 `use_virtual_node_adapter_rsx`，只有明确需要直接返回 native node 时才落到这里。
+声明式 RSX 使用 CSS 写法（`width: "100%"`、`height: 48.0`）；`NodeBuilder` 是 render cycle 外的命令式路径。两者都使用 `use_virtual_node_adapter`，由 callback 返回 `Element` 或 `ArkUIResult<ArkUINode>` 自动选择实现。
 
 builder 在 `build` 前持有 native cleanup guard。任一步返回错误或 builder 被提前 drop，已创建 node 会被 dispose；`build` 后所有权转移给调用方。
 

@@ -37,11 +37,10 @@ pub use arkit_hooks::{
     use_ark_host_provider, use_ark_node, use_component_lifecycle, use_component_visibility,
     use_layout_frame, use_layout_frame_node, use_layout_size, use_load_more, use_overlay,
     use_safe_area, use_safe_area_policy, use_virtual_node_adapter,
-    use_virtual_node_adapter_items_keyed, use_virtual_node_adapter_rsx,
-    use_virtual_node_adapter_rsx_items_keyed, use_virtual_range, use_window_metrics, ArkHost,
+    use_virtual_node_adapter_items_keyed, use_virtual_range, use_window_metrics, ArkHost,
     ArkNodeRef, ComponentLifecycleState, HitTestMode, LayoutFrame, LayoutSize, LoadMoreController,
     LoadMoreState, OverlayLayer, OverlayRoot, OverlayViewport, SafeArea, SafeAreaEdges,
-    SafeAreaProps, VirtualVisibleRange,
+    SafeAreaProps, VirtualAdapterItem, VirtualVisibleRange,
 };
 
 // --- i18n ---
@@ -321,11 +320,10 @@ pub mod prelude {
         use_ark_host_provider, use_ark_node, use_component_lifecycle, use_component_visibility,
         use_layout_frame, use_layout_frame_node, use_layout_size, use_load_more, use_overlay,
         use_safe_area, use_safe_area_policy, use_virtual_node_adapter,
-        use_virtual_node_adapter_items_keyed, use_virtual_node_adapter_rsx,
-        use_virtual_node_adapter_rsx_items_keyed, use_virtual_range, use_window_metrics, ArkHost,
+        use_virtual_node_adapter_items_keyed, use_virtual_range, use_window_metrics, ArkHost,
         ArkNodeRef, ComponentLifecycleState, HitTestMode, LayoutFrame, LayoutSize,
         LoadMoreController, LoadMoreState, OverlayLayer, OverlayRoot, OverlayViewport, SafeArea,
-        SafeAreaEdges, SafeAreaProps, VirtualVisibleRange,
+        SafeAreaEdges, SafeAreaProps, VirtualAdapterItem, VirtualVisibleRange,
     };
 
     #[cfg(feature = "i18n")]

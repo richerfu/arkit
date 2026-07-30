@@ -4959,7 +4959,7 @@ fn RefreshVirtualListDemo(
     let item_controller = controller.clone();
     let footer_controller = controller.clone();
     let adapter =
-        use_virtual_node_adapter_rsx_items_keyed(VirtualKind::List, item_keys, move |index| {
+        use_virtual_node_adapter_items_keyed(VirtualKind::List, item_keys, move |index| {
             if index < item_count {
                 let visible_controller = item_controller.clone();
                 arkit::queue_ui_loop(move || visible_controller.on_virtual_item(index));
