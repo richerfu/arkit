@@ -7,7 +7,9 @@
 //! instantiation. RSX items own an embedded Dioxus subtree; native items can be
 //! built directly with `NodeBuilder`.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
+use std::collections::HashSet;
+use std::hash::Hash;
 use std::rc::Rc;
 
 use arkit_prelude::{dioxus_core, use_effect, use_hook, use_reactive, Element};
@@ -19,6 +21,7 @@ use arkit_arkui::{MountItem, RenderItem, VirtualItemMount, VirtualKind, VirtualN
 use crate::ArkHost;
 
 type RsxRenderItem = Rc<dyn Fn(u32) -> Element>;
+type SharedRsxRenderItem = Rc<RefCell<RsxRenderItem>>;
 
 mod sealed {
     pub trait Sealed {}
@@ -53,7 +56,6 @@ impl VirtualAdapterItem for Element {
         });
 
         adapter.set_mount_item(mount_item);
-        use_virtual_adapter_count(adapter.clone(), total_count);
         adapter
     }
 }
@@ -75,25 +77,25 @@ impl VirtualAdapterItem for ArkUIResult<ArkUINode> {
         // replace its callback with the latest closure. This is Rust-owned
         // state only and cannot re-enter the native event receiver.
         adapter.set_render_item(render_item);
-        use_virtual_adapter_count(adapter.clone(), total_count);
         adapter
     }
 }
 
 #[derive(Clone, arkit_prelude::Props)]
 struct VirtualRsxItemProps {
-    index: u32,
-    render_item: RsxRenderItem,
+    index: Rc<Cell<u32>>,
+    render_item: SharedRsxRenderItem,
 }
 
 impl PartialEq for VirtualRsxItemProps {
     fn eq(&self, other: &Self) -> bool {
-        self.index == other.index && Rc::ptr_eq(&self.render_item, &other.render_item)
+        Rc::ptr_eq(&self.index, &other.index) && Rc::ptr_eq(&self.render_item, &other.render_item)
     }
 }
 
 fn virtual_rsx_item_root(props: VirtualRsxItemProps) -> Element {
-    (props.render_item)(props.index)
+    let render_item = props.render_item.borrow().clone();
+    render_item(props.index.get())
 }
 
 /// Create a true virtual List, Grid, or WaterFlow.
@@ -139,10 +141,20 @@ pub fn use_virtual_node_adapter<I>(
 where
     I: VirtualAdapterItem,
 {
-    I::use_adapter(kind, total_count, Rc::new(render_item))
+    let adapter = I::use_adapter(kind, total_count, Rc::new(render_item));
+    use_virtual_adapter_count(adapter.clone(), total_count);
+    adapter
+}
+
+struct VirtualRsxItemOwner {
+    index: Rc<Cell<u32>>,
+    runtime: arkit_runtime::EmbeddedArkRuntime,
 }
 
 fn rsx_mount_item(render_item: RsxRenderItem) -> MountItem {
+    let initial_render_item = render_item.clone();
+    let shared_render_item = use_hook(move || Rc::new(RefCell::new(initial_render_item)));
+    *shared_render_item.borrow_mut() = render_item;
     let window_metrics = dioxus_core::try_consume_context::<arkit_runtime::WindowMetricsHandle>();
     let application_lifecycle =
         dioxus_core::try_consume_context::<arkit_runtime::ApplicationLifecycleHandle>();
@@ -150,11 +162,12 @@ fn rsx_mount_item(render_item: RsxRenderItem) -> MountItem {
 
     Rc::new(move |index, wrapper| {
         let host = ArkHost::new();
+        let item_index = Rc::new(Cell::new(index));
         let dom = arkit_runtime::VirtualDom::new_with_props(
             virtual_rsx_item_root,
             VirtualRsxItemProps {
-                index,
-                render_item: render_item.clone(),
+                index: item_index.clone(),
+                render_item: shared_render_item.clone(),
             },
         );
         dom.provide_root_context(host.clone());
@@ -169,9 +182,17 @@ fn rsx_mount_item(render_item: RsxRenderItem) -> MountItem {
         }
 
         let runtime = arkit_runtime::mount_embedded_virtual_dom(wrapper, dom, Some(Rc::new(host)));
-        Ok(VirtualItemMount::retain_with_abandon(runtime, |runtime| {
-            runtime.abandon();
-        }))
+        Ok(VirtualItemMount::retain_indexed_with_abandon(
+            VirtualRsxItemOwner {
+                index: item_index,
+                runtime,
+            },
+            |owner, index| {
+                owner.index.set(index);
+                owner.runtime.rerender();
+            },
+            |owner| owner.runtime.abandon(),
+        ))
     })
 }
 
@@ -191,10 +212,11 @@ fn use_virtual_adapter_count(adapter: VirtualNodeAdapter, total_count: u32) {
 /// Create a virtual adapter with item-local invalidation.
 ///
 /// `item_keys[index]` must cover every visual input for that item. Equal-size
-/// updates reload only the changed contiguous runs, while count changes are
-/// handled by [`use_virtual_node_adapter`]. Keeping distant changes separate
-/// is important for selection updates: reloading the entire range between the
-/// previous and next selection can disturb a List's scroll anchor.
+/// updates reload only the changed contiguous runs. Unique keys also allow
+/// structural inserts, removals, and moves to preserve unaffected native rows
+/// and their item-local state. Keeping distant changes separate is important
+/// for selection updates: reloading the entire range between the previous and
+/// next selection can disturb a List's scroll anchor.
 #[track_caller]
 pub fn use_virtual_node_adapter_items_keyed<K, I>(
     kind: VirtualKind,
@@ -202,18 +224,18 @@ pub fn use_virtual_node_adapter_items_keyed<K, I>(
     render_item: impl Fn(u32) -> I + 'static,
 ) -> VirtualNodeAdapter
 where
-    K: Clone + PartialEq + 'static,
+    K: Clone + Eq + Hash + 'static,
     I: VirtualAdapterItem,
 {
     let total_count = item_keys.len() as u32;
-    let adapter = use_virtual_node_adapter(kind, total_count, render_item);
+    let adapter = I::use_adapter(kind, total_count, Rc::new(render_item));
     use_virtual_item_keys(adapter.clone(), item_keys);
     adapter
 }
 
 fn use_virtual_item_keys<K>(adapter: VirtualNodeAdapter, item_keys: Vec<K>)
 where
-    K: Clone + PartialEq + 'static,
+    K: Clone + Eq + Hash + 'static,
 {
     let previous_item_keys = use_hook(|| Rc::new(RefCell::new(item_keys.clone())));
     let effect_previous_item_keys = previous_item_keys.clone();
@@ -221,27 +243,144 @@ where
     use_effect(use_reactive((&item_keys,), move |(next_item_keys,)| {
         let previous_item_keys = effect_previous_item_keys.borrow().clone();
 
-        // The base hook owns structural count changes and reloads visible
-        // content after updating the native adapter. This effect only handles
-        // equal-size item-local changes.
-        if previous_item_keys.len() != next_item_keys.len() {
-            *effect_previous_item_keys.borrow_mut() = next_item_keys;
+        let updates = keyed_item_updates(&previous_item_keys, &next_item_keys);
+        if updates.is_empty() {
             return;
         }
-        let changed_ranges = changed_item_ranges(&previous_item_keys, &next_item_keys);
-        if changed_ranges.is_empty() {
-            return;
-        }
-        for (start, count) in changed_ranges {
-            if let Err(error) = adapter.reload_items(start, count) {
+        for update in updates {
+            let result = match update {
+                KeyedItemUpdate::Insert { start, count } => adapter.insert_items(start, count),
+                KeyedItemUpdate::Remove { start, count } => adapter.remove_items(start, count),
+                KeyedItemUpdate::Move { from, to } => adapter.move_item(from, to),
+                KeyedItemUpdate::Reload { start, count } => adapter.reload_items(start, count),
+                KeyedItemUpdate::Reset => reset_virtual_items(&adapter, next_item_keys.len()),
+            };
+            if let Err(error) = result {
                 ohos_hilog_binding::error(format!(
                     "arkit_hooks: item-keyed virtual adapter update failed: {error}"
                 ));
-                return;
+                if let Err(reset_error) = reset_virtual_items(&adapter, next_item_keys.len()) {
+                    ohos_hilog_binding::error(format!(
+                        "arkit_hooks: virtual adapter recovery failed: {reset_error}"
+                    ));
+                }
+                break;
             }
         }
         *effect_previous_item_keys.borrow_mut() = next_item_keys;
     }));
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum KeyedItemUpdate {
+    Insert { start: u32, count: u32 },
+    Remove { start: u32, count: u32 },
+    Move { from: u32, to: u32 },
+    Reload { start: u32, count: u32 },
+    Reset,
+}
+
+fn keyed_item_updates<K>(previous: &[K], next: &[K]) -> Vec<KeyedItemUpdate>
+where
+    K: Clone + Eq + Hash,
+{
+    if previous == next {
+        return Vec::new();
+    }
+    if !keys_are_unique(previous) || !keys_are_unique(next) {
+        if previous.len() == next.len() {
+            return changed_item_ranges(previous, next)
+                .into_iter()
+                .map(|(start, count)| KeyedItemUpdate::Reload { start, count })
+                .collect();
+        }
+        return vec![KeyedItemUpdate::Reset];
+    }
+
+    let next_keys = next.iter().collect::<HashSet<_>>();
+    let mut current = previous.to_vec();
+    let mut updates = Vec::new();
+
+    let mut absent_ranges = Vec::new();
+    let mut range_start = None;
+    for (index, key) in current.iter().enumerate() {
+        if !next_keys.contains(key) {
+            range_start.get_or_insert(index);
+        } else if let Some(start) = range_start.take() {
+            absent_ranges.push((start, index - start));
+        }
+    }
+    if let Some(start) = range_start {
+        absent_ranges.push((start, current.len() - start));
+    }
+    for (start, count) in absent_ranges.into_iter().rev() {
+        current.drain(start..start + count);
+        updates.push(KeyedItemUpdate::Remove {
+            start: start as u32,
+            count: count as u32,
+        });
+    }
+
+    let mut target = 0;
+    while target < next.len() {
+        if current.get(target) == Some(&next[target]) {
+            target += 1;
+            continue;
+        }
+        if let Some(offset) = current[target..]
+            .iter()
+            .position(|key| key == &next[target])
+        {
+            let from = target + offset;
+            let key = current.remove(from);
+            current.insert(target, key);
+            updates.push(KeyedItemUpdate::Move {
+                from: from as u32,
+                to: target as u32,
+            });
+            target += 1;
+            continue;
+        }
+
+        let start = target;
+        while target < next.len() && !current[target.min(current.len())..].contains(&next[target]) {
+            current.insert(target, next[target].clone());
+            target += 1;
+        }
+        updates.push(KeyedItemUpdate::Insert {
+            start: start as u32,
+            count: (target - start) as u32,
+        });
+    }
+
+    if current.len() > next.len() {
+        let start = next.len();
+        let count = current.len() - start;
+        current.truncate(start);
+        updates.push(KeyedItemUpdate::Remove {
+            start: start as u32,
+            count: count as u32,
+        });
+    }
+    debug_assert!(current == next);
+    updates
+}
+
+fn keys_are_unique<K>(keys: &[K]) -> bool
+where
+    K: Eq + Hash,
+{
+    let mut unique = HashSet::with_capacity(keys.len());
+    keys.iter().all(|key| unique.insert(key))
+}
+
+fn reset_virtual_items(adapter: &VirtualNodeAdapter, next_len: usize) -> ArkUIResult<()> {
+    let next_total = next_len as u32;
+    if adapter.total_count() == next_total {
+        adapter.reload_all_items()
+    } else {
+        adapter.set_total_count(next_total)
+    }
 }
 
 fn changed_item_ranges<K: PartialEq>(previous: &[K], next: &[K]) -> Vec<(u32, u32)> {
@@ -263,7 +402,7 @@ fn changed_item_ranges<K: PartialEq>(previous: &[K], next: &[K]) -> Vec<(u32, u3
 
 #[cfg(test)]
 mod item_key_tests {
-    use super::changed_item_ranges;
+    use super::{changed_item_ranges, keyed_item_updates, KeyedItemUpdate};
 
     #[test]
     fn item_key_diff_keeps_distant_changes_separate() {
@@ -296,6 +435,61 @@ mod item_key_tests {
                 &[false, false, false, false, false, true],
             ),
             vec![(1, 1), (5, 1)]
+        );
+    }
+
+    #[test]
+    fn expanding_a_group_inserts_only_its_members() {
+        assert_eq!(
+            keyed_item_updates(
+                &["section", "group-a", "group-b"],
+                &["section", "group-a", "a-1", "a-2", "group-b"]
+            ),
+            vec![KeyedItemUpdate::Insert { start: 2, count: 2 }]
+        );
+    }
+
+    #[test]
+    fn collapsing_a_group_removes_only_its_members() {
+        assert_eq!(
+            keyed_item_updates(
+                &["section", "group-a", "a-1", "a-2", "group-b"],
+                &["section", "group-a", "group-b"]
+            ),
+            vec![KeyedItemUpdate::Remove { start: 2, count: 2 }]
+        );
+    }
+
+    #[test]
+    fn changing_expanded_group_preserves_both_group_rows() {
+        assert_eq!(
+            keyed_item_updates(
+                &["section", "group-a", "a-1", "a-2", "group-b", "group-c"],
+                &["section", "group-a", "group-b", "b-1", "b-2", "group-c"],
+            ),
+            vec![
+                KeyedItemUpdate::Remove { start: 2, count: 2 },
+                KeyedItemUpdate::Insert { start: 3, count: 2 },
+            ]
+        );
+    }
+
+    #[test]
+    fn reordering_unique_keys_moves_existing_rows() {
+        assert_eq!(
+            keyed_item_updates(&["a", "b", "c", "d"], &["a", "c", "d", "b"]),
+            vec![
+                KeyedItemUpdate::Move { from: 2, to: 1 },
+                KeyedItemUpdate::Move { from: 3, to: 2 },
+            ]
+        );
+    }
+
+    #[test]
+    fn duplicate_keys_keep_item_local_reload_semantics() {
+        assert_eq!(
+            keyed_item_updates(&[false, true, false], &[false, false, true]),
+            vec![KeyedItemUpdate::Reload { start: 1, count: 2 }]
         );
     }
 }
