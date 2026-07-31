@@ -15,6 +15,9 @@ pub struct CardProps {
     /// border-only shadcn surface commonly used in dense mobile layouts.
     #[props(default)]
     pub shadow: Option<bool>,
+    /// Exact reference forwarded to the card's native root.
+    #[props(default)]
+    pub native_ref: Option<arkit_arkui::NativeElementRef>,
     pub children: Element,
 }
 
@@ -24,6 +27,7 @@ pub fn Card(props: CardProps) -> Element {
     let shadow = props.shadow.unwrap_or(true);
     rsx! {
         column {
+            native_ref: props.native_ref,
             width: "100%",
             align_items: "start",
             background_color: theme.colors.card,

@@ -14,6 +14,13 @@
 //!
 //! With only `markdown` enabled, fenced code is plain monospace. Enable
 //! `code` (alone or with Markdown) for syntax highlighting.
+//!
+//! ## Controlled state
+//!
+//! Components with `Option<T>` control props treat `Some(value)` as the only
+//! source of truth. User dismissal emits `on_close` / `on_open_change(false)`;
+//! the owner must update the controlled value before the declarative portal is
+//! removed. Omitting the control prop enables the component's internal state.
 
 pub mod components;
 mod i18n;

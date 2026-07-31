@@ -1,9 +1,9 @@
 //! Guide — a multi-step product tour anchored to measured page targets.
 //!
-//! `GuideTarget` registers the frame of its rendered child without adding a
-//! layout wrapper. `Guide` owns the controlled/uncontrolled step lifecycle and
-//! declares a root-projected spotlight and anchored
-//! explanation panel.
+//! `GuideTarget` gives its render callback an exact native ref and registers
+//! the frame of the element carrying that ref without adding a layout wrapper.
+//! `Guide` owns the controlled/uncontrolled step lifecycle and declares a
+//! root-projected spotlight and anchored explanation panel.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -231,11 +231,17 @@ pub fn Guide(props: GuideProps) -> Element {
     }
 }
 
-/// Registers the frame of its rendered child as a guide target.
+/// Registers one exact rendered element as a guide target.
 ///
 /// `id` values must be unique within the nearest [`Guide`].
+/// The render callback must attach its argument to exactly one native element's
+/// `native_ref` attribute. This explicit render prop keeps `GuideTarget`
+/// layout-transparent and preserves the target's parent flex contract.
 #[component]
-pub fn GuideTarget(id: String, children: Element) -> Element {
+pub fn GuideTarget(
+    id: String,
+    render: dioxus_core::Callback<arkit_arkui::NativeElementRef, Element>,
+) -> Element {
     let target_ref = arkit_hooks::use_native_element_ref();
     let registry = try_use_context::<GuideRegistry>();
     let frame_registry = registry.clone();
@@ -252,13 +258,7 @@ pub fn GuideTarget(id: String, children: Element) -> Element {
         }
     });
 
-    rsx! {
-        stack {
-            native_ref: target_ref,
-            clip: false,
-            {children}
-        }
-    }
+    render.call(target_ref)
 }
 
 #[derive(Clone)]

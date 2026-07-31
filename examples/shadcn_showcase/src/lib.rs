@@ -2517,25 +2517,28 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         v_gap { height: spacing::XXL }
                         GuideTarget {
                             id: "guide-profile".to_string(),
-                            Card {
-                                CardHeader {
-                                    title: "Arkit workspace".to_string(),
-                                    description: "12 components updated this week".to_string(),
-                                }
-                                CardContent {
-                                    row {
-                                        width: "100%",
-                                        align_items: "center",
-                                        justify_content: "space_between",
-                                        Badge {
-                                            content: "Active".to_string(),
-                                            variant: BadgeVariant::Secondary,
-                                        }
-                                        text {
-                                            content: "Last opened today".to_string(),
-                                            font_size: typography::XS,
-                                            font_color: theme.colors.muted_foreground,
-                                            line_height: 18.0,
+                            render: move |target_ref| rsx! {
+                                Card {
+                                    native_ref: target_ref,
+                                    CardHeader {
+                                        title: "Arkit workspace".to_string(),
+                                        description: "12 components updated this week".to_string(),
+                                    }
+                                    CardContent {
+                                        row {
+                                            width: "100%",
+                                            align_items: "center",
+                                            justify_content: "space_between",
+                                            Badge {
+                                                content: "Active".to_string(),
+                                                variant: BadgeVariant::Secondary,
+                                            }
+                                            text {
+                                                content: "Last opened today".to_string(),
+                                                font_size: typography::XS,
+                                                font_color: theme.colors.muted_foreground,
+                                                line_height: 18.0,
+                                            }
                                         }
                                     }
                                 }
@@ -2548,27 +2551,33 @@ fn ComponentDemo(slug: &'static str) -> Element {
                             justify_content: "space_between",
                             GuideTarget {
                                 id: "guide-search".to_string(),
-                                Button {
-                                    variant: ButtonVariant::Outline,
-                                    onclick: move |_| {},
-                                    row {
-                                        align_items: "center",
-                                        {icon_placeholder("search", 18.0, theme.colors.foreground)}
-                                        h_gap { width: spacing::SM }
-                                        "Search"
+                                render: move |target_ref| rsx! {
+                                    Button {
+                                        native_ref: target_ref,
+                                        variant: ButtonVariant::Outline,
+                                        onclick: move |_| {},
+                                        row {
+                                            align_items: "center",
+                                            {icon_placeholder("search", 18.0, theme.colors.foreground)}
+                                            h_gap { width: spacing::SM }
+                                            "Search"
+                                        }
                                     }
                                 }
                             }
                             GuideTarget {
                                 id: "guide-settings".to_string(),
-                                Button {
-                                    variant: ButtonVariant::Outline,
-                                    onclick: move |_| {},
-                                    row {
-                                        align_items: "center",
-                                        {icon_placeholder("settings-2", 18.0, theme.colors.foreground)}
-                                        h_gap { width: spacing::SM }
-                                        "Preferences"
+                                render: move |target_ref| rsx! {
+                                    Button {
+                                        native_ref: target_ref,
+                                        variant: ButtonVariant::Outline,
+                                        onclick: move |_| {},
+                                        row {
+                                            align_items: "center",
+                                            {icon_placeholder("settings-2", 18.0, theme.colors.foreground)}
+                                            h_gap { width: spacing::SM }
+                                            "Preferences"
+                                        }
                                     }
                                 }
                             }

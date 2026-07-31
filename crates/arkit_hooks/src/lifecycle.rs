@@ -3,14 +3,14 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use arkit_arkui::{
-    NativeElementEvent, NativeElementRef, NativeElementSubscription, NativeVisibility,
-};
+use arkit_arkui::{NativeElementEvent, NativeElementRef, NativeVisibility};
 use arkit_prelude::*;
 use arkit_runtime::{
     ApplicationLifecycleEvent, ApplicationLifecycleHandle, ApplicationLifecycleState,
     ApplicationLifecycleSubscription,
 };
+
+use crate::node::use_native_element_events;
 
 #[derive(Clone, Copy)]
 struct ApplicationLifecycleSignal(Signal<ApplicationLifecycleState>);
@@ -116,18 +116,6 @@ impl From<NativeVisibility> for ComponentLifecycleState {
     }
 }
 
-struct ComponentLifecycleHookState {
-    subscription: Rc<RefCell<Option<NativeElementSubscription>>>,
-}
-
-impl Clone for ComponentLifecycleHookState {
-    fn clone(&self) -> Self {
-        Self {
-            subscription: self.subscription.clone(),
-        }
-    }
-}
-
 /// Observe show/hide state for the element carrying `reference`.
 ///
 /// The same handle must be assigned to that element's `native_ref` attribute.
@@ -136,30 +124,17 @@ pub fn use_component_lifecycle(reference: NativeElementRef) -> ComponentLifecycl
     // Prime renderer metadata before RSX assigns this ref to a native node.
     reference.request_visibility_observation();
     let lifecycle = use_signal(ComponentLifecycleState::default);
-    let state = use_hook(|| ComponentLifecycleHookState {
-        subscription: Rc::new(RefCell::new(None)),
-    });
-
-    let effect_state = state.clone();
-    use_effect(move || {
+    use_native_element_events(reference, move |event| {
         let callback_signal = lifecycle;
-        let subscription = reference.subscribe(move |event| {
-            let next = match event {
-                NativeElementEvent::Visibility { visibility, .. } => visibility.into(),
-                NativeElementEvent::Unmounted { .. } => ComponentLifecycleState::default(),
-                NativeElementEvent::Mounted(_) | NativeElementEvent::Layout { .. } => return,
-            };
-            let mut lifecycle = callback_signal;
-            if lifecycle.peek().ne(&next) {
-                lifecycle.set(next);
-            }
-        });
-        effect_state.subscription.replace(Some(subscription));
-    });
-
-    let cleanup = state.subscription.clone();
-    use_drop(move || {
-        cleanup.borrow_mut().take();
+        let next = match event {
+            Some(NativeElementEvent::Visibility { visibility, .. }) => visibility.into(),
+            None | Some(NativeElementEvent::Unmounted { .. }) => ComponentLifecycleState::default(),
+            Some(NativeElementEvent::Mounted(_) | NativeElementEvent::Layout { .. }) => return,
+        };
+        let mut lifecycle = callback_signal;
+        if lifecycle.peek().ne(&next) {
+            lifecycle.set(next);
+        }
     });
 
     lifecycle()

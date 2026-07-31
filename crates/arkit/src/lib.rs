@@ -252,7 +252,10 @@ pub fn mount_entry_with_policy(
 fn arkit_entry_root(props: EntryRootProps) -> Element {
     arkit_hooks::use_runtime_context_providers();
     #[cfg(feature = "animation")]
-    let animation_root_ref = arkit_animation::use_animation_host_provider();
+    let root_ref = arkit_animation::use_animation_host_provider();
+    #[cfg(not(feature = "animation"))]
+    let root_ref = arkit_hooks::use_native_element_ref();
+    use_root_content_rect(root_ref.clone());
     let policy = use_safe_area_policy();
     let measured_safe_area = use_safe_area();
     let safe_area = if policy == SafeAreaPolicy::Safe {
@@ -269,25 +272,9 @@ fn arkit_entry_root(props: EntryRootProps) -> Element {
         "ArkitApp",
     ));
 
-    #[cfg(feature = "animation")]
-    return rsx! {
-        stack {
-            native_ref: animation_root_ref,
-            width: "100%",
-            height: "100%",
-            alignment: "top-start",
-            clip: false,
-            padding_top: safe_area.top,
-            padding_right: safe_area.right,
-            padding_bottom: safe_area.bottom,
-            padding_left: safe_area.left,
-            {content}
-        }
-    };
-
-    #[cfg(not(feature = "animation"))]
     rsx! {
         stack {
+            native_ref: root_ref,
             width: "100%",
             height: "100%",
             alignment: "top-start",
@@ -299,6 +286,29 @@ fn arkit_entry_root(props: EntryRootProps) -> Element {
             {content}
         }
     }
+}
+
+fn use_root_content_rect(reference: NativeElementRef) {
+    let metrics = dioxus_core::try_consume_context::<WindowMetricsHandle>();
+    arkit_hooks::use_layout_frame(reference, move |frame| {
+        let Some(metrics) = metrics.as_ref() else {
+            return;
+        };
+        if !frame.is_measured()
+            || !frame.x.is_finite()
+            || !frame.y.is_finite()
+            || !frame.width.is_finite()
+            || !frame.height.is_finite()
+        {
+            return;
+        }
+        metrics.report_content_rect(PhysicalRect {
+            left: frame.x.round() as i32,
+            top: frame.y.round() as i32,
+            width: frame.width.round() as i32,
+            height: frame.height.round() as i32,
+        });
+    });
 }
 
 pub mod prelude {

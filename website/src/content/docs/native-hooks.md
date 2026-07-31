@@ -29,6 +29,9 @@ rsx! {
 
 一个 ref 只描述携带 `native_ref` 属性的那个元素。renderer 挂载节点时生成 `MountedNodeLease`；节点重建或卸载后，旧 lease 会因 generation 不匹配而自动失效。
 
+`NativeElementRef` 不会自动猜测 component 的根节点。ref 没有实际挂到
+`native_ref` 时，布局、生命周期和动画 target 都不会收到事件；可复用组件若要支持这些能力，应把可选 ref 显式转发到自己的原生根元素。
+
 ## 布局与生命周期
 
 | API                               | 回调参数                   | 用途                       |
@@ -81,6 +84,24 @@ register_native_callback(move |payload| {
 ```
 
 `RuntimeHandle` 属于当前 root。它同时提供 `queue_ui`、`tokio()` 和 RAII back handler；root 卸载后 pending UI work 会被清理，也不会误唤醒另一个应用 root。
+
+`use_runtime_handle()` 只能在 Arkit 挂载的 Dioxus root 内调用。缺少该上下文属于宿主接入错误，API 会直接失败，而不是回退到某个进程全局 runtime。
+
+## 从旧版 host API 迁移
+
+| 旧 API                                               | 新 API / 做法                                                      |
+| ---------------------------------------------------- | ------------------------------------------------------------------ |
+| `use_ark_node()` / `ArkNodeRef`                      | `use_native_element_ref()`，把同一 ref 挂到目标元素的 `native_ref` |
+| `use_layout_frame(callback)`                         | `use_layout_frame(ref, callback)`                                  |
+| `use_ark_host_provider()` / `ArkHost`                | 由 `mount_entry` 自动安装 root-local 上下文                        |
+| `OverlayRoot` / `use_overlay()`                      | 在声明位置使用 `Portal` / `ModalPortal`                            |
+| `use_virtual_node_adapter*()` / `VirtualNodeAdapter` | `use_virtual_source*()` / `VirtualSource`                          |
+| `queue_ui_loop(...)`                                 | `use_runtime_handle().queue_ui(...)`                               |
+| `tokio_handle()`                                     | `use_runtime_handle().tokio()`                                     |
+| `register_back_press_handler(...)`                   | `use_runtime_handle().register_back_handler(...)`                  |
+
+Portal 是受声明状态控制的：受控组件收到关闭操作时会调用
+`on_close` / `on_open_change(false)`，调用方需要同步更新 `open`；框架不再从组件外部命令式删除仍被声明为打开的浮层。
 
 ## 所有权规则
 

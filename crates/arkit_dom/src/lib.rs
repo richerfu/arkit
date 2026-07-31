@@ -36,6 +36,72 @@ pub enum PortalLayer {
     Transient,
 }
 
+/// Platform-independent generation state for one exact-element subscriber.
+///
+/// Native refs update their current epoch synchronously while mount/layout
+/// notifications may cross a deferred runtime boundary. This state machine
+/// rejects stale queued events without depending on ArkUI node types.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct MountEpochSubscriber {
+    epoch: u64,
+    mounted: bool,
+}
+
+impl MountEpochSubscriber {
+    pub const fn new(epoch: u64, mounted: bool) -> Self {
+        Self { epoch, mounted }
+    }
+
+    pub fn route(&mut self, event: MountEpochEvent) -> MountEpochRoute {
+        match event {
+            MountEpochEvent::Mounted { epoch, is_current } => {
+                if !is_current || epoch < self.epoch || (epoch == self.epoch && self.mounted) {
+                    return MountEpochRoute::default();
+                }
+                let previous_epoch = self.mounted.then_some(self.epoch);
+                self.epoch = epoch;
+                self.mounted = true;
+                MountEpochRoute {
+                    previous_epoch,
+                    forward: true,
+                }
+            }
+            MountEpochEvent::Unmounted { epoch } => {
+                if epoch != self.epoch || !self.mounted {
+                    return MountEpochRoute::default();
+                }
+                self.mounted = false;
+                MountEpochRoute {
+                    previous_epoch: None,
+                    forward: true,
+                }
+            }
+            MountEpochEvent::Observation { epoch, is_current } => MountEpochRoute {
+                previous_epoch: None,
+                forward: is_current && epoch == self.epoch && self.mounted,
+            },
+        }
+    }
+}
+
+/// Epoch-only event classification supplied by a platform renderer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MountEpochEvent {
+    Mounted { epoch: u64, is_current: bool },
+    Unmounted { epoch: u64 },
+    Observation { epoch: u64, is_current: bool },
+}
+
+/// Delivery decision for one subscriber.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct MountEpochRoute {
+    /// Previously mounted epoch that must be closed before forwarding a newer
+    /// mount notification.
+    pub previous_epoch: Option<u64>,
+    /// Whether the original event belongs to this subscriber.
+    pub forward: bool,
+}
+
 /// Logical node kind. Native projection state belongs to the renderer payload,
 /// not this foundation crate.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -332,5 +398,57 @@ mod tests {
         tree.detach_child(tree.root(), parent);
         assert!(!tree.is_connected_to_root(parent));
         assert!(!tree.is_connected_to_root(child));
+    }
+
+    #[test]
+    fn stale_epoch_events_are_rejected_after_rebind() {
+        let mut subscriber = MountEpochSubscriber::new(1, true);
+
+        assert_eq!(
+            subscriber.route(MountEpochEvent::Observation {
+                epoch: 1,
+                is_current: false,
+            }),
+            MountEpochRoute::default()
+        );
+        assert_eq!(
+            subscriber.route(MountEpochEvent::Mounted {
+                epoch: 1,
+                is_current: false,
+            }),
+            MountEpochRoute::default()
+        );
+        assert_eq!(subscriber, MountEpochSubscriber::new(1, true));
+    }
+
+    #[test]
+    fn newer_mount_closes_the_previous_epoch_before_forwarding() {
+        let mut subscriber = MountEpochSubscriber::new(3, true);
+
+        assert_eq!(
+            subscriber.route(MountEpochEvent::Mounted {
+                epoch: 5,
+                is_current: true,
+            }),
+            MountEpochRoute {
+                previous_epoch: Some(3),
+                forward: true,
+            }
+        );
+        assert_eq!(subscriber, MountEpochSubscriber::new(5, true));
+    }
+
+    #[test]
+    fn old_unmount_remains_deliverable_after_current_epoch_advances() {
+        let mut subscriber = MountEpochSubscriber::new(7, true);
+
+        assert_eq!(
+            subscriber.route(MountEpochEvent::Unmounted { epoch: 7 }),
+            MountEpochRoute {
+                previous_epoch: None,
+                forward: true,
+            }
+        );
+        assert_eq!(subscriber, MountEpochSubscriber::new(7, false));
     }
 }

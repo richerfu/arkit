@@ -3,6 +3,7 @@
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
+use arkit_dom::{MountEpochEvent, MountEpochSubscriber};
 use dioxus_core::{AttributeValue, IntoAttributeValue};
 use ohos_arkui_binding::api::node_custom_event::{IntOffset, IntSize};
 use ohos_arkui_binding::common::node::ArkUINode;
@@ -176,8 +177,7 @@ type NativeElementCallback = Rc<dyn Fn(NativeElementEvent)>;
 
 struct NativeElementSubscriber {
     callback: NativeElementCallback,
-    epoch: u64,
-    mounted: bool,
+    mount: MountEpochSubscriber,
 }
 
 #[derive(Default)]
@@ -287,8 +287,7 @@ impl NativeElementRef {
                 id,
                 NativeElementSubscriber {
                     callback: callback.clone(),
-                    epoch,
-                    mounted: lease.is_some(),
+                    mount: MountEpochSubscriber::new(epoch, lease.is_some()),
                 },
             );
             let mut initial = Vec::with_capacity(3);
@@ -396,14 +395,27 @@ impl NativeElementRef {
     fn deliver(&self, event: NativeElementEvent) {
         let deliveries = {
             let mut state = self.state.borrow_mut();
+            let event_is_current = match &event {
+                NativeElementEvent::Mounted(lease) => {
+                    lease.epoch == state.epoch
+                        && state.node.as_ref().and_then(Weak::upgrade).is_some()
+                }
+                NativeElementEvent::Layout { epoch, .. }
+                | NativeElementEvent::Visibility { epoch, .. } => {
+                    *epoch == state.epoch && state.node.as_ref().and_then(Weak::upgrade).is_some()
+                }
+                // Unmount notifications intentionally describe the previous
+                // epoch after `unbind` has already advanced current state.
+                NativeElementEvent::Unmounted { .. } => true,
+            };
             match &event {
                 NativeElementEvent::Layout { epoch, frame }
-                    if *epoch == state.epoch && state.node.is_some() =>
+                    if event_is_current && *epoch == state.epoch =>
                 {
                     state.layout = Some(*frame);
                 }
                 NativeElementEvent::Visibility { epoch, visibility }
-                    if *epoch == state.epoch && state.node.is_some() =>
+                    if event_is_current && *epoch == state.epoch =>
                 {
                     state.visibility = *visibility;
                 }
@@ -412,40 +424,31 @@ impl NativeElementRef {
                 | NativeElementEvent::Layout { .. }
                 | NativeElementEvent::Visibility { .. } => {}
             }
+            let mount_event = match &event {
+                NativeElementEvent::Mounted(lease) => MountEpochEvent::Mounted {
+                    epoch: lease.epoch,
+                    is_current: event_is_current,
+                },
+                NativeElementEvent::Unmounted { epoch } => {
+                    MountEpochEvent::Unmounted { epoch: *epoch }
+                }
+                NativeElementEvent::Layout { epoch, .. }
+                | NativeElementEvent::Visibility { epoch, .. } => MountEpochEvent::Observation {
+                    epoch: *epoch,
+                    is_current: event_is_current,
+                },
+            };
             state
                 .subscribers
                 .values_mut()
                 .flat_map(|subscriber| {
                     let mut events = Vec::with_capacity(2);
-                    match &event {
-                        NativeElementEvent::Mounted(lease) => {
-                            if lease.epoch < subscriber.epoch
-                                || (lease.epoch == subscriber.epoch && subscriber.mounted)
-                            {
-                                // Stale or duplicate mount notification.
-                            } else {
-                                if subscriber.mounted {
-                                    events.push(NativeElementEvent::Unmounted {
-                                        epoch: subscriber.epoch,
-                                    });
-                                }
-                                subscriber.epoch = lease.epoch;
-                                subscriber.mounted = true;
-                                events.push(event.clone());
-                            }
-                        }
-                        NativeElementEvent::Unmounted { epoch } => {
-                            if *epoch == subscriber.epoch && subscriber.mounted {
-                                subscriber.mounted = false;
-                                events.push(event.clone());
-                            }
-                        }
-                        NativeElementEvent::Layout { epoch, .. }
-                        | NativeElementEvent::Visibility { epoch, .. } => {
-                            if *epoch == subscriber.epoch && subscriber.mounted {
-                                events.push(event.clone());
-                            }
-                        }
+                    let route = subscriber.mount.route(mount_event);
+                    if let Some(epoch) = route.previous_epoch {
+                        events.push(NativeElementEvent::Unmounted { epoch });
+                    }
+                    if route.forward {
+                        events.push(event.clone());
                     }
                     events
                         .into_iter()

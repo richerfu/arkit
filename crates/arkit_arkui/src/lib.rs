@@ -315,6 +315,16 @@ impl std::fmt::Display for RendererFault {
 
 impl std::error::Error for RendererFault {}
 
+fn latch_renderer_fault(
+    fault: &mut Option<RendererFault>,
+    operation: &'static str,
+    message: String,
+) {
+    if fault.is_none() {
+        *fault = Some(RendererFault { operation, message });
+    }
+}
+
 enum RendererRootMount {
     /// Normal application renderer: the root is mounted in and owned through a
     /// NodeContent slot.
@@ -454,12 +464,7 @@ impl ArkUIRenderer {
             Ok(value) => Some(value),
             Err(error) => {
                 let message = error.to_string();
-                if self.fault.is_none() {
-                    self.fault = Some(RendererFault {
-                        operation,
-                        message: message.clone(),
-                    });
-                }
+                latch_renderer_fault(&mut self.fault, operation, message.clone());
                 ohos_hilog_binding::error(format!("arkit_arkui: {operation} failed: {message}"));
                 None
             }
@@ -2439,7 +2444,10 @@ fn event_type_for_name(name: &str, tag: &str) -> Option<NodeEventType> {
 
 #[cfg(test)]
 mod event_tests {
-    use super::{event_type_for_name, DirtyHostQueue, HostId, NodeEventType, ProjectionState};
+    use super::{
+        event_type_for_name, latch_renderer_fault, DirtyHostQueue, HostId, NodeEventType,
+        ProjectionState,
+    };
 
     #[test]
     fn component_events_use_their_typed_native_event() {
@@ -2526,5 +2534,17 @@ mod event_tests {
         assert!(!projection.deactivate_portal(portal));
         assert!(projection.take_root_dirty());
         assert!(!projection.take_root_dirty());
+    }
+
+    #[test]
+    fn renderer_fault_latch_keeps_the_first_structural_failure() {
+        let mut fault = None;
+        latch_renderer_fault(&mut fault, "insert child", "first".to_string());
+        latch_renderer_fault(&mut fault, "detach child", "second".to_string());
+
+        assert_eq!(
+            fault.as_ref().map(ToString::to_string).as_deref(),
+            Some("insert child failed: first")
+        );
     }
 }

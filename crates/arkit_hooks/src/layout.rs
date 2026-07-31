@@ -3,8 +3,10 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use arkit_arkui::{LayoutFramePx, NativeElementEvent, NativeElementRef, NativeElementSubscription};
-use arkit_prelude::{use_drop, use_effect, use_hook};
+use arkit_arkui::{LayoutFramePx, NativeElementEvent, NativeElementRef};
+use arkit_prelude::use_hook;
+
+use crate::node::use_native_element_events;
 
 /// A measured size in physical pixels.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -40,75 +42,38 @@ fn frame_close(previous: LayoutFrame, next: LayoutFrame) -> bool {
 }
 
 type LayoutCallback<T> = Rc<dyn Fn(T)>;
-type SharedLayoutCallback<T> = Rc<RefCell<LayoutCallback<T>>>;
-
-struct LayoutHookState<T: Copy + 'static> {
-    callback: SharedLayoutCallback<T>,
-    subscription: Rc<RefCell<Option<NativeElementSubscription>>>,
-}
-
-impl<T: Copy + 'static> Clone for LayoutHookState<T> {
-    fn clone(&self) -> Self {
-        Self {
-            callback: self.callback.clone(),
-            subscription: self.subscription.clone(),
-        }
-    }
-}
 
 fn use_layout_event<T: Copy + 'static>(
     reference: NativeElementRef,
-    initial_callback: LayoutCallback<T>,
+    callback: LayoutCallback<T>,
     project: impl Fn(LayoutFrame) -> T + 'static,
     is_close: impl Fn(T, T) -> bool + 'static,
 ) {
     // This declaration must happen synchronously during render. Effects run
     // after the native_ref attribute has already been projected.
     reference.request_layout_observation();
-    let project = Rc::new(project) as Rc<dyn Fn(LayoutFrame) -> T>;
-    let is_close = Rc::new(is_close) as Rc<dyn Fn(T, T) -> bool>;
-    let initial = initial_callback.clone();
-    let state = use_hook(move || LayoutHookState {
-        callback: Rc::new(RefCell::new(initial)),
-        subscription: Rc::new(RefCell::new(None)),
-    });
-    *state.callback.borrow_mut() = initial_callback;
-
-    let effect_state = state.clone();
-    use_effect(move || {
-        let callback = effect_state.callback.clone();
-        let project = project.clone();
-        let is_close = is_close.clone();
-        let last = Rc::new(RefCell::new(None::<T>));
-        let event_last = last.clone();
-        let subscription = reference.subscribe(move |event| {
-            let frame = match event {
-                NativeElementEvent::Mounted(lease) => lease.layout_frame_px(),
-                NativeElementEvent::Layout { frame, .. } => Some(frame),
-                NativeElementEvent::Unmounted { .. } => {
-                    event_last.borrow_mut().take();
-                    None
-                }
-                NativeElementEvent::Visibility { .. } => None,
-            };
-            let Some(frame) = frame else {
-                return;
-            };
-            let next = project(frame);
-            let changed = !event_last
-                .borrow()
-                .is_some_and(|previous| is_close(previous, next));
-            if changed {
-                event_last.replace(Some(next));
-                callback.borrow().clone()(next);
+    let last = use_hook(|| Rc::new(RefCell::new(None::<T>)));
+    use_native_element_events(reference, move |event| {
+        let frame = match event {
+            Some(NativeElementEvent::Mounted(lease)) => lease.layout_frame_px(),
+            Some(NativeElementEvent::Layout { frame, .. }) => Some(frame),
+            None | Some(NativeElementEvent::Unmounted { .. }) => {
+                last.borrow_mut().take();
+                None
             }
-        });
-        effect_state.subscription.replace(Some(subscription));
-    });
-
-    let cleanup = state.subscription.clone();
-    use_drop(move || {
-        cleanup.borrow_mut().take();
+            Some(NativeElementEvent::Visibility { .. }) => None,
+        };
+        let Some(frame) = frame else {
+            return;
+        };
+        let next = project(frame);
+        let changed = !last
+            .borrow()
+            .is_some_and(|previous| is_close(previous, next));
+        if changed {
+            last.replace(Some(next));
+            callback(next);
+        }
     });
 }
 
