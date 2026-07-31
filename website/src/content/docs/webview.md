@@ -24,7 +24,8 @@ controller id 在首次 mount 后不可变化。一个 controller 对应一个 e
 `EmbeddedWebViewController::set_visible` 可在 native WebView 创建前调用，期望值会保留到首次挂载。嵌入组件应组合应用与组件可见性，避免后台或隐藏页面继续展示/播放 Web 内容：
 
 ```rust
-let visible = use_app_foreground() && use_component_visibility();
+let host_ref = use_native_element_ref();
+let visible = use_app_foreground() && use_component_visibility(host_ref.clone());
 let lifecycle_controller = controller.clone();
 
 use_effect(use_reactive(&visible, move |visible| {
@@ -38,12 +39,17 @@ use_effect(use_reactive(&visible, move |visible| {
 #[component]
 fn WebViewArea() -> Element {
     let controller: EmbeddedWebViewController = use_context();
+    let host_ref = use_native_element_ref();
     let controller_for_layout = controller.clone();
+    let lease_ref = host_ref.clone();
 
-    use_layout_frame_node(move |mut host, frame| {
+    use_layout_frame(host_ref.clone(), move |frame| {
         if !frame.is_measured() {
             return;
         }
+        let Some(host) = lease_ref.current() else {
+            return;
+        };
 
         let mut init = EmbeddedWebViewInit::url(
             "article-webview",
@@ -51,14 +57,7 @@ fn WebViewArea() -> Element {
         );
         init.javascript_enabled = Some(true);
 
-        let _ = controller_for_layout.mount_or_sync(
-            &mut host,
-            init,
-            Some(WebViewFrame {
-                width: frame.width,
-                height: frame.height,
-            }),
-        );
+        let _ = controller_for_layout.mount_or_sync(&host, init);
     });
 
     let controller_for_drop = controller.clone();
@@ -66,6 +65,7 @@ fn WebViewArea() -> Element {
 
     rsx! {
         stack {
+            native_ref: host_ref,
             width: "100%",
             height: 400.0,
         }
@@ -73,7 +73,7 @@ fn WebViewArea() -> Element {
 }
 ```
 
-`mount_or_sync` 首次创建并 attach；后续调用会幂等确保 child attachment、按需导航 URL/HTML 并同步 frame。`WebViewFrame::is_valid` 要求有限且宽高大于零。
+`mount_or_sync` 首次创建并 attach；后续调用会幂等确保 child attachment，并按需导航 URL/HTML。WebView 使用 `100%` 宽高跟随 native host 的布局约束；ArkTS 创建的外部节点不能通过 ArkUI Native Node API 写布局属性。
 
 ## 初始化选项
 
@@ -100,22 +100,22 @@ fn WebViewArea() -> Element {
 
 ```rust
 let mut title = use_signal(|| String::from("loading"));
+let runtime = use_runtime_handle();
 
 init.on_title_change = Some(Rc::new(move |new_title| {
-    queue_ui_loop(move || {
+    runtime.queue_ui(move || {
         title.set(new_title);
     });
 }));
 ```
 
-回调来自 native/ArkTS 边界，不要在其中直接触发 Dioxus render。传给 `queue_ui_loop` 的 payload 必须 owned。
+回调来自 native/ArkTS 边界，不要在其中直接触发 Dioxus render。传给 `RuntimeHandle::queue_ui` 的 payload 必须 owned。
 
 ## Controller API
 
 | 方法                      | 说明                        |
 | ------------------------- | --------------------------- |
 | `id`、`is_mounted`        | 查询 controller 状态        |
-| `sync_frame`              | 只更新 native node frame    |
 | `load_url`                | 导航 URL                    |
 | `load_html`               | 加载 HTML                   |
 | `reload`、`focus`         | 页面控制                    |

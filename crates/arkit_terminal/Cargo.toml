@@ -43,6 +43,7 @@ default = []
 stub = []
 
 [dependencies]
+arkit_arkui.workspace = true
 arkit_hooks.workspace = true
 arkit_prelude.workspace = true
 arkit_elements.workspace = true

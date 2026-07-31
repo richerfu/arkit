@@ -1,8 +1,7 @@
 //! Alert dialog — centered modal with RN Reusables alert-specific header and
-//! footer semantics. The full-screen modal/backdrop native tree is owned by
-//! `arkit_hooks::use_overlay`, matching Dialog.
+//! footer semantics. The full-screen modal/backdrop is a declarative portal.
 
-use super::dialog::{use_dialog_close, use_dialog_overlay, DialogCloseProvider, DIALOG_MAX_WIDTH};
+use super::dialog::{dialog_portal, use_dialog_close, DialogCloseProvider, DIALOG_MAX_WIDTH};
 use crate::theme::*;
 use arkit_prelude::*;
 
@@ -106,8 +105,7 @@ pub fn AlertDialog(
         }
     };
 
-    use_dialog_overlay(current, panel, close);
-    rsx! {}
+    dialog_portal(current, panel, close)
 }
 
 /// Convenience cancel/action button that always invokes [`use_dialog_close`].

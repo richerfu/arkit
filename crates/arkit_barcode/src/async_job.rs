@@ -38,9 +38,10 @@ impl JobEpoch {
 
 /// Encode + build display source on a blocking worker.
 pub(crate) async fn encode_artifact_async(
+    handle: tokio::runtime::Handle,
     request: BarcodeRequest,
 ) -> BarcodeResult<(Arc<BarcodeBitmap>, ArkImageSource)> {
-    run_blocking(move || {
+    run_blocking(handle, move || {
         let bitmap = encode_barcode(&request)?;
         let image = bitmap.to_ark_image_source();
         Ok((Arc::new(bitmap), image))
@@ -48,28 +49,34 @@ pub(crate) async fn encode_artifact_async(
     .await
 }
 
-pub(crate) async fn png_bytes_async(bitmap: Arc<BarcodeBitmap>) -> BarcodeResult<Vec<u8>> {
-    run_blocking(move || bitmap.to_png_bytes()).await
+pub(crate) async fn png_bytes_async(
+    handle: tokio::runtime::Handle,
+    bitmap: Arc<BarcodeBitmap>,
+) -> BarcodeResult<Vec<u8>> {
+    run_blocking(handle, move || bitmap.to_png_bytes()).await
 }
 
-pub(crate) async fn base64_png_async(bitmap: Arc<BarcodeBitmap>) -> BarcodeResult<String> {
-    run_blocking(move || bitmap.to_base64_png()).await
+pub(crate) async fn base64_png_async(
+    handle: tokio::runtime::Handle,
+    bitmap: Arc<BarcodeBitmap>,
+) -> BarcodeResult<String> {
+    run_blocking(handle, move || bitmap.to_base64_png()).await
 }
 
 pub(crate) async fn save_png_async(
+    handle: tokio::runtime::Handle,
     bitmap: Arc<BarcodeBitmap>,
     path: PathBuf,
 ) -> BarcodeResult<PathBuf> {
-    run_blocking(move || bitmap.write_png(path)).await
+    run_blocking(handle, move || bitmap.write_png(path)).await
 }
 
 /// Run `work` on Tokio's blocking pool; await the join from the UI async task.
-async fn run_blocking<T, F>(work: F) -> BarcodeResult<T>
+async fn run_blocking<T, F>(handle: tokio::runtime::Handle, work: F) -> BarcodeResult<T>
 where
     T: Send + 'static,
     F: FnOnce() -> BarcodeResult<T> + Send + 'static,
 {
-    let handle = arkit_runtime::tokio_handle();
     handle
         .spawn(async move {
             match tokio::task::spawn_blocking(work).await {

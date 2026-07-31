@@ -14,29 +14,14 @@ HVIGWORW="/Users/ranger/Downloads/command-line-tools/bin/hvigorw"
 OHPM="/Users/ranger/Downloads/command-line-tools/bin/ohpm"
 BUNDLE="com.arkit.example"
 ABILITY="EntryAbility"
-HDC_TARGET="${HDC_TARGET:-$(hdc list targets -v 2>/dev/null | awk '$3 == "Connected" { print $1; exit }')}"
+HDC_TARGET="${HDC_TARGET:-}"
 HDC=(hdc)
 if [ -n "$HDC_TARGET" ]; then
   HDC+=(-t "$HDC_TARGET")
 fi
 
-# hdc can transiently report "Connect server failed" with a zero exit code
-# after a longer hvigor build. Retry it and turn that text failure into a real
-# shell failure so `all` never claims a deployment that did not happen.
 run_hdc() {
-  local output=""
-  local attempt
-  for attempt in 1 2 3; do
-    output=$("${HDC[@]}" "$@" 2>&1) || true
-    if [[ "$output" != *"Connect server failed"* && \
-      "$output" != *"[Fail]"* && \
-      "$output" != *"Device not found or connected"* ]]; then
-      printf '%s\n' "$output"
-      return 0
-    fi
-  done
-  printf '%s\n' "$output" >&2
-  return 1
+  "${HDC[@]}" "$@"
 }
 
 EX="${1:?usage: $0 <example-dir> [build|install|start|log]}"
@@ -111,15 +96,18 @@ do_build() {
 }
 
 do_install() {
-  HAP=$(find "$APP/entry/build" -name "*.hap" -path "*outputs*" 2>/dev/null | head -1 || true)
+  HAP=$(find "$APP/entry/build" -name "*-signed.hap" -path "*outputs*" 2>/dev/null | head -1 || true)
+  if [ -z "$HAP" ]; then
+    HAP=$(find "$APP/entry/build" -name "*.hap" -path "*outputs*" 2>/dev/null | head -1 || true)
+  fi
   [ -n "$HAP" ] || { echo "no hap found, build first"; exit 1; }
   echo ">> hdc ${HDC_TARGET:+-t $HDC_TARGET }install $HAP"
-  run_hdc install -r "$HAP" | tail -3
+  run_hdc install -r "$HAP"
 }
 
 do_start() {
   echo ">> aa start $ABILITY / $BUNDLE"
-  run_hdc shell aa start -a "$ABILITY" -b "$BUNDLE" | tail -3
+  run_hdc shell aa start -a "$ABILITY" -b "$BUNDLE"
 }
 
 case "$ACTION" in

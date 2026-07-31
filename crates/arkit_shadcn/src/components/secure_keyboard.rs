@@ -469,6 +469,7 @@ struct SecureKeyboardBackState {
 }
 
 fn use_secure_keyboard_back_press(open: bool, close: EventHandler<bool>) {
+    let runtime = arkit_runtime::use_runtime_handle();
     let state = use_hook(|| Rc::new(SecureKeyboardBackState::default()));
     state.open.set(open);
     state.close.replace(Some(close));
@@ -485,7 +486,7 @@ fn use_secure_keyboard_back_press(open: bool, close: EventHandler<bool>) {
             }
             true
         });
-        Rc::new(arkit_runtime::register_back_press_handler(handler))
+        Rc::new(runtime.register_back_handler(handler))
     });
 }
 

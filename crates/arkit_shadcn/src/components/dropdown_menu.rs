@@ -1,13 +1,12 @@
 //! DropdownMenu — trigger + portal dropdown of entries.
 //!
 //! Ported from the legacy Elm builder `dropdown_menu.rs`. Menu panels render
-//! through the framework overlay root instead of inline so they are not clipped
-//! by the trigger's parent layout and so trigger children can remain ordinary
-//! shadcn buttons.
+//! through root-projected portals instead of inline so they are not clipped by
+//! the trigger's parent layout and trigger children remain ordinary shadcn
+//! buttons.
 
 use crate::components::menu_common::{
-    menu_closed_panel_height, use_menu_overlay_refresh, MenuEntry, MenuOverlayPlacement,
-    MenuOverlaySession, MenuStyle,
+    menu_closed_panel_height, menu_overlay_content, MenuEntry, MenuOverlayPlacement, MenuStyle,
 };
 use crate::theme::*;
 use arkit_prelude::*;
@@ -28,10 +27,10 @@ pub fn DropdownMenu(
 ) -> Element {
     let _ = trigger_capture;
     let theme = use_theme();
-    let overlay = arkit_hooks::use_overlay();
+    let viewport = arkit_hooks::use_overlay_viewport();
+    let trigger_ref = arkit_hooks::use_native_element_ref();
     let trigger_frame = use_signal(arkit_hooks::LayoutFrame::default);
-    let mut overlay_session = use_signal(|| None::<MenuOverlaySession>);
-    arkit_hooks::use_layout_frame(move |frame| {
+    arkit_hooks::use_layout_frame(trigger_ref.clone(), move |frame| {
         let mut trigger_frame = trigger_frame;
         trigger_frame.set(frame);
     });
@@ -55,52 +54,30 @@ pub fn DropdownMenu(
         side_offset_vp: spacing::XXS,
     };
 
-    let dismiss_overlay = overlay.clone();
-    let mut dismiss_session = overlay_session;
     let dismiss = EventHandler::new(move |_: ()| {
         set_open.call(false);
-        dismiss_session.set(None);
-        dismiss_overlay.dismiss();
     });
 
-    use_menu_overlay_refresh(
-        overlay.clone(),
-        current_open,
-        overlay_session,
-        style,
-        theme,
-        dismiss,
-        items.clone(),
+    let panel_height = menu_closed_panel_height(&items);
+    let placement = MenuOverlayPlacement::resolve(
+        *trigger_frame.read(),
+        viewport,
+        style.width,
+        panel_height,
+        style.side_offset_vp,
     );
-
-    let mut toggle = move |_| {
-        if current_open {
-            dismiss.call(());
-        } else {
-            set_open.call(true);
-            let entries = items.clone();
-            let frame = *trigger_frame.read();
-            let viewport = overlay.viewport();
-            let panel_height = menu_closed_panel_height(&entries);
-            let placement = MenuOverlayPlacement::resolve(
-                frame,
-                viewport,
-                style.width,
-                panel_height,
-                style.side_offset_vp,
-            );
-            let session = MenuOverlaySession::new(placement, None);
-            overlay_session.set(Some(session));
-            session.show(&overlay, style, theme, dismiss, entries);
-        }
-    };
 
     rsx! {
         row {
-            onclick: move |_| {
-                toggle(());
-            },
+            native_ref: trigger_ref,
+            onclick: move |_| set_open.call(!current_open),
             {children}
+        }
+        if current_open {
+            arkit_hooks::Portal {
+                layer: arkit_hooks::OverlayLayer::Floating,
+                {menu_overlay_content(style, theme, dismiss, items, placement, None)}
+            }
         }
     }
 }

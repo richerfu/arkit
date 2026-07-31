@@ -34,11 +34,13 @@ pub fn Select(
 ) -> Element {
     let theme = use_theme();
     let i18n = use_component_i18n();
-    let overlay = arkit_hooks::use_overlay();
-    let mut trigger_frame = use_signal(arkit_hooks::LayoutFrame::default);
-    // Measure only the painted trigger root via `onarea` (full control width).
-    // Do not also attach `use_layout_frame` here — a second observer can race
-    // and overwrite with a different host frame.
+    let viewport = arkit_hooks::use_overlay_viewport();
+    let trigger_ref = arkit_hooks::use_native_element_ref();
+    let trigger_frame = use_signal(arkit_hooks::LayoutFrame::default);
+    arkit_hooks::use_layout_frame(trigger_ref.clone(), move |frame| {
+        let mut trigger_frame = trigger_frame;
+        trigger_frame.set(frame);
+    });
     let mut internal_open = use_signal(|| default_open);
     let mut internal_selected = use_signal(|| default_selected.clone());
     let open_controlled = open.is_some();
@@ -81,71 +83,25 @@ pub fn Select(
     let count = options.len();
     let has_panel_label = label.as_deref() != Some("");
 
-    let toggle = move |_| {
-        if current_open {
-            set_open.call(false);
-            overlay.dismiss();
-            return;
-        }
-
-        set_open.call(true);
-
-        let frame = *trigger_frame.read();
-        let viewport = overlay.viewport();
-        let panel_width = trigger_width_vp(frame, viewport, SELECT_PANEL_FALLBACK_WIDTH);
-        let panel_height = select_panel_estimated_height(count, has_panel_label);
-        let placement = FloatingPanelPlacement::resolve(
-            frame,
-            viewport,
-            panel_width,
-            panel_height,
-            FloatingSide::Bottom,
-            FloatingAlign::Start,
-            SELECT_PANEL_SIDE_OFFSET,
-        );
-        let dismiss_overlay = overlay.clone();
-        let dismiss = EventHandler::new(move |_: ()| {
-            set_open.call(false);
-            dismiss_overlay.dismiss();
-        });
-        let overlay_options = options.clone();
-        let overlay_label = label.clone();
-        let overlay_selected = current_selected.clone();
-        let overlay_i18n = i18n;
-
-        overlay.show_floating(move || {
-            select_overlay_content(SelectOverlayContent {
-                theme,
-                i18n: overlay_i18n,
-                panel_width,
-                placement,
-                options: overlay_options,
-                label: overlay_label,
-                selected: overlay_selected,
-                set_selected,
-                on_dismiss: dismiss,
-            })
-        });
-    };
+    let frame = *trigger_frame.read();
+    let panel_width = trigger_width_vp(frame, viewport, SELECT_PANEL_FALLBACK_WIDTH);
+    let panel_height = select_panel_estimated_height(count, has_panel_label);
+    let placement = FloatingPanelPlacement::resolve(
+        frame,
+        viewport,
+        panel_width,
+        panel_height,
+        FloatingSide::Bottom,
+        FloatingAlign::Start,
+        SELECT_PANEL_SIDE_OFFSET,
+    );
+    let dismiss = EventHandler::new(move |_: ()| set_open.call(false));
 
     rsx! {
         row {
+            native_ref: trigger_ref,
             width: "100%",
-            // Measure the full control (same width as the painted chrome).
-            onarea: move |evt: dioxus_core::Event<dioxus_elements::event::AreaData>| {
-                let frame = evt.data().frame;
-                if frame.is_measured() {
-                    trigger_frame.set(arkit_hooks::LayoutFrame {
-                        x: frame.x,
-                        y: frame.y,
-                        width: frame.width,
-                        height: frame.height,
-                    });
-                }
-            },
-            onclick: move |_| {
-                toggle(());
-            },
+            onclick: move |_| set_open.call(!current_open),
             row {
                 width: "100%",
                 height: 40.0,
@@ -174,6 +130,22 @@ pub fn Select(
                     }
                 }
                 {crate::icon::icon_placeholder("chevron-down", 16.0, colors.muted_foreground)}
+            }
+        }
+        if current_open {
+            arkit_hooks::Portal {
+                layer: arkit_hooks::OverlayLayer::Floating,
+                {select_overlay_content(SelectOverlayContent {
+                    theme,
+                    i18n,
+                    panel_width,
+                    placement,
+                    options,
+                    label,
+                    selected: current_selected,
+                    set_selected,
+                    on_dismiss: dismiss,
+                })}
             }
         }
     }

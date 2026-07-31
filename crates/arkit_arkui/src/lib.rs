@@ -26,6 +26,7 @@ use std::cell::RefCell;
 use std::ffi::c_void;
 use std::rc::Rc;
 
+use arkit_dom::{ElementKey, HostId, HostKind, HostTree, PortalLayer};
 use dioxus_core::{ElementId, Template, TemplateNode, WriteMutations};
 use ohos_arkui_binding::common::error::ArkUIResult;
 use ohos_arkui_binding::common::handle::ArkUIHandle;
@@ -39,7 +40,7 @@ use ohos_arkui_binding::gesture::inner_gesture::Gesture;
 use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
 use ohos_arkui_binding::types::gesture_event::GestureEventAction;
 use ohos_arkui_sys::ArkUI_NodeComponentEvent;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 // Re-export the shared event-payload types (owned by `arkit_elements`, whose
 // lib name is `dioxus_elements`).
 use dioxus_elements::event::{classify_event_name, ArkEventKind};
@@ -49,17 +50,23 @@ pub use dioxus_elements::event::{
 };
 
 mod css_value;
+mod element_ref;
 mod native;
-use native::parse_color;
-pub use native::{canonical_tag, create_node, create_node_by_tag, kind_from_tag, NodeKind};
+use element_ref::SharedNativeNode;
+pub use element_ref::{
+    LayoutFramePx, MountedNodeLease, NativeElementDelivery, NativeElementEvent, NativeElementRef,
+    NativeElementSubscription, NativeVisibility,
+};
+use native::{canonical_tag, create_node_by_tag, parse_color};
+
+mod owned_node;
+pub use owned_node::OwnedNativeNode;
 
 pub mod image;
 pub use image::{ArkImagePixels, ArkImageSource, RetainedImage};
 
 pub mod virtual_adapter;
-pub use virtual_adapter::{
-    MountItem, RenderItem, VirtualItemMount, VirtualKind, VirtualNodeAdapter,
-};
+pub use virtual_adapter::{MountItem, RenderItem, VirtualItemMount, VirtualKind, VirtualSource};
 
 pub mod node_builder;
 pub use node_builder::{NativeNodeEvent, NodeBuilder, NodeEventType, PreDragStatus};
@@ -91,16 +98,19 @@ pub trait EventSink {
     /// the ArkUI `Event` (slider value, text, scroll index, ...); it is wrapped
     /// in an `ArkEventData` before re-injection.
     fn dispatch(&self, name: &'static str, element: ElementId, payload: ArkEventPayload);
+
+    /// Queue an exact-element notification for delivery outside the native
+    /// mutation phase.
+    fn dispatch_native_ref(&self, delivery: NativeElementDelivery);
 }
 
-type NodeRef = Rc<RefCell<ArkUINode>>;
+type NodeRef = SharedNativeNode;
 
 const TEXT_ALIGN_START: i32 = 0;
 const LONG_PRESS_DURATION_MS: i32 = 500;
 
 struct RegisteredEventListener {
-    name: &'static str,
-    id: ElementId,
+    event_type: NodeEventType,
     native_wrapper: usize,
     active: Rc<std::cell::Cell<bool>>,
 }
@@ -151,40 +161,20 @@ impl Drop for RegisteredGestureListener {
     }
 }
 
-enum EventRegistration {
-    Node(Rc<std::cell::Cell<bool>>),
-    Gesture(RegisteredGestureListener),
+struct NodeEventRoute {
+    node: std::rc::Weak<RefCell<ArkUINode>>,
+    sink: Rc<dyn EventSink>,
+    listeners: Vec<(&'static str, ElementId)>,
+    native_ref: Option<(NativeElementRef, u64)>,
 }
 
-// ---------------------------------------------------------------------------
-// Host tree
-// ---------------------------------------------------------------------------
-
-/// Arena id for a host node.
-type HostId = usize;
-
-/// Logical kind of a host node — mirrors the dioxus RealDOM.
-#[derive(Debug)]
-enum HostKind {
-    /// The synthetic root (ElementId 0) — a full-screen `Stack` container
-    /// mounted to the NodeContent slot.
-    Root,
-    /// A dioxus element (`column`, `text`, `button`, ...). `tag` is the
-    /// canonical lowercase rsx tag.
-    Element { tag: &'static str },
-    /// A logical text node. Projects onto the parent's content attribute when
-    /// the parent is `text`/`button`; otherwise onto its own native `Text`.
-    Text { value: String },
-    /// A dioxus placeholder (anchor for `replace_placeholder`). Projects onto
-    /// nothing natively by default.
-    Placeholder,
+struct RoutedNodeEvent {
+    event_type: NodeEventType,
+    route: Rc<RefCell<NodeEventRoute>>,
 }
 
-/// One node in the renderer-owned host tree.
-struct HostNode {
-    kind: HostKind,
-    parent: Option<HostId>,
-    children: Vec<HostId>,
+#[derive(Default)]
+struct NativeHostState {
     native: Option<NodeRef>,
     native_attached: bool,
     /// Renderer-managed content container for composite native projections.
@@ -196,6 +186,7 @@ struct HostNode {
     content_native: Option<NodeRef>,
     event_listeners: Vec<(&'static str, ElementId)>,
     registered_event_listeners: Vec<RegisteredEventListener>,
+    routed_node_events: Vec<RoutedNodeEvent>,
     registered_gesture_listeners: Vec<RegisteredGestureListener>,
     /// Declarative desired attributes (dioxus state). Replayed onto the native
     /// node at lifecycle points (after create, after attach) so ArkUI's
@@ -212,39 +203,8 @@ struct HostNode {
     /// and applies it only when the source or native node changes.
     image_source: Option<ArkImageSource>,
     retained_image_src: Option<Rc<RetainedImage>>,
-    /// Element ids currently bound to this arena slot. Cleared before the slot
-    /// enters the free list so stale ElementId mappings cannot alias reuse.
-    bound_elements: Vec<ElementId>,
-}
-
-impl HostNode {
-    fn new(kind: HostKind) -> Self {
-        Self {
-            kind,
-            parent: None,
-            children: Vec::new(),
-            native: None,
-            native_attached: false,
-            content_native: None,
-            event_listeners: Vec::new(),
-            registered_event_listeners: Vec::new(),
-            registered_gesture_listeners: Vec::new(),
-            desired_attrs: Rc::new(RefCell::new(DesiredAttrs::default())),
-            pending_scroll_offset: None,
-            image_source: None,
-            retained_image_src: None,
-            bound_elements: Vec::new(),
-        }
-    }
-
-    fn tag(&self) -> &'static str {
-        match self.kind {
-            HostKind::Root => "stack",
-            HostKind::Element { tag } => tag,
-            HostKind::Text { .. } => "text",
-            HostKind::Placeholder => "stack",
-        }
-    }
+    native_ref: Option<NativeElementRef>,
+    virtual_source: Option<VirtualSource>,
 }
 
 /// The attribute a host element's text children merge into, if any.
@@ -263,12 +223,7 @@ fn text_content_attr(tag: &str) -> Option<ArkUINodeAttributeType> {
 /// host-tree projection.
 pub struct ArkUIRenderer {
     /// Host-node arena. Index 0 is the synthetic root.
-    hosts: Vec<HostNode>,
-    free_hosts: Vec<HostId>,
-    /// ElementId → HostId.
-    element_to_host: Vec<Option<HostId>>,
-    /// The mutation stack (host ids, top = last).
-    stack: Vec<HostId>,
+    hosts: HostTree<NativeHostState>,
     /// Cached static-template host subtrees, keyed by template address. Each
     /// entry is a ready-to-clone host subtree (kinds + structure) that
     /// `load_template` instantiates.
@@ -277,7 +232,88 @@ pub struct ArkUIRenderer {
     root_mount: RendererRootMount,
     /// Event sink (set by the runtime after construction).
     sink: Option<Rc<dyn EventSink>>,
+    /// Incremental native-projection state shared across one Dioxus mutation
+    /// batch. Local host mutations never invalidate the renderer root directly;
+    /// only active portal membership/order changes do.
+    projection: ProjectionState,
+    /// First structural native failure. Once set, projection is no longer
+    /// trustworthy and the owning runtime must stop after the mutation batch.
+    fault: Option<RendererFault>,
 }
+
+#[derive(Default)]
+struct DirtyHostQueue {
+    ordered: Vec<HostId>,
+    members: FxHashSet<HostId>,
+}
+
+impl DirtyHostQueue {
+    fn mark(&mut self, host: HostId) {
+        if self.members.insert(host) {
+            self.ordered.push(host);
+        }
+    }
+
+    fn discard(&mut self, host: HostId) {
+        if self.members.remove(&host) {
+            self.ordered.retain(|candidate| *candidate != host);
+        }
+    }
+
+    fn drain(&mut self) -> Vec<HostId> {
+        self.members.clear();
+        std::mem::take(&mut self.ordered)
+    }
+}
+
+#[derive(Default)]
+struct ProjectionState {
+    active_portals: FxHashSet<HostId>,
+    root_dirty: bool,
+    deferred_event_hosts: DirtyHostQueue,
+}
+
+impl ProjectionState {
+    fn activate_portal(&mut self, host: HostId) -> bool {
+        let changed = self.active_portals.insert(host);
+        self.root_dirty |= changed;
+        changed
+    }
+
+    fn deactivate_portal(&mut self, host: HostId) -> bool {
+        let changed = self.active_portals.remove(&host);
+        self.root_dirty |= changed;
+        changed
+    }
+
+    fn mark_portal_order_dirty(&mut self, host: HostId) {
+        self.root_dirty |= self.active_portals.contains(&host);
+    }
+
+    fn take_root_dirty(&mut self) -> bool {
+        std::mem::take(&mut self.root_dirty)
+    }
+
+    fn discard_host(&mut self, host: HostId) {
+        self.deferred_event_hosts.discard(host);
+        self.deactivate_portal(host);
+    }
+}
+
+/// Irrecoverable failure while projecting the logical host tree to ArkUI.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RendererFault {
+    operation: &'static str,
+    message: String,
+}
+
+impl std::fmt::Display for RendererFault {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{} failed: {}", self.operation, self.message)
+    }
+}
+
+impl std::error::Error for RendererFault {}
 
 enum RendererRootMount {
     /// Normal application renderer: the root is mounted in and owned through a
@@ -346,20 +382,20 @@ impl ArkUIRenderer {
     /// the host root (HostId 0 / ElementId 0).
     pub fn new(slot: ArkUIHandle) -> ArkUIResult<Self> {
         let mut root_node = RootNode::new(slot);
-        let root_ark = NodeBuilder::from_node(Stack::new()?.into())
+        let root_ark = NodeBuilder::from_raw(Stack::new()?.into())
             .percent_width(1.0)?
             .percent_height(1.0)?
             .build();
-        if let Err(error) = root_node.mount(root_ark.clone()) {
+        if let Err(error) = root_node.mount(root_ark.as_raw().clone()) {
             // `RootNode::mount` retains a clone before calling native APIs.
             // Let it release that clone when possible; otherwise dispose our
             // still-unmounted owner so constructor failure cannot leak it.
             if root_node.unmount().is_err() {
-                let mut root_ark = root_ark;
-                let _ = root_ark.dispose();
+                drop(root_ark);
             }
             return Err(error);
         }
+        let root_ark = root_ark.into_raw();
         let root = Rc::new(RefCell::new(root_ark));
         Ok(Self::from_root(
             root,
@@ -380,23 +416,18 @@ impl ArkUIRenderer {
     }
 
     fn from_root(root: Rc<RefCell<ArkUINode>>, root_mount: RendererRootMount) -> Self {
-        let mut hosts = Vec::new();
-        let mut root_host = HostNode::new(HostKind::Root);
-        root_host.native = Some(root);
-        root_host.native_attached = true;
-        root_host.bound_elements.push(ElementId(0));
-        hosts.push(root_host);
-
-        let element_to_host = vec![Some(0)];
+        let mut hosts = HostTree::new(NativeHostState::default());
+        let root_host = hosts.root();
+        hosts[root_host].native = Some(root);
+        hosts[root_host].native_attached = true;
 
         Self {
             hosts,
-            free_hosts: Vec::new(),
-            element_to_host,
-            stack: Vec::new(),
             templates: FxHashMap::default(),
             root_mount,
             sink: None,
+            projection: ProjectionState::default(),
+            fault: None,
         }
     }
 
@@ -405,54 +436,95 @@ impl ArkUIRenderer {
         self.sink = Some(sink);
     }
 
+    /// Take the first structural projection failure, if any.
+    ///
+    /// Dioxus' mutation writer cannot return a `Result`, so the renderer
+    /// latches the failure and the owning runtime checks it immediately after
+    /// each mutation batch.
+    pub fn take_fault(&mut self) -> Option<RendererFault> {
+        self.fault.take()
+    }
+
+    fn latch_structural<T, E: ToString>(
+        &mut self,
+        operation: &'static str,
+        result: Result<T, E>,
+    ) -> Option<T> {
+        match result {
+            Ok(value) => Some(value),
+            Err(error) => {
+                let message = error.to_string();
+                if self.fault.is_none() {
+                    self.fault = Some(RendererFault {
+                        operation,
+                        message: message.clone(),
+                    });
+                }
+                ohos_hilog_binding::error(format!("arkit_arkui: {operation} failed: {message}"));
+                None
+            }
+        }
+    }
+
     // -- host arena helpers ------------------------------------------------
 
     fn alloc_host(&mut self, kind: HostKind) -> HostId {
-        if let Some(id) = self.free_hosts.pop() {
-            self.hosts[id] = HostNode::new(kind);
-            id
-        } else {
-            let id = self.hosts.len();
-            self.hosts.push(HostNode::new(kind));
-            id
-        }
-    }
-
-    fn ensure_element_capacity(&mut self, id: ElementId) {
-        if id.0 >= self.element_to_host.len() {
-            self.element_to_host.resize_with(id.0 + 1, || None);
-        }
+        self.hosts.alloc(kind)
     }
 
     fn bind_element(&mut self, id: ElementId, host: HostId) {
-        self.ensure_element_capacity(id);
-        if let Some(previous) = self.element_to_host[id.0] {
-            self.hosts[previous]
-                .bound_elements
-                .retain(|candidate| *candidate != id);
-        }
-        self.element_to_host[id.0] = Some(host);
-        if !self.hosts[host].bound_elements.contains(&id) {
-            self.hosts[host].bound_elements.push(id);
-        }
+        self.hosts.bind_element(ElementKey::new(id.0), host);
     }
 
     fn release_host(&mut self, host: HostId) {
-        debug_assert_ne!(host, 0, "the synthetic root cannot enter the free list");
-        for element in std::mem::take(&mut self.hosts[host].bound_elements) {
-            if self.element_to_host.get(element.0).and_then(|slot| *slot) == Some(host) {
-                self.element_to_host[element.0] = None;
-            }
-        }
-        self.hosts[host] = HostNode::new(HostKind::Placeholder);
-        self.free_hosts.push(host);
+        self.projection.discard_host(host);
+        self.hosts.release(host);
     }
 
     fn host_of(&self, id: ElementId) -> HostId {
-        self.element_to_host
-            .get(id.0)
-            .and_then(|s| *s)
+        self.hosts
+            .host_for_element(ElementKey::new(id.0))
             .unwrap_or_else(|| panic!("arkit_arkui: no host for ElementId({})", id.0))
+    }
+
+    fn activate_portals_in_subtree(&mut self, host: HostId) {
+        if !self.hosts.is_connected_to_root(host) {
+            return;
+        }
+        self.activate_portals_in_connected_subtree(host);
+    }
+
+    fn activate_portals_in_connected_subtree(&mut self, host: HostId) {
+        if matches!(self.hosts[host].kind, HostKind::Portal { .. }) {
+            self.projection.activate_portal(host);
+        }
+        let children = self.hosts[host].children.clone();
+        for child in children {
+            self.activate_portals_in_connected_subtree(child);
+        }
+    }
+
+    fn deactivate_portals_in_subtree(&mut self, host: HostId) -> bool {
+        let mut changed = false;
+        if matches!(self.hosts[host].kind, HostKind::Portal { .. }) {
+            changed |= self.projection.deactivate_portal(host);
+        }
+        let children = self.hosts[host].children.clone();
+        for child in children {
+            changed |= self.deactivate_portals_in_subtree(child);
+        }
+        changed
+    }
+
+    fn flush_root_projection(&mut self) {
+        if !self.projection.take_root_dirty() {
+            return;
+        }
+        self.sync_native_children(self.hosts.root());
+    }
+
+    fn mark_deferred_node_events(&mut self, host: HostId) {
+        self.projection.deferred_event_hosts.mark(host);
     }
 
     // -- native projection -------------------------------------------------
@@ -572,10 +644,9 @@ impl ArkUIRenderer {
             return;
         };
         self.hosts[host].content_native = native.borrow().children().first().cloned();
-        self.replay_composite_content(host);
     }
 
-    fn replay_mounted_host_state(&self, host: HostId) {
+    fn replay_after_attach(&self, host: HostId) {
         let Some(native) = self.hosts[host].native.clone() else {
             return;
         };
@@ -588,7 +659,6 @@ impl ArkUIRenderer {
             }
             let attrs = self.hosts[host].desired_attrs.borrow();
             attrs.apply_initial(&mut native, tag);
-            attrs.apply_to(&mut native, tag);
             attrs.after_attach(&mut native, tag);
         }
         if is_text_host {
@@ -596,9 +666,23 @@ impl ArkUIRenderer {
         }
     }
 
-    fn rebind_mounted_projection(&mut self, host: HostId) {
+    /// Rebind renderer-owned `Rc` wrappers after ArkUI inserts or moves a
+    /// native subtree. Wrapper rebinding is ownership bookkeeping; declarative
+    /// attributes are replayed only when the subtree was physically attached.
+    fn rebind_mounted_projection(&mut self, host: HostId, replay_after_attach: bool) {
+        let replay_after_attach = replay_after_attach && self.hosts[host].native_attached;
         self.rebind_composite_content(host);
-        self.replay_mounted_host_state(host);
+        if replay_after_attach {
+            self.replay_after_attach(host);
+            self.replay_composite_content(host);
+            self.apply_host_image_source(host);
+        }
+        self.bind_native_ref(host);
+        self.attach_virtual_source(host);
+        self.replay_event_listeners(host);
+        if replay_after_attach {
+            self.apply_pending_scroll_offset(host);
+        }
         let Some(container) = self.native_child_container(host) else {
             return;
         };
@@ -610,10 +694,18 @@ impl ArkUIRenderer {
             }
             let mounted_child = container.borrow().children().get(native_index).cloned();
             if let Some(mounted_child) = mounted_child {
+                let wrapper_changed = self.hosts[child]
+                    .native
+                    .as_ref()
+                    .is_none_or(|current| !Rc::ptr_eq(current, &mounted_child));
+                let was_attached = self.hosts[child].native_attached;
+                let is_attached = self.hosts[host].native_attached;
                 self.hosts[child].native = Some(mounted_child);
-                self.hosts[child].native_attached = self.hosts[host].native_attached;
-                self.rebind_mounted_projection(child);
-                self.apply_host_image_source(child);
+                self.hosts[child].native_attached = is_attached;
+                let child_attach_replay = replay_after_attach || (!was_attached && is_attached);
+                if wrapper_changed || was_attached != is_attached || child_attach_replay {
+                    self.rebind_mounted_projection(child, child_attach_replay);
+                }
             }
             native_index += 1;
         }
@@ -647,6 +739,10 @@ impl ArkUIRenderer {
         let h = &self.hosts[host];
         match &h.kind {
             HostKind::Root | HostKind::Element { .. } => h.native.clone().into_iter().collect(),
+            // A portal has a logical parent but projects directly under the
+            // renderer root. It contributes no native root to that logical
+            // parent's child list.
+            HostKind::Portal { .. } => Vec::new(),
             HostKind::Text { .. } => {
                 // Text under text/button merges into parent → no native root.
                 // Text under a normal container → its own native Text.
@@ -677,19 +773,17 @@ impl ArkUIRenderer {
     fn remember_event_registration(
         &mut self,
         host: HostId,
-        name: &'static str,
-        id: ElementId,
+        event_type: NodeEventType,
         native_wrapper: usize,
         active: Rc<std::cell::Cell<bool>>,
     ) {
         self.hosts[host]
             .registered_event_listeners
-            .retain(|listener| listener.name != name || listener.id != id);
+            .retain(|listener| listener.event_type != event_type);
         self.hosts[host]
             .registered_event_listeners
             .push(RegisteredEventListener {
-                name,
-                id,
+                event_type,
                 native_wrapper,
                 active,
             });
@@ -758,6 +852,14 @@ impl ArkUIRenderer {
     /// children before/after this insertion point are unaffected because ArkUI
     /// `insert_child` is positional.
     fn attach_native(&mut self, parent: HostId, child: HostId) {
+        if self.fault.is_some() {
+            return;
+        }
+        self.activate_portals_in_subtree(child);
+        if matches!(self.hosts[child].kind, HostKind::Portal { .. }) {
+            self.ensure_native(child);
+            return;
+        }
         // If the parent merges text children, a child text node contributes to
         // the parent's content attribute instead of a native child.
         let parent_tag = self.hosts[parent].tag();
@@ -782,14 +884,13 @@ impl ArkUIRenderer {
         // Compute the native insertion index: the count of native roots
         // contributed by logical children preceding `child`.
         let native_index = self.projected_native_len_before(parent, child);
-        let inserted = {
+        let insert_result = {
             let mut parent_mut = parent_native.borrow_mut();
-            log_arkui_result(
-                "attach_native insert_child",
-                parent_mut.insert_child(child_native.borrow().clone(), native_index),
-            )
-            .is_some()
+            parent_mut.insert_child(child_native.borrow().clone(), native_index)
         };
+        let inserted = self
+            .latch_structural("attach_native insert_child", insert_result)
+            .is_some();
         if !inserted {
             // Do not bind this logical child to whatever node happened to be
             // at the requested index when native insertion failed.
@@ -805,22 +906,11 @@ impl ArkUIRenderer {
         // wrapper 处理计划".)
         let mounted = parent_native.borrow().children().get(native_index).cloned();
         if let Some(mounted) = mounted {
+            let parent_attached = self.hosts[parent].native_attached;
             self.hosts[child].native = Some(mounted);
-            self.hosts[child].native_attached = self.hosts[parent].native_attached;
-            self.rebind_mounted_projection(child);
+            self.hosts[child].native_attached = parent_attached;
+            self.rebind_mounted_projection(child, parent_attached);
         }
-
-        // After attach, replay desired attrs so ArkUI control defaults cannot
-        // clobber declarative styles.
-        let child_tag = self.hosts[child].tag();
-        if let Some(native) = self.hosts[child].native.clone() {
-            let attrs = self.hosts[child].desired_attrs.borrow();
-            attrs.after_attach(&mut native.borrow_mut(), child_tag);
-        }
-        self.apply_host_image_source(child);
-        self.replay_composite_content(child);
-        self.replay_event_listeners(child);
-        self.apply_pending_scroll_offset(child);
     }
 
     /// Ensure a host node has a native node allocated if its kind projects one.
@@ -832,7 +922,7 @@ impl ArkUIRenderer {
         }
         let tag = self.hosts[host].tag();
         match self.hosts[host].kind {
-            HostKind::Root | HostKind::Element { .. } => {
+            HostKind::Root | HostKind::Element { .. } | HostKind::Portal { .. } => {
                 let (native, content_native) = Self::create_native_for(tag);
                 self.hosts[host].native = Some(native);
                 self.hosts[host].content_native = content_native;
@@ -874,38 +964,166 @@ impl ArkUIRenderer {
     }
 
     fn replay_event_listeners(&mut self, host: HostId) {
+        if self.replay_event_listeners_inner(host, false) {
+            self.mark_deferred_node_events(host);
+        }
+    }
+
+    /// Reconcile native event routes for one host.
+    ///
+    /// Returns `true` when an event requested by this host must wait until the
+    /// current mutation batch has fully attached the native projection.
+    fn replay_event_listeners_inner(&mut self, host: HostId, include_deferred: bool) -> bool {
         let Some(sink) = self.sink.clone() else {
-            return;
+            return false;
         };
         let Some(native) = self.hosts[host].native.clone() else {
-            return;
+            return false;
         };
         let tag = self.hosts[host].tag();
         let native_wrapper = Self::native_wrapper_id(&native);
         let listeners = self.hosts[host].event_listeners.clone();
-        for (name, id) in listeners {
-            if self.hosts[host]
-                .registered_event_listeners
+
+        let long_press = listeners
+            .iter()
+            .copied()
+            .filter(|(name, _)| classify_event_name(name) == Some(ArkEventKind::LongPress))
+            .collect::<Vec<_>>();
+        self.hosts[host]
+            .registered_gesture_listeners
+            .retain(|registration| {
+                long_press
+                    .iter()
+                    .any(|(name, id)| registration.name == *name && registration.id == *id)
+            });
+        for (name, id) in long_press {
+            let already_registered = self.hosts[host]
+                .registered_gesture_listeners
                 .iter()
-                .any(|listener| {
-                    listener.name == name
-                        && listener.id == id
-                        && listener.native_wrapper == native_wrapper
-                })
-            {
-                continue;
-            }
-            if let Some(registration) = register_event(&native, name, tag, sink.clone(), id) {
-                let active = match registration {
-                    EventRegistration::Node(active) => active,
-                    EventRegistration::Gesture(registration) => {
-                        self.remember_gesture_registration(host, registration);
-                        Rc::new(std::cell::Cell::new(true))
-                    }
-                };
-                self.remember_event_registration(host, name, id, native_wrapper, active);
+                .any(|registration| registration.name == name && registration.id == id);
+            if !already_registered {
+                if let Some(registration) = log_arkui_result(
+                    "create_event_listener long_press",
+                    register_long_press(&native, name, sink.clone(), id),
+                ) {
+                    self.remember_gesture_registration(host, registration);
+                }
             }
         }
+
+        let mut requested_event_types = listeners
+            .iter()
+            .filter_map(|(name, _)| event_type_for_name(name, tag))
+            .collect::<Vec<_>>();
+        // A native_ref is a mount capability by default. Layout and
+        // visibility hooks opt into their respective ArkUI events explicitly;
+        // animation/canvas/native-component refs therefore do not pay for or
+        // risk unrelated platform event registrations.
+        if self.hosts[host].native_attached {
+            if self.hosts[host]
+                .native_ref
+                .as_ref()
+                .is_some_and(NativeElementRef::observes_layout)
+            {
+                requested_event_types.push(NodeEventType::EventOnAreaChange);
+            }
+            if self.hosts[host]
+                .native_ref
+                .as_ref()
+                .is_some_and(NativeElementRef::observes_visibility)
+            {
+                requested_event_types.extend([
+                    NodeEventType::EventOnAppear,
+                    NodeEventType::EventOnDisappear,
+                    NodeEventType::EventOnVisibleAreaChange,
+                ]);
+            }
+        }
+        let mut event_types = Vec::with_capacity(requested_event_types.len());
+        for event_type in requested_event_types {
+            if !event_types.contains(&event_type) {
+                event_types.push(event_type);
+            }
+        }
+
+        self.hosts[host]
+            .registered_event_listeners
+            .retain(|registration| event_types.contains(&registration.event_type));
+        self.hosts[host]
+            .routed_node_events
+            .retain(|route| event_types.contains(&route.event_type));
+
+        let mut has_deferred_work = false;
+        for event_type in event_types {
+            let event_listeners = listeners
+                .iter()
+                .copied()
+                .filter(|(name, _)| event_type_for_name(name, tag) == Some(event_type))
+                .collect::<Vec<_>>();
+            let route = if let Some(route) = self.hosts[host]
+                .routed_node_events
+                .iter()
+                .find(|route| route.event_type == event_type)
+            {
+                route.route.clone()
+            } else {
+                let route = Rc::new(RefCell::new(NodeEventRoute {
+                    node: Rc::downgrade(&native),
+                    sink: sink.clone(),
+                    listeners: Vec::new(),
+                    native_ref: None,
+                }));
+                self.hosts[host].routed_node_events.push(RoutedNodeEvent {
+                    event_type,
+                    route: route.clone(),
+                });
+                route
+            };
+            {
+                let mut route = route.borrow_mut();
+                route.node = Rc::downgrade(&native);
+                route.sink = sink.clone();
+                route.listeners = event_listeners;
+                route.native_ref = self.hosts[host].native_ref.as_ref().and_then(|reference| {
+                    reference
+                        .current()
+                        .map(|lease| (reference.clone(), lease.epoch()))
+                });
+            }
+
+            let installed =
+                self.hosts[host]
+                    .registered_event_listeners
+                    .iter()
+                    .any(|registration| {
+                        registration.event_type == event_type
+                            && registration.native_wrapper == native_wrapper
+                    });
+            if installed {
+                continue;
+            }
+            if is_deferred_node_event(event_type) && !include_deferred {
+                has_deferred_work = true;
+                continue;
+            }
+            self.hosts[host]
+                .registered_event_listeners
+                .retain(|registration| registration.event_type != event_type);
+            if event_type == NodeEventType::EventOnVisibleAreaChange {
+                // ArkUI requires a ratio before this event can be registered.
+                // A small positive threshold reliably crosses after first
+                // layout and avoids a one-off pre-layout 0% notification.
+                log_arkui_result(
+                    "visible area threshold",
+                    native
+                        .borrow()
+                        .set_visible_area_change_ratio(vec![0.001_f32]),
+                );
+            }
+            let active = register_routed_node_event(&native, event_type, route);
+            self.remember_event_registration(host, event_type, native_wrapper, active);
+        }
+        has_deferred_work
     }
 
     /// Write a text host node's value to its native TextContent (when it owns a
@@ -947,6 +1165,15 @@ impl ArkUIRenderer {
     /// (`button` outer container + internal content Row) make that especially
     /// fragile, so structural mutations use this final-state sync instead.
     fn sync_native_children(&mut self, parent: HostId) {
+        if self.fault.is_some() {
+            return;
+        }
+        let root = self.hosts.root();
+        if parent == root {
+            // A direct root reconciliation consumes every portal invalidation
+            // accumulated so far in this mutation batch.
+            self.projection.take_root_dirty();
+        }
         let parent_tag = self.hosts[parent].tag();
         if Self::merges_text_children(parent_tag) {
             self.sync_content_attribute(parent);
@@ -956,7 +1183,31 @@ impl ArkUIRenderer {
             return;
         };
 
-        let children = self.hosts[parent].children.clone();
+        let mut children = self.hosts[parent]
+            .children
+            .iter()
+            .copied()
+            .filter(|child| !matches!(self.hosts[*child].kind, HostKind::Portal { .. }))
+            .collect::<Vec<_>>();
+        if parent == root {
+            let mut portals = self
+                .projection
+                .active_portals
+                .iter()
+                .copied()
+                .filter(|host| self.hosts.is_connected_to_root(*host))
+                .collect::<Vec<_>>();
+            debug_assert!(portals
+                .iter()
+                .all(|host| matches!(self.hosts[*host].kind, HostKind::Portal { .. })));
+            portals.sort_by_key(|host| {
+                (
+                    self.hosts[*host].kind.portal_layer().unwrap_or_default(),
+                    host.index(),
+                )
+            });
+            children.extend(portals);
+        }
         let mut desired = Vec::<(HostId, NodeRef)>::new();
         for child in children {
             self.ensure_native(child);
@@ -981,14 +1232,14 @@ impl ArkUIRenderer {
                 .get(index)
                 .map(|child| !desired_raws.contains(&Self::native_raw_id(child)))
                 .unwrap_or(false);
-            if should_remove
-                && log_arkui_result(
-                    "sync_native_children remove_child",
-                    parent_native.borrow_mut().remove_child(index),
-                )
-                .is_none()
-            {
-                return;
+            if should_remove {
+                let result = parent_native.borrow_mut().remove_child(index);
+                if self
+                    .latch_structural("sync_native_children remove_child", result)
+                    .is_none()
+                {
+                    return;
+                }
             }
         }
 
@@ -1002,9 +1253,14 @@ impl ArkUIRenderer {
                 .is_some_and(|mounted| Self::native_raw_id(mounted) == desired_raw)
             {
                 if let Some(mounted) = mounted_at_index {
+                    let wrapper_changed = !Rc::ptr_eq(&child_native, &mounted);
+                    let was_attached = self.hosts[child].native_attached;
                     self.hosts[child].native = Some(mounted);
                     self.hosts[child].native_attached = parent_attached;
-                    self.rebind_mounted_projection(child);
+                    let became_attached = !was_attached && parent_attached;
+                    if wrapper_changed || was_attached != parent_attached {
+                        self.rebind_mounted_projection(child, became_attached);
+                    }
                 }
             } else {
                 // The desired node may already be mounted later in the same
@@ -1016,10 +1272,9 @@ impl ArkUIRenderer {
                     .iter()
                     .position(|mounted| Self::native_raw_id(mounted) == desired_raw);
                 let node_to_insert = if let Some(index) = mounted_elsewhere {
-                    let removed = log_arkui_result(
-                        "sync_native_children detach reordered child",
-                        parent_native.borrow_mut().remove_child(index),
-                    );
+                    let result = parent_native.borrow_mut().remove_child(index);
+                    let removed = self
+                        .latch_structural("sync_native_children detach reordered child", result);
                     let Some(Some(removed)) = removed else {
                         return;
                     };
@@ -1028,14 +1283,13 @@ impl ArkUIRenderer {
                 } else {
                     child_native.borrow().clone()
                 };
-                let inserted = {
+                let result = {
                     let mut parent_mut = parent_native.borrow_mut();
-                    log_arkui_result(
-                        "sync_native_children insert_child",
-                        parent_mut.insert_child(node_to_insert, native_index),
-                    )
-                    .is_some()
+                    parent_mut.insert_child(node_to_insert, native_index)
                 };
+                let inserted = self
+                    .latch_structural("sync_native_children insert_child", result)
+                    .is_some();
                 if !inserted {
                     return;
                 }
@@ -1043,31 +1297,34 @@ impl ArkUIRenderer {
                 if let Some(mounted) = mounted {
                     self.hosts[child].native = Some(mounted);
                     self.hosts[child].native_attached = parent_attached;
-                    self.rebind_mounted_projection(child);
+                    self.rebind_mounted_projection(child, parent_attached);
                 }
             }
-
-            self.apply_host_image_source(child);
-            let child_tag = self.hosts[child].tag();
-            if let Some(native) = self.hosts[child].native.clone() {
-                let attrs = self.hosts[child].desired_attrs.borrow();
-                attrs.after_attach(&mut native.borrow_mut(), child_tag);
-            }
-            self.replay_composite_content(child);
-            self.replay_event_listeners(child);
-            self.apply_pending_scroll_offset(child);
         }
     }
 
-    /// Deactivate native event callbacks and remove gesture recognizers before
-    /// ArkUI disposes their native nodes.
-    fn clear_subtree_native_listeners(&mut self, host: HostId) {
+    /// Tear down every integration that still needs a live native node.
+    ///
+    /// ArkUI recursively destroys descendants when an ancestor is disposed.
+    /// Walk children first so item adapters, surfaces, web views, callbacks,
+    /// and exact-node leases all release their native resources while their
+    /// corresponding nodes are still valid.
+    fn prepare_subtree_native_dispose(&mut self, host: HostId) {
         let children = self.hosts[host].children.clone();
         for child in children {
-            self.clear_subtree_native_listeners(child);
+            self.prepare_subtree_native_dispose(child);
         }
         self.hosts[host].registered_gesture_listeners.clear();
         self.hosts[host].registered_event_listeners.clear();
+        self.hosts[host].routed_node_events.clear();
+        self.unbind_native_ref(host);
+        if let Some(source) = self.hosts[host].virtual_source.take() {
+            if let Err(error) = source.detach() {
+                ohos_hilog_binding::warn(format!(
+                    "arkit_arkui: virtual source detach failed: {error}"
+                ));
+            }
+        }
     }
 
     /// Clear renderer-owned state for a subtree whose native root has already
@@ -1077,11 +1334,24 @@ impl ArkUIRenderer {
         for c in children {
             self.clear_subtree_state(c);
         }
+        debug_assert!(
+            self.hosts[host]
+                .native_ref
+                .as_ref()
+                .is_none_or(|reference| reference.current().is_none()),
+            "native ref remained bound after pre-dispose teardown"
+        );
+        if let Some(source) = self.hosts[host].virtual_source.take() {
+            // This is an exceptional fallback: the normal pre-dispose pass
+            // detaches every source while its host is live.
+            source.abandon_attachment();
+        }
         self.hosts[host].native = None;
         self.hosts[host].native_attached = false;
         self.hosts[host].content_native = None;
         self.hosts[host].event_listeners.clear();
         self.hosts[host].registered_event_listeners.clear();
+        self.hosts[host].routed_node_events.clear();
         self.hosts[host].registered_gesture_listeners.clear();
         self.hosts[host].pending_scroll_offset = None;
         self.hosts[host].children.clear();
@@ -1097,12 +1367,26 @@ impl ArkUIRenderer {
     /// especially for composite projections such as `button` where the
     /// renderer owns an internal content Row not represented in the HostTree.
     fn dispose_subtree(&mut self, host: HostId) {
-        // Callback registrations retain renderer-owned state. Deactivate
-        // node-event tokens and remove every recognizer before ArkUI disposes
-        // the native subtree.
-        self.clear_subtree_native_listeners(host);
+        let removed_active_portal = self.deactivate_portals_in_subtree(host);
+        let portal_branches = self.detach_portal_branches(host);
+        if removed_active_portal {
+            // Portal native nodes are root children rather than descendants of
+            // their logical owner. Detach them before disposing either branch.
+            self.flush_root_projection();
+        }
+        for portal in portal_branches {
+            self.dispose_subtree(portal);
+        }
+        self.prepare_subtree_native_dispose(host);
+        self.dispose_prepared_subtree(host);
+    }
+
+    /// Dispose a subtree after [`Self::prepare_subtree_native_dispose`] has
+    /// released every native-dependent integration.
+    fn dispose_prepared_subtree(&mut self, host: HostId) {
         if let Some(native) = self.hosts[host].native.take() {
-            log_arkui_result("dispose_subtree dispose", native.borrow_mut().dispose());
+            let result = native.borrow_mut().dispose();
+            self.latch_structural("dispose_subtree dispose", result);
             let children = self.hosts[host].children.clone();
             for c in children {
                 self.clear_subtree_state(c);
@@ -1110,13 +1394,14 @@ impl ArkUIRenderer {
         } else {
             let children = self.hosts[host].children.clone();
             for c in children {
-                self.dispose_subtree(c);
+                self.dispose_prepared_subtree(c);
             }
         }
         self.hosts[host].content_native = None;
         self.hosts[host].native_attached = false;
         self.hosts[host].event_listeners.clear();
         self.hosts[host].registered_event_listeners.clear();
+        self.hosts[host].routed_node_events.clear();
         self.hosts[host].registered_gesture_listeners.clear();
         self.hosts[host].pending_scroll_offset = None;
         self.hosts[host].children.clear();
@@ -1125,11 +1410,108 @@ impl ArkUIRenderer {
         self.release_host(host);
     }
 
+    fn detach_portal_branches(&mut self, host: HostId) -> Vec<HostId> {
+        let children = self.hosts[host].children.clone();
+        let mut portals = Vec::new();
+        for child in children {
+            if matches!(self.hosts[child].kind, HostKind::Portal { .. }) {
+                self.hosts[host]
+                    .children
+                    .retain(|candidate| *candidate != child);
+                self.hosts[child].parent = None;
+                portals.push(child);
+            } else {
+                portals.extend(self.detach_portal_branches(child));
+            }
+        }
+        portals
+    }
+
     fn discard_detached_hosts(&mut self, hosts: impl IntoIterator<Item = HostId>) {
         for host in hosts {
-            debug_assert_ne!(host, 0, "the synthetic root cannot be a detached mutation");
+            debug_assert_ne!(
+                host,
+                self.hosts.root(),
+                "the synthetic root cannot be a detached mutation"
+            );
             self.dispose_subtree(host);
         }
+    }
+
+    fn bind_native_ref(&self, host: HostId) {
+        if !self.hosts[host].native_attached {
+            return;
+        }
+        let Some(reference) = self.hosts[host].native_ref.clone() else {
+            return;
+        };
+        let Some(native) = self.hosts[host].native.as_ref() else {
+            return;
+        };
+        let Some(event) = reference.bind(native) else {
+            return;
+        };
+        if let Some(sink) = &self.sink {
+            sink.dispatch_native_ref(NativeElementDelivery::new(reference, event));
+        }
+    }
+
+    fn unbind_native_ref(&self, host: HostId) {
+        let Some(reference) = self.hosts[host].native_ref.clone() else {
+            return;
+        };
+        let Some(event) = reference.unbind() else {
+            return;
+        };
+        if let Some(sink) = &self.sink {
+            sink.dispatch_native_ref(NativeElementDelivery::new(reference, event));
+        }
+    }
+
+    fn set_native_ref(&mut self, host: HostId, reference: Option<NativeElementRef>) {
+        let unchanged = self.hosts[host].native_ref == reference;
+        if unchanged {
+            self.bind_native_ref(host);
+            self.replay_event_listeners(host);
+            return;
+        }
+        self.unbind_native_ref(host);
+        self.hosts[host].native_ref = reference;
+        self.bind_native_ref(host);
+        self.replay_event_listeners(host);
+    }
+
+    fn attach_virtual_source(&self, host: HostId) {
+        if !self.hosts[host].native_attached {
+            return;
+        }
+        let Some(source) = self.hosts[host].virtual_source.clone() else {
+            return;
+        };
+        let Some(native) = self.hosts[host].native.as_ref() else {
+            return;
+        };
+        if let Err(error) = source.attach(native) {
+            ohos_hilog_binding::error(format!(
+                "arkit_arkui: virtual source attach failed: {error}"
+            ));
+        }
+    }
+
+    fn set_virtual_source(&mut self, host: HostId, source: Option<VirtualSource>) {
+        if self.hosts[host].virtual_source == source {
+            self.attach_virtual_source(host);
+            return;
+        }
+        if let Some(previous) = self.hosts[host].virtual_source.take() {
+            if let Err(error) = previous.detach() {
+                ohos_hilog_binding::warn(format!(
+                    "arkit_arkui: virtual source replacement detach failed: {error}"
+                ));
+            }
+        }
+        self.hosts[host].virtual_source = source;
+        self.attach_virtual_source(host);
     }
 
     // -- template instantiation -------------------------------------------
@@ -1149,7 +1531,14 @@ impl ArkUIRenderer {
                 attrs,
                 children,
             } => {
-                let host = self.alloc_host(HostKind::Element { tag });
+                let kind = if *tag == "portal" {
+                    HostKind::Portal {
+                        layer: PortalLayer::Modal,
+                    }
+                } else {
+                    HostKind::Element { tag }
+                };
+                let host = self.alloc_host(kind);
                 let (native, content_native) = Self::create_native_for(tag);
                 self.hosts[host].native = Some(native);
                 self.hosts[host].content_native = content_native;
@@ -1207,7 +1596,7 @@ impl WriteMutations for ArkUIRenderer {
     fn append_children(&mut self, id: ElementId, m: usize) {
         let parent = self.host_of(id);
         let children: Vec<HostId> = (0..m)
-            .map(|_| self.stack.pop().expect("stack underflow"))
+            .map(|_| self.hosts.pop().expect("stack underflow"))
             .collect();
         // children popped in reverse document order; reverse to restore order.
         let children: Vec<HostId> = children.into_iter().rev().collect();
@@ -1220,9 +1609,9 @@ impl WriteMutations for ArkUIRenderer {
 
     fn assign_node_id(&mut self, path: &'static [u8], id: ElementId) {
         // The target is the host node at `path` under the top-of-stack host.
-        let top = *self
-            .stack
-            .last()
+        let top = self
+            .hosts
+            .stack_last()
             .expect("arkit_arkui: assign_node_id with empty stack");
         let target = self.walk_host_path(top, path);
         self.bind_element(id, target);
@@ -1231,7 +1620,7 @@ impl WriteMutations for ArkUIRenderer {
     fn create_placeholder(&mut self, id: ElementId) {
         let host = self.alloc_host(HostKind::Placeholder);
         self.bind_element(id, host);
-        self.stack.push(host);
+        self.hosts.push(host);
     }
 
     fn create_text_node(&mut self, value: &str, id: ElementId) {
@@ -1239,7 +1628,7 @@ impl WriteMutations for ArkUIRenderer {
             value: value.to_string(),
         });
         self.bind_element(id, host);
-        self.stack.push(host);
+        self.hosts.push(host);
     }
 
     fn load_template(&mut self, template: Template, index: usize, id: ElementId) {
@@ -1258,21 +1647,21 @@ impl WriteMutations for ArkUIRenderer {
             .clone();
         let host = self.instantiate_template(&tpl, index);
         self.bind_element(id, host);
-        self.stack.push(host);
+        self.hosts.push(host);
     }
 
     fn replace_node_with(&mut self, id: ElementId, m: usize) {
         let target = self.host_of(id);
-        if target == 0 {
+        if target == self.hosts.root() {
             ohos_hilog_binding::warn("arkit_arkui: replace_node_with on root not supported");
             // Consume and dispose pending nodes to keep both the mutation stack
             // and host arena consistent after rejecting the operation.
-            let discarded = (0..m).filter_map(|_| self.stack.pop()).collect::<Vec<_>>();
+            let discarded = (0..m).filter_map(|_| self.hosts.pop()).collect::<Vec<_>>();
             self.discard_detached_hosts(discarded);
             return;
         }
         let new_hosts: Vec<HostId> = (0..m)
-            .map(|_| self.stack.pop().expect("stack underflow"))
+            .map(|_| self.hosts.pop().expect("stack underflow"))
             .collect::<Vec<_>>()
             .into_iter()
             .rev()
@@ -1296,6 +1685,7 @@ impl WriteMutations for ArkUIRenderer {
         };
 
         self.hosts[parent].children.remove(logical_index);
+        self.hosts[target].parent = None;
 
         // Insert the new hosts at the same logical position.
         for (offset, &child) in new_hosts.iter().enumerate() {
@@ -1303,6 +1693,7 @@ impl WriteMutations for ArkUIRenderer {
             self.hosts[parent]
                 .children
                 .insert(logical_index + offset, child);
+            self.activate_portals_in_subtree(child);
         }
         self.sync_native_children(parent);
         self.dispose_subtree(target);
@@ -1310,14 +1701,14 @@ impl WriteMutations for ArkUIRenderer {
 
     fn replace_placeholder_with_nodes(&mut self, path: &'static [u8], m: usize) {
         let new_hosts: Vec<HostId> = (0..m)
-            .map(|_| self.stack.pop().expect("stack underflow"))
+            .map(|_| self.hosts.pop().expect("stack underflow"))
             .collect::<Vec<_>>()
             .into_iter()
             .rev()
             .collect();
-        let top = *self
-            .stack
-            .last()
+        let top = self
+            .hosts
+            .stack_last()
             .expect("arkit_arkui: replace_placeholder_with_nodes with empty stack");
         // The placeholder is at `path` under the top-of-stack host.
         let placeholder = self.walk_host_path(top, path);
@@ -1348,13 +1739,14 @@ impl WriteMutations for ArkUIRenderer {
             self.hosts[parent]
                 .children
                 .insert(logical_index + offset, child);
+            self.activate_portals_in_subtree(child);
         }
         self.sync_native_children(parent);
     }
 
     fn insert_nodes_after(&mut self, id: ElementId, m: usize) {
         let new_hosts: Vec<HostId> = (0..m)
-            .map(|_| self.stack.pop().expect("stack underflow"))
+            .map(|_| self.hosts.pop().expect("stack underflow"))
             .collect::<Vec<_>>()
             .into_iter()
             .rev()
@@ -1387,7 +1779,7 @@ impl WriteMutations for ArkUIRenderer {
 
     fn insert_nodes_before(&mut self, id: ElementId, m: usize) {
         let new_hosts: Vec<HostId> = (0..m)
-            .map(|_| self.stack.pop().expect("stack underflow"))
+            .map(|_| self.hosts.pop().expect("stack underflow"))
             .collect::<Vec<_>>()
             .into_iter()
             .rev()
@@ -1427,6 +1819,64 @@ impl WriteMutations for ArkUIRenderer {
     ) {
         let host = self.host_of(id);
         let tag = self.hosts[host].tag();
+
+        if name == "native_ref" {
+            let reference = match value {
+                dioxus_core::AttributeValue::Any(value) => {
+                    value.as_any().downcast_ref::<NativeElementRef>().cloned()
+                }
+                dioxus_core::AttributeValue::None => None,
+                _ => {
+                    ohos_hilog_binding::warn(
+                        "arkit_arkui: native_ref requires a NativeElementRef value",
+                    );
+                    None
+                }
+            };
+            self.set_native_ref(host, reference);
+            return;
+        }
+
+        if name == "virtual_source" {
+            let source = match value {
+                dioxus_core::AttributeValue::Any(value) => {
+                    value.as_any().downcast_ref::<VirtualSource>().cloned()
+                }
+                dioxus_core::AttributeValue::None => None,
+                _ => {
+                    ohos_hilog_binding::warn(
+                        "arkit_arkui: virtual_source requires a VirtualSource value",
+                    );
+                    None
+                }
+            };
+            self.set_virtual_source(host, source);
+            return;
+        }
+
+        if name == "portal_layer" {
+            let layer = match value {
+                dioxus_core::AttributeValue::Text(value) => match value.as_str() {
+                    "floating" => PortalLayer::Floating,
+                    "transient" => PortalLayer::Transient,
+                    _ => PortalLayer::Modal,
+                },
+                dioxus_core::AttributeValue::Int(value) => match *value {
+                    1 => PortalLayer::Floating,
+                    2 => PortalLayer::Transient,
+                    _ => PortalLayer::Modal,
+                },
+                _ => PortalLayer::Modal,
+            };
+            if matches!(self.hosts[host].kind, HostKind::Portal { .. }) {
+                let previous = self.hosts[host].kind.portal_layer();
+                self.hosts[host].kind = HostKind::Portal { layer };
+                if previous != Some(layer) {
+                    self.projection.mark_portal_order_dirty(host);
+                }
+            }
+            return;
+        }
 
         if name == "src" {
             match value {
@@ -1496,9 +1946,6 @@ impl WriteMutations for ArkUIRenderer {
     }
 
     fn create_event_listener(&mut self, name: &'static str, id: ElementId) {
-        let Some(sink) = self.sink.clone() else {
-            return;
-        };
         let host = self.host_of(id);
         if !self.hosts[host]
             .event_listeners
@@ -1507,33 +1954,7 @@ impl WriteMutations for ArkUIRenderer {
         {
             self.hosts[host].event_listeners.push((name, id));
         }
-        let tag = self.hosts[host].tag();
-        let Some(native) = self.hosts[host].native.clone() else {
-            // Logical-only node (e.g. text child under text/button) has no
-            // native target to register an event on.
-            return;
-        };
-        let native_wrapper = Self::native_wrapper_id(&native);
-        if !self.hosts[host]
-            .registered_event_listeners
-            .iter()
-            .any(|listener| {
-                listener.name == name
-                    && listener.id == id
-                    && listener.native_wrapper == native_wrapper
-            })
-        {
-            if let Some(registration) = register_event(&native, name, tag, sink, id) {
-                let active = match registration {
-                    EventRegistration::Node(active) => active,
-                    EventRegistration::Gesture(registration) => {
-                        self.remember_gesture_registration(host, registration);
-                        Rc::new(std::cell::Cell::new(true))
-                    }
-                };
-                self.remember_event_registration(host, name, id, native_wrapper, active);
-            }
-        }
+        self.replay_event_listeners(host);
     }
 
     fn remove_event_listener(&mut self, name: &'static str, id: ElementId) {
@@ -1544,17 +1965,12 @@ impl WriteMutations for ArkUIRenderer {
         self.hosts[host]
             .registered_gesture_listeners
             .retain(|listener| listener.name != name || listener.id != id);
-        self.hosts[host]
-            .registered_event_listeners
-            .retain(|listener| listener.name != name || listener.id != id);
-        // ArkUI event listeners are tied to node lifetime; already-registered
-        // native node callbacks remain until the node is disposed. Renderer-
-        // owned gesture recognizers are removed immediately above.
+        self.replay_event_listeners(host);
     }
 
     fn remove_node(&mut self, id: ElementId) {
         let host = self.host_of(id);
-        if host == 0 {
+        if host == self.hosts.root() {
             return;
         }
         let Some(parent) = self.hosts[host].parent else {
@@ -1565,13 +1981,14 @@ impl WriteMutations for ArkUIRenderer {
             return;
         };
         self.hosts[parent].children.remove(logical_index);
+        self.hosts[host].parent = None;
         self.sync_native_children(parent);
         self.dispose_subtree(host);
     }
 
     fn push_root(&mut self, id: ElementId) {
         let host = self.host_of(id);
-        self.stack.push(host);
+        self.hosts.push(host);
     }
 }
 
@@ -1584,7 +2001,8 @@ impl ArkUIRenderer {
     /// calls this once on the next UI-loop tick after the initial mount, and
     /// composite elements get the same late replay used by normal patches.
     pub fn replay_declarative_attrs(&mut self) {
-        for host in 0..self.hosts.len() {
+        for host_index in 0..self.hosts.len() {
+            let host = HostId::new(host_index);
             let tag = self.hosts[host].tag();
             let Some(native) = self.hosts[host].native.clone() else {
                 continue;
@@ -1598,46 +2016,40 @@ impl ArkUIRenderer {
         }
     }
 
+    /// Commit renderer work that must run after a complete Dioxus mutation
+    /// batch.
+    ///
+    /// Portal membership/order invalidates the root projection, while deferred
+    /// native observers invalidate only their owning hosts. Both queues are
+    /// deduplicated during mutation writing and consumed exactly once here.
+    pub fn finish_mutation_batch(&mut self) {
+        self.flush_root_projection();
+        for host in self.projection.deferred_event_hosts.drain() {
+            if self.hosts[host].native_attached {
+                let _ = self.replay_event_listeners_inner(host, true);
+            }
+        }
+    }
+
     /// Unmount the root from the NodeContent slot.
     pub fn unmount(&mut self) -> ArkUIResult<()> {
-        // Gesture Drop calls into the mounted node, and node-event callbacks
-        // rely on active tokens. Tear both down before RootNode destroys the
-        // native subtree.
-        self.clear_subtree_native_listeners(0);
+        // Every native-dependent integration must stop before RootNode
+        // destroys the native subtree (or before an embedded root's caller
+        // disposes it). This pass is idempotent, so explicit unmount followed
+        // by Drop is safe.
+        self.prepare_subtree_native_dispose(self.hosts.root());
         match &mut self.root_mount {
             RendererRootMount::NodeContent(root_node) => root_node.unmount(),
             RendererRootMount::Embedded => Ok(()),
         }
     }
 
-    /// Look up the native ArkUI node backing the given dioxus [`ElementId`], if
-    /// one is currently mounted.
-    ///
-    /// Returns the host's native projection as a shared `Rc` handle — the
-    /// **same** `Rc` that is mounted in the ArkUI tree (the one stored as the
-    /// node's user-data for event dispatch). This matters: ArkUI event
-    /// dispatch reads the callback from this exact wrapper's `event_handle`, so
-    /// event registration (e.g. `onAreaChange`) must target this `Rc`, not a
-    /// cloned `ArkUINode` value (whose `event_handle` is a separate copy).
-    ///
-    /// For logical-only nodes (text children under `text`/`button`,
-    /// placeholders) returns `None` so layout hooks are not misled.
-    pub fn node_for_element(&self, id: ElementId) -> Option<Rc<RefCell<ArkUINode>>> {
-        let host = self.element_to_host.get(id.0).and_then(|s| *s)?;
-        self.hosts[host].native.clone()
-    }
-
     /// Walk the host tree from `root` following `path` (logical child indices),
     /// returning the target host id.
     fn walk_host_path(&self, root: HostId, path: &[u8]) -> HostId {
-        let mut current = root;
-        for &idx in path {
-            current = *self.hosts[current]
-                .children
-                .get(idx as usize)
-                .expect("arkit_arkui: host path index out of range");
-        }
-        current
+        self.hosts
+            .walk_path(root, path)
+            .expect("arkit_arkui: host path index out of range")
     }
 }
 
@@ -1653,27 +2065,13 @@ impl Drop for ArkUIRenderer {
 // Event registration + payload extraction
 // ---------------------------------------------------------------------------
 
-/// Register a native ArkUI event or gesture that forwards into the dioxus
-/// runtime.
-///
-/// `ArkUINode` implements `ArkUICommonAttribute` directly, but `ArkUIEvent` is
-/// only implemented for wrapper types (the binding's RuntimeNode). We use a
-/// local wrapper to opt into the trait's default event-registration methods.
-fn register_event(
+/// Register exactly one native callback for a node event type. The callback
+/// multiplexes declarative Dioxus listeners and exact-element observers.
+fn register_routed_node_event(
     node: &NodeRef,
-    name: &'static str,
-    tag: &'static str,
-    sink: Rc<dyn EventSink>,
-    id: ElementId,
-) -> Option<EventRegistration> {
-    if classify_event_name(name) == Some(ArkEventKind::LongPress) {
-        return log_arkui_result(
-            "create_event_listener long_press",
-            register_long_press(node, name, sink, id),
-        )
-        .map(EventRegistration::Gesture);
-    }
-
+    event_type: NodeEventType,
+    route: Rc<RefCell<NodeEventRoute>>,
+) -> Rc<std::cell::Cell<bool>> {
     struct EventNode<'a>(&'a mut ArkUINode);
     impl ohos_arkui_binding::component::attribute::ArkUIAttributeBasic for EventNode<'_> {
         fn raw(&self) -> &ArkUINode {
@@ -1685,26 +2083,84 @@ fn register_event(
     }
     impl ohos_arkui_binding::component::attribute::ArkUIEvent for EventNode<'_> {}
 
-    let Some(event_type) = event_type_for_name(name, tag) else {
-        ohos_hilog_binding::warn(format!(
-            "arkit_arkui: create_event_listener: unsupported event `{name}` on `{tag}`"
-        ));
-        return None;
-    };
-
     let mut borrowed = node.borrow_mut();
     let mut event_node = EventNode(&mut borrowed);
-    let node_for_payload = node.clone();
     let active = Rc::new(std::cell::Cell::new(true));
     let callback_active = active.clone();
     event_node.on_event(event_type, move |event: &ArkNativeEvent| {
         if !callback_active.get() {
             return;
         }
-        let payload = extract_payload(event_type, event, Some(&node_for_payload));
-        sink.dispatch(name, id, payload);
+        let (node, sink, listeners, native_ref) = {
+            let route = route.borrow();
+            (
+                route.node.upgrade(),
+                route.sink.clone(),
+                route.listeners.clone(),
+                route.native_ref.clone(),
+            )
+        };
+        let payload = extract_payload(event_type, event, node.as_ref());
+        for (name, id) in listeners {
+            sink.dispatch(name, id, payload.clone());
+        }
+        let Some((reference, epoch)) = native_ref else {
+            return;
+        };
+        let native_event = match event_type {
+            NodeEventType::EventOnAreaChange => match payload {
+                ArkEventPayload::Layout(layout) => Some(NativeElementEvent::Layout {
+                    epoch,
+                    frame: LayoutFramePx {
+                        x: layout.x,
+                        y: layout.y,
+                        width: layout.width,
+                        height: layout.height,
+                    },
+                }),
+                _ => None,
+            },
+            NodeEventType::EventOnAppear => Some(NativeElementEvent::Visibility {
+                epoch,
+                visibility: NativeVisibility {
+                    visible: true,
+                    fraction: 1.0,
+                },
+            }),
+            NodeEventType::EventOnDisappear => Some(NativeElementEvent::Visibility {
+                epoch,
+                visibility: NativeVisibility::default(),
+            }),
+            NodeEventType::EventOnVisibleAreaChange => {
+                // data[0] is the direction of the ratio change, not current
+                // visibility. A decreasing node can still be partially
+                // visible, so derive presentation state from the ratio.
+                let fraction = event.f32_value(1).unwrap_or_default();
+                Some(NativeElementEvent::Visibility {
+                    epoch,
+                    visibility: NativeVisibility {
+                        visible: fraction.is_finite() && fraction > f32::EPSILON,
+                        fraction,
+                    },
+                })
+            }
+            _ => None,
+        };
+        if let Some(event) = native_event {
+            sink.dispatch_native_ref(NativeElementDelivery::new(reference, event));
+        }
     });
-    Some(EventRegistration::Node(active))
+    active
+}
+
+fn is_deferred_node_event(event_type: NodeEventType) -> bool {
+    matches!(
+        event_type,
+        NodeEventType::EventOnAreaChange
+            | NodeEventType::EventOnAppear
+            | NodeEventType::EventOnDisappear
+            | NodeEventType::EventOnVisibleAreaChange
+    )
 }
 
 fn register_long_press(
@@ -1759,9 +2215,9 @@ fn dispatch_long_press(event: GestureEventData) {
 
 /// Extract a typed [`ArkEventPayload`] from a native ArkUI [`ArkNativeEvent`].
 ///
-/// The value accessor + index differ per event type. This mirrors the legacy
-/// extraction logic (each ArkUI event stores its value(s) at a known numeric
-/// index accessible via `i32_value`/`f32_value`/`string_value`/`async_string`).
+/// The value accessor + index differ per event type: ArkUI stores each event's
+/// values at fixed numeric indices exposed by
+/// `i32_value`/`f32_value`/`string_value`/`async_string`.
 fn extract_payload(
     event_type: NodeEventType,
     event: &ArkNativeEvent,
@@ -1983,7 +2439,7 @@ fn event_type_for_name(name: &str, tag: &str) -> Option<NodeEventType> {
 
 #[cfg(test)]
 mod event_tests {
-    use super::{event_type_for_name, NodeEventType};
+    use super::{event_type_for_name, DirtyHostQueue, HostId, NodeEventType, ProjectionState};
 
     #[test]
     fn component_events_use_their_typed_native_event() {
@@ -2025,5 +2481,50 @@ mod event_tests {
             event_type_for_name("_blur", "textinput"),
             Some(NodeEventType::OnBlur)
         );
+    }
+
+    #[test]
+    fn dirty_host_queue_deduplicates_and_preserves_first_mark_order() {
+        let first = HostId::new(7);
+        let second = HostId::new(3);
+        let mut queue = DirtyHostQueue::default();
+
+        queue.mark(first);
+        queue.mark(second);
+        queue.mark(first);
+
+        assert_eq!(queue.drain(), vec![first, second]);
+        assert!(queue.drain().is_empty());
+    }
+
+    #[test]
+    fn discarded_dirty_host_can_be_reused_without_a_stale_entry() {
+        let host = HostId::new(4);
+        let mut queue = DirtyHostQueue::default();
+
+        queue.mark(host);
+        queue.discard(host);
+        queue.mark(host);
+
+        assert_eq!(queue.drain(), vec![host]);
+    }
+
+    #[test]
+    fn portal_registry_invalidates_root_only_on_semantic_changes() {
+        let portal = HostId::new(9);
+        let mut projection = ProjectionState::default();
+
+        assert!(projection.activate_portal(portal));
+        assert!(!projection.activate_portal(portal));
+        assert!(projection.take_root_dirty());
+        assert!(!projection.take_root_dirty());
+
+        projection.mark_portal_order_dirty(portal);
+        assert!(projection.take_root_dirty());
+
+        assert!(projection.deactivate_portal(portal));
+        assert!(!projection.deactivate_portal(portal));
+        assert!(projection.take_root_dirty());
+        assert!(!projection.take_root_dirty());
     }
 }

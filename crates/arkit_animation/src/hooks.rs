@@ -2,7 +2,8 @@ use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
 use arkit_animation_core::{AdapterTargetId, TargetName};
-use arkit_hooks::use_ark_node;
+use arkit_arkui::NativeElementRef;
+use arkit_hooks::{use_mounted_node, use_native_element_ref};
 use arkit_prelude::*;
 
 use crate::api::Timeline;
@@ -17,25 +18,32 @@ pub(crate) struct AnimationHostContext {
     pending_controls: Rc<RefCell<Vec<Weak<ControlsInner>>>>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct AnimationTarget {
     ready: Signal<bool>,
+    reference: NativeElementRef,
 }
 
 impl AnimationTarget {
-    pub fn is_ready(self) -> bool {
+    pub fn is_ready(&self) -> bool {
         (self.ready)()
+    }
+
+    /// Exact reference that must be assigned to the animated RSX element.
+    pub fn native_ref(&self) -> NativeElementRef {
+        self.reference.clone()
     }
 }
 
 #[track_caller]
-pub fn use_animation_host_provider() {
+pub fn use_animation_host_provider() -> NativeElementRef {
     crate::layout::use_layout_registry_provider();
-    let frame_node = use_ark_node();
-    let context = use_context_provider(|| {
+    let frame_node = use_native_element_ref();
+    let driver_node = frame_node.clone();
+    let context = use_context_provider(move || {
         let host = AnimationHost::new().expect("built-in animation adapters must register");
         AnimationHostContext {
-            driver: FrameDriver::new(host.clone(), frame_node),
+            driver: FrameDriver::new(host.clone(), driver_node),
             host,
             target_version: Signal::new(0),
             pending_controls: Rc::new(RefCell::new(Vec::new())),
@@ -50,41 +58,75 @@ pub fn use_animation_host_provider() {
             height_vp: metrics.content_rect.height.max(0) as f32 / density,
             density,
         });
+    let mount_driver = context.driver.clone();
+    let mount_host = context.host.clone();
+    use_mounted_node(frame_node.clone(), move |mounted| {
+        let Some(node) = mounted else {
+            return;
+        };
+        let teardown_host = Rc::downgrade(&mount_host);
+        // SAFETY: cleanup only releases native animator handles associated
+        // with this ArkUI context and does not mutate Dioxus or the host tree.
+        let installed = unsafe {
+            node.install_native_teardown(move || {
+                if let Some(host) = teardown_host.upgrade() {
+                    host.release_native_context();
+                }
+            })
+        };
+        if !installed {
+            mount_host.release_native_context();
+            return;
+        }
+        if mount_host.has_work() {
+            mount_driver.request();
+        }
+    });
+    frame_node
 }
 
 #[track_caller]
 pub fn use_animation_target(name: impl Into<String>) -> AnimationTarget {
     let context = use_context::<AnimationHostContext>();
-    let node = use_ark_node();
+    let reference = use_native_element_ref();
     let name = use_hook(|| TargetName::owned(name.into()));
-    let mut ready = use_signal(|| false);
+    let ready = use_signal(|| false);
     let registered = use_hook(|| Rc::new(Cell::new(None::<AdapterTargetId>)));
     let register_context = context.clone();
     let register_name = name.clone();
     let register_slot = registered.clone();
-    use_effect(move || {
-        if register_slot.get().is_some() {
-            return;
+    use_mounted_node(reference.clone(), move |mounted| match mounted {
+        Some(host_node) => {
+            if register_slot.get().is_some() {
+                return;
+            }
+            match register_context.host.arkui().register_target(
+                register_name.clone(),
+                host_node,
+                None,
+            ) {
+                Ok(id) => {
+                    register_slot.set(Some(id));
+                    let mut target_ready = ready;
+                    target_ready.set(true);
+                    let mut version = register_context.target_version;
+                    version += 1;
+                    retry_pending_controls(&register_context);
+                }
+                Err(error) => {
+                    ohos_hilog_binding::error(format!(
+                        "arkit_animation target registration failed: {error}"
+                    ));
+                }
+            }
         }
-        let Some(host_node) = node.get() else {
-            return;
-        };
-        match register_context
-            .host
-            .arkui()
-            .register_target(register_name.clone(), host_node, None)
-        {
-            Ok(id) => {
-                register_slot.set(Some(id));
-                ready.set(true);
+        None => {
+            if let Some(id) = register_slot.take() {
+                register_context.host.unregister_arkui_target(id);
+                let mut target_ready = ready;
+                target_ready.set(false);
                 let mut version = register_context.target_version;
                 version += 1;
-                retry_pending_controls(&register_context);
-            }
-            Err(error) => {
-                ohos_hilog_binding::error(format!(
-                    "arkit_animation target registration failed: {error}"
-                ));
             }
         }
     });
@@ -97,7 +139,7 @@ pub fn use_animation_target(name: impl Into<String>) -> AnimationTarget {
             version += 1;
         }
     });
-    AnimationTarget { ready }
+    AnimationTarget { ready, reference }
 }
 
 pub(crate) fn use_animation_context() -> AnimationHostContext {

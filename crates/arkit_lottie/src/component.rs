@@ -2,7 +2,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::Arc;
 
-use arkit_hooks::{use_app_foreground, use_ark_node};
+use arkit_hooks::{use_app_foreground, use_mounted_node, use_native_element_ref};
 use arkit_prelude::*;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
@@ -133,7 +133,7 @@ pub struct LottiePlayerProps {
 #[component]
 pub fn LottiePlayer(props: LottiePlayerProps) -> Element {
     let runtime = use_hook(|| Rc::new(ComponentRuntime::new()));
-    let node_ref = use_ark_node();
+    let node_ref = use_native_element_ref();
     let app_foreground = use_app_foreground();
     // XComponent presentation is owned by its native surface lifecycle. ArkUI
     // reports a transient 0% visible area for a mounted Surface node even while
@@ -142,7 +142,7 @@ pub fn LottiePlayer(props: LottiePlayerProps) -> Element {
     // component-level gate; the application lifecycle remains independent.
     let effective_active = props.active && app_foreground;
     let surface_registration = use_hook(|| Rc::new(RefCell::new(None::<SurfaceRegistration>)));
-    let registered_node = use_hook(|| Rc::new(Cell::new(None::<usize>)));
+    let registered_node = use_hook(|| Rc::new(Cell::new(None::<u64>)));
     let controller_binding = use_hook(|| Rc::new(RefCell::new(None::<(LottieController, u64)>)));
     let source_loader = use_hook(|| {
         Rc::new(RefCell::new(
@@ -274,7 +274,7 @@ pub fn LottiePlayer(props: LottiePlayerProps) -> Element {
     let download_runtime = runtime.clone();
     let download_loader = source_loader.clone();
     let active_download = download_task.clone();
-    let async_runtime = arkit_runtime::tokio_handle();
+    let async_runtime = arkit_runtime::use_runtime_handle().tokio();
     use_effect(use_reactive((&props.source,), move |(source,)| {
         active_download.borrow_mut().take();
         let Some(network_source) = source.network_source().cloned() else {
@@ -324,11 +324,13 @@ pub fn LottiePlayer(props: LottiePlayerProps) -> Element {
     let effect_registered_node = registered_node.clone();
     let effect_runtime = runtime.clone();
     let frame_rate = props.max_frames_per_second;
-    use_effect(move || {
-        let Some(node) = node_ref.get() else {
+    use_mounted_node(node_ref.clone(), move |node| {
+        let Some(node) = node else {
+            effect_registration.borrow_mut().take();
+            effect_registered_node.set(None);
             return;
         };
-        let native_key = node.borrow().raw_handle() as usize;
+        let native_key = node.epoch();
         if effect_registered_node.get() == Some(native_key) {
             if let Some(registration) = effect_registration.borrow().as_ref() {
                 if let Err(error) = registration.set_frame_rate(frame_rate) {
@@ -349,14 +351,25 @@ pub fn LottiePlayer(props: LottiePlayerProps) -> Element {
         let Some(tick_pending) = tick_pending else {
             return;
         };
-        let attachment = {
-            let node = node.borrow();
-            SurfaceRegistration::attach(&node, sender, tick_pending, frame_rate)
-        };
+        let attachment = SurfaceRegistration::attach(&node, sender, tick_pending, frame_rate);
         match attachment {
             Ok(registration) => {
                 effect_registration.borrow_mut().replace(registration);
                 effect_registered_node.set(Some(native_key));
+                let teardown_registration = effect_registration.clone();
+                let teardown_registered_node = effect_registered_node.clone();
+                // SAFETY: cleanup only detaches surface callbacks and releases
+                // their worker senders before the XComponent is invalidated.
+                let installed = unsafe {
+                    node.install_native_teardown(move || {
+                        teardown_registration.borrow_mut().take();
+                        teardown_registered_node.set(None);
+                    })
+                };
+                if !installed {
+                    effect_registration.borrow_mut().take();
+                    effect_registered_node.set(None);
+                }
             }
             Err(error) => effect_runtime.emit_error(error),
         }
@@ -391,6 +404,7 @@ pub fn LottiePlayer(props: LottiePlayerProps) -> Element {
     let height = props.height.clone().unwrap_or_else(|| "240".into());
     rsx! {
         xcomponent {
+            native_ref: node_ref,
             width: props.width.clone(),
             height: height,
             background_color: props.background_color,

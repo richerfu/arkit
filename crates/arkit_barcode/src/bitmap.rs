@@ -24,6 +24,7 @@ pub struct BarcodeBitmap {
 }
 
 impl BarcodeBitmap {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         width: u32,
         height: u32,

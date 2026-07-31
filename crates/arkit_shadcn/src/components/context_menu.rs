@@ -2,11 +2,10 @@
 //!
 //! Ported from the legacy Elm builder `context_menu.rs`. The trigger owns a
 //! native ArkUI long-press recognizer; ordinary taps remain available to its
-//! child content. The menu panel renders through the shared overlay root.
+//! child content. The menu panel renders through a root-projected portal.
 
 use crate::components::menu_common::{
-    menu_closed_panel_height, use_menu_overlay_refresh, MenuEntry, MenuOverlayPlacement,
-    MenuOverlaySession, MenuStyle,
+    menu_closed_panel_height, menu_overlay_content, MenuEntry, MenuOverlayPlacement, MenuStyle,
 };
 use crate::theme::*;
 use arkit_prelude::*;
@@ -25,10 +24,11 @@ pub fn ContextMenu(
     #[props(default)] width: Option<f32>,
 ) -> Element {
     let theme = use_theme();
-    let overlay = arkit_hooks::use_overlay();
+    let viewport = arkit_hooks::use_overlay_viewport();
+    let trigger_ref = arkit_hooks::use_native_element_ref();
     let trigger_frame = use_signal(arkit_hooks::LayoutFrame::default);
-    let mut overlay_session = use_signal(|| None::<MenuOverlaySession>);
-    arkit_hooks::use_layout_frame(move |frame| {
+    let mut cursor_placement = use_signal(|| None::<MenuOverlayPlacement>);
+    arkit_hooks::use_layout_frame(trigger_ref.clone(), move |frame| {
         let mut trigger_frame = trigger_frame;
         trigger_frame.set(frame);
     });
@@ -52,38 +52,35 @@ pub fn ContextMenu(
         side_offset_vp: spacing::XXS,
     };
 
-    let dismiss_overlay = overlay.clone();
-    let mut dismiss_session = overlay_session;
     let dismiss = EventHandler::new(move |_: ()| {
         set_open.call(false);
-        dismiss_session.set(None);
-        dismiss_overlay.dismiss();
+        cursor_placement.set(None);
     });
 
-    use_menu_overlay_refresh(
-        overlay.clone(),
-        current_open,
-        overlay_session,
-        style,
-        theme,
-        dismiss,
-        items.clone(),
-    );
+    let panel_height = menu_closed_panel_height(&items);
+    let placement = (*cursor_placement.read()).unwrap_or_else(|| {
+        MenuOverlayPlacement::resolve(
+            *trigger_frame.read(),
+            viewport,
+            style.width,
+            panel_height,
+            style.side_offset_vp,
+        )
+    });
 
     rsx! {
         row {
+            native_ref: trigger_ref,
             onlongpress: move |evt: dioxus_core::Event<dioxus_elements::event::ClickData>| {
                 if current_open {
                     dismiss.call(());
-                } else {
-                    set_open.call(true);
-                    let entries = items.clone();
-                    let frame = *trigger_frame.read();
-                    let viewport = overlay.viewport();
-                    let panel_height = menu_closed_panel_height(&entries);
-                    // Context menus anchor to the press point (cursor), not the
-                    // trigger root — matching OS/shadcn context-menu behavior.
-                    let placement = if let Some(pointer) = evt.data().pointer {
+                    return;
+                }
+                let frame = *trigger_frame.read();
+                let placement = evt
+                    .data()
+                    .pointer
+                    .and_then(|pointer| {
                         MenuOverlayPlacement::from_cursor(
                             pointer,
                             viewport,
@@ -91,16 +88,8 @@ pub fn ContextMenu(
                             panel_height,
                             style.side_offset_vp,
                         )
-                        .unwrap_or_else(|| {
-                            MenuOverlayPlacement::resolve(
-                                frame,
-                                viewport,
-                                style.width,
-                                panel_height,
-                                style.side_offset_vp,
-                            )
-                        })
-                    } else {
+                    })
+                    .unwrap_or_else(|| {
                         MenuOverlayPlacement::resolve(
                             frame,
                             viewport,
@@ -108,13 +97,17 @@ pub fn ContextMenu(
                             panel_height,
                             style.side_offset_vp,
                         )
-                    };
-                    let session = MenuOverlaySession::new(placement, None);
-                    overlay_session.set(Some(session));
-                    session.show(&overlay, style, theme, dismiss, entries);
-                }
+                    });
+                cursor_placement.set(Some(placement));
+                set_open.call(true);
             },
             {children}
+        }
+        if current_open {
+            arkit_hooks::Portal {
+                layer: arkit_hooks::OverlayLayer::Floating,
+                {menu_overlay_content(style, theme, dismiss, items, placement, None)}
+            }
         }
     }
 }

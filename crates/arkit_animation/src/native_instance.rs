@@ -5,7 +5,7 @@ use std::ptr::NonNull;
 use std::rc::Rc;
 
 use arkit_animation_core::{AnimationOutcome, IterationCount, TimePoint, TimeSpan};
-use arkit_hooks::HostNode;
+use arkit_arkui::MountedNodeLease;
 use ohos_arkui_binding::animate::animator::AnimatorController;
 use ohos_arkui_binding::animate::options::{Animation as ArkUiAnimation, KeyframeAnimation};
 use ohos_arkui_binding::common::ui_context::ArkUIContext;
@@ -366,13 +366,17 @@ pub(crate) struct ArkUiNodeAnimatorInstance {
 
 impl ArkUiNodeAnimatorInstance {
     pub(crate) fn new(
-        node: &HostNode,
+        node: &MountedNodeLease,
         spec: NativeAnimatorSpec,
     ) -> Result<Self, NativeInstanceError> {
-        let raw_node = node.borrow().raw_handle();
-        // SAFETY: `raw_node` belongs to the mounted `HostNode` retained by the
-        // renderer. ArkUI accepts it for context lookup on the UI thread.
-        let context = unsafe { OH_ArkUI_GetContextByNode(raw_node) };
+        // SAFETY: context lookup is synchronous inside the
+        // generation-checked borrow. The host installs lease-bound teardown
+        // for every animator retained beyond this call.
+        let context =
+            unsafe { node.with_native(|node| OH_ArkUI_GetContextByNode(node.raw_handle().cast())) }
+                .ok_or_else(|| {
+                    NativeInstanceError::Native("animation target is no longer mounted".into())
+                })?;
         if context.is_null() {
             return Err(NativeInstanceError::Native(
                 "OH_ArkUI_GetContextByNode returned null".into(),

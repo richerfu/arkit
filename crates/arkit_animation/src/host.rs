@@ -13,7 +13,7 @@ use arkit_animation_core::{
     AnimationRuntimeError, EngineCommand, EngineEvent, InstanceKey, PlaybackDirection,
     TimeDomainId, TimeExtent, TimePoint, TimeSpan, TimelineSource, WindowMetrics,
 };
-use arkit_hooks::HostNode;
+use arkit_arkui::MountedNodeLease;
 use rustc_hash::FxHashMap;
 
 use crate::{
@@ -29,7 +29,7 @@ use crate::{
 };
 
 type EngineListener = Rc<dyn Fn(EngineEvent)>;
-type ContextNodeProvider = Rc<dyn Fn() -> Option<HostNode>>;
+type ContextNodeProvider = Rc<dyn Fn() -> Option<MountedNodeLease>>;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct AnimationPerformanceCounters {
@@ -123,7 +123,7 @@ struct HostedNativeInstance {
     owner: Box<dyn NativeAnimationInstance>,
     duration: TimeSpan,
     policy: ExecutionPolicy,
-    context_node: HostNode,
+    context_node: MountedNodeLease,
     state: HostedNativeState,
     direction: PlaybackDirection,
 }
@@ -170,6 +170,44 @@ impl AnimationHost {
 
     pub(crate) fn set_context_node_provider(&self, provider: ContextNodeProvider) {
         self.context_node_provider.replace(Some(provider));
+    }
+
+    pub(crate) fn release_native_context(&self) {
+        let instances = self
+            .native_instances
+            .borrow()
+            .keys()
+            .copied()
+            .collect::<Vec<_>>();
+        if instances.is_empty() {
+            return;
+        }
+
+        {
+            let mut engine = self.engine.borrow_mut();
+            for instance in &instances {
+                if let Err(error) = engine.set_clock_mode(*instance, AnimationClockMode::Internal) {
+                    ohos_hilog_binding::error(format!(
+                        "arkit_animation: failed to detach native clock before context teardown: {error:?}"
+                    ));
+                }
+            }
+            for command in self.native_commands.borrow_mut().drain(..) {
+                engine.enqueue(command);
+            }
+        }
+
+        // Drop native animator callbacks and handles while their ArkUI context
+        // node is still valid. The sampled engine remains usable if Dioxus
+        // later rebinds the animation root.
+        self.native_instances.borrow_mut().clear();
+        for instance in instances {
+            self.record_runtime_fallback(
+                instance,
+                UnsupportedFeature::BackendUnavailable,
+                "native animation context unmounted; using sampled execution",
+            );
+        }
     }
 
     pub fn unregister_arkui_target(&self, target: arkit_animation_core::AdapterTargetId) -> bool {
@@ -352,7 +390,7 @@ impl AnimationHost {
     fn context_node_for_plan(
         &self,
         plan: &arkit_animation_core::CompiledAnimation,
-    ) -> Option<HostNode> {
+    ) -> Option<MountedNodeLease> {
         if let Some(node) = self
             .context_node_provider
             .borrow()

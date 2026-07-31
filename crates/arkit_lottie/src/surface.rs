@@ -3,7 +3,7 @@ use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use std::time::Instant;
 
-use ohos_arkui_binding::common::node::ArkUINode;
+use arkit_arkui::MountedNodeLease;
 use ohos_native_window_binding::NativeWindow;
 use ohos_xcomponent_binding::{NativeXComponent, WindowRaw, XComponentRaw};
 use ohos_xcomponent_sys::{
@@ -20,14 +20,26 @@ pub(crate) struct SurfaceRegistration {
 
 impl SurfaceRegistration {
     pub(crate) fn attach(
-        node: &ArkUINode,
+        node: &MountedNodeLease,
         sender: Sender<WorkerMessage>,
         tick_pending: Arc<AtomicBool>,
         frames_per_second: u16,
     ) -> LottieResult<Self> {
-        // SAFETY: `node` is the mounted ArkUI XComponent resolved by
-        // `use_ark_node`; the renderer keeps it alive for this registration.
-        let raw = unsafe { OH_NativeXComponent_GetNativeXComponent(node.raw_handle().cast()) };
+        // SAFETY: context lookup is synchronous inside the generation-checked
+        // borrow. The returned XComponent is retained by the registration,
+        // whose owner is tied to this lease's native teardown.
+        let raw = unsafe {
+            node.with_native(|node| {
+                OH_NativeXComponent_GetNativeXComponent(node.raw_handle().cast())
+            })
+        }
+        .ok_or_else(|| {
+            LottieError::new(
+                LottieErrorKind::SurfaceUnavailable,
+                "SurfaceRegistration::attach",
+                "XComponent is no longer mounted",
+            )
+        })?;
         if raw.is_null() {
             return Err(LottieError::new(
                 LottieErrorKind::SurfaceUnavailable,

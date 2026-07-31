@@ -108,7 +108,7 @@ fn app() -> Element {
 - `destroy`：卸载 renderer，释放 runtime 和 native tree。
 - `on_back_press_intercept`：把系统返回键转交当前 handler stack。
 
-框架 root 会自动装好 ArkHost、窗口度量、安全区和 OverlayRoot；开了 animation 还会挂上 AnimationHost。业务入口里不用再装一遍。
+框架 root 会自动装好 `RuntimeHandle`、窗口度量和安全区；开了 animation 还会挂上 AnimationHost。Portal 由 renderer 原生投影，业务入口里不用安装额外 host/provider。
 
 ## 安全区策略
 

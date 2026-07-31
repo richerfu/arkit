@@ -1,11 +1,11 @@
 ---
 title: 布局与浮层
-description: "测量尺寸、处理安全区与键盘，并把浮层挂到 OverlayRoot。"
+description: "测量尺寸、处理安全区与键盘，并用 Portal 投影浮层。"
 ---
 
 # 布局与浮层
 
-量尺寸、躲安全区、听键盘，以及把浮层挂到 OverlayRoot 上——这几件事经常一起出现。
+量尺寸、躲安全区、听键盘，以及把浮层投影到 root——这几件事经常一起出现。
 
 ## 尺寸与对齐
 
@@ -14,17 +14,15 @@ description: "测量尺寸、处理安全区与键盘，并把浮层挂到 Overl
 - Text 换行前必须有可用宽度。
 - Row/Column 的默认对齐不替代组件显式布局，页面自定义 children 需要时设置 `align_items`。
 
-## OverlayRoot
+## Portal
 
-`#[entry]` 已安装唯一 OverlayRoot。Dialog、Popover、Select、Menu 和 Sonner 都复用它，不需要业务再次创建。
+Dialog、Popover、Select、Menu 和 Sonner 都使用 renderer 原生支持的声明式 `Portal`，业务不需要创建 host、注册 overlay service 或发布命令式 token。
 
 ```text
-页面 subtree ─┐
-              ├─ 同一个 VirtualDom / Context
-OverlayRoot ──┘
+声明位置（状态 / Context）── HostTree ── root native projection
 ```
 
-浮层发布后仍能读取 Theme、Signal 和其他 Context。scope 卸载会撤销所属 token。
+浮层仍能读取声明位置的 Theme、Signal 和其他 Context。scope 卸载会产生普通 Dioxus mutation 并清理 projection。
 
 ## SafeArea 与键盘
 
@@ -36,4 +34,4 @@ Popover、Select、DropdownMenu 等先通过 layout hook 测量 trigger，再结
 
 ## 层级原则
 
-不要在同一 scope 同时发布相互竞争的 modal。子菜单由父菜单 session 管理；确认弹窗打开前先关闭无关 menu，避免多个 backdrop 捕获同一事件。
+不要在同一 scope 同时声明相互竞争的 modal。确认弹窗打开前先关闭无关 menu，避免多个 backdrop 捕获同一事件。

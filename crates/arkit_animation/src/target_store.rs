@@ -4,7 +4,7 @@ use rustc_hash::FxHashMap;
 use arkit_animation_core::{
     AdapterTargetId, SourceTarget, TargetLayoutSnapshot, TargetName, TargetSetName,
 };
-use arkit_hooks::HostNode;
+use arkit_arkui::MountedNodeLease;
 
 use crate::{AnimationAdapterError, AnimationTargetBinding, TargetVisualState};
 
@@ -20,7 +20,7 @@ impl TargetStore {
     pub fn register(
         &mut self,
         name: TargetName,
-        node: HostNode,
+        node: MountedNodeLease,
         layout: Option<TargetLayoutSnapshot>,
     ) -> Result<AdapterTargetId, AnimationAdapterError> {
         if self.names.contains_key(&name) {

@@ -499,6 +499,7 @@ fn CameraScanLine(
 ) -> Element {
     let target_name = use_hook(next_camera_scan_line_target_name);
     let target = arkit_animation::use_animation_target(target_name.clone());
+    let target_ref = target.native_ref();
     let controls =
         arkit_animation::use_animation(camera_scan_line_timeline(&target_name, travel, duration));
     let animation = controls.clone();
@@ -524,6 +525,7 @@ fn CameraScanLine(
     let glow_color = (color & 0x00FF_FFFF) | 0x3300_0000;
     rsx! {
         stack {
+            native_ref: target_ref,
             position: format!("{x},{y}"),
             width: width.max(1.0),
             height: glow_height,

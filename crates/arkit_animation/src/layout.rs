@@ -268,12 +268,18 @@ pub(crate) fn use_layout_registry_provider() {
 }
 
 #[track_caller]
-pub fn use_animation_layout(id: LayoutId, parent: Option<LayoutId>, visible: bool, z_order: i32) {
+pub fn use_animation_layout(
+    reference: arkit_arkui::NativeElementRef,
+    id: LayoutId,
+    parent: Option<LayoutId>,
+    visible: bool,
+    z_order: i32,
+) {
     let registry = use_context::<LayoutRegistryContext>();
     let layout_id = use_hook(|| id);
     let observed_registry = registry.clone();
     let observed_id = layout_id.clone();
-    arkit_hooks::use_layout_frame(move |frame| {
+    arkit_hooks::use_layout_frame(reference.clone(), move |frame| {
         observed_registry.nodes.borrow_mut().insert(
             observed_id.clone(),
             RegisteredLayoutNode {

@@ -2,7 +2,7 @@ use std::ffi::c_void;
 use std::ptr::NonNull;
 use std::sync::mpsc::Sender;
 
-use ohos_arkui_binding::common::node::ArkUINode;
+use arkit_arkui::MountedNodeLease;
 use ohos_native_window_binding::NativeWindow;
 use ohos_xcomponent_binding::{NativeXComponent, WindowRaw, XComponentRaw};
 use ohos_xcomponent_sys::OH_NativeXComponent_GetNativeXComponent;
@@ -55,10 +55,19 @@ pub(crate) struct SurfaceRegistration {
 }
 
 impl SurfaceRegistration {
-    pub(crate) fn attach(node: &ArkUINode, sender: Sender<WorkerMessage>) -> TerminalResult<Self> {
-        // SAFETY: `node` is the mounted XComponent resolved by `use_ark_node`
-        // and remains mounted while this registration is retained.
-        let raw = unsafe { OH_NativeXComponent_GetNativeXComponent(node.raw_handle().cast()) };
+    pub(crate) fn attach(
+        node: &MountedNodeLease,
+        sender: Sender<WorkerMessage>,
+    ) -> TerminalResult<Self> {
+        // SAFETY: context lookup is synchronous inside the generation-checked
+        // borrow. The returned XComponent is retained by the registration,
+        // whose owner is tied to this lease's native teardown.
+        let raw = unsafe {
+            node.with_native(|node| {
+                OH_NativeXComponent_GetNativeXComponent(node.raw_handle().cast())
+            })
+        }
+        .ok_or_else(|| surface_error("XComponent is no longer mounted"))?;
         if raw.is_null() {
             return Err(surface_error(
                 "ArkUI did not return a native XComponent handle",

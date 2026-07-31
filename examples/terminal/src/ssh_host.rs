@@ -9,7 +9,6 @@ use tokio::sync::mpsc;
 /// Commands from the UI thread → SSH task.
 pub enum SshCmd {
     Data(Vec<u8>),
-    Resize { cols: u32, rows: u32 },
     Close,
 }
 
@@ -34,6 +33,7 @@ pub struct SshConnect {
 
 /// Spawn SSH on the arkit Tokio runtime. Returns the command sender.
 pub fn spawn_ssh(
+    handle: tokio::runtime::Handle,
     cfg: SshConnect,
     events: mpsc::UnboundedSender<SshEvent>,
 ) -> mpsc::UnboundedSender<SshCmd> {
@@ -42,7 +42,6 @@ pub fn spawn_ssh(
         "ssh {}:{} connecting…",
         cfg.host, cfg.port
     )));
-    let handle = arkit_runtime::tokio_handle();
     handle.spawn(async move {
         match run_session(cfg, cmd_rx, events.clone()).await {
             Ok(()) => {
@@ -128,9 +127,6 @@ async fn run_session(
                         if channel.data(&data[..]).await.is_err() {
                             break;
                         }
-                    }
-                    Some(SshCmd::Resize { cols, rows }) => {
-                        let _ = channel.window_change(cols, rows, 0, 0).await;
                     }
                     Some(SshCmd::Close) | None => {
                         let _ = channel.eof().await;

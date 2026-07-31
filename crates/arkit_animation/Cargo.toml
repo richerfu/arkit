@@ -11,6 +11,7 @@ workspace = true
 
 [dependencies]
 arkit_animation_core.workspace = true
+arkit_arkui.workspace = true
 arkit_prelude.workspace = true
 arkit_hooks.workspace = true
 ohos-arkui-binding.workspace = true

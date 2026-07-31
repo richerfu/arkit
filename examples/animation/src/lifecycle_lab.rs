@@ -210,6 +210,7 @@ fn PresenceTile(
 ) -> Element {
     let name = format!("lab-presence-{}", item_key.as_str());
     let target_ready = use_animation_target(name.clone());
+    let target_ref = target_ready.native_ref();
     let controls = use_animation(presence_timeline(&name, phase, delay_ms));
     let mut active = use_signal(|| None::<PresencePhase>);
     controls.on_complete(move || on_terminal.call((item_key.clone(), phase)));
@@ -225,6 +226,7 @@ fn PresenceTile(
     }));
     rsx! {
         column {
+            native_ref: target_ref,
             margin: 5.0,
             width: 82.0,
             height: 82.0,
@@ -372,10 +374,18 @@ fn LayoutRuntimeMetric(controls: AnimationControls) -> Element {
 
 #[component]
 fn LayoutTarget(expanded: bool) -> Element {
-    let _target = use_animation_target(LAYOUT_TARGET);
-    use_animation_layout(LayoutId::owned("lab-layout-node"), None, true, 1);
+    let target = use_animation_target(LAYOUT_TARGET);
+    let target_ref = target.native_ref();
+    use_animation_layout(
+        target_ref.clone(),
+        LayoutId::owned("lab-layout-node"),
+        None,
+        true,
+        1,
+    );
     rsx! {
         column {
+            native_ref: target_ref,
             width: if expanded { 184.0 } else { 118.0 },
             height: if expanded { 112.0 } else { 78.0 },
             align_items: "center",

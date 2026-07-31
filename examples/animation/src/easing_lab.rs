@@ -107,9 +107,10 @@ fn EasingLane(name: &'static str, label: &'static str, tint: u32) -> Element {
 
 #[component]
 fn EasingChip(name: &'static str, tint: u32) -> Element {
-    let _target = use_animation_target(name);
+    let target = use_animation_target(name);
     rsx! {
         column {
+            native_ref: target.native_ref(),
             width: 28.0,
             height: 28.0,
             background_color: tint,
@@ -242,7 +243,7 @@ fn point_ms(milliseconds: u64) -> TimePoint {
 #[component]
 fn StaggerDot(index: usize) -> Element {
     let name = format!("lab-stagger-{index}");
-    let _target = use_animation_target(name);
+    let target = use_animation_target(name);
     let tint = if index % 2 == 0 {
         0xff4f46e5u32
     } else {
@@ -250,6 +251,7 @@ fn StaggerDot(index: usize) -> Element {
     };
     rsx! {
         column {
+            native_ref: target.native_ref(),
             margin: 6.0,
             width: 48.0,
             height: 48.0,

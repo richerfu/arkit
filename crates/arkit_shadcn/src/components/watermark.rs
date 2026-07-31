@@ -13,7 +13,7 @@ use std::{
 };
 
 use arkit_arkui::ArkImageSource;
-use arkit_hooks::use_ark_node;
+use arkit_hooks::{use_mounted_node, use_native_element_ref};
 use arkit_prelude::*;
 use ohos_arkui_binding::{
     common::node::ArkUINode,
@@ -427,51 +427,59 @@ fn WatermarkCanvas(props: WatermarkCanvasProps) -> Element {
     let initial_config = props.config.clone();
     let state = use_hook(move || Rc::new(WatermarkRenderState::new(initial_config)));
     let changed = state.update(props.config);
-    let node_ref = use_ark_node();
-    let registered_node = use_hook(|| Rc::new(Cell::new(None::<usize>)));
+    let node_ref = use_native_element_ref();
+    let registered_node = use_hook(|| Rc::new(Cell::new(None::<u64>)));
 
     if changed {
-        if let Some(node) = node_ref.peek() {
-            let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
+        if let Some(node) = node_ref.current() {
+            // SAFETY: dirty marking neither changes ownership nor event
+            // routing, and the native borrow does not escape.
+            let _ = unsafe { node.with_native(|node| node.mark_dirty(NodeDirtyFlag::NeedRender)) };
         }
     }
 
     let draw_state = state.clone();
     let registered_for_effect = registered_node.clone();
-    use_effect(move || {
-        let Some(node) = node_ref.get() else {
+    use_mounted_node(node_ref.clone(), move |node| {
+        let Some(node) = node else {
+            registered_for_effect.set(None);
             return;
         };
-        let native_key = node.borrow().raw_handle() as usize;
+        let native_key = node.epoch();
         if registered_for_effect.get() != Some(native_key) {
             let draw_state = draw_state.clone();
-            CustomEventNode(&mut node.borrow_mut()).on_custom_draw(move |event| {
-                let Some(draw_context) = event.draw_context_in_draw() else {
-                    return;
-                };
-                let Some(raw_canvas) = draw_context.canvas() else {
-                    return;
-                };
-                let pixel_ratio = display_pixel_ratio();
-                let size = draw_context.size();
-                let width = size.width as f32 / pixel_ratio;
-                let height = size.height as f32 / pixel_ratio;
-                if width <= 0.0 || height <= 0.0 {
-                    return;
-                }
-                // SAFETY: ArkUI owns the canvas for this synchronous callback.
-                // The borrowed wrapper is destroyed without releasing it and
-                // cannot escape this closure.
-                let canvas = unsafe { Canvas::from_raw_borrowed(raw_canvas.cast()) };
-                draw_state.paint(&canvas, width, height, pixel_ratio);
-            });
+            // SAFETY: custom-draw is separate from renderer-owned normal node
+            // events. The callback belongs to this mounted Custom node.
+            let _ = unsafe {
+                node.with_native_mut(|node| {
+                    CustomEventNode(node).on_custom_draw(move |event| {
+                        let Some(draw_context) = event.draw_context_in_draw() else {
+                            return;
+                        };
+                        let Some(raw_canvas) = draw_context.canvas() else {
+                            return;
+                        };
+                        let pixel_ratio = display_pixel_ratio();
+                        let size = draw_context.size();
+                        let width = size.width as f32 / pixel_ratio;
+                        let height = size.height as f32 / pixel_ratio;
+                        if width <= 0.0 || height <= 0.0 {
+                            return;
+                        }
+                        let canvas = Canvas::from_raw_borrowed(raw_canvas.cast());
+                        draw_state.paint(&canvas, width, height, pixel_ratio);
+                    });
+                })
+            };
             registered_for_effect.set(Some(native_key));
         }
-        let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
+        // SAFETY: dirty marking neither changes ownership nor event routing.
+        let _ = unsafe { node.with_native(|node| node.mark_dirty(NodeDirtyFlag::NeedRender)) };
     });
 
     rsx! {
         custom {
+            native_ref: node_ref,
             width: "100%",
             height: "100%",
             hit_test_behavior: "none",

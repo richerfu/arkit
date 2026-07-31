@@ -2,7 +2,7 @@
 //!
 //! `GuideTarget` registers the frame of its rendered child without adding a
 //! layout wrapper. `Guide` owns the controlled/uncontrolled step lifecycle and
-//! publishes a viewport overlay with a spotlight cut-out and an anchored
+//! declares a root-projected spotlight and anchored
 //! explanation panel.
 
 use std::cell::RefCell;
@@ -120,10 +120,7 @@ pub struct GuideProps {
 pub fn Guide(props: GuideProps) -> Element {
     let theme = use_theme();
     let i18n = use_component_i18n();
-    let overlay = arkit_hooks::use_overlay();
-    // Subscribe to orientation, density, and safe-area changes before taking
-    // the overlay snapshot used by the placement resolver.
-    let _window_metrics = arkit_hooks::use_window_metrics();
+    let viewport = arkit_hooks::use_overlay_viewport();
     let registry = use_context_provider(GuideRegistry::new);
     let _target_revision = registry.revision();
 
@@ -205,37 +202,33 @@ pub fn Guide(props: GuideProps) -> Element {
         current_step,
         total_steps,
         target_frame,
-        viewport: overlay.viewport(),
+        viewport,
         labels,
         style: props.style,
         theme,
         allow_target_interaction: props.allow_target_interaction,
     };
 
-    let effect_overlay = overlay.clone();
-    use_effect(use_reactive((&snapshot,), move |(snapshot,)| {
-        if !snapshot.open {
-            effect_overlay.dismiss();
-            return;
-        }
-        let (Some(step), Some(frame)) = (snapshot.step.clone(), snapshot.target_frame) else {
-            // Target measurement is asynchronous. The registry revision will
-            // republish the overlay as soon as the frame is available.
-            effect_overlay.dismiss();
-            return;
-        };
-        let Some(geometry) =
-            GuideGeometry::resolve(frame, snapshot.viewport, snapshot.style, step.side)
-        else {
-            effect_overlay.dismiss();
-            return;
-        };
-        let panel_action = on_action;
-        effect_overlay
-            .show_floating(move || guide_overlay_content(snapshot, step, geometry, panel_action));
-    }));
+    let portal = snapshot
+        .open
+        .then(|| {
+            let step = snapshot.step.clone()?;
+            let frame = snapshot.target_frame?;
+            let geometry =
+                GuideGeometry::resolve(frame, snapshot.viewport, snapshot.style, step.side)?;
+            Some(guide_overlay_content(snapshot, step, geometry, on_action))
+        })
+        .flatten();
 
-    rsx! { {props.children} }
+    rsx! {
+        {props.children}
+        if let Some(portal) = portal {
+            arkit_hooks::Portal {
+                layer: arkit_hooks::OverlayLayer::Floating,
+                {portal}
+            }
+        }
+    }
 }
 
 /// Registers the frame of its rendered child as a guide target.
@@ -243,10 +236,11 @@ pub fn Guide(props: GuideProps) -> Element {
 /// `id` values must be unique within the nearest [`Guide`].
 #[component]
 pub fn GuideTarget(id: String, children: Element) -> Element {
+    let target_ref = arkit_hooks::use_native_element_ref();
     let registry = try_use_context::<GuideRegistry>();
     let frame_registry = registry.clone();
     let frame_id = id.clone();
-    arkit_hooks::use_layout_frame(move |frame| {
+    arkit_hooks::use_layout_frame(target_ref.clone(), move |frame| {
         if let Some(registry) = frame_registry.as_ref() {
             registry.update(&frame_id, frame);
         }
@@ -258,7 +252,13 @@ pub fn GuideTarget(id: String, children: Element) -> Element {
         }
     });
 
-    rsx! { {children} }
+    rsx! {
+        stack {
+            native_ref: target_ref,
+            clip: false,
+            {children}
+        }
+    }
 }
 
 #[derive(Clone)]

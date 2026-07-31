@@ -172,9 +172,10 @@ fn DragDemo() -> Element {
 
 #[component]
 fn DragTarget(on_pointer: EventHandler<dioxus_elements::event::PointerPayload>) -> Element {
-    let _target = use_animation_target(DRAG_TARGET);
+    let target = use_animation_target(DRAG_TARGET);
     rsx! {
         column {
+            native_ref: target.native_ref(),
             width: 96.0,
             height: 72.0,
             align_items: "center",
@@ -323,9 +324,10 @@ fn ScrollDemo() -> Element {
 
 #[component]
 fn ScrollTarget() -> Element {
-    let _target = use_animation_target(SCROLL_TARGET);
+    let target = use_animation_target(SCROLL_TARGET);
     rsx! {
         column {
+            native_ref: target.native_ref(),
             width: 112.0,
             height: 82.0,
             align_items: "center",

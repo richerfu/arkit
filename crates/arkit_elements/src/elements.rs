@@ -54,6 +54,8 @@ macro_rules! define_element {
             pub const TAG_NAME: &'static str = $tag;
             /// Namespace for all ArkUI elements.
             pub const NAME_SPACE: Option<&'static str> = Some("arkui");
+            /// Bind this exact logical element to a `NativeElementRef`.
+            pub const native_ref: $crate::AttributeDescription = ("native_ref", None, false);
 
             $(
                 pub const $attr: $crate::AttributeDescription = (stringify!($attr), None, false);
@@ -64,6 +66,14 @@ macro_rules! define_element {
 
 // Shared layout/box attribute list used by most containers and leaf nodes.
 // (Inline since `define_element!` takes a literal comma-list.)
+
+define_element! {
+    /// Logical portal. Its Dioxus ancestry stays at the declaration site while
+    /// the renderer projects its native stack into the selected root layer.
+    portal => "Portal" {
+        portal_layer, width, height, alignment, hit_test_behavior, z_index,
+    }
+}
 
 define_element! {
     /// Native media surface (ArkUI `XComponent`, surface mode).
@@ -278,6 +288,7 @@ define_element! {
     ///
     /// `scroll_bar`: same modes as [`scroll`] — `false`/`"off"`/`0`, `"auto"`/`1`, `true`/`"on"`/`2`.
     grid => "Grid" {
+        virtual_source,
         scroll_bar, grid_column_template, grid_row_template, grid_column_gap, grid_row_gap,
         grid_cached_count, background_color, padding, margin, margin_top,
         margin_bottom, margin_left, margin_right, margin_x, margin_y, margin_horizontal, margin_vertical,
@@ -302,6 +313,7 @@ define_element! {
     ///
     /// `scroll_bar`: same modes as [`scroll`] — `false`/`"off"`/`0`, `"auto"`/`1`, `true`/`"on"`/`2`.
     list => "List" {
+        virtual_source,
         scroll_bar, list_cached_count, list_sticky, background_color, padding, margin, margin_top,
         margin_bottom, margin_left, margin_right, margin_x, margin_y, margin_horizontal, margin_vertical,
         width, height, layout_weight, opacity, border_radius, border_width,
@@ -325,6 +337,7 @@ define_element! {
     ///
     /// `scroll_bar`: same modes as [`scroll`] — `false`/`"off"`/`0`, `"auto"`/`1`, `true`/`"on"`/`2`.
     waterflow => "WaterFlow" {
+        virtual_source,
         scroll_bar, water_flow_column_template, water_flow_row_template, water_flow_column_gap,
         water_flow_row_gap, water_flow_cached_count, background_color, padding, margin,
         margin_top, margin_bottom, margin_left, margin_right, margin_x, margin_y, margin_horizontal, margin_vertical,
@@ -441,5 +454,6 @@ pub mod completions {
         textinput {},
         textarea {},
         xcomponent {},
+        portal {},
     }
 }

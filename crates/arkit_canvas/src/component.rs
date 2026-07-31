@@ -2,7 +2,7 @@ use std::cell::{Cell, RefCell};
 use std::fmt;
 use std::rc::Rc;
 
-use arkit_hooks::use_ark_node;
+use arkit_hooks::{use_mounted_node, use_native_element_ref};
 use arkit_prelude::*;
 use dioxus_core::use_drop;
 use ohos_arkui_binding::common::node::ArkUINode;
@@ -220,14 +220,14 @@ impl ArkUIEvent for CustomEventNode<'_> {}
 /// Native Canvas 2D component backed by an ArkUI custom-draw node.
 #[component]
 pub fn Canvas(props: CanvasProps) -> Element {
-    let node_ref = use_ark_node();
+    let node_ref = use_native_element_ref();
     let renderer = use_hook(|| Rc::new(RefCell::new(props.draw.clone())));
     renderer.replace(props.draw.clone());
     let clear_before_draw = use_hook(|| Rc::new(Cell::new(props.clear_before_draw)));
     clear_before_draw.set(props.clear_before_draw);
     let settings = use_hook(|| Rc::new(Cell::new(props.settings)));
     settings.set(props.settings);
-    let registered_node = use_hook(|| Rc::new(Cell::new(None::<usize>)));
+    let registered_node = use_hook(|| Rc::new(Cell::new(None::<u64>)));
     let surface = use_hook(|| Rc::new(RefCell::new(None::<CanvasSurface>)));
 
     let controller_binding = use_hook(|| Rc::new(RefCell::new(None::<(CanvasController, u64)>)));
@@ -244,20 +244,28 @@ pub fn Canvas(props: CanvasProps) -> Element {
             controller.unbind(binding);
         }
         if let Some(controller) = props.controller.clone() {
-            let invalidate_node = node_ref;
-            let size_node = node_ref;
+            let invalidate_node = node_ref.clone();
+            let size_node = node_ref.clone();
             let snapshot_surface = surface.clone();
             let binding = controller.bind(
                 Rc::new(move || {
-                    if let Some(node) = invalidate_node.peek() {
-                        let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
+                    if let Some(node) = invalidate_node.current() {
+                        // SAFETY: dirty marking is a renderer-compatible
+                        // operation and the native borrow does not escape.
+                        let _ = unsafe {
+                            node.with_native(|node| node.mark_dirty(NodeDirtyFlag::NeedRender))
+                        };
                     }
                 }),
                 Rc::new(move || {
                     let ratio = CanvasSurface::display_pixel_ratio();
                     size_node
-                        .peek()
-                        .and_then(|node| node.borrow().layout_size().ok())
+                        .current()
+                        .and_then(|node| {
+                            // SAFETY: layout is read synchronously from the
+                            // generation-checked node and is not retained.
+                            unsafe { node.with_native(|node| node.layout_size().ok()) }.flatten()
+                        })
                         .map_or([0.0, 0.0], |size| {
                             [size.width as f32 / ratio, size.height as f32 / ratio]
                         })
@@ -286,81 +294,89 @@ pub fn Canvas(props: CanvasProps) -> Element {
     let effect_settings = settings.clone();
     let effect_registered = registered_node.clone();
     let effect_surface = surface.clone();
-    use_effect(move || {
-        let Some(node) = node_ref.get() else {
+    use_mounted_node(node_ref.clone(), move |node| {
+        let Some(node) = node else {
+            effect_registered.set(None);
+            effect_surface.borrow_mut().take();
             return;
         };
-        let native_key = node.borrow().raw_handle() as usize;
+        let native_key = node.epoch();
         if effect_registered.get() != Some(native_key) {
             let renderer = effect_renderer.clone();
             let clear_before_draw = effect_clear.clone();
             let settings = effect_settings.clone();
             let surface = effect_surface.clone();
-            CustomEventNode(&mut node.borrow_mut()).on_custom_draw(move |event| {
-                let Some(draw_context) = event.draw_context_in_draw() else {
-                    return;
-                };
-                let Some(raw_canvas) = draw_context.canvas() else {
-                    return;
-                };
-                // SAFETY: ArkUI owns the canvas for exactly this synchronous
-                // callback. The borrowed wrapper and 2D context do not escape.
-                let native = unsafe { NativeCanvas::from_raw_borrowed(raw_canvas.cast()) };
-                let size = draw_context.size();
-                let ratio = CanvasSurface::display_pixel_ratio();
-                let width = size.width as f32 / ratio;
-                let height = size.height as f32 / ratio;
-                let pixel_width = size.width.max(1) as u32;
-                let pixel_height = size.height.max(1) as u32;
-                let context_settings = settings.get();
-                let mut surface = surface.borrow_mut();
-                if surface.as_ref().is_none_or(|surface| {
-                    !surface.matches(pixel_width, pixel_height, ratio, context_settings)
-                }) {
-                    surface.replace(CanvasSurface::new(
-                        width,
-                        height,
-                        pixel_width,
-                        pixel_height,
-                        ratio,
-                        context_settings,
-                    ));
-                }
-                let surface = surface
-                    .as_mut()
-                    .expect("arkit_canvas: surface initialized above");
-                if clear_before_draw.get() {
-                    surface.clear_pixels();
-                }
-                {
-                    let mut context = surface.context();
-                    renderer.borrow().draw(&mut context);
-                }
-                // `OH_Drawing_CanvasClear` ignores the custom node's clip and
-                // can erase sibling ArkUI content because the borrowed draw
-                // canvas may share the parent's render target. Clear through a
-                // clipped draw operation so invalidating Canvas never damages
-                // the header or other nodes in the same XComponent tree.
-                native.save();
-                let bounds = NativeRect::new(
-                    0.0,
-                    0.0,
-                    size.width.max(1) as f32,
-                    size.height.max(1) as f32,
-                );
-                native.clip_rect(&bounds, ClipOperation::Intersect, false);
-                let _ = native.draw_color(0x0000_0000, BlendMode::Clear);
-                surface.draw_to(&native);
-                native.restore();
-            });
+            // SAFETY: custom-draw is independent of the renderer's normal
+            // node-event route. The callback is owned by the mounted custom
+            // node and does not retain this native borrow.
+            let _ = unsafe {
+                node.with_native_mut(|node| {
+                    CustomEventNode(node).on_custom_draw(move |event| {
+                        let Some(draw_context) = event.draw_context_in_draw() else {
+                            return;
+                        };
+                        let Some(raw_canvas) = draw_context.canvas() else {
+                            return;
+                        };
+                        // SAFETY: ArkUI owns the canvas for exactly this
+                        // synchronous callback. No wrapper escapes.
+                        let native = NativeCanvas::from_raw_borrowed(raw_canvas.cast());
+                        let size = draw_context.size();
+                        let ratio = CanvasSurface::display_pixel_ratio();
+                        let width = size.width as f32 / ratio;
+                        let height = size.height as f32 / ratio;
+                        let pixel_width = size.width.max(1) as u32;
+                        let pixel_height = size.height.max(1) as u32;
+                        let context_settings = settings.get();
+                        let mut surface = surface.borrow_mut();
+                        if surface.as_ref().is_none_or(|surface| {
+                            !surface.matches(pixel_width, pixel_height, ratio, context_settings)
+                        }) {
+                            surface.replace(CanvasSurface::new(
+                                width,
+                                height,
+                                pixel_width,
+                                pixel_height,
+                                ratio,
+                                context_settings,
+                            ));
+                        }
+                        let surface = surface
+                            .as_mut()
+                            .expect("arkit_canvas: surface initialized above");
+                        if clear_before_draw.get() {
+                            surface.clear_pixels();
+                        }
+                        {
+                            let mut context = surface.context();
+                            renderer.borrow().draw(&mut context);
+                        }
+                        // Clear through the node clip so a shared parent render
+                        // target cannot erase sibling content.
+                        native.save();
+                        let bounds = NativeRect::new(
+                            0.0,
+                            0.0,
+                            size.width.max(1) as f32,
+                            size.height.max(1) as f32,
+                        );
+                        native.clip_rect(&bounds, ClipOperation::Intersect, false);
+                        let _ = native.draw_color(0x0000_0000, BlendMode::Clear);
+                        surface.draw_to(&native);
+                        native.restore();
+                    });
+                })
+            };
             effect_registered.set(Some(native_key));
         }
-        let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
+        // SAFETY: dirty marking neither changes ownership nor event routing.
+        let _ = unsafe { node.with_native(|node| node.mark_dirty(NodeDirtyFlag::NeedRender)) };
     });
 
     let height = props.height.clone().unwrap_or_else(|| "300".into());
     rsx! {
         custom {
+            native_ref: node_ref,
             width: props.width.clone(),
             height: height,
             hit_test_behavior: "default",

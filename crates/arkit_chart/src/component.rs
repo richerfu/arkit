@@ -5,7 +5,10 @@ use std::collections::BTreeSet;
 use std::ops::Deref;
 use std::rc::Rc;
 
-use arkit_hooks::{use_app_foreground, use_ark_node, use_component_visibility};
+use arkit_hooks::{
+    use_app_foreground, use_component_visibility, use_mounted_node, use_native_element_ref,
+    MountedNodeLease,
+};
 use arkit_prelude::*;
 use dioxus_core::use_drop;
 use ohos_arkui_binding::common::node::ArkUINode;
@@ -1863,6 +1866,24 @@ impl ArkUIAttributeBasic for CustomEventNode<'_> {
 
 impl ArkUIEvent for CustomEventNode<'_> {}
 
+fn mark_node_dirty(node: &MountedNodeLease) {
+    // SAFETY: dirty marking neither changes ownership nor event routing and
+    // the generation-checked native borrow does not escape.
+    let _ = unsafe { node.with_native(|node| node.mark_dirty(NodeDirtyFlag::NeedRender)) };
+}
+
+fn mounted_node_size(node: &MountedNodeLease) -> (f32, f32) {
+    // SAFETY: layout is read synchronously from the mounted node.
+    unsafe {
+        node.with_native(|node| {
+            node.layout_size()
+                .map(|size| (size.width.max(1) as f32, size.height.max(1) as f32))
+                .unwrap_or((1.0, 1.0))
+        })
+    }
+    .unwrap_or((1.0, 1.0))
+}
+
 /// Render an ECharts-compatible option through an ArkUI native canvas.
 ///
 /// The component is controlled: read a Dioxus signal while constructing
@@ -1870,7 +1891,8 @@ impl ArkUIEvent for CustomEventNode<'_> {}
 /// the existing native node without remounting it.
 #[component]
 pub fn ECharts(props: EChartsProps) -> Element {
-    let lifecycle_active = use_app_foreground() && use_component_visibility();
+    let node_ref = use_native_element_ref();
+    let lifecycle_active = use_app_foreground() && use_component_visibility(node_ref.clone());
     let transition_progress = arkit_animation::use_animatable(0.0_f32);
     let state_progress = arkit_animation::use_animatable(0.0_f32);
     let clock_pulse = arkit_animation::use_animatable(0.0_f32);
@@ -1883,23 +1905,22 @@ pub fn ECharts(props: EChartsProps) -> Element {
     });
     state.update_option(&props.option);
 
-    let node_ref = use_ark_node();
-    let invalidate_node = node_ref;
+    let invalidate_node = node_ref.clone();
     animation_clock.set_invalidator(move || {
-        if let Some(node) = invalidate_node.peek() {
-            let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
+        if let Some(node) = invalidate_node.current() {
+            mark_node_dirty(&node);
         }
     });
-    let transition_node = node_ref;
+    let transition_node = node_ref.clone();
     transition_progress.set_invalidator(move || {
-        if let Some(node) = transition_node.peek() {
-            let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
+        if let Some(node) = transition_node.current() {
+            mark_node_dirty(&node);
         }
     });
-    let state_node = node_ref;
+    let state_node = node_ref.clone();
     state_progress.set_invalidator(move || {
-        if let Some(node) = state_node.peek() {
-            let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
+        if let Some(node) = state_node.current() {
+            mark_node_dirty(&node);
         }
     });
     let clock_state = state.clone();
@@ -1910,7 +1931,7 @@ pub fn ECharts(props: EChartsProps) -> Element {
             tick_clock.stop();
         }
     });
-    let registered_node = use_hook(|| Rc::new(Cell::new(None::<usize>)));
+    let registered_node = use_hook(|| Rc::new(Cell::new(None::<u64>)));
     let select_handler = use_hook(|| Rc::new(Cell::new(None::<EventHandler<ChartEvent>>)));
     let event_handler = use_hook(|| Rc::new(Cell::new(None::<EventHandler<ChartRuntimeEvent>>)));
     select_handler.set(props.on_select);
@@ -1931,7 +1952,7 @@ pub fn ECharts(props: EChartsProps) -> Element {
         if let Some(controller) = props.controller.clone() {
             let command_state = state.clone();
             let command_clock = animation_clock.clone();
-            let command_node = node_ref;
+            let command_node = node_ref.clone();
             let command_events = event_handler.clone();
             let option_state = state.clone();
             let size_state = state.clone();
@@ -1949,8 +1970,8 @@ pub fn ECharts(props: EChartsProps) -> Element {
                             None
                         }
                     };
-                    if let Some(node) = command_node.peek() {
-                        let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
+                    if let Some(node) = command_node.current() {
+                        mark_node_dirty(&node);
                     }
                     if command_state.needs_animation_clock() {
                         command_clock.start();
@@ -1984,66 +2005,71 @@ pub fn ECharts(props: EChartsProps) -> Element {
     let draw_transition_progress = transition_progress.clone();
     let draw_state_progress = state_progress.clone();
 
-    use_effect(move || {
-        let Some(node) = node_ref.get() else {
+    use_mounted_node(node_ref.clone(), move |node| {
+        let Some(node) = node else {
+            registered_for_effect.set(None);
             return;
         };
-        let native_key = node.borrow().raw_handle() as usize;
+        let native_key = node.epoch();
         if registered_for_effect.get() != Some(native_key) {
             let draw_state = draw_state.clone();
-            CustomEventNode(&mut node.borrow_mut()).on_custom_draw(move |event| {
-                let Some(draw_context) = event.draw_context_in_draw() else {
-                    return;
-                };
-                let Some(raw_canvas) = draw_context.canvas() else {
-                    return;
-                };
-                // SAFETY: ArkUI owns `raw_canvas` for exactly this synchronous
-                // custom-draw callback. `Canvas` is borrowed (never destroyed)
-                // and does not escape the callback.
-                let canvas = unsafe { Canvas::from_raw_borrowed(raw_canvas.cast()) };
-                let size = draw_context.size();
-                let pixel_ratio = pixel_ratio();
-                let logical_size = (
-                    size.width as f32 / pixel_ratio,
-                    size.height as f32 / pixel_ratio,
-                );
-                draw_state.apply_media(logical_size.0, logical_size.1);
-                let option = draw_state.rendered_option();
-                let domain_option = draw_state.option.borrow();
-                let selected = draw_state.selected.borrow();
-                let action_tooltip = draw_state.action_tooltip.borrow();
-                let tooltip = action_tooltip.as_ref().or(selected.as_ref());
-                canvas.save();
-                canvas.scale(pixel_ratio, pixel_ratio);
-                let hits = crate::animation::with_animation_time(
-                    draw_state.animation_time_seconds(),
-                    || {
-                        draw_option_with_domain(
-                            &option,
-                            &domain_option,
-                            tooltip,
-                            &draw_state.hidden_series.borrow(),
-                            &draw_state.zoom_windows.borrow(),
-                            &draw_state.selected_items.borrow(),
-                            Some(&canvas),
-                            logical_size.0,
-                            logical_size.1,
-                        )
-                    },
-                );
-                draw_state.draw_hits.replace(hits);
-                if let Some(drag) = *draw_state.toolbox_zoom_drag.borrow() {
-                    draw_toolbox_zoom_selection(
-                        &canvas,
-                        BrushArea {
-                            start: [drag.pointer_start.0, drag.pointer_start.1],
-                            end: [drag.pointer_last.0, drag.pointer_last.1],
-                        },
-                    );
-                }
-                canvas.restore();
-            });
+            // SAFETY: custom-draw is separate from the renderer's normal node
+            // event route. The callback belongs to this mounted Custom node.
+            let _ = unsafe {
+                node.with_native_mut(|node| {
+                    CustomEventNode(node).on_custom_draw(move |event| {
+                        let Some(draw_context) = event.draw_context_in_draw() else {
+                            return;
+                        };
+                        let Some(raw_canvas) = draw_context.canvas() else {
+                            return;
+                        };
+                        // ArkUI owns the canvas for this synchronous callback.
+                        let canvas = Canvas::from_raw_borrowed(raw_canvas.cast());
+                        let size = draw_context.size();
+                        let pixel_ratio = pixel_ratio();
+                        let logical_size = (
+                            size.width as f32 / pixel_ratio,
+                            size.height as f32 / pixel_ratio,
+                        );
+                        draw_state.apply_media(logical_size.0, logical_size.1);
+                        let option = draw_state.rendered_option();
+                        let domain_option = draw_state.option.borrow();
+                        let selected = draw_state.selected.borrow();
+                        let action_tooltip = draw_state.action_tooltip.borrow();
+                        let tooltip = action_tooltip.as_ref().or(selected.as_ref());
+                        canvas.save();
+                        canvas.scale(pixel_ratio, pixel_ratio);
+                        let hits = crate::animation::with_animation_time(
+                            draw_state.animation_time_seconds(),
+                            || {
+                                draw_option_with_domain(
+                                    &option,
+                                    &domain_option,
+                                    tooltip,
+                                    &draw_state.hidden_series.borrow(),
+                                    &draw_state.zoom_windows.borrow(),
+                                    &draw_state.selected_items.borrow(),
+                                    Some(&canvas),
+                                    logical_size.0,
+                                    logical_size.1,
+                                )
+                            },
+                        );
+                        draw_state.draw_hits.replace(hits);
+                        if let Some(drag) = *draw_state.toolbox_zoom_drag.borrow() {
+                            draw_toolbox_zoom_selection(
+                                &canvas,
+                                BrushArea {
+                                    start: [drag.pointer_start.0, drag.pointer_start.1],
+                                    end: [drag.pointer_last.0, drag.pointer_last.1],
+                                },
+                            );
+                        }
+                        canvas.restore();
+                    });
+                })
+            };
             registered_for_effect.set(Some(native_key));
         }
         // The initial commands may have been queued before the native node was
@@ -2063,7 +2089,7 @@ pub fn ECharts(props: EChartsProps) -> Element {
         } else {
             draw_clock.stop();
         }
-        let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
+        mark_node_dirty(&node);
     });
 
     let lifecycle_clock = animation_clock.clone();
@@ -2092,6 +2118,7 @@ pub fn ECharts(props: EChartsProps) -> Element {
     let click_events = event_handler.clone();
     rsx! {
         custom {
+            native_ref: node_ref.clone(),
             width: props.width.clone(),
             height: height,
             hit_test_behavior: "default",
@@ -2099,14 +2126,10 @@ pub fn ECharts(props: EChartsProps) -> Element {
                 let Some(pointer) = event.data().pointer else {
                     return;
                 };
-                let Some(node) = node_ref.peek() else {
+                let Some(node) = node_ref.current() else {
                     return;
                 };
-                let size = node
-                    .borrow()
-                    .layout_size()
-                    .map(|size| (size.width.max(1) as f32, size.height.max(1) as f32))
-                    .unwrap_or((1.0, 1.0));
+                let size = mounted_node_size(&node);
                 let ratio = pixel_ratio();
                 let logical_size = (size.0 / ratio, size.1 / ratio);
                 click_state.apply_media(logical_size.0, logical_size.1);
@@ -2138,25 +2161,25 @@ pub fn ECharts(props: EChartsProps) -> Element {
                     let toolbox_zoom_drag = { *click_state.toolbox_zoom_drag.borrow() };
                     if let Some(drag) = toolbox_zoom_drag {
                         click_state.update_toolbox_zoom_drag(drag, x, y);
-                        let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
+                        mark_node_dirty(&node);
                         return;
                     }
                     let brush_drag = { *click_state.brush_drag.borrow() };
                     if let Some(drag) = brush_drag {
                         click_state.update_brush_drag(drag, x, y);
-                        let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
+                        mark_node_dirty(&node);
                         return;
                     }
                     let map_drag = { *click_state.map_drag.borrow() };
                     if let Some(drag) = map_drag {
                         click_state.update_map_drag(drag, x, y);
-                        let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
+                        mark_node_dirty(&node);
                         return;
                     }
                     let label_drag = { *click_state.label_drag.borrow() };
                     if let Some(drag) = label_drag {
                         click_state.update_label_drag(drag, x, y);
-                        let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
+                        mark_node_dirty(&node);
                         return;
                     }
                     let zoom_drag = { *click_state.zoom_drag.borrow() };
@@ -2188,7 +2211,7 @@ pub fn ECharts(props: EChartsProps) -> Element {
                                 previous,
                                 selected,
                             );
-                            let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
+                            mark_node_dirty(&node);
                         } else {
                             let previous = click_state.selected.borrow().clone();
                             let hovered = click_state
@@ -2221,7 +2244,7 @@ pub fn ECharts(props: EChartsProps) -> Element {
                                 previous,
                                 hovered,
                             );
-                            let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
+                            mark_node_dirty(&node);
                         }
                         return;
                     };
@@ -2232,7 +2255,7 @@ pub fn ECharts(props: EChartsProps) -> Element {
                         logical_size.0,
                         logical_size.1,
                     );
-                    let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
+                    mark_node_dirty(&node);
                     return;
                 }
                 let hit = click_state
@@ -2316,7 +2339,7 @@ pub fn ECharts(props: EChartsProps) -> Element {
                 }
                 if let Some(drag) = click_state.label_drag.take() {
                     let event = click_state.finish_label_drag(drag, x, y);
-                    let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
+                    mark_node_dirty(&node);
                     if let Some(handler) = click_handler.get() {
                         handler.call(event.clone());
                     }
@@ -2338,7 +2361,7 @@ pub fn ECharts(props: EChartsProps) -> Element {
                         logical_size.1,
                     );
                     click_state.selected.replace(Some(event.clone()));
-                    let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
+                    mark_node_dirty(&node);
                     if let Some(handler) = click_handler.get() {
                         handler.call(event);
                     }
@@ -2347,7 +2370,7 @@ pub fn ECharts(props: EChartsProps) -> Element {
                 if let Some(drag) = click_state.brush_drag.take() {
                     let event = click_state.finish_brush(drag, x, y);
                     click_state.selected.replace(Some(event.clone()));
-                    let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
+                    mark_node_dirty(&node);
                     if let Some(handler) = click_handler.get() {
                         handler.call(event);
                     }
@@ -2358,7 +2381,7 @@ pub fn ECharts(props: EChartsProps) -> Element {
                         + (drag.pointer_last.1 - drag.pointer_start.1).powi(2))
                     .sqrt();
                     if distance >= 3.0 {
-                        let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
+                        mark_node_dirty(&node);
                         return;
                     }
                 }
@@ -2381,7 +2404,7 @@ pub fn ECharts(props: EChartsProps) -> Element {
                             logical_size.0,
                             logical_size.1,
                         );
-                        let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
+                        mark_node_dirty(&node);
                         if let (Some(event), Some(handler)) = (event, click_handler.get()) {
                             handler.call(event);
                         }
@@ -2471,7 +2494,7 @@ pub fn ECharts(props: EChartsProps) -> Element {
                                 Err(error) => format!("save-as-image-error:{error}"),
                             });
                             click_state.selected.replace(Some(event.clone()));
-                            let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
+                            mark_node_dirty(&node);
                             if let Some(handler) = click_handler.get() {
                                 handler.call(event);
                             }
@@ -2530,7 +2553,7 @@ pub fn ECharts(props: EChartsProps) -> Element {
                     }
                     click_state.selected.replace(hit.clone());
                 }
-                let _ = node.borrow().mark_dirty(NodeDirtyFlag::NeedRender);
+                mark_node_dirty(&node);
                 if let (Some(hit), Some(handler)) = (hit.as_ref(), click_events.get()) {
                     let event_type = match hit.component_type.as_str() {
                         "legend" => "legendselectchanged",

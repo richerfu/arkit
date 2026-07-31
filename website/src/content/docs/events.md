@@ -60,11 +60,12 @@ column {
 
 ## Native callback 边界
 
-不在 Dioxus event dispatch 内触发的原生回调可能发生在 tree patch 中。此时用 `queue_ui_loop` 把状态更新排到下一 UI tick，避免重入 render：
+不在 Dioxus event dispatch 内触发的原生回调可能发生在 tree patch 中。此时用当前 root 的 `RuntimeHandle` 把状态更新排到下一 UI tick，避免重入 render：
 
 ```rust
+let runtime = use_runtime_handle();
 let mut title = use_signal(String::new);
 let callback = move |next: String| {
-    queue_ui_loop(move || title.set(next));
+    runtime.queue_ui(move || title.set(next));
 };
 ```

@@ -14,22 +14,24 @@
 //! 4. `unmount` detaches the renderer root from the slot.
 
 use std::any::Any;
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::future::Future;
 use std::panic::{self, AssertUnwindSafe};
 use std::rc::Rc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Once};
 use std::task::{Context, Poll, Wake, Waker};
 
-use arkit_arkui::{ArkUIRenderer, EventSink};
-use dioxus_core::{DynamicNode, ElementId, Runtime as DioxusRuntime, VNode};
+use arkit_arkui::{ArkUIRenderer, EventSink, NativeElementDelivery};
+use dioxus_core::{ElementId, Runtime as DioxusRuntime};
 use napi_ohos::{Error, Result};
 use ohos_arkui_binding::common::handle::ArkUIHandle;
 use ohos_arkui_binding::common::node::ArkUINode;
 use openharmony_ability::{Event as AbilityEvent, OpenHarmonyApp, OpenHarmonyWaker};
 
 mod lifecycle;
+mod session;
 mod webview;
 mod window;
 
@@ -37,7 +39,8 @@ pub use lifecycle::{
     ApplicationLifecycleEvent, ApplicationLifecycleHandle, ApplicationLifecyclePhase,
     ApplicationLifecycleState, ApplicationLifecycleSubscription,
 };
-pub use webview::{EmbeddedWebViewController, EmbeddedWebViewInit, WebViewFrame, WebViewStyle};
+pub use session::{use_runtime_handle, BackPressRegistration, RuntimeHandle, RuntimeId};
+pub use webview::{EmbeddedWebViewController, EmbeddedWebViewInit, WebViewStyle};
 pub use window::{
     EdgeInsets, PhysicalRect, SafeAreaPolicy, WindowMetrics, WindowMetricsHandle,
     WindowMetricsSubscription,
@@ -45,276 +48,18 @@ pub use window::{
 
 pub use dioxus_core::VirtualDom;
 
-type RegistrationId = u64;
-type UiWakeCallback = Rc<dyn Fn()>;
-type BackPressHandler = Rc<dyn Fn() -> bool>;
+static NEXT_RUNTIME_ID: AtomicU64 = AtomicU64::new(1);
 
-// ---------------------------------------------------------------------------
-// UI loop machinery
-// ---------------------------------------------------------------------------
-
-thread_local! {
-    static NEXT_REGISTRATION_ID: Cell<u64> = const { Cell::new(0) };
-    static UI_LOOP_EFFECTS: RefCell<Vec<UiLoopEffect>> = const { RefCell::new(Vec::new()) };
-    static UI_WAKERS: RefCell<Vec<(RegistrationId, UiWakeCallback)>> = const { RefCell::new(Vec::new()) };
-    static ASYNC_HANDLES: RefCell<Vec<(u64, tokio::runtime::Handle)>> = const { RefCell::new(Vec::new()) };
-    static EMBEDDED_RUNTIMES: RefCell<Vec<(u64, std::rc::Weak<RefCell<EmbeddedRuntimeInner>>)>> =
-        const { RefCell::new(Vec::new()) };
+fn next_runtime_id() -> RuntimeId {
+    RuntimeId::new(NEXT_RUNTIME_ID.fetch_add(1, Ordering::Relaxed))
 }
 
-struct UiLoopEffect {
-    owner: Option<u64>,
-    effect: Box<dyn FnOnce()>,
-}
-
-fn next_registration_id() -> u64 {
-    NEXT_REGISTRATION_ID.with(|next| {
-        let id = next
-            .get()
-            .checked_add(1)
-            .expect("arkit_runtime: registration id space exhausted");
-        next.set(id);
-        id
-    })
-}
-
-struct UiWakerRegistration {
-    id: u64,
-}
-
-impl Drop for UiWakerRegistration {
-    fn drop(&mut self) {
-        UI_WAKERS.with(|wakers| wakers.borrow_mut().retain(|(id, _)| *id != self.id));
-        UI_LOOP_EFFECTS.with(|effects| {
-            effects
-                .borrow_mut()
-                .retain(|effect| effect.owner != Some(self.id));
-        });
-    }
-}
-
-fn register_ui_waker(waker: Rc<dyn Fn()>) -> UiWakerRegistration {
-    let id = next_registration_id();
-    UI_WAKERS.with(|wakers| wakers.borrow_mut().push((id, waker)));
-    UiWakerRegistration { id }
-}
-
-struct AsyncRuntimeRegistration {
-    id: u64,
-}
-
-impl Drop for AsyncRuntimeRegistration {
-    fn drop(&mut self) {
-        ASYNC_HANDLES.with(|handles| handles.borrow_mut().retain(|(id, _)| *id != self.id));
-    }
-}
-
-fn register_async_runtime(handle: tokio::runtime::Handle) -> AsyncRuntimeRegistration {
-    let id = next_registration_id();
-    ASYNC_HANDLES.with(|handles| handles.borrow_mut().push((id, handle)));
-    AsyncRuntimeRegistration { id }
-}
-
-/// The handle of the framework's tokio runtime. Use it to await timers / I/O
-/// inside dioxus async hooks, e.g.:
-///
-/// ```ignore
-/// let handle = arkit_runtime::tokio_handle();
-/// let _ = use_resource(move || async move {
-///     handle.spawn(async move { tokio::time::sleep(Duration::from_millis(800)).await }).await.unwrap();
-///     "done".to_string()
-/// });
-/// ```
-pub fn tokio_handle() -> tokio::runtime::Handle {
-    ASYNC_HANDLES.with(|handles| {
-        handles
-            .borrow()
-            .last()
-            .map(|(_, handle)| handle.clone())
-            .expect("arkit_runtime: tokio_handle() requires a mounted ArkRuntime")
-    })
-}
-
-thread_local! {
-    /// Global back-press handler registered by `arkit_router::use_back_handler`
-    /// (or any component). Consumed by the OHOS back-button interceptor wired
-    /// in `ArkRuntime::new`. Returns `true` to consume the back press.
-    static BACK_PRESS_HANDLERS: RefCell<Vec<(RegistrationId, BackPressHandler)>> =
-        const { RefCell::new(Vec::new()) };
-}
-
-/// RAII registration for one back-press handler. Nested providers form a
-/// stack; dropping an older registration never clears a newer one.
-pub struct BackPressRegistration {
-    id: u64,
-}
-
-impl Drop for BackPressRegistration {
-    fn drop(&mut self) {
-        BACK_PRESS_HANDLERS.with(|handlers| {
-            handlers.borrow_mut().retain(|(id, _)| *id != self.id);
-        });
-    }
-}
-
-pub fn register_back_press_handler(handler: Rc<dyn Fn() -> bool>) -> BackPressRegistration {
-    let id = next_registration_id();
-    BACK_PRESS_HANDLERS.with(|handlers| handlers.borrow_mut().push((id, handler)));
-    BackPressRegistration { id }
-}
-
-fn dispatch_back_press() -> bool {
-    let handlers = BACK_PRESS_HANDLERS.with(|state| {
-        state
-            .borrow()
-            .iter()
-            .rev()
-            .map(|(_, handler)| handler.clone())
-            .collect::<Vec<_>>()
-    });
-    handlers.into_iter().any(|handler| handler())
-}
-
-/// Queue a closure to run on the next UI loop tick, and wake the UI waker.
-pub fn queue_ui_loop(effect: impl FnOnce() + 'static) {
-    let owner = UI_WAKERS.with(|wakers| wakers.borrow().last().map(|(id, _)| *id));
-    UI_LOOP_EFFECTS.with(|state| {
-        state.borrow_mut().push(UiLoopEffect {
-            owner,
-            effect: Box::new(effect),
-        });
-    });
-    wake_ui_loop();
-}
-
-fn wake_ui_loop() {
-    UI_WAKERS.with(|state| {
-        if let Some((_, waker)) = state.borrow().last() {
-            waker();
-        }
-    });
-}
-
-fn run_ui_loop_effects(owner: u64) {
-    let effects = UI_LOOP_EFFECTS.with(|state| {
-        let mut state = state.borrow_mut();
-        let all = std::mem::take(&mut *state);
-        let (ready, pending): (Vec<_>, Vec<_>) = all
-            .into_iter()
-            .partition(|effect| effect.owner.is_none() || effect.owner == Some(owner));
-        *state = pending;
-        ready
-    });
-    for effect in effects {
-        if let Err(payload) = panic::catch_unwind(AssertUnwindSafe(effect.effect)) {
+fn run_ui_loop_effects(handle: &RuntimeHandle) {
+    for effect in handle.run_ui_effects() {
+        if let Err(payload) = panic::catch_unwind(AssertUnwindSafe(effect)) {
             log_panic_payload("ui_loop_effect", payload.as_ref());
             std::process::abort();
         }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Runtime
-// ---------------------------------------------------------------------------
-
-/// Bridge resolving `use_ark_node` / overlay portal requests after each render.
-///
-/// dioxus 0.7 does not expose a `ScopeId → ElementId` mapping to component
-/// bodies, so `arkit_hooks::use_ark_node` registers pending scope lookups on an
-/// [`ArkHost`](arkit_hooks) context. The runtime owns the `VirtualDom` (which
-/// *can* map `ScopeId → root ElementId` via `mounted_root`), so after each
-/// render it asks the resolver for pending scopes, resolves each to its
-/// mounted node, and writes it back.
-///
-/// Implemented by `arkit_hooks::ArkHost` (which lives in a crate that depends
-/// on `arkit_runtime`, so the runtime holds it behind this trait to avoid a
-/// circular dependency).
-pub trait ScopeNodeResolver {
-    /// Snapshot of scopes awaiting node resolution.
-    fn pending_scopes(&self) -> Vec<dioxus_core::ScopeId>;
-    /// Deliver the mounted native node (shared `Rc` handle — the same one
-    /// mounted in the ArkUI tree and used as the event-dispatch user-data
-    /// target) for a scope, writing it into the hook's signal slot.
-    fn resolve_scope(
-        &self,
-        scope: dioxus_core::ScopeId,
-        node: std::rc::Rc<std::cell::RefCell<ohos_arkui_binding::common::node::ArkUINode>>,
-    );
-}
-
-thread_local! {
-    static SCOPE_RESOLVERS: RefCell<Vec<(u64, Rc<dyn ScopeNodeResolver>)>> =
-        const { RefCell::new(Vec::new()) };
-}
-
-pub struct ScopeResolverRegistration {
-    id: u64,
-}
-
-impl Drop for ScopeResolverRegistration {
-    fn drop(&mut self) {
-        SCOPE_RESOLVERS.with(|resolvers| {
-            resolvers.borrow_mut().retain(|(id, _)| *id != self.id);
-        });
-    }
-}
-
-pub fn register_scope_resolver(resolver: Rc<dyn ScopeNodeResolver>) -> ScopeResolverRegistration {
-    let id = next_registration_id();
-    SCOPE_RESOLVERS.with(|resolvers| resolvers.borrow_mut().push((id, resolver)));
-    ScopeResolverRegistration { id }
-}
-
-/// Resolve all pending `use_ark_node` lookups against the freshly-rendered
-/// VirtualDom. Called after each `render_immediate` / `rebuild`.
-fn resolve_pending(dom: &VirtualDom, renderer: &ArkUIRenderer) {
-    let Some(resolver) =
-        SCOPE_RESOLVERS.with(|state| state.borrow().last().map(|(_, resolver)| resolver.clone()))
-    else {
-        return;
-    };
-
-    resolve_pending_with(dom, renderer, resolver.as_ref());
-}
-
-fn resolve_pending_with(
-    dom: &VirtualDom,
-    renderer: &ArkUIRenderer,
-    resolver: &dyn ScopeNodeResolver,
-) {
-    for scope in resolver.pending_scopes() {
-        let node_id_opt = dom
-            .get_scope(scope)
-            .and_then(|s| first_mounted_element(s.root_node(), dom));
-        if let Some(node) = node_id_opt.and_then(|id| renderer.node_for_element(id)) {
-            resolver.resolve_scope(scope, node);
-        }
-    }
-}
-
-fn first_mounted_element(vnode: &VNode, dom: &VirtualDom) -> Option<ElementId> {
-    (0..vnode.template.roots.len()).find_map(|root_idx| vnode_root_element(vnode, root_idx, dom))
-}
-
-fn vnode_root_element(vnode: &VNode, root_idx: usize, dom: &VirtualDom) -> Option<ElementId> {
-    let dynamic_idx = vnode.template.roots.get(root_idx)?.dynamic_id();
-    match dynamic_idx {
-        Some(dynamic_idx) => dynamic_node_element(vnode, dynamic_idx, dom),
-        None => vnode.mounted_root(root_idx, dom),
-    }
-}
-
-fn dynamic_node_element(vnode: &VNode, dynamic_idx: usize, dom: &VirtualDom) -> Option<ElementId> {
-    match vnode.dynamic_nodes.get(dynamic_idx)? {
-        DynamicNode::Text(_) | DynamicNode::Placeholder(_) => {
-            vnode.mounted_dynamic_node(dynamic_idx, dom)
-        }
-        DynamicNode::Fragment(children) => children
-            .iter()
-            .find_map(|child| first_mounted_element(child, dom)),
-        DynamicNode::Component(component) => component
-            .mounted_scope(dynamic_idx, vnode, dom)
-            .and_then(|scope| first_mounted_element(scope.root_node(), dom)),
     }
 }
 
@@ -360,7 +105,6 @@ struct EmbeddedRuntimeInner {
     dom: VirtualDom,
     renderer: ArkUIRenderer,
     sink: Rc<RuntimeEventSink>,
-    resolver: Option<Rc<dyn ScopeNodeResolver>>,
 }
 
 /// Wakes the OpenHarmony event loop when dioxus' scheduler receives work.
@@ -380,23 +124,17 @@ impl Wake for DioxusUiWaker {
     }
 }
 
-struct EmbeddedUiWaker;
-
-impl Wake for EmbeddedUiWaker {
-    fn wake(self: Arc<Self>) {
-        wake_ui_loop();
-    }
-
-    fn wake_by_ref(self: &Arc<Self>) {
-        wake_ui_loop();
-    }
-}
-
 fn render_dom(inner: &Rc<RefCell<RuntimeInner>>) {
-    let mut borrowed = inner.borrow_mut();
-    let RuntimeInner { dom, renderer } = &mut *borrowed;
-    dom.render_immediate(renderer);
-    resolve_pending(dom, renderer);
+    let fault = {
+        let mut borrowed = inner.borrow_mut();
+        let RuntimeInner { dom, renderer } = &mut *borrowed;
+        dom.render_immediate(renderer);
+        renderer.finish_mutation_batch();
+        renderer.take_fault()
+    };
+    if let Some(fault) = fault {
+        panic!("arkit_runtime: native projection became inconsistent: {fault}");
+    }
 }
 
 /// Poll dioxus' scheduler once, rendering only when work is ready.
@@ -420,16 +158,15 @@ fn render_ready_work(inner: &Rc<RefCell<RuntimeInner>>, task_waker: &Waker) {
 }
 
 fn render_embedded(inner: &Rc<RefCell<EmbeddedRuntimeInner>>) {
-    let mut borrowed = inner.borrow_mut();
-    let EmbeddedRuntimeInner {
-        dom,
-        renderer,
-        resolver,
-        ..
-    } = &mut *borrowed;
-    dom.render_immediate(renderer);
-    if let Some(resolver) = resolver {
-        resolve_pending_with(dom, renderer, resolver.as_ref());
+    let fault = {
+        let mut borrowed = inner.borrow_mut();
+        let EmbeddedRuntimeInner { dom, renderer, .. } = &mut *borrowed;
+        dom.render_immediate(renderer);
+        renderer.finish_mutation_batch();
+        renderer.take_fault()
+    };
+    if let Some(fault) = fault {
+        panic!("arkit_runtime: embedded native projection became inconsistent: {fault}");
     }
 }
 
@@ -449,20 +186,13 @@ fn render_ready_embedded_work(inner: &Rc<RefCell<EmbeddedRuntimeInner>>, task_wa
     }
 }
 
-fn pump_embedded_runtimes() {
-    let runtimes = EMBEDDED_RUNTIMES.with(|registered| {
-        let mut registered = registered.borrow_mut();
-        registered.retain(|(_, runtime)| runtime.strong_count() > 0);
-        registered
-            .iter()
-            .filter_map(|(_, runtime)| runtime.upgrade())
-            .collect::<Vec<_>>()
-    });
+fn pump_embedded_runtimes(handle: &RuntimeHandle) {
+    let runtimes = handle.embedded_runtimes();
     if runtimes.is_empty() {
         return;
     }
 
-    let task_waker = Waker::from(Arc::new(EmbeddedUiWaker));
+    let task_waker = handle.scheduler_waker();
     for inner in runtimes {
         let (sink, runtime) = {
             let borrowed = inner.borrow();
@@ -476,21 +206,8 @@ fn pump_embedded_runtimes() {
 /// Owns the dioxus VirtualDom and ArkUI renderer for one entry point.
 pub struct ArkRuntime {
     inner: Rc<RefCell<RuntimeInner>>,
-    _ui_waker_registration: UiWakerRegistration,
+    handle: RuntimeHandle,
     async_runtime: Option<tokio::runtime::Runtime>,
-    async_registration: Option<AsyncRuntimeRegistration>,
-}
-
-struct EmbeddedRuntimeRegistration {
-    id: u64,
-}
-
-impl Drop for EmbeddedRuntimeRegistration {
-    fn drop(&mut self) {
-        EMBEDDED_RUNTIMES.with(|runtimes| {
-            runtimes.borrow_mut().retain(|(id, _)| *id != self.id);
-        });
-    }
 }
 
 /// Item-local Dioxus runtime projected into an adapter-owned native wrapper.
@@ -499,7 +216,7 @@ impl Drop for EmbeddedRuntimeRegistration {
 /// signals, hooks, async work, and event handlers remain live while ArkUI keeps
 /// the virtual item mounted.
 pub struct EmbeddedArkRuntime {
-    registration: Option<EmbeddedRuntimeRegistration>,
+    registration: Option<session::EmbeddedRuntimeRegistration>,
     inner: Option<Rc<RefCell<EmbeddedRuntimeInner>>>,
 }
 
@@ -533,13 +250,25 @@ struct PendingNativeEvent {
 /// the `VirtualDom` here would re-enter it while `render_immediate` still has
 /// exclusive access to [`RuntimeInner`]. The OpenHarmony UI loop drains the
 /// queue at a phase boundary before starting the next render.
-#[derive(Default)]
 struct RuntimeEventSink {
+    handle: RuntimeHandle,
     pending: RefCell<VecDeque<PendingNativeEvent>>,
     draining: RefCell<VecDeque<PendingNativeEvent>>,
+    pending_native_refs: RefCell<VecDeque<NativeElementDelivery>>,
+    draining_native_refs: RefCell<VecDeque<NativeElementDelivery>>,
 }
 
 impl RuntimeEventSink {
+    fn new(handle: RuntimeHandle) -> Self {
+        Self {
+            handle,
+            pending: RefCell::new(VecDeque::new()),
+            draining: RefCell::new(VecDeque::new()),
+            pending_native_refs: RefCell::new(VecDeque::new()),
+            draining_native_refs: RefCell::new(VecDeque::new()),
+        }
+    }
+
     fn enqueue(&self, event: PendingNativeEvent) {
         let mut pending = self.pending.borrow_mut();
         if let Some(pointer) = pointer_payload(&event)
@@ -588,6 +317,15 @@ impl RuntimeEventSink {
             let event = dioxus_core::Event::new(data, event_bubbles(name));
             runtime.handle_event(name, event, element);
         }
+        {
+            let mut pending = self.pending_native_refs.borrow_mut();
+            let mut draining = self.draining_native_refs.borrow_mut();
+            debug_assert!(draining.is_empty());
+            std::mem::swap(&mut *pending, &mut *draining);
+        }
+        while let Some(delivery) = self.draining_native_refs.borrow_mut().pop_front() {
+            delivery.deliver();
+        }
     }
 }
 
@@ -604,9 +342,19 @@ impl EventSink for RuntimeEventSink {
                 element,
                 payload,
             });
-            wake_ui_loop();
+            self.handle.wake();
         })) {
             log_panic_payload("event_dispatch", payload.as_ref());
+            std::process::abort();
+        }
+    }
+
+    fn dispatch_native_ref(&self, delivery: NativeElementDelivery) {
+        if let Err(payload) = panic::catch_unwind(AssertUnwindSafe(|| {
+            self.pending_native_refs.borrow_mut().push_back(delivery);
+            self.handle.wake();
+        })) {
+            log_panic_payload("native_ref_dispatch", payload.as_ref());
             std::process::abort();
         }
     }
@@ -671,13 +419,13 @@ impl ArkRuntime {
         async_runtime: tokio::runtime::Runtime,
     ) -> Result<Self> {
         install_panic_hook();
-        let async_registration = register_async_runtime(async_runtime.handle().clone());
+        let runtime_handle = RuntimeHandle::new(next_runtime_id(), async_runtime.handle().clone());
 
         let mut renderer = ArkUIRenderer::new(slot).map_err(map_arkui_error)?;
 
         // Install the queueing event sink before rebuild so every listener
         // captures the same phase-isolated native event boundary.
-        let sink = Rc::new(RuntimeEventSink::default());
+        let sink = Rc::new(RuntimeEventSink::new(runtime_handle.clone()));
         renderer.set_sink(sink.clone());
 
         // Window state is owned by the native runtime and provided before the
@@ -691,10 +439,11 @@ impl ArkRuntime {
         dom.provide_root_context(window_metrics.clone());
         dom.provide_root_context(application_lifecycle.clone());
         dom.provide_root_context(safe_area_policy);
+        dom.provide_root_context(runtime_handle.clone());
 
         // Initial mount: build the real DOM tree onto the slot.
         dom.rebuild(&mut renderer);
-        resolve_pending(&dom, &renderer);
+        renderer.finish_mutation_batch();
 
         let weak_runtime = Rc::downgrade(&dom.runtime());
         let inner = Rc::new(RefCell::new(RuntimeInner { dom, renderer }));
@@ -704,11 +453,11 @@ impl ArkRuntime {
         // task is later completed by the background tokio runtime.
         let waker = app.create_waker();
         let task_waker = Waker::from(Arc::new(DioxusUiWaker(waker.clone())));
-        let ui_waker_registration = register_ui_waker(Rc::new({
+        runtime_handle.set_scheduler_waker(task_waker.clone());
+        runtime_handle.set_ui_waker(Rc::new({
             let waker = waker.clone();
             move || waker.wake()
         }));
-        let ui_loop_owner = ui_waker_registration.id;
 
         // Run imperative UI closures and queued native events first, then let
         // dioxus render every piece of scheduler work they made ready.
@@ -717,6 +466,7 @@ impl ArkRuntime {
         let loop_sink = sink.clone();
         let loop_metrics = window_metrics.clone();
         let loop_lifecycle = application_lifecycle;
+        let loop_runtime = runtime_handle.clone();
         let metrics_app = app.clone();
         let mut keyboard_height_px = None;
         app.run_loop(move |event| {
@@ -750,14 +500,14 @@ impl ArkRuntime {
                             }
                         }
                         if is_user_event {
-                            run_ui_loop_effects(ui_loop_owner);
+                            run_ui_loop_effects(&loop_runtime);
                             if let Some(runtime) = weak_runtime.upgrade() {
                                 loop_sink.dispatch_pending(&runtime);
                             }
-                            pump_embedded_runtimes();
+                            pump_embedded_runtimes(&loop_runtime);
                         }
                         render_ready_work(&inner, &loop_task_waker);
-                        pump_embedded_runtimes();
+                        pump_embedded_runtimes(&loop_runtime);
                     }
                 })) {
                     log_panic_payload("ui_loop", payload.as_ref());
@@ -766,11 +516,12 @@ impl ArkRuntime {
             }
         });
 
-        // Wire the OHOS back button: forward to the global back-press handler
-        // (registered by `arkit_router::use_back_handler` or any component).
+        // Wire the OHOS back button to this root's handler stack (registered
+        // by `arkit_router::use_back_handler` or another component).
         // Walk newest-to-oldest so an inactive overlay can pass the event to
         // the next active overlay or router handler.
-        app.on_back_press_intercept(dispatch_back_press);
+        let back_runtime = runtime_handle.clone();
+        app.on_back_press_intercept(move || back_runtime.dispatch_back_press());
 
         // `rebuild` does not finish a render cycle, so run one immediate pass
         // to publish mount-time effects. Then drain exactly the scheduler work
@@ -783,7 +534,7 @@ impl ArkRuntime {
         // paint consistent with later Dioxus patches without duplicating style
         // logic in components.
         let inner_for_initial_replay = inner.clone();
-        queue_ui_loop(move || {
+        runtime_handle.queue_ui(move || {
             inner_for_initial_replay
                 .borrow_mut()
                 .renderer
@@ -792,22 +543,28 @@ impl ArkRuntime {
 
         Ok(Self {
             inner,
-            _ui_waker_registration: ui_waker_registration,
+            handle: runtime_handle,
             async_runtime: Some(async_runtime),
-            async_registration: Some(async_registration),
         })
     }
 
-    /// Unmount the renderer root from the NodeContent slot.
-    pub fn unmount(&self) -> Result<()> {
+    /// Consume this runtime and unmount its root from the NodeContent slot.
+    pub fn unmount(self) -> Result<()> {
+        // An explicitly unmounted root must no longer accept queued effects,
+        // async wakeups, back handlers, or embedded-runtime scheduling.
+        self.handle.close();
         let mut borrowed = self.inner.borrow_mut();
         borrowed.renderer.unmount().map_err(map_arkui_error)
+    }
+
+    pub fn handle(&self) -> RuntimeHandle {
+        self.handle.clone()
     }
 }
 
 impl Drop for ArkRuntime {
     fn drop(&mut self) {
-        self.async_registration.take();
+        self.handle.close();
         if let Some(runtime) = self.async_runtime.take() {
             runtime.shutdown_background();
         }
@@ -817,39 +574,33 @@ impl Drop for ArkRuntime {
 /// Mount a Dioxus subtree directly into an existing native node.
 ///
 /// The caller retains ownership of `root` and must drop the returned runtime
-/// before disposing that node. `resolver` is optional, but supplying one
-/// enables `use_ark_node` and layout hooks inside the embedded subtree.
+/// before disposing that node.
 pub fn mount_embedded_virtual_dom(
     root: Rc<RefCell<ArkUINode>>,
     mut dom: VirtualDom,
-    resolver: Option<Rc<dyn ScopeNodeResolver>>,
+    runtime_handle: RuntimeHandle,
 ) -> EmbeddedArkRuntime {
     let mut renderer = ArkUIRenderer::new_embedded(root);
-    let sink = Rc::new(RuntimeEventSink::default());
+    let sink = Rc::new(RuntimeEventSink::new(runtime_handle.clone()));
     renderer.set_sink(sink.clone());
+    dom.provide_root_context(runtime_handle.clone());
 
     dom.rebuild(&mut renderer);
-    if let Some(resolver) = &resolver {
-        resolve_pending_with(&dom, &renderer, resolver.as_ref());
-    }
+    renderer.finish_mutation_batch();
 
     let inner = Rc::new(RefCell::new(EmbeddedRuntimeInner {
         dom,
         renderer,
         sink,
-        resolver,
     }));
-    let id = next_registration_id();
-    EMBEDDED_RUNTIMES.with(|runtimes| {
-        runtimes.borrow_mut().push((id, Rc::downgrade(&inner)));
-    });
+    let registration = runtime_handle.register_embedded(Rc::downgrade(&inner));
 
     render_embedded(&inner);
-    let task_waker = Waker::from(Arc::new(EmbeddedUiWaker));
+    let task_waker = runtime_handle.scheduler_waker();
     render_ready_embedded_work(&inner, &task_waker);
 
     EmbeddedArkRuntime {
-        registration: Some(EmbeddedRuntimeRegistration { id }),
+        registration: Some(registration),
         inner: Some(inner),
     }
 }
@@ -880,44 +631,72 @@ fn map_arkui_error<E: ToString>(error: E) -> Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::Cell;
+
+    fn test_runtime_handle() -> (tokio::runtime::Runtime, RuntimeHandle) {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .expect("test tokio runtime");
+        let handle = RuntimeHandle::new(next_runtime_id(), runtime.handle().clone());
+        (runtime, handle)
+    }
 
     #[test]
     fn back_press_falls_through_inactive_newer_handlers() {
+        let (_runtime, handle) = test_runtime_handle();
         let older_calls = Rc::new(Cell::new(0));
         let newer_calls = Rc::new(Cell::new(0));
         let older_counter = older_calls.clone();
         let newer_counter = newer_calls.clone();
-        let _older = register_back_press_handler(Rc::new(move || {
+        let _older = handle.register_back_handler(Rc::new(move || {
             older_counter.set(older_counter.get() + 1);
             true
         }));
-        let _newer = register_back_press_handler(Rc::new(move || {
+        let _newer = handle.register_back_handler(Rc::new(move || {
             newer_counter.set(newer_counter.get() + 1);
             false
         }));
 
-        assert!(dispatch_back_press());
+        assert!(handle.dispatch_back_press());
         assert_eq!(newer_calls.get(), 1);
         assert_eq!(older_calls.get(), 1);
     }
 
     #[test]
     fn back_press_stops_after_the_first_consuming_handler() {
+        let (_runtime, handle) = test_runtime_handle();
         let older_calls = Rc::new(Cell::new(0));
         let newer_calls = Rc::new(Cell::new(0));
         let older_counter = older_calls.clone();
         let newer_counter = newer_calls.clone();
-        let _older = register_back_press_handler(Rc::new(move || {
+        let _older = handle.register_back_handler(Rc::new(move || {
             older_counter.set(older_counter.get() + 1);
             true
         }));
-        let _newer = register_back_press_handler(Rc::new(move || {
+        let _newer = handle.register_back_handler(Rc::new(move || {
             newer_counter.set(newer_counter.get() + 1);
             true
         }));
 
-        assert!(dispatch_back_press());
+        assert!(handle.dispatch_back_press());
         assert_eq!(newer_calls.get(), 1);
         assert_eq!(older_calls.get(), 0);
+    }
+
+    #[test]
+    fn back_handlers_are_isolated_per_root() {
+        let (_first_runtime, first) = test_runtime_handle();
+        let (_second_runtime, second) = test_runtime_handle();
+        let calls = Rc::new(Cell::new(0));
+        let callback_calls = calls.clone();
+        let _registration = first.register_back_handler(Rc::new(move || {
+            callback_calls.set(callback_calls.get() + 1);
+            true
+        }));
+
+        assert!(!second.dispatch_back_press());
+        assert_eq!(calls.get(), 0);
+        assert!(first.dispatch_back_press());
+        assert_eq!(calls.get(), 1);
     }
 }

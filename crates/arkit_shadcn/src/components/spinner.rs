@@ -80,6 +80,7 @@ fn CustomSpinnerIcon(
 ) -> Element {
     let target_name = use_hook(next_spinner_target_name);
     let target = arkit_animation::use_animation_target(target_name.clone());
+    let target_ref = target.native_ref();
     let controls = arkit_animation::use_animation(custom_icon_timeline(&target_name));
     let animation = controls.clone();
 
@@ -96,6 +97,7 @@ fn CustomSpinnerIcon(
 
     rsx! {
         row {
+            native_ref: target_ref,
             width: size,
             height: size,
             align_items: "center",

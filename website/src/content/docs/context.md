@@ -40,7 +40,7 @@ Provider 负责：
 - 在 scope 卸载时取消订阅、任务和 native 资源。
 - 定义没有 provider 时是 panic、错误还是默认值。
 
-Arkit 自带的 ArkHost、I18n、Router、Theme 和 AnimationHost 都遵循这一模型。
+Arkit 自带的 root-local RuntimeHandle、WindowMetrics、I18n、Router、Theme 和 AnimationHost 都遵循这一模型。原生节点不通过 Context 猜测，而用显式 `NativeElementRef` 绑定。
 
 ## 何时不用 Context
 

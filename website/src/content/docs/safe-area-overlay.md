@@ -1,11 +1,11 @@
 ---
 title: 安全区与浮层
-description: "安全区怎么避让，浮层又该挂在哪一层。"
+description: "安全区怎么避让，以及用声明式 Portal 投影浮层。"
 ---
 
 # 安全区与浮层
 
-刘海、手势条和键盘会吃掉可视区域。业务内容默认待在安全区里；需要贴边或盖在上面的浮层，走 OverlayRoot。
+刘海、手势条和键盘会吃掉可视区域。业务内容按入口 policy 消费安全区；需要投影到应用根层的内容使用声明式 `Portal`。
 
 ## SafeArea
 
@@ -23,41 +23,45 @@ rsx! {
 
 可组合边：`NONE`、`TOP`、`RIGHT`、`BOTTOM`、`LEFT`、`HORIZONTAL`、`VERTICAL`、`ALL`。嵌套区域只消费声明的边。
 
-edge-to-edge 入口让业务内容填满 XComponent，但 modal panel 和框架 floating content 仍可使用 safe viewport。Backdrop 可以覆盖系统栏附近。
-
-## 发布浮层
+## 声明式 Portal
 
 ```rust
-let overlay = use_overlay();
-let trigger = overlay.clone();
-
 rsx! {
-    button {
-        onclick: move |_| trigger.show_floating(|| rsx! {
-            column { padding: 12.0, "浮层内容" }
-        }),
-        "打开"
+    if open() {
+        Portal {
+            layer: OverlayLayer::Floating,
+            column {
+                position: "24,80",
+                padding: 12.0,
+                "浮层内容"
+            }
+        }
     }
 }
 ```
 
-浮层内容仍属于同一个 VirtualDom，Signal、Context 和 Hook 正常工作。它不是第二个 renderer，也不是 ArkTS overlay window。
+Portal 保留声明位置的 component ownership、Signal、Context 与 Hook，但 renderer 把 native subtree 投影到 root。固定层级顺序是 `Modal < Floating < Transient`。它不是第二个 VirtualDom，也不是 ArkTS overlay window。
 
-## Modal 类型
+全屏 Portal root 默认 pass-through；需要点击的 panel 显式使用默认 hit-test，需要 outside-click 或 modal 行为时声明实际 backdrop。
 
-`ModalPresentation` 支持 `CenteredDialog`、`RightSheet`、`BottomDrawer`。`ModalOverlaySpec` 控制 backdrop、safe viewport inset 和 `dismiss_on_backdrop`。
+## ModalPortal
 
-| Overlay API                  | 作用                           |
-| ---------------------------- | ------------------------------ |
-| `show_floating`              | 发布自定位的全屏浮层 subtree   |
-| `show_modal`                 | 发布标准 modal chrome          |
-| `show_modal_with_dismiss`    | 关闭前同步受控状态             |
-| `dismiss`                    | 移除当前 token                 |
-| `is_open`                    | 查询 token 是否打开            |
-| `overlay_frame` / `viewport` | 读取浮层 frame 与安全 viewport |
+```rust
+rsx! {
+    ModalPortal {
+        open: open(),
+        presentation: ModalPresentation::CenteredDialog,
+        dismiss_on_backdrop: true,
+        on_dismiss: move |_| open.set(false),
+        DialogPanel {}
+    }
+}
+```
 
-## 生命周期与状态
+`ModalPresentation` 支持 `CenteredDialog`、`RightSheet`、`BottomDrawer`。`ModalPortal` 声明 backdrop、safe viewport inset 和 dismissal；open state 始终由业务 Signal / Props 控制。
 
-`use_overlay` 为当前 scope 创建 token。scope 卸载会移除自己的 overlay，并断开 content closure；旧 handle 不能重新发布。
+## 定位
 
-Dialog、Popover、Menu 的 open state 应由 Signal/Props 控制。保持打开时要重新发布最新 subtree，不能永久缓存第一次生成的 `Element`，否则 checkbox、submenu 等会显示陈旧状态。
+浮层需要把 window-relative trigger frame 换算到 root viewport 时，使用 `use_overlay_viewport()`。返回值包含 content frame、safe-area inset 和 pixel-to-vp scale。
+
+Portal 随声明 scope 一起卸载，不存在独立 token、命令式 publish 或缓存第一次 `Element` 的问题。

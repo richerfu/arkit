@@ -115,7 +115,7 @@ fn app() -> Element {
 
 `CameraStatus` 给出可用于 UI 的完整生命周期：`WaitingForSurface`、`Starting`、`Running`、`Capturing`、`Stopped`、`PermissionDenied`、`Unavailable` 和 `Error`。只有 `Running` 且 `CameraSessionInfo::supports_photo()` 为 `true` 时，`CameraController::capture()` 才会接受拍照命令。没有 JPEG profile 的设备仍可正常预览，`photo_size` 为 `None`。
 
-`active = false` 会停止并释放 native session，但保留组件 Surface；恢复为 `true` 时重建 session。组件内部还会把 `active` 与 `use_app_foreground()`、`use_component_visibility()` 合并：应用进入后台、窗口隐藏、预览被 Tab/父节点隐藏或完全移出可见区域时自动关闭 session，重新进入前台且预览可见后才恢复。业务显式传入的 `active = false` 不会被前台恢复事件覆盖。修改 `position` 同样会按反向顺序关闭当前 session，再使用目标相机支持的 profile 重建。
+`active = false` 会停止并释放 native session，但保留组件 Surface；恢复为 `true` 时重建 session。组件内部用绑定到预览 XComponent 的 `NativeElementRef`，把 `active` 与 `use_app_foreground()`、`use_component_visibility(reference)` 合并：应用进入后台、窗口隐藏、预览被 Tab/父节点隐藏或完全移出可见区域时自动关闭 session，重新进入前台且预览可见后才恢复。业务显式传入的 `active = false` 不会被前台恢复事件覆盖。修改 `position` 同样会按反向顺序关闭当前 session，再使用目标相机支持的 profile 重建。
 
 `on_capabilities_change` 返回当前镜头实际支持的预览/照片分辨率；把精确尺寸写入 `CameraProfileSelection` 即可重建对应 profile。不存在的尺寸会返回明确的 `Unsupported` 错误，不再静默回落。`CameraController::controls()` 可读取闪光灯、手电筒、变焦、曝光、对焦、防抖、白平衡、帧率、色彩空间、微距等实时能力和取值范围，并通过对应的 `set_*` 方法调整。
 

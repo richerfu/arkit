@@ -1,11 +1,11 @@
 use arkit_animation_core::{AdapterTargetId, TargetLayoutSnapshot, TargetName};
-use arkit_hooks::HostNode;
+use arkit_arkui::MountedNodeLease;
 
 #[derive(Clone)]
 pub struct AnimationTargetBinding {
     pub id: AdapterTargetId,
     pub name: TargetName,
-    pub node: HostNode,
+    pub node: MountedNodeLease,
     pub layout: Option<TargetLayoutSnapshot>,
     pub mounted: bool,
     pub version: u64,

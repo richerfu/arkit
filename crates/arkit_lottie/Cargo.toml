@@ -15,6 +15,7 @@ expressions = ["thorvg/expressions"]
 network = ["dep:reqwest"]
 
 [dependencies]
+arkit_arkui.workspace = true
 arkit_hooks.workspace = true
 arkit_prelude.workspace = true
 arkit_runtime.workspace = true

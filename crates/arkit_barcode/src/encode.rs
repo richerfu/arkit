@@ -26,8 +26,10 @@ pub fn encode_barcode(request: &BarcodeRequest) -> BarcodeResult<BarcodeBitmap> 
         )));
     }
 
-    let mut hints = EncodeHints::default();
-    hints.Margin = Some(request.margin.to_string());
+    let mut hints = EncodeHints {
+        Margin: Some(request.margin.to_string()),
+        ..EncodeHints::default()
+    };
     if let Some(level) = request.qr_ec_level {
         if matches!(request.format, crate::format::BarcodeFormat::QrCode) {
             hints.ErrorCorrection = Some(level.as_hint().to_string());

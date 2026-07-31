@@ -67,6 +67,7 @@ pub struct RouteProviderProps {
 /// position when navigating back.
 #[component]
 pub fn RouteProvider(props: RouteProviderProps) -> Element {
+    let runtime = arkit_runtime::use_runtime_handle();
     let store = use_context::<RouteScrollStore>();
     let route = dioxus_router::router().full_route_string();
     let initial_route = route.clone();
@@ -86,10 +87,11 @@ pub fn RouteProvider(props: RouteProviderProps) -> Element {
     let restore_command = use_signal(|| None::<(String, f32)>);
     let last_effect_route = use_hook(|| RefCell::new(String::new()));
     let effect_route = route.clone();
+    let effect_runtime = runtime.clone();
     let mut restore_effect = use_effect(move || {
         let desired = restored.map(|position| (effect_route.clone(), position));
         let mut command = restore_command;
-        arkit_runtime::queue_ui_loop(move || {
+        effect_runtime.queue_ui(move || {
             let Ok(current) = command.try_peek() else {
                 return;
             };

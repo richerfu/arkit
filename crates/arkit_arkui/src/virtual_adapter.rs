@@ -1,13 +1,13 @@
 //! ArkUI `NodeAdapter`-backed virtual container support.
 //!
-//! A [`VirtualNodeAdapter`] drives an ArkUI `NodeAdapter` so that only visible
+//! A [`VirtualSource`] drives an ArkUI `NodeAdapter` so that only visible
 //! items are created (lazy, data-driven), instead of instantiating every child
 //! up front. The adapter supports `ListNodeAdapter`, `GridNodeAdapter`, and
 //! `WaterFlowNodeAdapter`; [`VirtualKind`] selects the matching host attribute
 //! and item wrapper.
 //!
 //! The adapter supports both a native `render_item` callback returning a fresh
-//! [`ArkUINode`] and a direct wrapper mount callback used by the RSX
+//! [`OwnedNativeNode`] and a direct wrapper mount callback used by the RSX
 //! integration. Items and their retained Rust-side owners are released when
 //! ArkUI removes them from the adapter.
 
@@ -15,6 +15,7 @@ use std::any::Any;
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
+use dioxus_core::{AttributeValue, IntoAttributeValue};
 use ohos_arkui_binding::api::attribute_option::{NodeAdapter, NodeAdapterEvent};
 use ohos_arkui_binding::common::error::ArkUIResult;
 use ohos_arkui_binding::common::node::ArkUINode;
@@ -22,6 +23,8 @@ use ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
 use ohos_arkui_binding::types::advanced::NodeAdapterEventType;
 use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
 use rustc_hash::FxHashMap;
+
+use crate::{element_ref::SharedNativeNode, OwnedNativeNode};
 
 /// Kind of virtual container — selects which `*NodeAdapter` attribute to set
 /// on the host node and which item-wrapper to use.
@@ -54,7 +57,7 @@ impl VirtualKind {
 }
 
 /// Callback that renders a single item's content node for the given index.
-pub type RenderItem = Rc<dyn Fn(u32) -> ArkUIResult<ArkUINode>>;
+pub type RenderItem = Rc<dyn Fn(u32) -> ArkUIResult<OwnedNativeNode>>;
 
 /// Callback that mounts an item directly into its adapter-owned native wrapper.
 ///
@@ -145,27 +148,33 @@ struct AdapterState {
     /// when the old removal arrives.
     mounted: FxHashMap<usize, MountedItem>,
     adapter: Option<NodeAdapter>,
-    attached_host: Option<ArkUINode>,
+    attached_host: Option<Weak<RefCell<ArkUINode>>>,
 }
 
 /// A virtual adapter attached to a `list`, `grid`, or `waterflow` host node.
 /// Clone shares the underlying adapter state.
 #[derive(Clone)]
-pub struct VirtualNodeAdapter {
+pub struct VirtualSource {
     state: Rc<RefCell<AdapterState>>,
 }
 
-impl PartialEq for VirtualNodeAdapter {
+impl PartialEq for VirtualSource {
     fn eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.state, &other.state)
     }
 }
 
-impl Eq for VirtualNodeAdapter {}
+impl Eq for VirtualSource {}
 
-impl VirtualNodeAdapter {
-    /// Create a new adapter. Call [`attach`](Self::attach) to bind it to a host
-    /// node.
+impl IntoAttributeValue for VirtualSource {
+    fn into_value(self) -> AttributeValue {
+        AttributeValue::any_value(self)
+    }
+}
+
+impl VirtualSource {
+    /// Create a native-item source. Assign it to a compatible container's
+    /// `virtual_source` attribute; the renderer owns attachment and detachment.
     pub fn new(kind: VirtualKind, total_count: u32, render_item: RenderItem) -> Self {
         Self {
             state: Rc::new(RefCell::new(AdapterState {
@@ -182,6 +191,7 @@ impl VirtualNodeAdapter {
     /// Create an adapter whose callback mounts directly into the generated item
     /// wrapper. Most applications should use the RSX hook exposed by
     /// `arkit_hooks`; this constructor exists for renderer integrations.
+    #[doc(hidden)]
     pub fn new_mounted(kind: VirtualKind, total_count: u32, mount_item: MountItem) -> Self {
         Self {
             state: Rc::new(RefCell::new(AdapterState {
@@ -199,15 +209,16 @@ impl VirtualNodeAdapter {
     /// the native `NodeAdapter`, sets the total count, registers the event
     /// receiver, and sets the `*NodeAdapter` attribute on the host. Idempotent
     /// for the same host (re-attaching replaces the adapter).
-    pub fn attach(&self, host: &ArkUINode) -> ArkUIResult<()> {
-        let host_handle = host.raw_handle();
+    pub(crate) fn attach(&self, host: &SharedNativeNode) -> ArkUIResult<()> {
+        let host_handle = host.borrow().raw_handle();
         let already_attached = {
             let state = self.state.borrow();
             state.adapter.is_some()
                 && state
                     .attached_host
                     .as_ref()
-                    .is_some_and(|current| current.raw_handle() == host_handle)
+                    .and_then(Weak::upgrade)
+                    .is_some_and(|current| current.borrow().raw_handle() == host_handle)
         };
         if already_attached {
             return Ok(());
@@ -231,13 +242,16 @@ impl VirtualNodeAdapter {
             return Err(error);
         }
 
-        if let Err(error) = host.set_attribute(kind.adapter_attr(), (&adapter).into()) {
+        if let Err(error) = host
+            .borrow()
+            .set_attribute(kind.adapter_attr(), (&adapter).into())
+        {
             adapter.dispose();
             return Err(error);
         }
         let mut state = self.state.borrow_mut();
         state.adapter = Some(adapter);
-        state.attached_host = Some(host.clone());
+        state.attached_host = Some(Rc::downgrade(host));
         Ok(())
     }
 
@@ -261,7 +275,7 @@ impl VirtualNodeAdapter {
     }
 
     /// Detach and dispose the native adapter and every mounted item.
-    pub fn detach(&self) -> ArkUIResult<()> {
+    pub(crate) fn detach(&self) -> ArkUIResult<()> {
         let (kind, host, adapter) = {
             let mut state = self.state.borrow_mut();
             (state.kind, state.attached_host.take(), state.adapter.take())
@@ -270,7 +284,9 @@ impl VirtualNodeAdapter {
         // Resetting the attribute and disposing the adapter can synchronously
         // emit removal events. Leave `mounted` in AdapterState so the event
         // receiver remains the single owner that disposes those native nodes.
-        let reset_result = host.map_or(Ok(()), |host| host.reset_attribute(kind.adapter_attr()));
+        let reset_result = host.and_then(|host| host.upgrade()).map_or(Ok(()), |host| {
+            host.borrow().reset_attribute(kind.adapter_attr())
+        });
         if let Some(adapter) = adapter {
             adapter.dispose();
         }
@@ -290,6 +306,21 @@ impl VirtualNodeAdapter {
             }
         }
         reset_result
+    }
+
+    pub(crate) fn abandon_attachment(&self) {
+        let adapter = {
+            let mut state = self.state.borrow_mut();
+            state.attached_host = None;
+            state.adapter.take()
+        };
+        if let Some(adapter) = adapter {
+            adapter.dispose();
+        }
+        let mounted = std::mem::take(&mut self.state.borrow_mut().mounted);
+        for (_, item) in mounted {
+            item.abandon();
+        }
     }
 
     /// Replace the logical item count and rebuild currently visible content.
@@ -406,15 +437,15 @@ impl VirtualNodeAdapter {
     }
 }
 
-impl Drop for VirtualNodeAdapter {
+impl Drop for VirtualSource {
     fn drop(&mut self) {
         // Only dispose when the last reference drops.
         if Rc::strong_count(&self.state) == 1 {
             // Dioxus removes the rendered host node before it drops the
             // component's hooks. At that point `attached_host` is only a
             // copied raw handle; resetting an attribute through it is a
-            // use-after-free in ArkUI. Explicit `detach()` remains available
-            // while a host is known to be alive, but the finalizer must only
+            // use-after-free in ArkUI. The renderer calls `detach()` while a
+            // host is known to be alive; this last-resort finalizer must only
             // release resources owned by the adapter itself.
             let adapter = {
                 let mut state = self.state.borrow_mut();
@@ -518,10 +549,11 @@ fn build_item(kind: VirtualKind, index: u32, renderer: &ItemRenderer) -> ArkUIRe
                     return Err(error);
                 }
             };
-            if let Err(error) = wrapper.borrow_mut().add_child(content) {
+            if let Err(error) = wrapper.borrow_mut().add_child(content.as_raw().clone()) {
                 let _ = wrapper.borrow_mut().dispose();
                 return Err(error);
             }
+            drop(content.into_raw());
             None
         }
         ItemRenderer::Mounted(mount_item) => match mount_item(index, wrapper.clone()) {
@@ -588,7 +620,7 @@ mod tests {
     use std::rc::Rc;
 
     use super::{
-        validate_insert, validate_item_range, VirtualItemMount, VirtualKind, VirtualNodeAdapter,
+        validate_insert, validate_item_range, VirtualItemMount, VirtualKind, VirtualSource,
     };
 
     struct DropProbe(Rc<Cell<u32>>);
@@ -620,7 +652,7 @@ mod tests {
 
     #[test]
     fn detached_adapter_applies_structural_updates_to_its_model() {
-        let adapter = VirtualNodeAdapter::new(
+        let adapter = VirtualSource::new(
             VirtualKind::List,
             3,
             Rc::new(|_| panic!("detached updates must not request native rows")),

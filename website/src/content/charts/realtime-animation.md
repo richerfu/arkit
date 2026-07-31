@@ -51,7 +51,7 @@ controller.append_data(ChartAppendData::scatter(
 
 ## Thread 边界
 
-WebSocket/后台采集只产生 owned 数据；通过 Signal/resource 或 `queue_ui_loop` 回到 UI。Controller 绑定 native instance，不在后台线程直接调用。
+WebSocket/后台采集只产生 owned 数据；通过 Signal/resource 或当前 root 的 `RuntimeHandle::queue_ui` 回到 UI。Controller 绑定 native instance，不在后台线程直接调用。
 
 ## 验证
 

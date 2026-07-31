@@ -34,9 +34,10 @@ pub struct BarcodeArtifact {
 /// Handle returned by [`use_barcode`].
 ///
 /// Export helpers are **async** and never run PNG / I/O on the UI thread.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct BarcodeHandle {
     phase: Signal<BarcodePhase>,
+    runtime: arkit_runtime::RuntimeHandle,
 }
 
 impl BarcodeHandle {
@@ -68,12 +69,22 @@ impl BarcodeHandle {
 
     /// PNG encode on a blocking worker; `on_done` runs on the UI executor.
     pub fn png_bytes_async(&self, on_done: impl FnOnce(BarcodeResult<Vec<u8>>) + 'static) {
-        export_bitmap(self.bitmap(), on_done, png_bytes_async);
+        export_bitmap(
+            self.runtime.tokio(),
+            self.bitmap(),
+            on_done,
+            png_bytes_async,
+        );
     }
 
     /// Base64 PNG on a blocking worker; `on_done` runs on the UI executor.
     pub fn base64_png_async(&self, on_done: impl FnOnce(BarcodeResult<String>) + 'static) {
-        export_bitmap(self.bitmap(), on_done, base64_png_async);
+        export_bitmap(
+            self.runtime.tokio(),
+            self.bitmap(),
+            on_done,
+            base64_png_async,
+        );
     }
 
     /// Write PNG on a blocking worker; `on_done` runs on the UI executor.
@@ -85,7 +96,10 @@ impl BarcodeHandle {
         let path = async_job::path_buf(path);
         match self.bitmap() {
             Some(bitmap) => {
-                async_job::spawn_ui_result(save_png_async(bitmap, path), on_done);
+                async_job::spawn_ui_result(
+                    save_png_async(self.runtime.tokio(), bitmap, path),
+                    on_done,
+                );
             }
             None => on_done(Err(not_ready())),
         }
@@ -93,15 +107,16 @@ impl BarcodeHandle {
 }
 
 fn export_bitmap<T, Fut>(
+    runtime: tokio::runtime::Handle,
     bitmap: Option<Arc<BarcodeBitmap>>,
     on_done: impl FnOnce(BarcodeResult<T>) + 'static,
-    work: impl FnOnce(Arc<BarcodeBitmap>) -> Fut + 'static,
+    work: impl FnOnce(tokio::runtime::Handle, Arc<BarcodeBitmap>) -> Fut + 'static,
 ) where
     T: 'static,
     Fut: std::future::Future<Output = BarcodeResult<T>> + 'static,
 {
     match bitmap {
-        Some(bitmap) => async_job::spawn_ui_result(work(bitmap), on_done),
+        Some(bitmap) => async_job::spawn_ui_result(work(runtime, bitmap), on_done),
         None => on_done(Err(not_ready())),
     }
 }
@@ -124,14 +139,16 @@ pub fn use_barcode(
     let options = options.into();
     let phase = use_signal(|| BarcodePhase::Empty);
     let epoch = use_hook(JobEpoch::default);
+    let runtime = arkit_runtime::use_runtime_handle();
+    let encode_runtime = runtime.clone();
 
     use_effect(move || {
         let text = contents();
         let opts = options();
-        schedule_encode(text, opts, phase, epoch.clone());
+        schedule_encode(text, opts, phase, epoch.clone(), encode_runtime.clone());
     });
 
-    BarcodeHandle { phase }
+    BarcodeHandle { phase, runtime }
 }
 
 /// Shared scheduler for the hook and the declarative component.
@@ -140,6 +157,7 @@ pub(crate) fn schedule_encode(
     options: BarcodeOptions,
     mut phase: Signal<BarcodePhase>,
     epoch: JobEpoch,
+    runtime: arkit_runtime::RuntimeHandle,
 ) {
     if contents.trim().is_empty() {
         let _ = epoch.next();
@@ -152,7 +170,7 @@ pub(crate) fn schedule_encode(
     let request = options.to_request(contents);
 
     arkit_prelude::dioxus_core::spawn(async move {
-        let result = encode_artifact_async(request).await;
+        let result = encode_artifact_async(runtime.tokio(), request).await;
         if !epoch.is_current(job) {
             return;
         }

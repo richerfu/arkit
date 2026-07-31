@@ -1,7 +1,7 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use arkit_hooks::{use_app_foreground, use_ark_node};
+use arkit_hooks::{use_app_foreground, use_mounted_node, use_native_element_ref};
 use arkit_prelude::*;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
@@ -117,14 +117,14 @@ pub struct CameraPreviewProps {
 #[component]
 pub fn CameraPreview(props: CameraPreviewProps) -> Element {
     let runtime = use_hook(|| Rc::new(ComponentRuntime::new()));
-    let node_ref = use_ark_node();
+    let node_ref = use_native_element_ref();
     let app_foreground = use_app_foreground();
     // CameraPreview is a Surface XComponent. Its created/destroyed callbacks
     // are the authoritative component lifecycle; ArkUI's visible-area event
     // can transiently report 0% for an on-screen Surface node.
     let effective_active = props.active && app_foreground;
     let surface_registration = use_hook(|| Rc::new(RefCell::new(None::<SurfaceRegistration>)));
-    let registered_node = use_hook(|| Rc::new(Cell::new(None::<usize>)));
+    let registered_node = use_hook(|| Rc::new(Cell::new(None::<u64>)));
     let controller_binding = use_hook(|| Rc::new(RefCell::new(None::<(CameraController, u64)>)));
     let status_handler = use_hook(|| Rc::new(Cell::new(None::<EventHandler<CameraStatus>>)));
     let capabilities_handler =
@@ -291,11 +291,13 @@ pub fn CameraPreview(props: CameraPreviewProps) -> Element {
     let effect_registration = surface_registration.clone();
     let effect_registered_node = registered_node.clone();
     let effect_runtime = runtime.clone();
-    use_effect(move || {
-        let Some(node) = node_ref.get() else {
+    use_mounted_node(node_ref.clone(), move |node| {
+        let Some(node) = node else {
+            effect_registration.borrow_mut().take();
+            effect_registered_node.set(None);
             return;
         };
-        let native_key = node.borrow().raw_handle() as usize;
+        let native_key = node.epoch();
         if effect_registered_node.get() == Some(native_key) {
             return;
         }
@@ -303,14 +305,25 @@ pub fn CameraPreview(props: CameraPreviewProps) -> Element {
         let Some(sender) = effect_runtime.surface_sender() else {
             return;
         };
-        let attachment = {
-            let node = node.borrow();
-            SurfaceRegistration::attach(&node, sender)
-        };
+        let attachment = SurfaceRegistration::attach(&node, sender);
         match attachment {
             Ok(registration) => {
                 effect_registration.borrow_mut().replace(registration);
                 effect_registered_node.set(Some(native_key));
+                let teardown_registration = effect_registration.clone();
+                let teardown_registered_node = effect_registered_node.clone();
+                // SAFETY: this closure only unregisters the XComponent
+                // attachment while its native node is still valid.
+                let installed = unsafe {
+                    node.install_native_teardown(move || {
+                        teardown_registration.borrow_mut().take();
+                        teardown_registered_node.set(None);
+                    })
+                };
+                if !installed {
+                    effect_registration.borrow_mut().take();
+                    effect_registered_node.set(None);
+                }
             }
             Err(error) => effect_runtime.emit_error(error),
         };
@@ -330,6 +343,7 @@ pub fn CameraPreview(props: CameraPreviewProps) -> Element {
     let height = props.height.clone().unwrap_or_else(|| "360".into());
     rsx! {
         xcomponent {
+            native_ref: node_ref,
             width: props.width.clone(),
             height: height,
             background_color: "#FF000000",

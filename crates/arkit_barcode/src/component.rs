@@ -61,11 +61,12 @@ pub fn Barcode(props: BarcodeProps) -> Element {
 
     let phase = use_signal(|| BarcodePhase::Empty);
     let epoch = use_hook(JobEpoch::default);
+    let runtime = arkit_runtime::use_runtime_handle();
 
     use_effect(use_reactive((&contents, &options), {
         let epoch = epoch.clone();
         move |(contents, options)| {
-            schedule_encode(contents, options, phase, epoch.clone());
+            schedule_encode(contents, options, phase, epoch.clone(), runtime.clone());
         }
     }));
 

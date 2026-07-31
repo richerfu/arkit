@@ -7,8 +7,8 @@
 //! [`crate::components::menu_common`].
 
 use crate::components::menu_common::{
-    menu_closed_panel_height, use_menu_overlay_refresh, MenuEntry, MenuOverlayPassThroughRegion,
-    MenuOverlayPlacement, MenuOverlaySession, MenuStyle,
+    menu_closed_panel_height, menu_overlay_content, MenuEntry, MenuOverlayPassThroughRegion,
+    MenuOverlayPlacement, MenuStyle,
 };
 use crate::theme::*;
 use arkit_prelude::*;
@@ -44,7 +44,12 @@ pub fn Menubar(
     on_active_change: Option<EventHandler<Option<usize>>>,
 ) -> Element {
     let theme = use_theme();
+    let menubar_ref = arkit_hooks::use_native_element_ref();
     let menubar_frame = use_signal(arkit_hooks::LayoutFrame::default);
+    arkit_hooks::use_layout_frame(menubar_ref.clone(), move |frame| {
+        let mut menubar_frame = menubar_frame;
+        menubar_frame.set(frame);
+    });
     let mut internal_active = use_signal(|| default_active);
     let is_controlled = active.is_some();
     let current_active = active.unwrap_or_else(|| *internal_active.read());
@@ -73,6 +78,7 @@ pub fn Menubar(
 
     rsx! {
         row {
+            native_ref: menubar_ref,
             padding: spacing::XXS,
             height: 36.0,
             align_items: "center",
@@ -81,18 +87,6 @@ pub fn Menubar(
             border_color: border,
             background_color: background,
             shadow: "sm",
-            onarea: move |evt: dioxus_core::Event<dioxus_elements::event::AreaData>| {
-                let frame = evt.data().frame;
-                if frame.is_measured() {
-                    let mut menubar_frame = menubar_frame;
-                    menubar_frame.set(arkit_hooks::LayoutFrame {
-                        x: frame.x,
-                        y: frame.y,
-                        width: frame.width,
-                        height: frame.height,
-                    });
-                }
-            },
             for (index, spec) in menus.iter().enumerate() {
                 MenubarMenu {
                     index,
@@ -126,56 +120,28 @@ fn MenubarMenu(
     foreground: u32,
     on_active_change: EventHandler<Option<usize>>,
 ) -> Element {
-    let overlay = arkit_hooks::use_overlay();
+    let viewport = arkit_hooks::use_overlay_viewport();
+    let trigger_ref = arkit_hooks::use_native_element_ref();
     let trigger_frame = use_signal(arkit_hooks::LayoutFrame::default);
-    let mut overlay_session = use_signal(|| None::<MenuOverlaySession>);
-
-    let dismiss_overlay = overlay.clone();
-    let mut dismiss_session = overlay_session;
-    let dismiss = EventHandler::new(move |_: ()| {
-        on_active_change.call(None);
-        dismiss_session.set(None);
-        dismiss_overlay.dismiss();
+    arkit_hooks::use_layout_frame(trigger_ref.clone(), move |frame| {
+        let mut trigger_frame = trigger_frame;
+        trigger_frame.set(frame);
     });
-
-    use_menu_overlay_refresh(
-        overlay.clone(),
-        active,
-        overlay_session,
-        style,
-        theme,
-        dismiss,
-        items.clone(),
+    let dismiss = EventHandler::new(move |_: ()| on_active_change.call(None));
+    let panel_height = menu_closed_panel_height(&items);
+    let pass_through_region =
+        MenuOverlayPassThroughRegion::from_frame(pass_through_frame, viewport.frame);
+    let placement = MenuOverlayPlacement::resolve(
+        *trigger_frame.read(),
+        viewport,
+        style.width,
+        panel_height,
+        style.side_offset_vp,
     );
-
-    let open_overlay = overlay.clone();
-
-    let mut open_menu = move |_| {
-        on_active_change.call(Some(index));
-        let entries = items.clone();
-        let frame = *trigger_frame.read();
-        let viewport = open_overlay.viewport();
-        let panel_height = menu_closed_panel_height(&entries);
-        let pass_through_region =
-            MenuOverlayPassThroughRegion::from_frame(pass_through_frame, viewport.frame);
-        let placement = MenuOverlayPlacement::resolve(
-            frame,
-            viewport,
-            style.width,
-            panel_height,
-            style.side_offset_vp,
-        );
-        let session = MenuOverlaySession::new(placement, pass_through_region);
-        overlay_session.set(Some(session));
-        session.show(&open_overlay, style, theme, dismiss, entries);
-    };
-
-    let close_menu = move || {
-        dismiss.call(());
-    };
 
     rsx! {
         row {
+            native_ref: trigger_ref,
             margin_left: if index > 0 { spacing::XXS } else { 0.0 },
             height: 28.0,
             align_items: "center",
@@ -186,23 +152,11 @@ fn MenubarMenu(
             padding_left: spacing::SM,
             border_radius: trigger_radius,
             background_color: if active { active_background } else { MENUBAR_ITEM_TRANSPARENT },
-            onarea: move |evt: dioxus_core::Event<dioxus_elements::event::AreaData>| {
-                let frame = evt.data().frame;
-                if frame.is_measured() {
-                    let mut trigger_frame = trigger_frame;
-                    trigger_frame.set(arkit_hooks::LayoutFrame {
-                        x: frame.x,
-                        y: frame.y,
-                        width: frame.width,
-                        height: frame.height,
-                    });
-                }
-            },
             onclick: move |_| {
                 if active {
-                    close_menu();
+                    on_active_change.call(None);
                 } else {
-                    open_menu(());
+                    on_active_change.call(Some(index));
                 }
             },
             text {
@@ -211,6 +165,19 @@ fn MenubarMenu(
                 font_color: foreground,
                 line_height: 20.0,
                 {title}
+            }
+        }
+        if active {
+            arkit_hooks::Portal {
+                layer: arkit_hooks::OverlayLayer::Floating,
+                {menu_overlay_content(
+                    style,
+                    theme,
+                    dismiss,
+                    items,
+                    placement,
+                    pass_through_region,
+                )}
             }
         }
     }

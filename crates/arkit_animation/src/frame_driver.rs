@@ -2,7 +2,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
 use arkit_animation_core::TimePoint;
-use arkit_hooks::ArkNodeRef;
+use arkit_arkui::NativeElementRef;
 
 use crate::AnimationHost;
 
@@ -10,7 +10,7 @@ type FrameSource = Rc<dyn Fn(TimePoint)>;
 
 pub struct FrameDriver {
     host: Rc<AnimationHost>,
-    node: ArkNodeRef,
+    node: NativeElementRef,
     requested: Cell<bool>,
     sources: RefCell<Vec<Option<FrameSource>>>,
 }
@@ -21,8 +21,9 @@ pub(crate) struct FrameSourceSubscription {
 }
 
 impl FrameDriver {
-    pub fn new(host: Rc<AnimationHost>, node: ArkNodeRef) -> Rc<Self> {
-        host.set_context_node_provider(Rc::new(move || node.peek()));
+    pub fn new(host: Rc<AnimationHost>, node: NativeElementRef) -> Rc<Self> {
+        let context_node = node.clone();
+        host.set_context_node_provider(Rc::new(move || context_node.current()));
         Rc::new(Self {
             host,
             node,
@@ -51,7 +52,7 @@ impl FrameDriver {
     }
 
     pub fn request(self: &Rc<Self>) {
-        let Some(node) = self.node.peek() else {
+        let Some(node) = self.node.current() else {
             return;
         };
         if self.requested.replace(true) {
@@ -59,23 +60,36 @@ impl FrameDriver {
         }
         self.host.record_frame_callback_requested();
         let driver = self.clone();
-        let result = node.borrow().post_frame_callback(move |timestamp, _| {
-            driver.requested.set(false);
-            let frame_time = TimePoint::from_nanos(timestamp);
-            driver.flush_sources(frame_time);
-            if let Err(error) = driver.host.tick(frame_time) {
-                ohos_hilog_binding::error(format!("arkit_animation frame failed: {error}"));
-                return;
+        // SAFETY: `post_frame_callback` is a one-shot scheduler operation. It
+        // does not replace renderer-owned node-event registrations or retain
+        // the borrowed node.
+        let result = unsafe {
+            node.with_native(|node| {
+                node.post_frame_callback(move |timestamp, _| {
+                    driver.requested.set(false);
+                    let frame_time = TimePoint::from_nanos(timestamp);
+                    driver.flush_sources(frame_time);
+                    if let Err(error) = driver.host.tick(frame_time) {
+                        ohos_hilog_binding::error(format!("arkit_animation frame failed: {error}"));
+                        return;
+                    }
+                    if driver.host.has_work() {
+                        driver.request();
+                    }
+                })
+            })
+        };
+        match result {
+            Some(Ok(())) => {}
+            Some(Err(error)) => {
+                self.requested.set(false);
+                ohos_hilog_binding::error(format!(
+                    "arkit_animation post frame callback failed: {error:?}"
+                ));
             }
-            if driver.host.has_work() {
-                driver.request();
+            None => {
+                self.requested.set(false);
             }
-        });
-        if let Err(error) = result {
-            self.requested.set(false);
-            ohos_hilog_binding::error(format!(
-                "arkit_animation post frame callback failed: {error:?}"
-            ));
         }
     }
 

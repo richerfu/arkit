@@ -166,6 +166,7 @@ pub fn MountTransition(
         ))
     });
     let target = use_animation_target(name.as_str().to_owned());
+    let target_ref = target.native_ref();
     let duration = TimeSpan::from_millis(duration_ms.unwrap_or(180).max(0) as u64);
     let delay = TimeSpan::from_millis(delay_ms.unwrap_or(0).max(0) as u64);
     let selected_preset = preset.unwrap_or_default();
@@ -193,6 +194,7 @@ pub fn MountTransition(
     if fill.unwrap_or(false) {
         rsx! {
             column {
+                native_ref: target_ref,
                 width: "100%",
                 height: "100%",
                 align_items: "start",
@@ -204,6 +206,7 @@ pub fn MountTransition(
         // without collapsing; height stays content-sized for vertical centering.
         rsx! {
             column {
+                native_ref: target_ref,
                 width: "100%",
                 align_items: "stretch",
                 {children}

@@ -135,6 +135,7 @@ name = "arkit_animation"
 version = "0.0.1-beta.0"
 dependencies = [
  "arkit_animation_core",
+ "arkit_arkui",
  "arkit_hooks",
  "arkit_prelude",
  "ohos-arkui-binding",
@@ -157,6 +158,7 @@ dependencies = [
 name = "arkit_arkui"
 version = "0.0.1-beta.0"
 dependencies = [
+ "arkit_dom",
  "arkit_elements",
  "dioxus-core",
  "ohos-arkui-binding",
@@ -194,6 +196,7 @@ name = "arkit_camera"
 version = "0.0.1-beta.0"
 dependencies = [
  "arkit_animation",
+ "arkit_arkui",
  "arkit_hooks",
  "arkit_icon",
  "arkit_prelude",
@@ -250,6 +253,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "arkit_dom"
+version = "0.0.1-beta.0"
+dependencies = [
+ "oxc_index",
+]
+
+[[package]]
 name = "arkit_elements"
 version = "0.0.1-beta.0"
 dependencies = [
@@ -265,8 +275,6 @@ dependencies = [
  "arkit_runtime",
  "ohos-arkui-binding",
  "ohos-hilog-binding",
- "rustc-hash 2.1.3",
- "smallvec",
 ]
 
 [[package]]
@@ -311,6 +319,7 @@ dependencies = [
 name = "arkit_lottie"
 version = "0.0.1-beta.0"
 dependencies = [
+ "arkit_arkui",
  "arkit_hooks",
  "arkit_prelude",
  "arkit_runtime",
@@ -398,6 +407,7 @@ dependencies = [
 name = "arkit_terminal"
 version = "0.0.1-beta.0"
 dependencies = [
+ "arkit_arkui",
  "arkit_elements",
  "arkit_hooks",
  "arkit_prelude",
@@ -4623,7 +4633,6 @@ name = "terminal_example"
 version = "0.0.1-beta.0"
 dependencies = [
  "arkit",
- "arkit_runtime",
  "napi-build-ohos",
  "napi-derive-ohos",
  "napi-ohos",

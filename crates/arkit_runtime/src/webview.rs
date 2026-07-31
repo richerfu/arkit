@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use arkit_arkui::MountedNodeLease;
 use napi_ohos::bindgen_prelude::{Function, JsObjectValue, Object, ObjectRef};
 use napi_ohos::{Either, Error, Result};
 use ohos_arkui_binding::common::node::{ArkUINode, ArkUINodeRaw};
@@ -9,19 +10,6 @@ use ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
 use openharmony_ability::{get_helper, get_main_thread_env, WebViewInitData, Webview};
 
 pub use openharmony_ability::WebViewStyle;
-
-/// Layout frame used to size an embedded WebView inside a native ArkUI host.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct WebViewFrame {
-    pub width: f32,
-    pub height: f32,
-}
-
-impl WebViewFrame {
-    pub fn is_valid(self) -> bool {
-        self.width.is_finite() && self.height.is_finite() && self.width > 0.0 && self.height > 0.0
-    }
-}
 
 /// Initial configuration for a renderer-owned embedded WebView.
 #[derive(Clone)]
@@ -65,7 +53,6 @@ struct EmbeddedWebViewState {
     id: String,
     webview: Option<Webview>,
     node: Option<ArkUINode>,
-    frame: Option<WebViewFrame>,
     current_url: Option<String>,
     current_html: Option<String>,
     desired_visible: bool,
@@ -77,10 +64,53 @@ impl Default for EmbeddedWebViewState {
             id: String::new(),
             webview: None,
             node: None,
-            frame: None,
             current_url: None,
             current_html: None,
             desired_visible: true,
+        }
+    }
+}
+
+/// Owned controller state used across ArkTS/N-API calls.
+///
+/// Native WebView operations may synchronously invoke callbacks. Keeping an
+/// owned snapshot guarantees that no `RefCell` borrow crosses that re-entrant
+/// boundary.
+enum EmbeddedWebViewSnapshot {
+    Unmounted {
+        desired_visible: bool,
+    },
+    Mounted {
+        node: ArkUINode,
+        webview: Webview,
+        current_url: Option<String>,
+        current_html: Option<String>,
+    },
+}
+
+impl EmbeddedWebViewState {
+    fn snapshot_for(&self, requested_id: &str) -> Result<EmbeddedWebViewSnapshot> {
+        match (&self.webview, &self.node) {
+            (None, None) => Ok(EmbeddedWebViewSnapshot::Unmounted {
+                desired_visible: self.desired_visible,
+            }),
+            (Some(webview), Some(node)) => {
+                if requested_id != self.id {
+                    return Err(Error::from_reason(format!(
+                        "embedded webview id cannot change after mount ({} -> {requested_id})",
+                        self.id
+                    )));
+                }
+                Ok(EmbeddedWebViewSnapshot::Mounted {
+                    node: node.clone(),
+                    webview: webview.clone(),
+                    current_url: self.current_url.clone(),
+                    current_html: self.current_html.clone(),
+                })
+            }
+            _ => Err(Error::from_reason(
+                "embedded webview controller state is inconsistent",
+            )),
         }
     }
 }
@@ -116,9 +146,8 @@ impl EmbeddedWebViewController {
 
     pub fn mount_or_sync(
         &self,
-        host: &mut ArkUINode,
+        host: &MountedNodeLease,
         mut init: EmbeddedWebViewInit,
-        frame: Option<WebViewFrame>,
     ) -> Result<()> {
         if init.id.is_empty() {
             init.id = self.id();
@@ -126,56 +155,61 @@ impl EmbeddedWebViewController {
         if init.id.is_empty() {
             return Err(Error::from_reason("embedded webview id must not be empty"));
         }
-        if self.inner.borrow().webview.is_some() && init.id != self.inner.borrow().id {
-            return Err(Error::from_reason(format!(
-                "embedded webview id cannot change after mount ({} -> {})",
-                self.inner.borrow().id,
-                init.id
-            )));
-        }
 
         let requested_url = init.url.clone();
         let requested_html = init.html.clone();
+        let snapshot = {
+            let state = self.inner.borrow();
+            state.snapshot_for(&init.id)?
+        };
 
-        if self.inner.borrow().webview.is_none() {
-            let mount = create_embedded_webview(init)?;
-            let desired_visible = self.inner.borrow().desired_visible;
-            if let Err(error) = mount.webview.set_visible(desired_visible) {
-                if let Err(dispose_error) = mount.webview.dispose() {
-                    ohos_hilog_binding::error(format!(
+        match snapshot {
+            EmbeddedWebViewSnapshot::Unmounted { desired_visible } => {
+                let mount = create_embedded_webview(init)?;
+                if let Err(error) = mount.webview.set_visible(desired_visible) {
+                    if let Err(dispose_error) = mount.webview.dispose() {
+                        ohos_hilog_binding::error(format!(
                         "embedded webview cleanup after visibility failure failed: {dispose_error}"
                     ));
+                    }
+                    return Err(error);
                 }
-                return Err(error);
-            }
-            if let Err(error) = attach_embedded_node(host, &mount.node) {
-                // The ArkTS manager owns the external content node. Disposing
-                // its controller releases that entry after a failed attach.
-                if let Err(dispose_error) = mount.webview.dispose() {
-                    ohos_hilog_binding::error(format!(
-                        "embedded webview cleanup after attach failure failed: {dispose_error}"
+                if let Err(error) = attach_embedded_node_to_lease(host, &mount.node) {
+                    // The ArkTS manager owns the external content node. Disposing
+                    // its controller releases that entry after a failed attach.
+                    if let Err(dispose_error) = mount.webview.dispose() {
+                        ohos_hilog_binding::error(format!(
+                            "embedded webview cleanup after attach failure failed: {dispose_error}"
+                        ));
+                    }
+                    return Err(error);
+                }
+                let mut state = self.inner.borrow_mut();
+                state.id = mount.id;
+                state.node = Some(mount.node);
+                state.webview = Some(mount.webview);
+                state.current_url = requested_url;
+                state.current_html = requested_html;
+                drop(state);
+
+                let teardown = self.clone();
+                // SAFETY: cleanup only disposes this controller's external WebView
+                // child before the renderer invalidates its host node.
+                let installed = unsafe { host.install_native_teardown(move || teardown.dispose()) };
+                if !installed {
+                    self.dispose();
+                    return Err(Error::from_reason(
+                        "embedded webview host was unmounted during attachment",
                     ));
                 }
-                return Err(error);
             }
-            let mut state = self.inner.borrow_mut();
-            state.id = mount.id;
-            state.node = Some(mount.node);
-            state.webview = Some(mount.webview);
-            state.current_url = requested_url;
-            state.current_html = requested_html;
-        } else if let Some(node) = self.inner.borrow().node.clone() {
-            attach_embedded_node(host, &node)?;
-
-            let (webview, previous_url, previous_html) = {
-                let state = self.inner.borrow();
-                (
-                    state.webview.clone(),
-                    state.current_url.clone(),
-                    state.current_html.clone(),
-                )
-            };
-            if let Some(webview) = webview {
+            EmbeddedWebViewSnapshot::Mounted {
+                node,
+                webview,
+                current_url: previous_url,
+                current_html: previous_html,
+            } => {
+                attach_embedded_node_to_lease(host, &node)?;
                 if let Some(html) = requested_html.as_deref() {
                     if requested_html != previous_html {
                         webview.load_html(html)?;
@@ -194,29 +228,6 @@ impl EmbeddedWebViewController {
             }
         }
 
-        if let Some(frame) = frame {
-            self.sync_frame(frame)?;
-        }
-        Ok(())
-    }
-
-    pub fn sync_frame(&self, frame: WebViewFrame) -> Result<()> {
-        if !frame.is_valid() {
-            return Ok(());
-        }
-        if self.inner.borrow().frame == Some(frame) {
-            return Ok(());
-        }
-        let Some(node) = self.inner.borrow().node.clone() else {
-            return Ok(());
-        };
-        node.set_position(vec![0.0_f32, 0.0_f32])
-            .map_err(map_arkui_error)?;
-        node.set_size(vec![frame.width, frame.height])
-            .map_err(map_arkui_error)?;
-        node.set_layout_rect(vec![0.0_f32, 0.0_f32, frame.width, frame.height])
-            .map_err(map_arkui_error)?;
-        self.inner.borrow_mut().frame = Some(frame);
         Ok(())
     }
 
@@ -296,7 +307,6 @@ impl EmbeddedWebViewController {
         let mut state = self.inner.borrow_mut();
         state.webview = None;
         state.node = None;
-        state.frame = None;
         state.current_url = None;
         state.current_html = None;
         Ok(())
@@ -421,6 +431,14 @@ fn attach_embedded_node(host: &mut ArkUINode, node: &ArkUINode) -> Result<()> {
     }
     host.add_existing_child(node.clone())
         .map_err(map_arkui_error)
+}
+
+fn attach_embedded_node_to_lease(host: &MountedNodeLease, node: &ArkUINode) -> Result<()> {
+    // SAFETY: EmbeddedWebViewController is the framework-owned projection
+    // boundary for this external content node. It only adds its own child and
+    // never disposes or retains the borrowed renderer host.
+    unsafe { host.with_native_mut(|host| attach_embedded_node(host, node)) }
+        .ok_or_else(|| Error::from_reason("embedded webview host is no longer mounted"))?
 }
 
 fn map_arkui_error(error: impl ToString) -> Error {

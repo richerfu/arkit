@@ -1,7 +1,7 @@
 //! arkit — Dioxus 0.7 + ArkUI framework for OpenHarmony.
 //!
 //! The default facade exports Dioxus core (`rsx!`, `use_signal`, `Element`),
-//! the ArkUI element registry, renderer, runtime, and host hooks. Domain
+//! the ArkUI element registry, per-root runtime, and exact-element hooks. Domain
 //! libraries are opt-in through the `animation`, `barcode`, `camera`, `canvas`,
 //! `chart`, `code`, `i18n`, `icon`, `lottie`, `markdown`, `router`, and `shadcn`
 //! and `terminal` features (or `full`). Barcode/QR generation is the `barcode`
@@ -15,32 +15,40 @@ pub use arkit_derive::entry;
 
 // --- Runtime: VirtualDom host ---
 pub use arkit_runtime::{
-    queue_ui_loop, register_back_press_handler, register_scope_resolver, tokio_handle,
-    ApplicationLifecycleEvent, ApplicationLifecycleHandle, ApplicationLifecyclePhase,
-    ApplicationLifecycleState, ApplicationLifecycleSubscription, ArkRuntime, BackPressRegistration,
-    EdgeInsets, EmbeddedWebViewController, EmbeddedWebViewInit, PhysicalRect, SafeAreaPolicy,
-    ScopeNodeResolver, ScopeResolverRegistration, VirtualDom, WebViewFrame, WebViewStyle,
+    use_runtime_handle, ApplicationLifecycleEvent, ApplicationLifecycleHandle,
+    ApplicationLifecyclePhase, ApplicationLifecycleState, ApplicationLifecycleSubscription,
+    ArkRuntime, BackPressRegistration, EdgeInsets, EmbeddedWebViewController, EmbeddedWebViewInit,
+    PhysicalRect, RuntimeHandle, RuntimeId, SafeAreaPolicy, VirtualDom, WebViewStyle,
     WindowMetrics, WindowMetricsHandle, WindowMetricsSubscription,
 };
 
-// --- Renderer + native node primitives ---
+// --- Renderer-owned handles safe for application code ---
 pub use arkit_arkui::{
-    canonical_tag, create_node, create_node_by_tag, kind_from_tag, ArkImageSource, ArkUIRenderer,
-    EventSink, NativeNodeEvent, NodeBuilder, NodeEventType, NodeKind, PreDragStatus, VirtualKind,
-    VirtualNodeAdapter,
+    ArkImageSource, LayoutFramePx, MountedNodeLease, NativeElementEvent, NativeElementRef,
+    NativeElementSubscription, NativeVisibility, VirtualKind, VirtualSource,
 };
 
-// --- Hooks (escape hatches: overlay / layout / virtual range / ark node) ---
+/// Explicit advanced-native construction APIs.
+///
+/// Nodes built here have unique Rust ownership until they are transferred to a
+/// renderer or virtual source. Renderer-owned mounted nodes are only available
+/// through generation-checked [`MountedNodeLease`] values.
+pub mod native {
+    pub use arkit_arkui::{
+        NativeNodeEvent, NodeBuilder, NodeEventType, OwnedNativeNode, PreDragStatus,
+    };
+}
+
+// --- Hooks (exact refs / portals / virtualization) ---
 pub use arkit_hooks as hooks;
 pub use arkit_hooks::{
     use_app_foreground, use_application_lifecycle, use_application_lifecycle_event,
-    use_ark_host_provider, use_ark_node, use_component_lifecycle, use_component_visibility,
-    use_layout_frame, use_layout_frame_node, use_layout_size, use_load_more, use_overlay,
-    use_safe_area, use_safe_area_policy, use_virtual_node_adapter,
-    use_virtual_node_adapter_items_keyed, use_virtual_range, use_window_metrics, ArkHost,
-    ArkNodeRef, ComponentLifecycleState, HitTestMode, LayoutFrame, LayoutSize, LoadMoreController,
-    LoadMoreState, OverlayLayer, OverlayRoot, OverlayViewport, SafeArea, SafeAreaEdges,
-    SafeAreaProps, VirtualAdapterItem, VirtualVisibleRange,
+    use_component_lifecycle, use_component_visibility, use_layout_frame, use_layout_size,
+    use_load_more, use_mounted_node, use_native_element_ref, use_overlay_viewport, use_safe_area,
+    use_safe_area_policy, use_virtual_range, use_virtual_source, use_virtual_source_items_keyed,
+    use_window_metrics, ComponentLifecycleState, LayoutFrame, LayoutSize, LoadMoreController,
+    LoadMoreState, ModalPortal, ModalPresentation, OverlayLayer, OverlayViewport, Portal, SafeArea,
+    SafeAreaEdges, SafeAreaProps, VirtualSourceItem, VirtualVisibleRange,
 };
 
 // --- i18n ---
@@ -219,10 +227,9 @@ impl PartialEq for EntryRootProps {
 
 /// Mount an arkit entry component into an ArkUI [`NodeContent`] slot.
 ///
-/// The public facade wraps every app root with the framework host context used
-/// by `use_ark_node`, layout observers, virtual adapters, WebView embedding,
-/// and overlay rendering. Business entry components should not call
-/// [`use_ark_host_provider`] themselves.
+/// The public facade installs root-specific runtime/window contexts. Exact
+/// native observation and root portals remain local to their declaring
+/// components.
 pub fn mount_entry(
     slot: ohos_arkui_binding::common::handle::ArkUIHandle,
     app: openharmony_ability::OpenHarmonyApp,
@@ -243,9 +250,9 @@ pub fn mount_entry_with_policy(
 }
 
 fn arkit_entry_root(props: EntryRootProps) -> Element {
-    let _host = use_ark_host_provider();
+    arkit_hooks::use_runtime_context_providers();
     #[cfg(feature = "animation")]
-    arkit_animation::use_animation_host_provider();
+    let animation_root_ref = arkit_animation::use_animation_host_provider();
     let policy = use_safe_area_policy();
     let measured_safe_area = use_safe_area();
     let safe_area = if policy == SafeAreaPolicy::Safe {
@@ -262,23 +269,34 @@ fn arkit_entry_root(props: EntryRootProps) -> Element {
         "ArkitApp",
     ));
 
+    #[cfg(feature = "animation")]
+    return rsx! {
+        stack {
+            native_ref: animation_root_ref,
+            width: "100%",
+            height: "100%",
+            alignment: "top-start",
+            clip: false,
+            padding_top: safe_area.top,
+            padding_right: safe_area.right,
+            padding_bottom: safe_area.bottom,
+            padding_left: safe_area.left,
+            {content}
+        }
+    };
+
+    #[cfg(not(feature = "animation"))]
     rsx! {
         stack {
             width: "100%",
             height: "100%",
             alignment: "top-start",
             clip: false,
-            stack {
-                width: "100%",
-                height: "100%",
-                alignment: "top-start",
-                padding_top: safe_area.top,
-                padding_right: safe_area.right,
-                padding_bottom: safe_area.bottom,
-                padding_left: safe_area.left,
-                {content}
-            }
-            OverlayRoot {}
+            padding_top: safe_area.top,
+            padding_right: safe_area.right,
+            padding_bottom: safe_area.bottom,
+            padding_left: safe_area.left,
+            {content}
         }
     }
 }
@@ -293,37 +311,31 @@ pub mod prelude {
     // Dioxus primitives, hooks, signals, and ArkUI element descriptors.
     pub use arkit_prelude::*;
 
-    // Entry + runtime + renderer.
+    // Entry + root-local runtime.
     pub use crate::{
-        entry, mount_entry, mount_entry_with_policy, ApplicationLifecycleEvent,
+        entry, mount_entry, mount_entry_with_policy, use_runtime_handle, ApplicationLifecycleEvent,
         ApplicationLifecycleHandle, ApplicationLifecyclePhase, ApplicationLifecycleState,
-        ApplicationLifecycleSubscription, ArkRuntime, ArkUIRenderer, EdgeInsets,
-        EmbeddedWebViewController, EmbeddedWebViewInit, EventSink, PhysicalRect, SafeAreaPolicy,
-        ScopeNodeResolver, VirtualDom, WebViewFrame, WebViewStyle, WindowMetrics,
-        WindowMetricsHandle, WindowMetricsSubscription,
+        ApplicationLifecycleSubscription, ArkRuntime, EdgeInsets, EmbeddedWebViewController,
+        EmbeddedWebViewInit, PhysicalRect, RuntimeHandle, RuntimeId, SafeAreaPolicy, VirtualDom,
+        WebViewStyle, WindowMetrics, WindowMetricsHandle, WindowMetricsSubscription,
     };
 
-    // UI-loop handoff for native callbacks that must update Dioxus state
-    // without re-entering the current render or native callback.
-    pub use crate::queue_ui_loop;
-
-    // Native node primitives + virtual container builder.
+    // Renderer-owned safe handles.
     pub use crate::{
-        canonical_tag, create_node, create_node_by_tag, kind_from_tag, ArkImageSource,
-        NativeNodeEvent, NodeBuilder, NodeEventType, NodeKind, PreDragStatus, VirtualKind,
-        VirtualNodeAdapter,
+        ArkImageSource, LayoutFramePx, MountedNodeLease, NativeElementEvent, NativeElementRef,
+        NativeElementSubscription, NativeVisibility, VirtualKind, VirtualSource,
     };
 
-    // Escape-hatch hooks.
+    // Exact-element, portal, and virtual-source hooks.
     pub use crate::{
         use_app_foreground, use_application_lifecycle, use_application_lifecycle_event,
-        use_ark_host_provider, use_ark_node, use_component_lifecycle, use_component_visibility,
-        use_layout_frame, use_layout_frame_node, use_layout_size, use_load_more, use_overlay,
-        use_safe_area, use_safe_area_policy, use_virtual_node_adapter,
-        use_virtual_node_adapter_items_keyed, use_virtual_range, use_window_metrics, ArkHost,
-        ArkNodeRef, ComponentLifecycleState, HitTestMode, LayoutFrame, LayoutSize,
-        LoadMoreController, LoadMoreState, OverlayLayer, OverlayRoot, OverlayViewport, SafeArea,
-        SafeAreaEdges, SafeAreaProps, VirtualAdapterItem, VirtualVisibleRange,
+        use_component_lifecycle, use_component_visibility, use_layout_frame, use_layout_size,
+        use_load_more, use_mounted_node, use_native_element_ref, use_overlay_viewport,
+        use_safe_area, use_safe_area_policy, use_virtual_range, use_virtual_source,
+        use_virtual_source_items_keyed, use_window_metrics, ComponentLifecycleState, LayoutFrame,
+        LayoutSize, LoadMoreController, LoadMoreState, ModalPortal, ModalPresentation,
+        OverlayLayer, OverlayViewport, Portal, SafeArea, SafeAreaEdges, SafeAreaProps,
+        VirtualSourceItem, VirtualVisibleRange,
     };
 
     #[cfg(feature = "i18n")]
