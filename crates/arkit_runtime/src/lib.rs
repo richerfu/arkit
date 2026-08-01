@@ -504,6 +504,17 @@ pub struct EmbeddedArkRuntime {
 }
 
 impl EmbeddedArkRuntime {
+    /// Schedule the embedded root for an in-place render.
+    ///
+    /// Adapter-backed containers use this when a retained item's logical
+    /// index changes after an insert, removal, or move. The native wrapper and
+    /// item-local hooks stay mounted while the subtree observes its new index.
+    pub fn rerender(&self) {
+        if let Some(inner) = &self.inner {
+            inner.borrow_mut().dom.mark_dirty(dioxus_core::ScopeId::APP);
+        }
+    }
+
     /// Stop scheduling this runtime without touching an already-invalid native
     /// root.
     ///

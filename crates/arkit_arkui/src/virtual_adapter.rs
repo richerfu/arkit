@@ -63,6 +63,7 @@ pub type RenderItem = Rc<dyn Fn(u32) -> ArkUIResult<ArkUINode>>;
 /// that must stay alive for as long as that wrapper is mounted.
 pub type MountItem = Rc<dyn Fn(u32, Rc<RefCell<ArkUINode>>) -> ArkUIResult<VirtualItemMount>>;
 type AbandonItemOwner = Box<dyn FnOnce(Box<dyn Any>)>;
+type UpdateItemIndex = Rc<dyn Fn(u32)>;
 
 /// Rust-side lifetime owner retained alongside one mounted virtual item.
 ///
@@ -71,6 +72,7 @@ type AbandonItemOwner = Box<dyn FnOnce(Box<dyn Any>)>;
 pub struct VirtualItemMount {
     owner: Option<Box<dyn Any>>,
     abandon_owner: Option<AbandonItemOwner>,
+    update_index: Option<UpdateItemIndex>,
 }
 
 impl VirtualItemMount {
@@ -79,6 +81,7 @@ impl VirtualItemMount {
         Self {
             owner: Some(Box::new(owner)),
             abandon_owner: None,
+            update_index: None,
         }
     }
 
@@ -95,7 +98,40 @@ impl VirtualItemMount {
                     .expect("virtual item owner type changed before abandonment");
                 abandon_owner(*owner);
             })),
+            update_index: None,
         }
+    }
+
+    /// Retain an owner that can observe logical index changes without
+    /// replacing its native wrapper.
+    pub fn retain_indexed_with_abandon<T: Any>(
+        owner: T,
+        update_index: impl Fn(&T, u32) + 'static,
+        abandon_owner: impl FnOnce(T) + 'static,
+    ) -> Self {
+        let owner = Rc::new(owner);
+        let update_owner = Rc::downgrade(&owner);
+        Self {
+            owner: Some(Box::new(owner)),
+            abandon_owner: Some(Box::new(move |owner| {
+                let owner = owner
+                    .downcast::<Rc<T>>()
+                    .expect("virtual item owner type changed before abandonment");
+                let owner = Rc::try_unwrap(*owner).unwrap_or_else(|_| {
+                    panic!("virtual item owner was retained during abandonment")
+                });
+                abandon_owner(owner);
+            })),
+            update_index: Some(Rc::new(move |index| {
+                if let Some(owner) = update_owner.upgrade() {
+                    update_index(&owner, index);
+                }
+            })),
+        }
+    }
+
+    fn index_updater(&self) -> Option<UpdateItemIndex> {
+        self.update_index.clone()
     }
 
     fn abandon(mut self) {
@@ -113,11 +149,22 @@ enum ItemRenderer {
 }
 
 struct MountedItem {
+    index: u32,
     node: Rc<RefCell<ArkUINode>>,
     mount: Option<VirtualItemMount>,
 }
 
 impl MountedItem {
+    fn prepare_index_update(&mut self, index: u32) -> Option<UpdateItemIndex> {
+        if self.index == index {
+            return None;
+        }
+        self.index = index;
+        self.mount
+            .as_ref()
+            .and_then(VirtualItemMount::index_updater)
+    }
+
     fn dispose(mut self) {
         // Item-local runtimes/listeners must stop touching native nodes before
         // the adapter-owned wrapper is destroyed.
@@ -341,6 +388,7 @@ impl VirtualNodeAdapter {
             .checked_add(count)
             .ok_or_else(|| invalid_parameter("virtual adapter item count overflowed u32"))?;
 
+        let mounted = self.mounted_indices();
         self.with_native_adapter(|adapter| {
             adapter.insert_item(start, count)?;
             if let Err(error) = adapter.set_total_node_count(next_total) {
@@ -350,6 +398,7 @@ impl VirtualNodeAdapter {
             Ok(())
         })?;
         self.state.borrow_mut().total_count = next_total;
+        self.update_mounted_indices(&mounted, |index| (index >= start).then(|| index + count));
         Ok(())
     }
 
@@ -363,6 +412,8 @@ impl VirtualNodeAdapter {
         }
         let next_total = total - count;
 
+        let mounted = self.mounted_indices();
+        let removed_end = start + count;
         self.with_native_adapter(|adapter| {
             adapter.remove_item(start, count)?;
             if let Err(error) = adapter.set_total_node_count(next_total) {
@@ -372,6 +423,9 @@ impl VirtualNodeAdapter {
             Ok(())
         })?;
         self.state.borrow_mut().total_count = next_total;
+        self.update_mounted_indices(&mounted, |index| {
+            (index >= removed_end).then(|| index - count)
+        });
         Ok(())
     }
 
@@ -384,7 +438,50 @@ impl VirtualNodeAdapter {
         if from == to {
             return Ok(());
         }
-        self.with_native_adapter(|adapter| adapter.move_item(from, to))
+        let mounted = self.mounted_indices();
+        self.with_native_adapter(|adapter| adapter.move_item(from, to))?;
+        self.update_mounted_indices(&mounted, |index| moved_item_index(index, from, to));
+        Ok(())
+    }
+
+    fn mounted_indices(&self) -> Vec<(usize, u32)> {
+        self.state
+            .borrow()
+            .mounted
+            .iter()
+            .map(|(handle, item)| (*handle, item.index))
+            .collect()
+    }
+
+    fn update_mounted_indices(
+        &self,
+        mounted: &[(usize, u32)],
+        next_index: impl Fn(u32) -> Option<u32>,
+    ) {
+        let updates = {
+            let mut state = self.state.borrow_mut();
+            let mut updates = Vec::new();
+            for (handle, previous_index) in mounted {
+                let Some(index) = next_index(*previous_index) else {
+                    continue;
+                };
+                let Some(item) = state.mounted.get_mut(handle) else {
+                    continue;
+                };
+                // A synchronous native callback may have replaced this
+                // handle. Only reindex the item represented by the
+                // pre-mutation snapshot.
+                if item.index == *previous_index {
+                    if let Some(update) = item.prepare_index_update(index) {
+                        updates.push((update, index));
+                    }
+                }
+            }
+            updates
+        };
+        for (update, index) in updates {
+            update(index);
+        }
     }
 
     /// Run one native adapter mutation without holding the shared state borrow.
@@ -533,9 +630,23 @@ fn build_item(kind: VirtualKind, index: u32, renderer: &ItemRenderer) -> ArkUIRe
         },
     };
     Ok(MountedItem {
+        index,
         node: wrapper,
         mount,
     })
+}
+
+fn moved_item_index(index: u32, from: u32, to: u32) -> Option<u32> {
+    if index == from {
+        return Some(to);
+    }
+    if from < to && index > from && index <= to {
+        return Some(index - 1);
+    }
+    if from > to && index >= to && index < from {
+        return Some(index + 1);
+    }
+    None
 }
 
 fn validate_item_index(total: u32, index: u32) -> ArkUIResult<()> {
@@ -588,7 +699,8 @@ mod tests {
     use std::rc::Rc;
 
     use super::{
-        validate_insert, validate_item_range, VirtualItemMount, VirtualKind, VirtualNodeAdapter,
+        moved_item_index, validate_insert, validate_item_range, VirtualItemMount, VirtualKind,
+        VirtualNodeAdapter,
     };
 
     struct DropProbe(Rc<Cell<u32>>);
@@ -654,5 +766,32 @@ mod tests {
         mount.abandon();
         assert_eq!(abandons.get(), 1);
         assert_eq!(drops.get(), 1);
+    }
+
+    #[test]
+    fn indexed_mount_observes_retained_item_moves() {
+        let index = Rc::new(Cell::new(3));
+        let update_index = index.clone();
+        let mount = VirtualItemMount::retain_indexed_with_abandon(
+            (),
+            move |_, next| update_index.set(next),
+            |_| {},
+        );
+
+        mount.index_updater().unwrap()(7);
+        assert_eq!(index.get(), 7);
+    }
+
+    #[test]
+    fn moving_an_item_reindexes_the_affected_interval() {
+        assert_eq!(moved_item_index(1, 1, 4), Some(4));
+        assert_eq!(moved_item_index(2, 1, 4), Some(1));
+        assert_eq!(moved_item_index(4, 1, 4), Some(3));
+        assert_eq!(moved_item_index(0, 1, 4), None);
+
+        assert_eq!(moved_item_index(4, 4, 1), Some(1));
+        assert_eq!(moved_item_index(1, 4, 1), Some(2));
+        assert_eq!(moved_item_index(3, 4, 1), Some(4));
+        assert_eq!(moved_item_index(0, 4, 1), None);
     }
 }
