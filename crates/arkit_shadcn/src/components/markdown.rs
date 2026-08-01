@@ -1369,26 +1369,72 @@ fn render_inlines(
         return rsx! { row { height: metrics.line_height } };
     }
 
-    let nodes = content
-        .iter()
+    // ArkUI Flex does **not** implement CSS-style inline text flow: each child is a
+    // flex item that packs side-by-side, which turns paragraphs with links/emphasis
+    // into broken multi-column layouts (common in GitHub READMEs).
+    //
+    // Strategy:
+    // - Split the run on images (block-level media).
+    // - Flatten contiguous text spans into a single full-width `Text` so wrapping
+    //   is native paragraph wrap. Mixed bold/link styles are reduced to a best
+    //   effort (weight / link color / monospace) for the whole run.
+
+    enum Segment<'a> {
+        Text(&'a [InlineNode]),
+        Image {
+            source: &'a Arc<str>,
+            title: &'a Arc<str>,
+            alt: &'a Arc<str>,
+            link: Option<&'a Arc<str>>,
+        },
+    }
+
+    let mut segments: Vec<Segment<'_>> = Vec::new();
+    let mut text_start: Option<usize> = None;
+    for (index, node) in content.iter().enumerate() {
+        match node {
+            InlineNode::Text { .. } => {
+                if text_start.is_none() {
+                    text_start = Some(index);
+                }
+            }
+            InlineNode::Image {
+                source,
+                title,
+                alt,
+                link,
+            } => {
+                if let Some(start) = text_start.take() {
+                    segments.push(Segment::Text(&content[start..index]));
+                }
+                segments.push(Segment::Image {
+                    source,
+                    title,
+                    alt,
+                    link: link.as_ref(),
+                });
+            }
+        }
+    }
+    if let Some(start) = text_start {
+        segments.push(Segment::Text(&content[start..]));
+    }
+
+    let children = segments
+        .into_iter()
         .enumerate()
-        .map(|(index, node)| {
-            let key = format!("{key_prefix}-inline-{index}");
-            match node {
-                InlineNode::Text {
-                    content,
-                    style,
-                    link,
-                } => render_text_span(
-                    content,
-                    *style,
-                    link.as_ref(),
+        .map(|(index, segment)| {
+            let key = format!("{key_prefix}-seg-{index}");
+            match segment {
+                Segment::Text(nodes) => render_text_run(
+                    nodes,
                     metrics,
                     markdown_style,
                     on_link_click,
                     key,
+                    alignment,
                 ),
-                InlineNode::Image {
+                Segment::Image {
                     source,
                     title,
                     alt,
@@ -1397,7 +1443,7 @@ fn render_inlines(
                     source,
                     title,
                     alt,
-                    link.as_ref(),
+                    link,
                     markdown_style,
                     on_link_click,
                     key,
@@ -1406,15 +1452,228 @@ fn render_inlines(
         })
         .collect::<Vec<_>>();
 
+    if children.len() == 1 {
+        return children.into_iter().next().unwrap();
+    }
+
     rsx! {
-        flex {
+        column {
             width: "100%",
-            flex_direction: "row",
-            flex_wrap: "wrap",
-            align_items: "baseline",
-            justify_content: alignment.justify_content(),
-            {nodes.into_iter()}
+            align_items: "start",
+            {children.into_iter()}
         }
+    }
+}
+
+/// Flatten contiguous text/inline-code/link spans into one full-width Text.
+fn render_text_run(
+    nodes: &[InlineNode],
+    metrics: TextMetrics,
+    markdown_style: &MarkdownStyle,
+    on_link_click: Option<EventHandler<String>>,
+    key: String,
+    alignment: InlineAlignment,
+) -> Element {
+    if nodes.is_empty() {
+        return rsx! { row { height: metrics.line_height } };
+    }
+
+    // Single-span fast path keeps precise style + per-link click.
+    if nodes.len() == 1 {
+        if let InlineNode::Text {
+            content,
+            style,
+            link,
+        } = &nodes[0]
+        {
+            return render_text_span(
+                content,
+                *style,
+                link.as_ref(),
+                metrics,
+                markdown_style,
+                on_link_click,
+                key,
+            );
+        }
+    }
+
+    let mut flat = String::new();
+    let mut any_strong = false;
+    let mut any_emphasis = false;
+    let mut any_strike = false;
+    let mut any_code = false;
+    let mut all_code = true;
+    let mut link_dests: Vec<String> = Vec::new();
+    let mut all_same_link: Option<Option<String>> = None;
+
+    for node in nodes {
+        let InlineNode::Text {
+            content,
+            style,
+            link,
+        } = node
+        else {
+            continue;
+        };
+        flat.push_str(content);
+        if style.contains(InlineStyle::STRONG) {
+            any_strong = true;
+        }
+        if style.contains(InlineStyle::EMPHASIS) {
+            any_emphasis = true;
+        }
+        if style.contains(InlineStyle::STRIKETHROUGH) {
+            any_strike = true;
+        }
+        if style.contains(InlineStyle::CODE) {
+            any_code = true;
+        } else {
+            all_code = false;
+        }
+        let dest = link.as_ref().map(|l| l.to_string());
+        if let Some(ref d) = dest {
+            link_dests.push(d.clone());
+        }
+        match &mut all_same_link {
+            None => all_same_link = Some(dest),
+            Some(prev) => {
+                if *prev != dest {
+                    *prev = None; // mixed: clear sole-link
+                    // keep as "mixed" by using a sentinel — represented as Some(None) after clear
+                    // but we also need to know it was mixed vs never linked. Use link_dests.
+                }
+            }
+        }
+    }
+
+    if flat.is_empty() {
+        return rsx! { row { height: metrics.line_height } };
+    }
+
+    let sole_link = {
+        let mut unique = link_dests;
+        unique.sort();
+        unique.dedup();
+        if unique.len() == 1 {
+            Some(unique.remove(0))
+        } else {
+            None
+        }
+    };
+    // Whole run is a single link only when every span shared that destination
+    // (all_same_link stayed Some(Some(..))).
+    let whole_is_link = matches!(all_same_link, Some(Some(ref d)) if sole_link.as_ref() == Some(d));
+
+    let font_weight = if any_strong {
+        700
+    } else {
+        metrics.font_weight
+    };
+    let font_style = i32::from(any_emphasis);
+    let text_decoration = if any_strike {
+        TEXT_DECORATION_LINE_THROUGH
+    } else if whole_is_link {
+        TEXT_DECORATION_UNDERLINE
+    } else {
+        TEXT_DECORATION_NONE
+    };
+    let color = if whole_is_link {
+        markdown_style.link
+    } else {
+        metrics.color
+    };
+    let use_mono = any_code && all_code;
+    let text_align = match alignment {
+        InlineAlignment::Start => "start",
+        InlineAlignment::Center => "center",
+        InlineAlignment::End => "end",
+    };
+
+    // Prefer precise whole-link click when every span shares one destination.
+    let click_dest = if whole_is_link { sole_link } else { None };
+    let bg = if use_mono {
+        markdown_style.code_background
+    } else {
+        0x00000000u32
+    };
+    let pad = if use_mono { 4.0 } else { 0.0 };
+    let pad_y = if use_mono { 2.0 } else { 0.0 };
+    let radius = if use_mono { 4.0 } else { 0.0 };
+
+    match (use_mono, click_dest, on_link_click) {
+        (true, Some(destination), Some(handler)) => rsx! {
+            text {
+                key: "{key}",
+                content: flat,
+                width: "100%",
+                font_size: metrics.font_size,
+                font_weight,
+                font_style,
+                font_family: "monospace",
+                font_color: color,
+                line_height: metrics.line_height,
+                text_decoration,
+                text_align,
+                background_color: bg,
+                padding_top: pad_y,
+                padding_right: pad,
+                padding_bottom: pad_y,
+                padding_left: pad,
+                border_radius: radius,
+                onclick: move |_| handler.call(destination.clone()),
+            }
+        },
+        (true, _, _) => rsx! {
+            text {
+                key: "{key}",
+                content: flat,
+                width: "100%",
+                font_size: metrics.font_size,
+                font_weight,
+                font_style,
+                font_family: "monospace",
+                font_color: color,
+                line_height: metrics.line_height,
+                text_decoration,
+                text_align,
+                background_color: bg,
+                padding_top: pad_y,
+                padding_right: pad,
+                padding_bottom: pad_y,
+                padding_left: pad,
+                border_radius: radius,
+            }
+        },
+        (false, Some(destination), Some(handler)) => rsx! {
+            text {
+                key: "{key}",
+                content: flat,
+                width: "100%",
+                font_size: metrics.font_size,
+                font_weight,
+                font_style,
+                font_color: color,
+                line_height: metrics.line_height,
+                text_decoration,
+                text_align,
+                onclick: move |_| handler.call(destination.clone()),
+            }
+        },
+        (false, _, _) => rsx! {
+            text {
+                key: "{key}",
+                content: flat,
+                width: "100%",
+                font_size: metrics.font_size,
+                font_weight,
+                font_style,
+                font_color: color,
+                line_height: metrics.line_height,
+                text_decoration,
+                text_align,
+            }
+        },
     }
 }
 
@@ -1464,6 +1723,7 @@ fn render_text_span(
                 text {
                     key: "{key}",
                     content,
+                    width: "100%",
                     font_size,
                     font_family: "monospace",
                     font_weight,
@@ -1485,6 +1745,7 @@ fn render_text_span(
             text {
                 key: "{key}",
                 content,
+                width: "100%",
                 font_size,
                 font_family: "monospace",
                 font_weight,
@@ -1506,6 +1767,7 @@ fn render_text_span(
                 text {
                     key: "{key}",
                     content,
+                    width: "100%",
                     font_size,
                     font_weight,
                     font_style,
@@ -1520,6 +1782,7 @@ fn render_text_span(
             text {
                 key: "{key}",
                 content,
+                width: "100%",
                 font_size,
                 font_weight,
                 font_style,
