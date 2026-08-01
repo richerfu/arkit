@@ -253,6 +253,16 @@ impl NativeElementRef {
         self.state.borrow().observe_visibility
     }
 
+    pub(crate) fn is_bound_to(&self, node: &SharedNativeNode) -> bool {
+        let native_handle = node.borrow().raw_handle();
+        self.state
+            .borrow()
+            .node
+            .as_ref()
+            .and_then(Weak::upgrade)
+            .is_some_and(|current| current.borrow().raw_handle() == native_handle)
+    }
+
     pub fn current(&self) -> Option<MountedNodeLease> {
         let state = self.state.borrow();
         state.node.as_ref()?.upgrade()?;
@@ -357,7 +367,15 @@ impl NativeElementRef {
         })
     }
 
-    pub(crate) fn unbind(&self) -> Option<NativeElementEvent> {
+    /// Unbind this reference only if `node` still owns the current binding.
+    ///
+    /// A mutation batch may bind the same reference to its new host before it
+    /// disposes the old host. Matching the native handle prevents that stale
+    /// owner from tearing down the new binding and invalidating its lease.
+    pub(crate) fn unbind(&self, node: &SharedNativeNode) -> Option<NativeElementEvent> {
+        if !self.is_bound_to(node) {
+            return None;
+        }
         let (epoch, teardowns) = {
             let mut state = self.state.borrow_mut();
             state.node.as_ref().and_then(Weak::upgrade)?;

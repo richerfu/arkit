@@ -51,6 +51,7 @@ impl EmbeddedWebViewInit {
 
 struct EmbeddedWebViewState {
     id: String,
+    mount_generation: u64,
     webview: Option<Webview>,
     node: Option<ArkUINode>,
     current_url: Option<String>,
@@ -62,6 +63,7 @@ impl Default for EmbeddedWebViewState {
     fn default() -> Self {
         Self {
             id: String::new(),
+            mount_generation: 0,
             webview: None,
             node: None,
             current_url: None,
@@ -184,20 +186,30 @@ impl EmbeddedWebViewController {
                     }
                     return Err(error);
                 }
-                let mut state = self.inner.borrow_mut();
-                state.id = mount.id;
-                state.node = Some(mount.node);
-                state.webview = Some(mount.webview);
-                state.current_url = requested_url;
-                state.current_html = requested_html;
-                drop(state);
+                let generation = {
+                    let mut state = self.inner.borrow_mut();
+                    state.mount_generation = state
+                        .mount_generation
+                        .checked_add(1)
+                        .expect("arkit_runtime: embedded webview mount generation exhausted");
+                    state.id = mount.id;
+                    state.node = Some(mount.node);
+                    state.webview = Some(mount.webview);
+                    state.current_url = requested_url;
+                    state.current_html = requested_html;
+                    state.mount_generation
+                };
 
                 let teardown = self.clone();
                 // SAFETY: cleanup only disposes this controller's external WebView
                 // child before the renderer invalidates its host node.
-                let installed = unsafe { host.install_native_teardown(move || teardown.dispose()) };
+                let installed = unsafe {
+                    host.install_native_teardown(move || {
+                        teardown.dispose_generation(generation);
+                    })
+                };
                 if !installed {
-                    self.dispose();
+                    self.dispose_generation(generation);
                     return Err(Error::from_reason(
                         "embedded webview host was unmounted during attachment",
                     ));
@@ -293,6 +305,16 @@ impl EmbeddedWebViewController {
     pub fn dispose(&self) {
         if let Err(error) = self.try_dispose() {
             ohos_hilog_binding::error(format!("embedded webview dispose failed: {error}"));
+        }
+    }
+
+    fn dispose_generation(&self, generation: u64) {
+        let is_current = {
+            let state = self.inner.borrow();
+            state.mount_generation == generation && state.webview.is_some()
+        };
+        if is_current {
+            self.dispose();
         }
     }
 

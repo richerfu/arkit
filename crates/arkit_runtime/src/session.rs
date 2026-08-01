@@ -101,6 +101,12 @@ impl RuntimeHandle {
     }
 
     pub fn register_back_handler(&self, handler: Rc<dyn Fn() -> bool>) -> BackPressRegistration {
+        if !self.is_active() {
+            return BackPressRegistration {
+                state: Weak::new(),
+                id: 0,
+            };
+        }
         let id = self.next_registration();
         self.state.back_handlers.borrow_mut().push((id, handler));
         BackPressRegistration {
@@ -136,10 +142,16 @@ impl RuntimeHandle {
     }
 
     pub(crate) fn run_ui_effects(&self) -> Vec<Box<dyn FnOnce()>> {
+        if !self.is_active() {
+            return Vec::new();
+        }
         self.state.ui_effects.borrow_mut().drain(..).collect()
     }
 
     pub(crate) fn dispatch_back_press(&self) -> bool {
+        if !self.is_active() {
+            return false;
+        }
         let handlers = self
             .state
             .back_handlers
@@ -155,6 +167,12 @@ impl RuntimeHandle {
         &self,
         runtime: Weak<RefCell<EmbeddedRuntimeInner>>,
     ) -> EmbeddedRuntimeRegistration {
+        if !self.is_active() {
+            return EmbeddedRuntimeRegistration {
+                state: Weak::new(),
+                id: 0,
+            };
+        }
         let id = self.next_registration();
         self.state
             .embedded_runtimes
@@ -167,6 +185,9 @@ impl RuntimeHandle {
     }
 
     pub(crate) fn embedded_runtimes(&self) -> Vec<Rc<RefCell<EmbeddedRuntimeInner>>> {
+        if !self.is_active() {
+            return Vec::new();
+        }
         let mut runtimes = self.state.embedded_runtimes.borrow_mut();
         runtimes.retain(|(_, runtime)| runtime.strong_count() > 0);
         runtimes

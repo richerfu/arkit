@@ -45,7 +45,10 @@ pub use scroll::{RouteProvider, RouteProviderProps};
 /// through a Dioxus callback so router history is resolved in the component
 /// scope that installed this hook, even though ArkTS initiated the call.
 pub fn use_back_handler() -> impl Fn() -> bool {
-    let runtime = arkit_runtime::use_runtime_handle();
+    // Headless VirtualDom tests and non-ArkUI renderers can still use the
+    // returned navigation callback; only native interception requires a root
+    // runtime context.
+    let runtime = dioxus_core::try_consume_context::<arkit_runtime::RuntimeHandle>();
     let navigator = dioxus_router::navigator();
     let scoped_handler = dioxus_hooks::use_callback(move |()| {
         if navigator.can_go_back() {
@@ -57,7 +60,9 @@ pub fn use_back_handler() -> impl Fn() -> bool {
     });
     let handler: Rc<dyn Fn() -> bool> = Rc::new(move || scoped_handler.call(()));
     let registered_handler = handler.clone();
-    let _registration = use_hook(|| Rc::new(runtime.register_back_handler(registered_handler)));
+    let _registration = use_hook(move || {
+        runtime.map(|runtime| Rc::new(runtime.register_back_handler(registered_handler)))
+    });
     move || handler()
 }
 

@@ -224,7 +224,7 @@ impl LayoutRegistryContext {
     fn snapshot(&self, metrics: WindowMetrics) -> LayoutSnapshot {
         let nodes = self.nodes.borrow();
         let mut ordered = nodes.iter().collect::<Vec<_>>();
-        ordered.sort_by(|(left, _), (right, _)| left.cmp(right));
+        ordered.sort_by_key(|(offset, _)| *offset);
         let ids = ordered
             .iter()
             .enumerate()

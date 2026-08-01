@@ -710,4 +710,20 @@ mod tests {
         assert!(first.dispatch_back_press());
         assert_eq!(calls.get(), 1);
     }
+
+    #[test]
+    fn closed_runtime_rejects_new_back_handlers() {
+        let (_runtime, handle) = test_runtime_handle();
+        let calls = Rc::new(Cell::new(0));
+        handle.close();
+
+        let callback_calls = calls.clone();
+        let _registration = handle.register_back_handler(Rc::new(move || {
+            callback_calls.set(callback_calls.get() + 1);
+            true
+        }));
+
+        assert!(!handle.dispatch_back_press());
+        assert_eq!(calls.get(), 0);
+    }
 }

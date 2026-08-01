@@ -268,9 +268,13 @@ impl VirtualSource {
                     .is_some_and(|current| current.borrow().raw_handle() == host_handle)
         };
         if already_attached {
+            // ArkUI child insertion may replace only the Rust wrapper while
+            // retaining the native handle. Refresh the weak owner so a later
+            // renderer teardown can still reset the adapter attribute.
+            self.state.borrow_mut().attached_host = Some(Rc::downgrade(host));
             return Ok(());
         }
-        self.detach()?;
+        self.detach_current()?;
 
         let kind = self.state.borrow().kind;
         let total = self.state.borrow().total_count;
@@ -321,8 +325,27 @@ impl VirtualSource {
         self.state.borrow().total_count
     }
 
-    /// Detach and dispose the native adapter and every mounted item.
-    pub(crate) fn detach(&self) -> ArkUIResult<()> {
+    /// Detach only if `host` still owns the current source attachment.
+    ///
+    /// A mutation batch may attach the same source to its new host before the
+    /// old host is disposed. The stale owner must not tear down the new one.
+    pub(crate) fn detach(&self, host: &SharedNativeNode) -> ArkUIResult<()> {
+        let host_handle = host.borrow().raw_handle();
+        let owns_attachment = self
+            .state
+            .borrow()
+            .attached_host
+            .as_ref()
+            .and_then(Weak::upgrade)
+            .is_some_and(|current| current.borrow().raw_handle() == host_handle);
+        if !owns_attachment {
+            return Ok(());
+        }
+        self.detach_current()
+    }
+
+    /// Deliberately detach whichever host currently owns this source.
+    fn detach_current(&self) -> ArkUIResult<()> {
         let (kind, host, adapter) = {
             let mut state = self.state.borrow_mut();
             (state.kind, state.attached_host.take(), state.adapter.take())
@@ -355,7 +378,18 @@ impl VirtualSource {
         reset_result
     }
 
-    pub(crate) fn abandon_attachment(&self) {
+    pub(crate) fn abandon_attachment(&self, host: &SharedNativeNode) {
+        let host_handle = host.borrow().raw_handle();
+        let owns_attachment = self
+            .state
+            .borrow()
+            .attached_host
+            .as_ref()
+            .and_then(Weak::upgrade)
+            .is_some_and(|current| current.borrow().raw_handle() == host_handle);
+        if !owns_attachment {
+            return;
+        }
         let adapter = {
             let mut state = self.state.borrow_mut();
             state.attached_host = None;

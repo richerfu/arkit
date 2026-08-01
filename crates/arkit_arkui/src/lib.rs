@@ -268,26 +268,37 @@ impl DirtyHostQueue {
 
 #[derive(Default)]
 struct ProjectionState {
-    active_portals: FxHashSet<HostId>,
+    /// Monotonic activation order for every portal currently projected at the
+    /// root. Host ids are arena slots and can be reused after removal, so they
+    /// cannot define stable same-layer z-order.
+    active_portals: FxHashMap<HostId, u64>,
+    next_portal_order: u64,
     root_dirty: bool,
     deferred_event_hosts: DirtyHostQueue,
 }
 
 impl ProjectionState {
     fn activate_portal(&mut self, host: HostId) -> bool {
-        let changed = self.active_portals.insert(host);
-        self.root_dirty |= changed;
-        changed
+        if self.active_portals.contains_key(&host) {
+            return false;
+        }
+        self.next_portal_order = self
+            .next_portal_order
+            .checked_add(1)
+            .expect("arkit_arkui: portal activation order space exhausted");
+        self.active_portals.insert(host, self.next_portal_order);
+        self.root_dirty = true;
+        true
     }
 
     fn deactivate_portal(&mut self, host: HostId) -> bool {
-        let changed = self.active_portals.remove(&host);
+        let changed = self.active_portals.remove(&host).is_some();
         self.root_dirty |= changed;
         changed
     }
 
     fn mark_portal_order_dirty(&mut self, host: HostId) {
-        self.root_dirty |= self.active_portals.contains(&host);
+        self.root_dirty |= self.active_portals.contains_key(&host);
     }
 
     fn take_root_dirty(&mut self) -> bool {
@@ -398,9 +409,12 @@ impl ArkUIRenderer {
             .build();
         if let Err(error) = root_node.mount(root_ark.as_raw().clone()) {
             // `RootNode::mount` retains a clone before calling native APIs.
-            // Let it release that clone when possible; otherwise dispose our
-            // still-unmounted owner so constructor failure cannot leak it.
-            if root_node.unmount().is_err() {
+            // If rollback succeeds it has already disposed the shared native
+            // handle, so relinquish our wrapper without disposing it again.
+            // If rollback fails, our unique owner remains responsible.
+            if root_node.unmount().is_ok() {
+                drop(root_ark.into_raw());
+            } else {
                 drop(root_ark);
             }
             return Err(error);
@@ -1199,19 +1213,19 @@ impl ArkUIRenderer {
                 .projection
                 .active_portals
                 .iter()
-                .copied()
-                .filter(|host| self.hosts.is_connected_to_root(*host))
+                .filter(|(host, _)| self.hosts.is_connected_to_root(**host))
+                .map(|(host, activation_order)| (*host, *activation_order))
                 .collect::<Vec<_>>();
             debug_assert!(portals
                 .iter()
-                .all(|host| matches!(self.hosts[*host].kind, HostKind::Portal { .. })));
-            portals.sort_by_key(|host| {
+                .all(|(host, _)| matches!(self.hosts[*host].kind, HostKind::Portal { .. })));
+            portals.sort_by_key(|(host, activation_order)| {
                 (
                     self.hosts[*host].kind.portal_layer().unwrap_or_default(),
-                    host.index(),
+                    *activation_order,
                 )
             });
-            children.extend(portals);
+            children.extend(portals.into_iter().map(|(host, _)| host));
         }
         let mut desired = Vec::<(HostId, NodeRef)>::new();
         for child in children {
@@ -1227,7 +1241,7 @@ impl ArkUIRenderer {
         let desired_raws = desired
             .iter()
             .map(|(_, native)| Self::native_raw_id(native))
-            .collect::<Vec<_>>();
+            .collect::<FxHashSet<_>>();
 
         let child_count = parent_native.borrow().children().len();
         for index in (0..child_count).rev() {
@@ -1324,10 +1338,12 @@ impl ArkUIRenderer {
         self.hosts[host].routed_node_events.clear();
         self.unbind_native_ref(host);
         if let Some(source) = self.hosts[host].virtual_source.take() {
-            if let Err(error) = source.detach() {
-                ohos_hilog_binding::warn(format!(
-                    "arkit_arkui: virtual source detach failed: {error}"
-                ));
+            if let Some(native) = self.hosts[host].native.as_ref() {
+                if let Err(error) = source.detach(native) {
+                    ohos_hilog_binding::warn(format!(
+                        "arkit_arkui: virtual source detach failed: {error}"
+                    ));
+                }
             }
         }
     }
@@ -1343,13 +1359,18 @@ impl ArkUIRenderer {
             self.hosts[host]
                 .native_ref
                 .as_ref()
-                .is_none_or(|reference| reference.current().is_none()),
+                .is_none_or(|reference| self.hosts[host]
+                    .native
+                    .as_ref()
+                    .is_none_or(|native| !reference.is_bound_to(native))),
             "native ref remained bound after pre-dispose teardown"
         );
         if let Some(source) = self.hosts[host].virtual_source.take() {
             // This is an exceptional fallback: the normal pre-dispose pass
             // detaches every source while its host is live.
-            source.abandon_attachment();
+            if let Some(native) = self.hosts[host].native.as_ref() {
+                source.abandon_attachment(native);
+            }
         }
         self.hosts[host].native = None;
         self.hosts[host].native_attached = false;
@@ -1465,7 +1486,10 @@ impl ArkUIRenderer {
         let Some(reference) = self.hosts[host].native_ref.clone() else {
             return;
         };
-        let Some(event) = reference.unbind() else {
+        let Some(native) = self.hosts[host].native.as_ref() else {
+            return;
+        };
+        let Some(event) = reference.unbind(native) else {
             return;
         };
         if let Some(sink) = &self.sink {
@@ -1509,10 +1533,12 @@ impl ArkUIRenderer {
             return;
         }
         if let Some(previous) = self.hosts[host].virtual_source.take() {
-            if let Err(error) = previous.detach() {
-                ohos_hilog_binding::warn(format!(
-                    "arkit_arkui: virtual source replacement detach failed: {error}"
-                ));
+            if let Some(native) = self.hosts[host].native.as_ref() {
+                if let Err(error) = previous.detach(native) {
+                    ohos_hilog_binding::warn(format!(
+                        "arkit_arkui: virtual source replacement detach failed: {error}"
+                    ));
+                }
             }
         }
         self.hosts[host].virtual_source = source;
@@ -2534,6 +2560,20 @@ mod event_tests {
         assert!(!projection.deactivate_portal(portal));
         assert!(projection.take_root_dirty());
         assert!(!projection.take_root_dirty());
+    }
+
+    #[test]
+    fn portal_activation_order_survives_host_slot_reuse() {
+        let reused = HostId::new(9);
+        let older = HostId::new(10);
+        let mut projection = ProjectionState::default();
+
+        projection.activate_portal(reused);
+        projection.activate_portal(older);
+        projection.deactivate_portal(reused);
+        projection.activate_portal(reused);
+
+        assert!(projection.active_portals[&older] < projection.active_portals[&reused]);
     }
 
     #[test]
