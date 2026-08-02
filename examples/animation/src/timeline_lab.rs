@@ -276,9 +276,10 @@ fn TimelineRuntimeMetrics(controls: AnimationControls, last_event: String) -> El
 
 #[component]
 fn TimelineCard() -> Element {
-    let _target = use_animation_target(CARD_TARGET);
+    let target = use_animation_target(CARD_TARGET);
     rsx! {
         column {
+            native_ref: target.native_ref(),
             width: 150.0,
             height: 112.0,
             align_items: "center",
@@ -293,9 +294,10 @@ fn TimelineCard() -> Element {
 
 #[component]
 fn TimelineBadge() -> Element {
-    let _target = use_animation_target(BADGE_TARGET);
+    let target = use_animation_target(BADGE_TARGET);
     rsx! {
         column {
+            native_ref: target.native_ref(),
             margin_left: 18.0,
             width: 74.0,
             height: 74.0,

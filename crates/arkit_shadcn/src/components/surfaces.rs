@@ -813,7 +813,6 @@ pub fn Sonner(props: SonnerProps) -> Element {
             on_dismiss: dismiss,
         }
     };
-    use_sonner_overlay(open, layer);
     rsx! {
         for toast in timer_items {
             {
@@ -827,25 +826,13 @@ pub fn Sonner(props: SonnerProps) -> Element {
                 }
             }
         }
-    }
-}
-
-fn use_sonner_overlay(open: bool, layer: Element) {
-    let overlay = arkit_hooks::use_overlay();
-    let effect_overlay = overlay.clone();
-    let effect_layer = layer.clone();
-    let mut refresh = use_effect(move || {
         if open {
-            let layer = effect_layer.clone();
-            effect_overlay.show_transient(move || layer.clone());
-        } else {
-            effect_overlay.dismiss();
+            arkit_hooks::Portal {
+                layer: arkit_hooks::OverlayLayer::Transient,
+                {layer}
+            }
         }
-    });
-    refresh.mark_dirty();
-
-    let cleanup_overlay = overlay.clone();
-    use_drop(move || cleanup_overlay.dismiss());
+    }
 }
 
 #[component]
@@ -1281,10 +1268,7 @@ fn SonnerToastTimer(toast: SonnerToast, on_dismiss: EventHandler<ToastIdentity>)
     let identity = ToastIdentity::from(&toast);
     let duration_ms = toast.duration_ms;
     let timer_callback = toast.dismiss_handler.clone();
-    // Capture the runtime handle while rendering on the registered UI thread.
-    // `tokio_handle()` is thread-local; resolving it lazily from inside a
-    // Dioxus task can run outside that registration and silently stop the task.
-    let async_runtime = arkit_runtime::tokio_handle();
+    let async_runtime = arkit_runtime::use_runtime_handle().tokio();
     let _dismiss_timer = use_future(move || {
         let async_runtime = async_runtime.clone();
         let timer_callback = timer_callback.clone();

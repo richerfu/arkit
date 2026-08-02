@@ -1,31 +1,12 @@
-//! `use_overlay` — declarative floating and modal overlays.
-//!
-//! Overlays render their content declaratively: `show_*` publishes the content
-//! `Element` on the `ArkHost`'s overlay-content signal, and `OverlayRoot`
-//! (rendered once at the app root) mounts it as a full-screen `stack` subtree
-//! on top of the app. `dismiss()` clears the signal. This keeps overlay content
-//! inside the dioxus tree (no second VirtualDom, no imperative portal chrome),
-//! so signals/hooks in the overlay continue to work.
-//!
-use std::cell::RefCell;
-use std::rc::Rc;
+//! Declarative root projection for floating, modal, and transient content.
 
 use crate::layout::LayoutFrame;
-use crate::node::{use_ark_host, ArkHost};
-use crate::safe_area::use_safe_area;
-
-// Bring the ArkUI element descriptors (`stack`, `row`, `column`, ...) and
-// event descriptors into scope for `rsx!`.
+use crate::safe_area::{use_safe_area, use_window_metrics};
 use arkit_prelude::*;
 
 const STACK_ALIGN_CENTER: &str = "center";
 
-/// Stable overlay planes rendered together by [`crate::OverlayRoot`].
-///
-/// Modal content blocks the application through its explicit backdrop,
-/// floating content sits above modal surfaces, and transient notifications
-/// sit above both while their full-screen positioning roots remain
-/// pass-through.
+/// Stable root projection planes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum OverlayLayer {
     #[default]
@@ -35,11 +16,40 @@ pub enum OverlayLayer {
 }
 
 impl OverlayLayer {
-    pub(crate) const fn z_index(self) -> i32 {
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Modal => "modal",
+            Self::Floating => "floating",
+            Self::Transient => "transient",
+        }
+    }
+
+    pub const fn z_index(self) -> i32 {
         match self {
             Self::Modal => 100,
             Self::Floating => 200,
             Self::Transient => 300,
+        }
+    }
+}
+
+/// Keep Dioxus ownership and context at the declaration site while projecting
+/// the native subtree into a stable renderer-root layer.
+#[component]
+pub fn Portal(#[props(default)] layer: OverlayLayer, children: Element) -> Element {
+    // Locals keep both attributes dynamic so the renderer receives them even
+    // when the component body itself came from a static RSX template.
+    let portal_layer = layer.name();
+    let z_index = layer.z_index();
+    rsx! {
+        portal {
+            portal_layer,
+            width: "100%",
+            height: "100%",
+            alignment: "top-start",
+            hit_test_behavior: "none",
+            z_index,
+            {children}
         }
     }
 }
@@ -53,318 +63,172 @@ pub enum ModalPresentation {
     BottomDrawer,
 }
 
-/// Spec for a modal overlay.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct ModalOverlaySpec {
-    pub open: bool,
-    pub presentation: ModalPresentation,
-    pub dismiss_on_backdrop: bool,
-    pub backdrop_color: u32,
-    pub viewport_inset: f32,
-}
-
-impl Default for ModalOverlaySpec {
-    fn default() -> Self {
-        Self {
-            open: false,
-            presentation: ModalPresentation::CenteredDialog,
-            dismiss_on_backdrop: true,
-            backdrop_color: 0x80000000,
-            viewport_inset: 16.0,
-        }
-    }
-}
-
-/// Internal overlay state. The content `Element` is published on the host's
-/// overlay-content signal; this struct only tracks whether content is open.
-struct OverlayState {
-    host: ArkHost,
-    token: u64,
-    window_metrics: Option<arkit_runtime::WindowMetricsHandle>,
-    open: bool,
-    mounted: bool,
-}
-
-impl OverlayState {
-    fn new(host: ArkHost, window_metrics: Option<arkit_runtime::WindowMetricsHandle>) -> Self {
-        let token = host.allocate_overlay_token();
-        Self {
-            host,
-            token,
-            window_metrics,
-            open: false,
-            mounted: true,
-        }
-    }
-}
-
-/// Full overlay frame plus the current effective visual safe insets.
+/// Full portal frame plus current safe insets.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct OverlayViewport {
-    /// Overlay root frame in physical pixels (window space).
+    /// Portal frame in physical window pixels.
     pub frame: LayoutFrame,
     /// Visual safe-area insets in vp.
     pub safe_area: arkit_runtime::EdgeInsets,
-    /// Physical-pixel → ArkUI-vp scale (window density).
+    /// Physical-pixel to ArkUI-vp scale.
     pub scale: f32,
 }
 
-/// Handle returned by [`use_overlay`]. Cloning shares the underlying state.
-#[derive(Clone)]
-pub struct OverlayApi {
-    inner: Rc<RefCell<OverlayState>>,
-}
-
-impl OverlayApi {
-    /// Show floating content as a full-screen subtree at `OverlayRoot`.
-    /// Positioning and dismissal layers are part of the supplied Dioxus tree.
-    /// The portal root itself uses ArkUI `HitTestMode::None`, so blank space is
-    /// pass-through by default. A floating subtree that needs outside-click
-    /// dismissal must add an explicit blocking hit plane; otherwise a single
-    /// click can both dismiss the surface and activate a retained route below
-    /// it. Masked/modal surfaces follow the same blocking rule.
-    pub fn show_floating(&self, content: impl FnOnce() -> Element + 'static) {
-        self.set_content(OverlayLayer::Floating, content);
-    }
-
-    /// Show a transient notification layer above modal and floating content.
-    /// The supplied subtree must keep its viewport-sized positioning nodes on
-    /// ArkUI `HitTestMode::None`; only concrete interactive cards opt back into
-    /// hit testing.
-    pub fn show_transient(&self, content: impl FnOnce() -> Element + 'static) {
-        self.set_content(OverlayLayer::Transient, content);
-    }
-
-    /// Show a modal overlay (centered dialog / right sheet / bottom drawer).
-    pub fn show_modal(&self, spec: ModalOverlaySpec, content: impl FnOnce() -> Element + 'static) {
-        self.show_modal_with_dismiss(spec, content, || {});
-    }
-
-    /// Show a modal overlay with an explicit dismiss callback. The callback is
-    /// invoked for backdrop/outside clicks before the overlay signal is cleared.
-    pub fn show_modal_with_dismiss(
-        &self,
-        spec: ModalOverlaySpec,
-        content: impl FnOnce() -> Element + 'static,
-        on_dismiss: impl Fn() + 'static,
-    ) {
-        let dismiss = {
-            let overlay = self.clone();
-            Rc::new(move || {
-                on_dismiss();
-                overlay.dismiss();
-            }) as Rc<dyn Fn()>
-        };
-        let element = modal_overlay_layer(spec, content(), dismiss);
-        self.set_element(OverlayLayer::Modal, element);
-    }
-
-    /// Dismiss the active overlay (clears the overlay-content signal).
-    pub fn dismiss(&self) {
-        let (host, token, mounted) = {
-            let state = self.inner.borrow();
-            (state.host.clone(), state.token, state.mounted)
-        };
-        if !mounted {
-            return;
-        }
-        host.dismiss_overlay(token);
-        let mut state = self.inner.borrow_mut();
-        state.open = false;
-    }
-
-    /// Whether an overlay is currently open.
-    pub fn is_open(&self) -> bool {
-        self.inner.borrow().open
-    }
-
-    /// Current measured frame of the app-level overlay root, in physical
-    /// pixels. Floating overlays use this to translate window-relative trigger
-    /// frames into overlay-local coordinates.
-    pub fn overlay_frame(&self) -> LayoutFrame {
-        self.inner.borrow().host.overlay_frame_value()
-    }
-
-    /// Current positioning viewport for floating content.
-    pub fn viewport(&self) -> OverlayViewport {
-        let state = self.inner.borrow();
-        let metrics = state.window_metrics.as_ref().map(|metrics| metrics.get());
-        OverlayViewport {
-            frame: state.host.overlay_frame_value(),
-            safe_area: metrics.map(|metrics| metrics.safe_area).unwrap_or_default(),
-            scale: metrics
-                .map(|metrics| metrics.scale)
-                .filter(|scale| scale.is_finite() && *scale > 0.0)
-                .unwrap_or(1.0),
-        }
-    }
-
-    /// Shared helper: render the content closure to an `Element` and publish it
-    /// on the host's overlay-content signal, marking the overlay open.
-    fn set_content(&self, layer: OverlayLayer, content: impl FnOnce() -> Element + 'static) {
-        let element = content();
-        self.set_element(layer, element);
-    }
-
-    fn set_element(&self, layer: OverlayLayer, element: Element) {
-        let (host, token, mounted) = {
-            let state = self.inner.borrow();
-            (state.host.clone(), state.token, state.mounted)
-        };
-        if !mounted {
-            return;
-        }
-        host.set_overlay(token, layer, element);
-        let mut state = self.inner.borrow_mut();
-        state.open = true;
-    }
-
-    fn dispose(&self) {
-        let (host, token, mounted) = {
-            let state = self.inner.borrow();
-            (state.host.clone(), state.token, state.mounted)
-        };
-        if mounted {
-            host.dismiss_overlay(token);
-        }
-        let mut state = self.inner.borrow_mut();
-        state.open = false;
-        state.mounted = false;
+/// Read positioning geometry for a declarative [`Portal`].
+#[track_caller]
+pub fn use_overlay_viewport() -> OverlayViewport {
+    let metrics = use_window_metrics();
+    let content = metrics.content_rect;
+    OverlayViewport {
+        frame: LayoutFrame {
+            x: content.left as f32,
+            y: content.top as f32,
+            width: content.width.max(0) as f32,
+            height: content.height.max(0) as f32,
+        },
+        safe_area: metrics.safe_area,
+        scale: if metrics.scale.is_finite() && metrics.scale > 0.0 {
+            metrics.scale
+        } else {
+            1.0
+        },
     }
 }
 
-fn dismiss_if_allowed(spec: ModalOverlaySpec, dismiss: &Rc<dyn Fn()>) {
-    if spec.dismiss_on_backdrop {
-        dismiss();
+/// Declarative modal shell with backdrop and safe-area-aware placement.
+#[component]
+pub fn ModalPortal(
+    open: bool,
+    #[props(default)] presentation: ModalPresentation,
+    #[props(default = true)] dismiss_on_backdrop: bool,
+    #[props(default = 0x80000000)] backdrop_color: u32,
+    #[props(default = 16.0)] viewport_inset: f32,
+    on_dismiss: EventHandler<()>,
+    children: Element,
+) -> Element {
+    if !open {
+        return rsx! {};
     }
-}
 
-fn modal_overlay_layer(spec: ModalOverlaySpec, panel: Element, dismiss: Rc<dyn Fn()>) -> Element {
     rsx! {
-        ModalOverlayLayer {
-            spec,
-            panel,
-            dismiss,
+        Portal {
+            layer: OverlayLayer::Modal,
+            ModalOverlayLayer {
+                presentation,
+                dismiss_on_backdrop,
+                backdrop_color,
+                viewport_inset,
+                on_dismiss,
+                panel: children,
+            }
         }
     }
 }
 
 #[derive(Clone, Props)]
 struct ModalOverlayLayerProps {
-    spec: ModalOverlaySpec,
+    presentation: ModalPresentation,
+    dismiss_on_backdrop: bool,
+    backdrop_color: u32,
+    viewport_inset: f32,
+    on_dismiss: EventHandler<()>,
     panel: Element,
-    dismiss: Rc<dyn Fn()>,
 }
 
 impl PartialEq for ModalOverlayLayerProps {
     fn eq(&self, _other: &Self) -> bool {
-        // Modal content may close over reactive business state. Rebuilding it
-        // also lets safe-area changes update panel constraints immediately.
+        // Element props can close over changing signals. Always reconcile the
+        // declared modal subtree rather than snapshotting it outside the owner.
         false
+    }
+}
+
+fn dismiss_if_allowed(allowed: bool, dismiss: EventHandler<()>) {
+    if allowed {
+        dismiss.call(());
     }
 }
 
 #[allow(non_snake_case)]
 fn ModalOverlayLayer(props: ModalOverlayLayerProps) -> Element {
-    let ModalOverlayLayerProps {
-        spec,
-        panel,
-        dismiss,
-    } = props;
     let safe_area = use_safe_area();
-    let inset_top = spec.viewport_inset + safe_area.top;
-    let inset_right = spec.viewport_inset + safe_area.right;
-    let inset_bottom = spec.viewport_inset + safe_area.bottom;
-    let inset_left = spec.viewport_inset + safe_area.left;
-    let backdrop_dismiss = dismiss.clone();
-    // Match the pre-migration interaction tree: full-screen shells carry
-    // dismiss `onclick`, and the panel wrapper only stops propagation. Do not
-    // force hit_test modes here — OverlayRoot already uses `"none"` for the
-    // portal, and experimental modes on these shells broke panel button hits.
-    let overlay_panel = match spec.presentation {
-        ModalPresentation::CenteredDialog => {
-            let outside_dismiss = dismiss.clone();
-            rsx! {
+    let inset_top = props.viewport_inset + safe_area.top;
+    let inset_right = props.viewport_inset + safe_area.right;
+    let inset_bottom = props.viewport_inset + safe_area.bottom;
+    let inset_left = props.viewport_inset + safe_area.left;
+    let dismiss_on_backdrop = props.dismiss_on_backdrop;
+    let dismiss = props.on_dismiss;
+    let panel = props.panel;
+
+    let overlay_panel = match props.presentation {
+        ModalPresentation::CenteredDialog => rsx! {
+            stack {
+                width: "100%",
+                height: "100%",
+                alignment: STACK_ALIGN_CENTER,
+                padding_top: inset_top,
+                padding_right: inset_right,
+                padding_bottom: inset_bottom,
+                padding_left: inset_left,
+                onclick: move |event| {
+                    event.stop_propagation();
+                    dismiss_if_allowed(dismiss_on_backdrop, dismiss);
+                },
                 stack {
                     width: "100%",
+                    clip: false,
+                    onclick: move |event| event.stop_propagation(),
+                    {panel}
+                }
+            }
+        },
+        ModalPresentation::RightSheet => rsx! {
+            row {
+                width: "100%",
+                height: "100%",
+                justify_content: "end",
+                padding_top: inset_top,
+                padding_right: inset_right,
+                padding_bottom: inset_bottom,
+                padding_left: inset_left,
+                onclick: move |event| {
+                    event.stop_propagation();
+                    dismiss_if_allowed(dismiss_on_backdrop, dismiss);
+                },
+                column {
                     height: "100%",
-                    alignment: STACK_ALIGN_CENTER,
-                    padding_top: inset_top,
-                    padding_right: inset_right,
-                    padding_bottom: inset_bottom,
-                    padding_left: inset_left,
-                    onclick: move |evt| {
-                        evt.stop_propagation();
-                        dismiss_if_allowed(spec, &outside_dismiss);
-                    },
                     stack {
-                        width: "100%",
                         clip: false,
-                        onclick: move |evt| evt.stop_propagation(),
+                        onclick: move |event| event.stop_propagation(),
                         {panel}
                     }
                 }
             }
-        }
-        ModalPresentation::RightSheet => {
-            let outside_dismiss = dismiss.clone();
-            rsx! {
+        },
+        ModalPresentation::BottomDrawer => rsx! {
+            column {
+                width: "100%",
+                height: "100%",
+                padding_top: inset_top,
+                padding_right: inset_right,
+                padding_bottom: 0.0,
+                padding_left: inset_left,
+                onclick: move |event| {
+                    event.stop_propagation();
+                    dismiss_if_allowed(dismiss_on_backdrop, dismiss);
+                },
                 row {
                     width: "100%",
-                    height: "100%",
-                    justify_content: "end",
-                    padding_top: inset_top,
-                    padding_right: inset_right,
-                    padding_bottom: inset_bottom,
-                    padding_left: inset_left,
-                    onclick: move |evt| {
-                        evt.stop_propagation();
-                        dismiss_if_allowed(spec, &outside_dismiss);
-                    },
-                    column {
-                        height: "100%",
-                        stack {
-                            clip: false,
-                            onclick: move |evt| evt.stop_propagation(),
-                            {panel}
-                        }
-                    }
+                    layout_weight: 1.0,
                 }
-            }
-        }
-        ModalPresentation::BottomDrawer => {
-            let outside_dismiss = dismiss.clone();
-            rsx! {
                 column {
                     width: "100%",
-                    height: "100%",
-                    padding_top: inset_top,
-                    padding_right: inset_right,
-                    // Bottom-anchored surfaces own their internal safe-area
-                    // padding so their background reaches the screen edge.
-                    padding_bottom: 0.0,
-                    padding_left: inset_left,
-                    onclick: move |evt| {
-                        evt.stop_propagation();
-                        dismiss_if_allowed(spec, &outside_dismiss);
-                    },
-                    // API 24 does not reliably honor bottom alignment on
-                    // full-height Column/Stack nodes. A weighted spacer uses
-                    // the measured remaining height and pins the intrinsic
-                    // sheet to the bottom without needing to know its height.
-                    row {
-                        width: "100%",
-                        layout_weight: 1.0,
-                    }
-                    column {
-                        width: "100%",
-                        clip: false,
-                        onclick: move |evt| evt.stop_propagation(),
-                        {panel}
-                    }
+                    clip: false,
+                    onclick: move |event| event.stop_propagation(),
+                    {panel}
                 }
             }
-        }
+        },
     };
 
     rsx! {
@@ -376,10 +240,10 @@ fn ModalOverlayLayer(props: ModalOverlayLayerProps) -> Element {
             row {
                 width: "100%",
                 height: "100%",
-                background_color: spec.backdrop_color,
-                onclick: move |evt| {
-                    evt.stop_propagation();
-                    dismiss_if_allowed(spec, &backdrop_dismiss);
+                background_color: props.backdrop_color,
+                onclick: move |event| {
+                    event.stop_propagation();
+                    dismiss_if_allowed(dismiss_on_backdrop, dismiss);
                 },
             }
             {overlay_panel}
@@ -387,34 +251,15 @@ fn ModalOverlayLayer(props: ModalOverlayLayerProps) -> Element {
     }
 }
 
-/// Create an [`OverlayApi`] bound to the current [`ArkHost`].
-///
-/// Requires an ancestor to have called [`crate::use_ark_host_provider`], and
-/// the app root to render [`crate::OverlayRoot`] so the overlay content
-/// actually mounts.
-pub fn use_overlay() -> OverlayApi {
-    let host = use_ark_host();
-    let window_metrics = dioxus_core::try_consume_context::<arkit_runtime::WindowMetricsHandle>();
-    let overlay = use_hook(|| {
-        let state = OverlayState::new(host.clone(), window_metrics.clone());
-        OverlayApi {
-            inner: Rc::new(RefCell::new(state)),
-        }
-    });
-    let cleanup = overlay.clone();
-    use_drop(move || cleanup.dispose());
-    overlay
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn overlay_layers_have_stable_interaction_order() {
+    fn overlay_layers_have_stable_projection_order() {
         assert!(OverlayLayer::Modal < OverlayLayer::Floating);
         assert!(OverlayLayer::Floating < OverlayLayer::Transient);
-        assert_eq!(OverlayLayer::Modal.z_index(), 100);
+        assert_eq!(OverlayLayer::Modal.name(), "modal");
         assert_eq!(OverlayLayer::Transient.z_index(), 300);
     }
 }

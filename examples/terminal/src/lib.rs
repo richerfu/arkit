@@ -90,6 +90,7 @@ impl HostState {
 
 #[entry]
 fn app() -> Element {
+    let async_runtime = use_runtime_handle().tokio();
     let controller = use_hook(TerminalController::new);
     let host = use_hook(|| Rc::new(RefCell::new(HostState::new())));
     let window_metrics = use_window_metrics();
@@ -100,7 +101,7 @@ fn app() -> Element {
     let mut ssh_host = use_signal(|| String::from("127.0.0.1"));
     let mut ssh_port = use_signal(|| String::from("22"));
     let mut ssh_user = use_signal(|| String::from("root"));
-    let mut ssh_pass = use_signal(|| String::new());
+    let mut ssh_pass = use_signal(String::new);
 
     // SSH inbound channel: task → UI poll.
     let (ssh_ev_tx, ssh_ev_rx) = use_hook(|| {
@@ -114,8 +115,8 @@ fn app() -> Element {
         let host = host.clone();
         let ssh_ev_rx = ssh_ev_rx.clone();
         let mut status = status;
+        let handle = async_runtime.clone();
         move || {
-            let handle = arkit_runtime::tokio_handle();
             dioxus_core::spawn(async move {
                 loop {
                     let sleeper = handle.spawn(async {
@@ -149,10 +150,10 @@ fn app() -> Element {
     use_hook({
         let controller = controller.clone();
         let host = host.clone();
+        let handle = async_runtime.clone();
         move || {
             let banner = host.borrow().local.banner();
             // Defer slightly so Terminal has attached the engine.
-            let handle = arkit_runtime::tokio_handle();
             dioxus_core::spawn(async move {
                 let sleeper = handle.spawn(async {
                     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
@@ -231,6 +232,7 @@ fn app() -> Element {
         let host = host.clone();
         let ssh_ev_tx = ssh_ev_tx.clone();
         let mut status = status;
+        let handle = async_runtime.clone();
         move |()| {
             let port: u16 = ssh_port().parse().unwrap_or(22);
             let cfg = SshConnect {
@@ -245,7 +247,7 @@ fn app() -> Element {
             if let Some(tx) = host.borrow_mut().ssh_tx.take() {
                 let _ = tx.send(SshCmd::Close);
             }
-            let tx = spawn_ssh(cfg, ssh_ev_tx.clone());
+            let tx = spawn_ssh(handle.clone(), cfg, ssh_ev_tx.clone());
             host.borrow_mut().ssh_tx = Some(tx);
             status.set("ssh connecting…".into());
         }

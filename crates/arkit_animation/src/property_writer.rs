@@ -112,15 +112,20 @@ pub(crate) fn write(
             return Err(AnimationAdapterError::UnsupportedValue { property });
         }
     };
-    binding
-        .node
-        .borrow()
-        .set_attribute(attribute, item)
-        .map_err(|error| AnimationAdapterError::NativeWrite {
+    let node = binding.node.clone();
+    // SAFETY: this writes one renderer-compatible visual attribute to the
+    // live target and neither retains nor reparents the native node.
+    let result = unsafe { node.with_native(|node| node.set_attribute(attribute, item)) }
+        .ok_or_else(|| AnimationAdapterError::NativeWrite {
             target: binding.id,
             property,
-            reason: error.to_string().into_boxed_str(),
-        })
+            reason: "target is no longer mounted".into(),
+        })?;
+    result.map_err(|error| AnimationAdapterError::NativeWrite {
+        target: binding.id,
+        property,
+        reason: error.to_string().into_boxed_str(),
+    })
 }
 
 pub(crate) fn write_compound_pair(
@@ -191,13 +196,18 @@ pub(crate) fn write_compound_pair(
         ArkUINodeAttributeType::Position => binding.visual.position.to_vec().into(),
         _ => unreachable!("compound writer only emits transform or position attributes"),
     };
-    binding
-        .node
-        .borrow()
-        .set_attribute(attribute, item)
-        .map_err(|error| AnimationAdapterError::NativeWrite {
+    let node = binding.node.clone();
+    // SAFETY: this writes one renderer-compatible compound visual attribute
+    // to the live target and does not retain the native borrow.
+    let result = unsafe { node.with_native(|node| node.set_attribute(attribute, item)) }
+        .ok_or_else(|| AnimationAdapterError::NativeWrite {
             target: binding.id,
             property: first_property,
-            reason: error.to_string().into_boxed_str(),
-        })
+            reason: "target is no longer mounted".into(),
+        })?;
+    result.map_err(|error| AnimationAdapterError::NativeWrite {
+        target: binding.id,
+        property: first_property,
+        reason: error.to_string().into_boxed_str(),
+    })
 }

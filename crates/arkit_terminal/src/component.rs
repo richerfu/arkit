@@ -17,7 +17,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
 use std::rc::Rc;
 
-use arkit_hooks::use_ark_node;
+use arkit_hooks::{use_mounted_node, use_native_element_ref};
 use arkit_prelude::*;
 use dioxus_elements::event::PointerAction;
 
@@ -425,10 +425,10 @@ fn fallback_key_bytes(name: &str) -> Vec<u8> {
 #[component]
 pub fn Terminal(props: TerminalProps) -> Element {
     let controller = props.controller.clone().unwrap_or_default();
-    let node_ref = use_ark_node();
+    let node_ref = use_native_element_ref();
     let runtime = use_hook(|| Rc::new(ComponentRuntime::new()));
     let surface_registration = use_hook(|| Rc::new(RefCell::new(None::<SurfaceRegistration>)));
-    let registered_node = use_hook(|| Rc::new(Cell::new(None::<usize>)));
+    let registered_node = use_hook(|| Rc::new(Cell::new(None::<u64>)));
     // Pointer tracking is transient interaction state, not paint state. A
     // reactive Signal here rerendered the entire terminal on every move and
     // again for every Ghostty row update, which made touch scrolling stutter.
@@ -484,13 +484,14 @@ pub fn Terminal(props: TerminalProps) -> Element {
     let vt_cols = config.cols.max(1);
     let vt_rows = config.rows.max(1);
     let base_config = config.clone();
+    let async_runtime = arkit_runtime::use_runtime_handle().tokio();
 
     use_hook({
         let runtime = runtime.clone();
         let controller = controller.clone();
         let settings = paint_settings.clone();
+        let handle = async_runtime.clone();
         move || {
-            let handle = arkit_runtime::tokio_handle();
             dioxus_core::spawn(async move {
                 loop {
                     let sleeper = handle.spawn(async {
@@ -574,11 +575,13 @@ pub fn Terminal(props: TerminalProps) -> Element {
     let registered_slot = registered_node.clone();
     let registration_runtime = runtime.clone();
     let registration_errors = callbacks.on_error.clone();
-    use_effect(move || {
-        let Some(node) = node_ref.get() else {
+    use_mounted_node(node_ref.clone(), move |node| {
+        let Some(node) = node else {
+            registration_slot.borrow_mut().take();
+            registered_slot.set(None);
             return;
         };
-        let native_key = node.borrow().raw_handle() as usize;
+        let native_key = node.epoch();
         if registered_slot.get() == Some(native_key) {
             return;
         }
@@ -586,14 +589,25 @@ pub fn Terminal(props: TerminalProps) -> Element {
         let Some(sender) = registration_runtime.sender() else {
             return;
         };
-        let registration = {
-            let node = node.borrow();
-            SurfaceRegistration::attach(&node, sender)
-        };
+        let registration = SurfaceRegistration::attach(&node, sender);
         match registration {
             Ok(registration) => {
                 registration_slot.borrow_mut().replace(registration);
                 registered_slot.set(Some(native_key));
+                let teardown_registration = registration_slot.clone();
+                let teardown_registered_node = registered_slot.clone();
+                // SAFETY: cleanup only replaces XComponent callbacks and
+                // releases worker senders before native node invalidation.
+                let installed = unsafe {
+                    node.install_native_teardown(move || {
+                        teardown_registration.borrow_mut().take();
+                        teardown_registered_node.set(None);
+                    })
+                };
+                if !installed {
+                    registration_slot.borrow_mut().take();
+                    registered_slot.set(None);
+                }
             }
             Err(error) => {
                 if let Some(handler) = registration_errors.get() {
@@ -629,6 +643,7 @@ pub fn Terminal(props: TerminalProps) -> Element {
 
     rsx! {
         xcomponent {
+            native_ref: node_ref,
             width: props.width.clone(),
             height: props.height.clone(),
             background_color: surface_bg,

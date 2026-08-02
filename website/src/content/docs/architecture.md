@@ -14,10 +14,11 @@ Arkit 的 UI 只走 Dioxus 这一条路：业务写出组件树，运行时 diff
 | `arkit`                            | public facade、prelude、feature gates、入口 root wrapper                    |
 | `arkit_derive`                     | `#[entry]` N-API lifecycle proc macro                                       |
 | `arkit_runtime`                    | VirtualDom、OpenHarmony loop、event queue、window metrics、embedded WebView |
-| `arkit_arkui`                      | HostTree、projection、attributes、events/gestures、image、virtual adapter   |
+| `arkit_dom`                        | 平台无关 HostTree、ElementKey、Portal 层和逻辑树不变量                      |
+| `arkit_arkui`                      | ArkUI projection、attributes、events/gestures、image、virtual source        |
 | `arkit_elements`                   | `rsx!` 使用的 ArkUI element/attribute/event registry                        |
 | `arkit_prelude`                    | Dioxus primitives 与 elements 的无环共享 prelude                            |
-| `arkit_hooks`                      | native node、layout、overlay、safe area、virtualization hooks               |
+| `arkit_hooks`                      | exact ref、layout、Portal、safe area、virtual source hooks                  |
 | `arkit_animation_core`             | 无 ArkUI 依赖的 resolve/compile/sample/state engine                         |
 | `arkit_animation`                  | root frame driver、ArkUI/Drawing adapter、native lowering、交互             |
 | `arkit_canvas`                     | W3C Canvas 2D 状态、路径、样式与 ArkUI Custom 原生绘制                      |
@@ -35,7 +36,7 @@ Arkit 的 UI 只走 Dioxus 这一条路：业务写出组件树，运行时 diff
 
 ## HostTree 投影
 
-逻辑上以 Dioxus 树为准。HostTree 记着模板路径、占位、文本子节点、ElementId、监听器和原生所有权；ArkUI 树上的节点只是这份逻辑树的投影。
+逻辑上以 Dioxus 树为准。纯 Rust `arkit_dom::HostTree<P>` 只记模板路径、占位、文本子节点、ElementKey、parent/children 和 mutation stack；ArkUI node、listener、image 与 adapter owner 全部留在 renderer payload。这样逻辑树不变量能在 host toolchain 独立测试，ArkUI 树只是它的 projection。
 
 典型规则：
 
@@ -44,30 +45,33 @@ Arkit 的 UI 只走 Dioxus 这一条路：业务写出组件树，运行时 diff
 - native insert 失败不会把 logical host 误绑定到原 index 的 sibling。
 - subtree dispose 释放 listener、gesture、image、virtual adapter 和 arena slot。
 - native callback 使用 active token，拒绝注销后晚到的事件。
+- Portal 保留逻辑 parent/context，但 native root 按 layer 稳定投影到 renderer root。
+- 结构性 ArkUI 错误锁存为 `RendererFault`；mutation batch 结束后 runtime 停止该 root，不允许两棵树静默分叉。
 
 ## 调度与事件
 
-runtime 把 `VirtualDom::wait_for_work` waker 接到 OpenHarmony loop。每个 tick：
+每个 root 有自己的 `RuntimeHandle`，其中持有 UI queue、scheduler waker、Tokio handle、back handlers 和 embedded runtimes。runtime 把 `VirtualDom::wait_for_work` waker 接到 OpenHarmony loop。每个 tick：
 
 1. 执行已排队 UI-loop effects。
-2. 把 owned native events 交给 Dioxus runtime。
+2. 把 owned native events 与 `NativeElementRef` 通知交给 Dioxus runtime。
 3. drain scheduler ready work。
 4. `render_immediate` 输出 mutation。
 5. renderer 同步 ArkUI projection。
 6. 重新注册 wait。
 
-没有固定次数轮询。ArkUI callback 只复制 payload、入队、wake；禁止同步借用 VirtualDom 或重入 render。
+没有 process-global UI queue、Tokio handle、back handler 或 scope resolver。ArkUI callback 只复制 payload、入当前 root、wake；禁止同步借用 VirtualDom 或重入 render。
 
 ## Window 与 Overlay
 
 一个 root 只有一个 `WindowMetricsHandle`。所有 avoid areas 先与 XComponent content rect 求交，再转换 vp。
 
-OverlayRoot 与 safe business subtree 是 root stack 的 sibling：
+Portal 在逻辑树中仍位于声明位置，但 native projection 是 root stack 的分层 child：
 
 - backdrop 可以覆盖完整 window。
 - panel/floating content 消费 safe viewport。
 - edge-to-edge 只改变 business subtree policy。
-- 每个 `use_overlay` token 独立，scope drop 只清理自己的 entry。
+- `Modal < Floating < Transient` 顺序稳定。
+- scope drop 通过普通 Dioxus mutation 清理 Portal，不存在命令式 token registry。
 
 ## 动画热路径
 
@@ -83,8 +87,9 @@ Chart model 是受控 snapshot。render transition 共享 `Rc` option，hit regi
 
 OpenHarmony binding 中部分 node/adapter handle 没有隐式 Drop：
 
-- `NodeBuilder` 在 build 前清理 early-error path。
-- VirtualNodeAdapter 管理 attach/detach/reload、item wrapper，以及可见 RSX subtree 的 runtime owner。
+- `NodeBuilder` 和 `OwnedNativeNode` 在所有权转移前清理 early-error path。
+- `VirtualSource` 由 renderer 根据属性自动 attach/detach，并管理 item wrapper 与可见 RSX subtree 的 runtime owner。
+- renderer-owned node 只通过 generation-checked `MountedNodeLease` 借用，facade 不导出裸 node factory。
 - Embedded WebView attach 失败立即 dispose ArkTS controller。
 - renderer dispose subtree 前先注销 event/gesture callback。
 - UI-only native 对象保持 thread-local ownership，不跨线程析构。
@@ -108,15 +113,15 @@ OpenHarmony binding 中部分 node/adapter handle 没有隐式 Drop：
 
 ## 何时使用哪个层
 
-| 需求                     | 层                              |
-| ------------------------ | ------------------------------- |
-| 普通页面和组件           | `arkit::prelude` + RSX          |
-| 领域功能                 | facade feature + 对应 namespace |
-| 虚拟列表（RSX / native） | `use_virtual_node_adapter`      |
-| 布局观测/adapter/WebView | `arkit_hooks` / facade hooks    |
-| 自定义 native item       | `NodeBuilder`                   |
-| 框架贡献：渲染 mutation  | `arkit_arkui`                   |
-| 框架贡献：调度/窗口      | `arkit_runtime`                 |
-| 平台无关动画算法         | `arkit_animation_core`          |
+| 需求                     | 层                               |
+| ------------------------ | -------------------------------- |
+| 普通页面和组件           | `arkit::prelude` + RSX           |
+| 领域功能                 | facade feature + 对应 namespace  |
+| 虚拟列表（RSX / native） | `use_virtual_source`             |
+| 布局观测/动画/WebView    | `NativeElementRef` + facade hook |
+| 自定义 native item       | `arkit::native::NodeBuilder`     |
+| 框架贡献：渲染 mutation  | `arkit_arkui`                    |
+| 框架贡献：调度/窗口      | `arkit_runtime`                  |
+| 平台无关动画算法         | `arkit_animation_core`           |
 
 业务不要直接依赖内部 renderer tree 或重新实现 host context。应用只依赖公开 facade。

@@ -75,7 +75,7 @@ rsx! {
 
 ## Root 组件
 
-`#[entry]` 自动安装 ArkHost、SafeArea、OverlayRoot，以及启用 feature 时的 AnimationHost。业务 root 直接返回页面：
+`#[entry]` 自动安装 root-local runtime、窗口度量、安全区，以及启用 feature 时的 AnimationHost。Portal 由 renderer 直接投影，不需要 provider。业务 root 直接返回页面：
 
 ```rust
 #[entry]
@@ -84,4 +84,4 @@ fn app() -> Element {
 }
 ```
 
-不要在业务 root 重复调用 framework provider，否则会产生多个 host 所有者和不一致的节点解析范围。
+不要在业务 root 重复调用 framework provider。需要原生节点时，把 `NativeElementRef` 明确挂到目标 RSX 元素。

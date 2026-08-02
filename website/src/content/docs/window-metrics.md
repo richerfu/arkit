@@ -48,7 +48,7 @@ native SDK 返回的像素坐标要先减去 content origin，再除以 scale �
 
 ## 订阅边界
 
-普通组件使用 `use_window_metrics`；非 Dioxus 服务可持有 `WindowMetricsHandle`/`WindowMetricsSubscription`。订阅必须随 owner 注销，且 callback 更新 UI 状态时通过 `queue_ui_loop`。
+普通组件使用 `use_window_metrics`；非 Dioxus 服务可持有 `WindowMetricsHandle`/`WindowMetricsSubscription`。订阅必须随 owner 注销，callback 更新 UI 状态时通过当前 root 的 `RuntimeHandle::queue_ui`。
 
 ## 键盘
 

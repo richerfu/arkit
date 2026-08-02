@@ -1,6 +1,6 @@
 use std::sync::mpsc::Sender;
 
-use ohos_arkui_binding::common::node::ArkUINode;
+use arkit_arkui::MountedNodeLease;
 use ohos_camera_binding::{CameraXComponentAttachment, CameraXComponentEvent};
 use ohos_xcomponent_binding::{NativeXComponent, XComponentRaw};
 use ohos_xcomponent_sys::OH_NativeXComponent_GetNativeXComponent;
@@ -14,12 +14,23 @@ pub(crate) struct SurfaceRegistration {
 
 impl SurfaceRegistration {
     pub(crate) fn attach(
-        node: &ArkUINode,
+        node: &MountedNodeLease,
         sender: Sender<CameraXComponentEvent>,
     ) -> CameraResult<Self> {
-        // SAFETY: the renderer owns a mounted ArkUI XComponent node for the
-        // lifetime of this registration.
-        let raw = unsafe { OH_NativeXComponent_GetNativeXComponent(node.raw_handle().cast()) };
+        // SAFETY: context lookup is synchronous inside the generation-checked
+        // borrow. The returned XComponent is retained by the registration,
+        // whose owner is tied to this lease's native teardown.
+        let raw = unsafe {
+            node.with_native(|node| {
+                OH_NativeXComponent_GetNativeXComponent(node.raw_handle().cast())
+            })
+        }
+        .ok_or_else(|| {
+            crate::CameraError::invalid_state(
+                "SurfaceRegistration::attach",
+                "XComponent is no longer mounted",
+            )
+        })?;
         let component = NativeXComponent::new(XComponentRaw(raw));
         let attachment = CameraXComponentAttachment::attach(component, sender)
             .map_err(crate::CameraError::from)?;

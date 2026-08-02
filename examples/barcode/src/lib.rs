@@ -34,6 +34,9 @@ fn app() -> Element {
         ),
         BarcodePhase::Error(error) => format!("error · {}", error.message()),
     };
+    let base64_code = code.clone();
+    let bytes_code = code.clone();
+    let save_code = code;
 
     rsx! {
         scroll {
@@ -218,7 +221,7 @@ fn app() -> Element {
                         font_size: 14.0,
                         onclick: move |_| {
                             status.set("Encoding PNG off UI thread…".to_string());
-                            code.base64_png_async(move |result| match result {
+                            base64_code.base64_png_async(move |result| match result {
                                 Ok(b64) => {
                                     let preview = if b64.len() > 48 {
                                         format!("{}… ({} chars)", &b64[..48], b64.len())
@@ -245,7 +248,7 @@ fn app() -> Element {
                         font_size: 14.0,
                         onclick: move |_| {
                             status.set("Encoding PNG off UI thread…".to_string());
-                            code.png_bytes_async(move |result| match result {
+                            bytes_code.png_bytes_async(move |result| match result {
                                 Ok(bytes) => {
                                     status.set(format!("PNG bytes · {} B", bytes.len()));
                                 }
@@ -267,7 +270,7 @@ fn app() -> Element {
                         onclick: move |_| {
                             let path = std::env::temp_dir().join("arkit-barcode-demo.png");
                             status.set("Saving PNG off UI thread…".to_string());
-                            code.save_png_async(path, move |result| match result {
+                            save_code.save_png_async(path, move |result| match result {
                                 Ok(saved) => {
                                     status.set(format!("saved {}", saved.display()));
                                 }

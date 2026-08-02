@@ -1,8 +1,7 @@
-//! A small ergonomic builder for imperatively constructing [`ArkUINode`]s.
+//! A small ergonomic builder for imperatively constructing owned ArkUI nodes.
 //!
-//! Used by virtual List/Grid/WaterFlow `render_item` callbacks (which run
-//! outside the dioxus render cycle and must return a raw `ArkUINode`), so demos
-//! don't touch the binding crate directly.
+//! Used by virtual List/Grid/WaterFlow `render_item` callbacks, which run
+//! outside the dioxus render cycle and return an [`OwnedNativeNode`].
 
 use ohos_arkui_binding::common::attribute::ArkUINodeAttributeItem;
 use ohos_arkui_binding::common::error::ArkUIResult;
@@ -14,6 +13,8 @@ pub use ohos_arkui_binding::event::inner_event::Event as NativeNodeEvent;
 pub use ohos_arkui_binding::r#type::drag::PreDragStatus;
 use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
 pub use ohos_arkui_binding::types::event::NodeEventType;
+
+use crate::OwnedNativeNode;
 
 struct EventNode<'a>(&'a mut ArkUINode);
 
@@ -29,14 +30,10 @@ impl ArkUIAttributeBasic for EventNode<'_> {
 
 impl ArkUIEvent for EventNode<'_> {}
 
-/// A chainable builder over an [`ArkUINode`]. Consumes itself to produce the
-/// node via [`build`](Self::build).
+/// A chainable builder over an owned [`ArkUINode`]. Consumes itself to produce
+/// an [`OwnedNativeNode`] via [`build`](Self::build).
 pub struct NodeBuilder {
-    // The binding requires explicit native disposal and `ArkUINode` has no
-    // `Drop` implementation. Keeping the in-progress node optional lets the
-    // builder clean up every early-error path while transferring ownership
-    // exactly once from `build`.
-    node: Option<ArkUINode>,
+    node: Option<OwnedNativeNode>,
 }
 
 impl NodeBuilder {
@@ -44,13 +41,16 @@ impl NodeBuilder {
     /// `"column"`).
     pub fn new(tag: &str) -> ArkUIResult<Self> {
         Ok(Self {
-            node: Some(crate::create_node_by_tag(tag)?),
+            node: Some(OwnedNativeNode::from_raw(
+                crate::native::create_node_by_tag(tag)?,
+            )),
         })
     }
 
-    /// Wrap an existing node.
-    pub fn from_node(node: ArkUINode) -> Self {
-        Self { node: Some(node) }
+    pub(crate) fn from_raw(node: ArkUINode) -> Self {
+        Self {
+            node: Some(OwnedNativeNode::from_raw(node)),
+        }
     }
 
     /// Set an attribute by its canonical [`ArkUINodeAttributeType`] with any
@@ -63,16 +63,21 @@ impl NodeBuilder {
         self.node
             .as_ref()
             .expect("NodeBuilder owns a node until build")
+            .as_raw()
             .set_attribute(attr, value.into())?;
         Ok(self)
     }
 
     /// Append a child node.
-    pub fn child(mut self, child: ArkUINode) -> ArkUIResult<Self> {
+    pub fn child(mut self, child: OwnedNativeNode) -> ArkUIResult<Self> {
         self.node
             .as_mut()
             .expect("NodeBuilder owns a node until build")
-            .add_child(child)?;
+            .as_raw_mut()
+            .add_child(child.as_raw().clone())?;
+        // ArkUI now owns the native subtree. Dropping the raw Rust wrapper does
+        // not dispose it; the parent owns disposal from this point onward.
+        drop(child.into_raw());
         Ok(self)
     }
 
@@ -157,7 +162,8 @@ impl NodeBuilder {
         let node = self
             .node
             .as_mut()
-            .expect("NodeBuilder owns a node until build");
+            .expect("NodeBuilder owns a node until build")
+            .as_raw_mut();
         EventNode(node).on_event(event_type, callback);
         Ok(self)
     }
@@ -371,17 +377,9 @@ impl NodeBuilder {
     }
 
     /// Build the node.
-    pub fn build(mut self) -> ArkUINode {
+    pub fn build(mut self) -> OwnedNativeNode {
         self.node
             .take()
             .expect("NodeBuilder ownership was already transferred")
-    }
-}
-
-impl Drop for NodeBuilder {
-    fn drop(&mut self) {
-        if let Some(mut node) = self.node.take() {
-            let _ = node.dispose();
-        }
     }
 }

@@ -152,6 +152,9 @@ pub struct ButtonProps {
     /// shadcn geometry and colors while rendering a flat mobile surface.
     #[props(default)]
     pub shadow: Option<bool>,
+    /// Exact reference forwarded to the button's native root.
+    #[props(default)]
+    pub native_ref: Option<arkit_arkui::NativeElementRef>,
     pub onclick: Option<EventHandler<()>>,
     pub children: Element,
 }
@@ -168,6 +171,7 @@ pub fn Button(props: ButtonProps) -> Element {
 
     rsx! {
         button {
+            native_ref: props.native_ref,
             button_type: "normal",
             focusable: false,
             focus_on_touch: false,

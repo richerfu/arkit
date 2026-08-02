@@ -15,8 +15,6 @@ export default class EntryAbility extends NativeAbility {
 
   async onWindowStageCreate(windowStage: window.WindowStage): Promise<void> {
     try {
-      const win = windowStage.getMainWindowSync();
-      await win.setWindowLayoutFullScreen(true);
       super.onWindowStageCreate(windowStage);
       if (this.moduleName === "camera_example") {
         const cameraPermission: Permissions = "ohos.permission.CAMERA";

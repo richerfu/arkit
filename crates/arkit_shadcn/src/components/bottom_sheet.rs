@@ -1,13 +1,10 @@
 //! Bottom sheet — a full-width modal surface anchored to the viewport bottom.
 //!
-//! The sheet is mounted through the application overlay root, so it is not
+//! The sheet is mounted through a root-projected portal, so it is not
 //! clipped by the page or showcase canvas. Its native presentation mirrors the
 //! React Native Reusables sheet: optional dismissible backdrop and drag
 //! indicator, rounded top corners, 60vp header, safe-area-aware body padding,
 //! and pan-down dismissal.
-
-use std::cell::Cell;
-use std::rc::Rc;
 
 use super::ARKUI_BORDER_STYLE_SOLID;
 use crate::icon::icon_placeholder;
@@ -35,74 +32,29 @@ fn display_vp_ratio() -> f32 {
     }
 }
 
-fn use_bottom_sheet_overlay(
+fn bottom_sheet_portal(
     open: bool,
     panel: Element,
     on_dismiss: EventHandler<()>,
     theme: Theme,
     show_backdrop: bool,
-) {
-    let overlay = arkit_hooks::use_overlay();
-    let last_open = use_hook(|| Rc::new(Cell::new(None::<bool>)));
-    let changed = last_open.get() != Some(open);
-    last_open.set(Some(open));
-
-    let spec = arkit_hooks::ModalOverlaySpec {
-        open,
-        presentation: arkit_hooks::ModalPresentation::BottomDrawer,
-        dismiss_on_backdrop: true,
-        backdrop_color: if show_backdrop {
-            bottom_sheet_backdrop(theme)
-        } else {
-            0x00000000
-        },
-        viewport_inset: 0.0,
+) -> Element {
+    let backdrop_color = if show_backdrop {
+        bottom_sheet_backdrop(theme)
+    } else {
+        0x00000000
     };
-
-    let effect_overlay = overlay.clone();
-    let effect_panel = panel.clone();
-    use_effect(use_reactive((&open,), move |(open,)| {
-        if !changed {
-            return;
+    rsx! {
+        arkit_hooks::ModalPortal {
+            open,
+            presentation: arkit_hooks::ModalPresentation::BottomDrawer,
+            dismiss_on_backdrop: true,
+            backdrop_color,
+            viewport_inset: 0.0,
+            on_dismiss,
+            {panel}
         }
-
-        if open {
-            let panel = effect_panel.clone();
-            effect_overlay.show_modal_with_dismiss(
-                spec,
-                move || panel.clone(),
-                move || on_dismiss.call(()),
-            );
-        } else {
-            effect_overlay.dismiss();
-        }
-    }));
-
-    // OverlayRoot stores an Element snapshot. Republish an already-open sheet
-    // on every owner render so controlled children (calendar selection, form
-    // values, validation state) receive their latest props without closing the
-    // sheet. Reconciliation preserves overlay-local hook state.
-    let refresh_overlay = overlay.clone();
-    let refresh_panel = panel.clone();
-    let mut refresh = use_effect(move || {
-        if open && refresh_overlay.is_open() {
-            let panel = refresh_panel.clone();
-            refresh_overlay.show_modal_with_dismiss(
-                spec,
-                move || panel.clone(),
-                move || on_dismiss.call(()),
-            );
-        }
-    });
-    refresh.mark_dirty();
-
-    let cleanup_overlay = overlay.clone();
-    let cleanup_last_open = last_open.clone();
-    use_drop(move || {
-        if cleanup_last_open.get() == Some(true) {
-            cleanup_overlay.dismiss();
-        }
-    });
+    }
 }
 
 /// A controlled or uncontrolled bottom sheet.
@@ -150,8 +102,7 @@ pub fn BottomSheet(
         }
     };
 
-    use_bottom_sheet_overlay(current, panel, close, theme, show_backdrop.unwrap_or(true));
-    rsx! {}
+    bottom_sheet_portal(current, panel, close, theme, show_backdrop.unwrap_or(true))
 }
 
 #[derive(Clone, Props)]

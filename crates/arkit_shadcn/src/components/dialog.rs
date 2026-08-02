@@ -1,12 +1,8 @@
 //! Dialog — centered modal panel with a close button, plus `DialogHeader` and
 //! `DialogFooter` building blocks.
 //!
-//! The panel is published through `arkit_hooks::use_overlay`; the hook layer
-//! owns the full-screen modal/backdrop native tree so dialog content does not
-//! participate in the page layout.
-
-use std::cell::Cell;
-use std::rc::Rc;
+//! The panel is declared through a root-projected portal, preserving its
+//! component context while keeping it out of page layout.
 
 use super::ARKUI_BORDER_STYLE_SOLID;
 use crate::icon::icon_placeholder;
@@ -46,53 +42,22 @@ pub(crate) fn DialogCloseProvider(close: EventHandler<()>, children: Element) ->
     rsx! { {children} }
 }
 
-pub(crate) fn use_dialog_overlay(open: bool, panel: Element, on_dismiss: EventHandler<()>) {
-    let overlay = arkit_hooks::use_overlay();
-    let last_open = use_hook(|| Rc::new(Cell::new(None::<bool>)));
-    let changed = last_open.get() != Some(open);
-    last_open.set(Some(open));
-
-    let spec = arkit_hooks::ModalOverlaySpec {
-        open,
-        presentation: arkit_hooks::ModalPresentation::CenteredDialog,
-        dismiss_on_backdrop: true,
-        backdrop_color: OVERLAY_BACKDROP_COLOR,
-        viewport_inset: DIALOG_VIEWPORT_INSET,
-    };
-
-    let effect_overlay = overlay.clone();
-    use_effect(use_reactive((&open,), move |(open,)| {
-        if !changed {
-            return;
+pub(crate) fn dialog_portal(open: bool, panel: Element, on_dismiss: EventHandler<()>) -> Element {
+    rsx! {
+        arkit_hooks::ModalPortal {
+            open,
+            presentation: arkit_hooks::ModalPresentation::CenteredDialog,
+            dismiss_on_backdrop: true,
+            backdrop_color: OVERLAY_BACKDROP_COLOR,
+            viewport_inset: DIALOG_VIEWPORT_INSET,
+            on_dismiss,
+            arkit_animation::MountTransition {
+                preset: Some(arkit_animation::TransitionPreset::Fade),
+                duration_ms: Some(160),
+                {panel}
+            }
         }
-
-        if open {
-            let panel = panel.clone();
-            effect_overlay.show_modal_with_dismiss(
-                spec,
-                move || {
-                    rsx! {
-                        arkit_animation::MountTransition {
-                            preset: Some(arkit_animation::TransitionPreset::Fade),
-                            duration_ms: Some(160),
-                            {panel.clone()}
-                        }
-                    }
-                },
-                move || on_dismiss.call(()),
-            );
-        } else {
-            effect_overlay.dismiss();
-        }
-    }));
-
-    let cleanup_overlay = overlay.clone();
-    let cleanup_last_open = last_open.clone();
-    use_drop(move || {
-        if cleanup_last_open.get() == Some(true) {
-            cleanup_overlay.dismiss();
-        }
-    });
+    }
 }
 
 /// Modal dialog panel.
@@ -169,8 +134,7 @@ pub fn Dialog(
         }
     };
 
-    use_dialog_overlay(current, panel, close);
-    rsx! {}
+    dialog_portal(current, panel, close)
 }
 
 /// Dialog header — start-aligned `native:text-xl` title and `native:text-base`

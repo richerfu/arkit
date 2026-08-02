@@ -15,6 +15,7 @@ scan = ["dep:arkit_animation", "dep:rxing"]
 
 [dependencies]
 arkit_animation = { workspace = true, optional = true }
+arkit_arkui.workspace = true
 arkit_hooks.workspace = true
 arkit_icon.workspace = true
 arkit_prelude.workspace = true

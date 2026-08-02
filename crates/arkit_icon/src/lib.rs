@@ -3,7 +3,7 @@
 //! [`icon`] renders an ArkUI `Image` element whose `src` attribute carries an
 //! [`ArkImageSource`] (SVG → PixelMap → DrawableDescriptor). The renderer
 //! resolves and holds the native resource for the node's lifetime — no
-//! `use_ark_node`/`use_effect` escape hatch.
+//! direct native-node escape hatch.
 
 mod embed;
 

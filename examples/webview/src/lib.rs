@@ -193,7 +193,9 @@ fn WebviewArea(
     status: dioxus_signals::Signal<String>,
 ) -> Element {
     let webview: EmbeddedWebViewController = use_context();
-    let lifecycle_visible = use_app_foreground() && use_component_visibility();
+    let node_ref = use_native_element_ref();
+    let runtime = use_runtime_handle();
+    let lifecycle_visible = use_app_foreground() && use_component_visibility(node_ref.clone());
 
     let lifecycle_webview = webview.clone();
     let mut lifecycle_status = status;
@@ -207,11 +209,16 @@ fn WebviewArea(
     let title_sig = title;
     let status_sig = status;
     let webview_for_frame = webview.clone();
+    let frame_ref = node_ref.clone();
+    let frame_runtime = runtime.clone();
 
-    use_layout_frame_node(move |mut host_node, frame| {
+    use_layout_frame(node_ref.clone(), move |frame| {
         if !frame.is_measured() {
             return;
         }
+        let Some(host_node) = frame_ref.current() else {
+            return;
+        };
 
         let mut init = EmbeddedWebViewInit::url(WEBVIEW_ID, (url_for_frame)());
         init.style = Some(WebViewStyle {
@@ -222,26 +229,20 @@ fn WebviewArea(
         });
 
         let title_cb_sig = title_sig;
+        let title_runtime = frame_runtime.clone();
         init.on_title_change = Some(Rc::new(move |new_title| {
             let mut sig = title_cb_sig;
-            queue_ui_loop(move || {
+            title_runtime.queue_ui(move || {
                 sig.set(new_title);
             });
         }));
 
-        let result = webview_for_frame.mount_or_sync(
-            &mut host_node,
-            init,
-            Some(WebViewFrame {
-                width: frame.width,
-                height: frame.height,
-            }),
-        );
+        let result = webview_for_frame.mount_or_sync(&host_node, init);
 
         match result {
             Ok(()) if webview_for_frame.is_mounted() => {
                 let mut sig = status_sig;
-                queue_ui_loop(move || {
+                frame_runtime.queue_ui(move || {
                     sig.set(String::from("webview mounted"));
                 });
             }
@@ -249,7 +250,7 @@ fn WebviewArea(
             Err(err) => {
                 let mut sig = status_sig;
                 let msg = err.to_string();
-                queue_ui_loop(move || {
+                frame_runtime.queue_ui(move || {
                     sig.set(format!("webview mount failed: {msg}"));
                 });
             }
@@ -263,6 +264,7 @@ fn WebviewArea(
 
     rsx! {
         stack {
+            native_ref: node_ref,
             width: "100%",
             height: 400.0,
             background_color: "#FFFFFFFF",

@@ -2,7 +2,7 @@
 //!
 //! A button increments a request-id signal; `use_resource` reruns whenever the
 //! id changes and awaits a real 800 ms `tokio::time::sleep` (driven by the
-//! framework's tokio runtime via `arkit::tokio_handle`) before
+//! root-specific Tokio runtime) before
 //! producing a result string.
 
 use std::time::Duration;
@@ -13,7 +13,7 @@ use arkit::prelude::*;
 #[entry]
 fn app() -> Element {
     let mut request_id = use_signal(|| 0_u32);
-    let handle = arkit::tokio_handle();
+    let handle = arkit::use_runtime_handle().tokio();
 
     let result = use_resource(move || {
         let handle = handle.clone();

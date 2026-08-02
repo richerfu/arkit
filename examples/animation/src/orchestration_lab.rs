@@ -120,6 +120,7 @@ fn ScopedTarget() -> Element {
 #[component]
 fn ScopeVisual(controls: AnimationControls) -> Element {
     let target = use_animation_target(SCOPE_A);
+    let target_ref = target.native_ref();
     let snapshot = use_animation_snapshot(&controls);
     let state = snapshot()
         .map(|value| format!("{:?}", value.state))
@@ -132,6 +133,7 @@ fn ScopeVisual(controls: AnimationControls) -> Element {
         });
     rsx! {
         column {
+            native_ref: target_ref,
             width: 110.0,
             height: 88.0,
             align_items: "center",
@@ -206,9 +208,10 @@ fn point_ms(milliseconds: u64) -> TimePoint {
 
 #[component]
 fn PropertyCard() -> Element {
-    let _target = use_animation_target(PROPERTY_TARGET);
+    let target = use_animation_target(PROPERTY_TARGET);
     rsx! {
         column {
+            native_ref: target.native_ref(),
             width: 132.0,
             height: 82.0,
             align_items: "center",
@@ -226,9 +229,10 @@ fn PropertyCard() -> Element {
 
 #[component]
 fn TypographyTarget() -> Element {
-    let _target = use_animation_target(TYPOGRAPHY_TARGET);
+    let target = use_animation_target(TYPOGRAPHY_TARGET);
     rsx! {
         text {
+            native_ref: target.native_ref(),
             margin_top: 18.0,
             font_size: 16.0,
             font_color: "#FF312E81",

@@ -4,6 +4,7 @@ members = [
     "crates/arkit_derive",
     "crates/arkit_runtime",
     "crates/arkit_arkui",
+    "crates/arkit_dom",
     "crates/arkit_elements",
     "crates/arkit_prelude",
     "crates/arkit_hooks",
@@ -80,6 +81,7 @@ arkit_runtime = { path = "crates/arkit_runtime" }
 arkit_shadcn = { path = "crates/arkit_shadcn" }
 arkit_calendar_icu = { path = "plugins/arkit_calendar_icu" }
 arkit_arkui = { path = "crates/arkit_arkui" }
+arkit_dom = { path = "crates/arkit_dom" }
 arkit_elements = { path = "crates/arkit_elements" }
 arkit_prelude = { path = "crates/arkit_prelude" }
 arkit_hooks = { path = "crates/arkit_hooks" }

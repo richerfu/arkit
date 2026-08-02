@@ -1,6 +1,6 @@
 //! Complex cases — List / Grid / WaterFlow virtualized via ArkUI `NodeAdapter`.
 //!
-//! `use_virtual_node_adapter` attaches the matching adapter to the native
+//! `use_virtual_source` binds through the host's `virtual_source` attribute so
 //! host so only visible items are created on demand (true virtualization).
 //! List/Grid/WaterFlow exercise RSX items and item-local invalidation; Native
 //! exercises the same public hook with `NodeBuilder` items.
@@ -10,6 +10,7 @@ use std::rc::Rc;
 
 use arkit::dioxus_signals::WritableExt;
 use arkit::entry;
+use arkit::native::NodeBuilder;
 use arkit::prelude::*;
 use dioxus_core_macro::{component, Props};
 
@@ -89,7 +90,7 @@ fn app() -> Element {
 fn VirtualCaseView(kind: VirtualKind, active: bool) -> Element {
     let revisions = use_hook(|| Rc::new(RefCell::new(vec![0_u32; TOTAL as usize])));
     let render_revisions = revisions.clone();
-    let adapter = use_virtual_node_adapter(kind, TOTAL, move |index| {
+    let source = use_virtual_source(kind, TOTAL, move |index| {
         let revision = render_revisions.borrow()[index as usize];
         render_virtual_item(kind, index, revision)
     });
@@ -111,7 +112,7 @@ fn VirtualCaseView(kind: VirtualKind, active: bool) -> Element {
         target.set((current + 1) % TOTAL);
     };
     let update_revisions = revisions.clone();
-    let update_adapter = adapter.clone();
+    let update_source = source.clone();
     let update_target = move |_| {
         let index = *target.peek();
         let revision = {
@@ -120,7 +121,7 @@ fn VirtualCaseView(kind: VirtualKind, active: bool) -> Element {
             *revision = revision.wrapping_add(1);
             *revision
         };
-        match update_adapter.reload_items(index, 1) {
+        match update_source.reload_items(index, 1) {
             Ok(()) => status.set(format!(
                 "{kind_label} #{index:05} 已局部更新到 rev {revision}"
             )),
@@ -178,14 +179,14 @@ fn VirtualCaseView(kind: VirtualKind, active: bool) -> Element {
                     }
                 }
             }
-            VirtualHost { kind, adapter }
+            VirtualHost { kind, source }
         }
     }
 }
 
 #[component]
 fn NativeVirtualCaseView(active: bool) -> Element {
-    let adapter = use_virtual_node_adapter(VirtualKind::List, TOTAL, move |index| {
+    let source = use_virtual_source(VirtualKind::List, TOTAL, move |index| {
         Ok(NodeBuilder::new("text")?
             .percent_width(1.0)?
             .height(44.0)?
@@ -212,18 +213,18 @@ fn NativeVirtualCaseView(active: bool) -> Element {
             opacity,
             VirtualHost {
                 kind: VirtualKind::List,
-                adapter,
+                source,
             }
         }
     }
 }
 
 #[component]
-fn VirtualHost(kind: VirtualKind, adapter: VirtualNodeAdapter) -> Element {
-    use_attach_virtual_adapter(adapter);
+fn VirtualHost(kind: VirtualKind, source: VirtualSource) -> Element {
     match kind {
         VirtualKind::List => rsx! {
             list {
+                virtual_source: source,
                 width: "100%",
                 layout_weight: 1.0,
                 // Virtual lists: hide scrollbar so it does not steal hit area.
@@ -232,6 +233,7 @@ fn VirtualHost(kind: VirtualKind, adapter: VirtualNodeAdapter) -> Element {
         },
         VirtualKind::Grid => rsx! {
             grid {
+                virtual_source: source,
                 width: "100%",
                 layout_weight: 1.0,
                 grid_column_template: "1fr 1fr",
@@ -240,6 +242,7 @@ fn VirtualHost(kind: VirtualKind, adapter: VirtualNodeAdapter) -> Element {
         },
         VirtualKind::WaterFlow => rsx! {
             waterflow {
+                virtual_source: source,
                 width: "100%",
                 layout_weight: 1.0,
                 scroll_bar: "off",
@@ -251,13 +254,6 @@ fn VirtualHost(kind: VirtualKind, adapter: VirtualNodeAdapter) -> Element {
             }
         },
     }
-}
-
-fn use_attach_virtual_adapter(adapter: VirtualNodeAdapter) {
-    let attach_adapter = adapter.clone();
-    use_layout_frame_node(move |host_node, _frame| {
-        let _ = attach_adapter.attach(&host_node);
-    });
 }
 
 fn render_virtual_item(kind: VirtualKind, index: u32, revision: u32) -> Element {

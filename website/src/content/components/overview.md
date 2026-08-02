@@ -56,7 +56,7 @@ use arkit::shadcn::theme::*;
 
 ## 运行模型
 
-组件不是 Web shadcn wrapper，也不创建第二个 VirtualDom。它们直接组合 ArkUI 原生节点；Dialog、Menu、Sonner 等通过应用唯一 OverlayRoot 发布；动画共用 root AnimationHost。
+组件不是 Web shadcn wrapper，也不创建第二个 VirtualDom。它们直接组合 ArkUI 原生节点；Dialog、Menu、Sonner 等在声明位置保留状态与 Context，并通过 `Portal` 投影到应用 root；动画共用 root AnimationHost。
 
 ## 内置文案与 i18n
 

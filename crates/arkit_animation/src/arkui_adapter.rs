@@ -5,7 +5,7 @@ use arkit_animation_core::{
     LinearRgba, OutputSeek, PropertyName, PropertyUpdate, ResolutionTarget, ResolvedProperty,
     ResolvedTarget, SourceTarget, TargetLayoutSnapshot, TargetName, TimePoint,
 };
-use arkit_hooks::HostNode;
+use arkit_arkui::MountedNodeLease;
 use ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
 use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
 
@@ -33,7 +33,7 @@ impl ArkUiAdapter {
     pub fn register_target(
         &self,
         name: TargetName,
-        node: HostNode,
+        node: MountedNodeLease,
         layout: Option<TargetLayoutSnapshot>,
     ) -> Result<AdapterTargetId, AnimationAdapterError> {
         self.targets.borrow_mut().register(name, node, layout)
@@ -43,7 +43,7 @@ impl ArkUiAdapter {
         self.targets.borrow_mut().unregister(target)
     }
 
-    pub(crate) fn node(&self, target: AdapterTargetId) -> Option<HostNode> {
+    pub(crate) fn node(&self, target: AdapterTargetId) -> Option<MountedNodeLease> {
         self.targets
             .borrow()
             .get(target)
@@ -155,113 +155,118 @@ impl TargetAdapter for ArkUiAdapter {
         let binding = targets
             .get_mut(target)
             .ok_or(AnimationAdapterError::UnknownTargetId(target))?;
-        let node = binding.node.borrow();
-        let result = match name {
-            "opacity" => node
-                .get_attribute(ArkUINodeAttributeType::Opacity)
-                .ok()
-                .and_then(first_f32)
-                .map(AnimationValue::Scalar),
-            "translate_x" | "translate_y" => {
-                if let Ok(item) = node.get_attribute(ArkUINodeAttributeType::Translate) {
-                    if let Some(values) = numbers(item) {
-                        for (index, value) in values.into_iter().take(3).enumerate() {
-                            binding.visual.translate[index] = value;
-                        }
-                    }
-                }
-                let index = usize::from(name == "translate_y");
-                Some(AnimationValue::Length(Length::vp(
-                    binding.visual.translate[index],
-                )))
-            }
-            "position_x" | "position_y" => {
-                if let Ok(item) = node.get_attribute(ArkUINodeAttributeType::Position) {
-                    if let Some(values) = numbers(item) {
-                        for (index, value) in values.into_iter().take(2).enumerate() {
-                            binding.visual.position[index] = value;
-                        }
-                    }
-                }
-                let index = usize::from(name == "position_y");
-                Some(AnimationValue::Length(Length::vp(
-                    binding.visual.position[index],
-                )))
-            }
-            "scale_x" | "scale_y" => {
-                if let Ok(item) = node.get_attribute(ArkUINodeAttributeType::Scale) {
-                    if let Some(values) = numbers(item) {
-                        for (index, value) in values.into_iter().take(2).enumerate() {
-                            binding.visual.scale[index] = value;
-                        }
-                    }
-                }
-                let index = usize::from(name == "scale_y");
-                Some(AnimationValue::Scalar(binding.visual.scale[index]))
-            }
-            "rotation" => node
-                .get_attribute(ArkUINodeAttributeType::Rotate)
-                .ok()
-                .and_then(numbers)
-                .and_then(|values| values.get(3).copied())
-                .map(Angle::degrees)
-                .map(AnimationValue::Angle),
-            "background_color" | "font_color" | "border_color" | "foreground_color" => {
-                let attribute = match name {
-                    "background_color" => ArkUINodeAttributeType::BackgroundColor,
-                    "font_color" => ArkUINodeAttributeType::FontColor,
-                    "border_color" => ArkUINodeAttributeType::BorderColor,
-                    _ => ArkUINodeAttributeType::ForegroundColor,
-                };
-                node.get_attribute(attribute)
+        let node = binding.node.clone();
+        // SAFETY: animation reads only ArkUI attributes from the live,
+        // generation-checked target and never retains the borrowed node.
+        let result = unsafe {
+            node.with_native(|node| match name {
+                "opacity" => node
+                    .get_attribute(ArkUINodeAttributeType::Opacity)
                     .ok()
-                    .and_then(first_u32)
-                    .map(LinearRgba::from_argb)
-                    .map(AnimationValue::Color)
-            }
-            "border_radius" | "border_width" => node
-                .get_attribute(if name == "border_radius" {
-                    ArkUINodeAttributeType::BorderRadius
-                } else {
-                    ArkUINodeAttributeType::BorderWidth
-                })
-                .ok()
-                .and_then(first_f32)
-                .map(Length::vp)
-                .map(AnimationValue::Length),
-            "blur" | "width" | "height" | "font_size" | "line_height" | "letter_spacing" => {
-                let attribute = match name {
-                    "blur" => ArkUINodeAttributeType::Blur,
-                    "width" => ArkUINodeAttributeType::Width,
-                    "height" => ArkUINodeAttributeType::Height,
-                    "font_size" => ArkUINodeAttributeType::FontSize,
-                    "line_height" => ArkUINodeAttributeType::TextLineHeight,
-                    _ => ArkUINodeAttributeType::TextLetterSpacing,
-                };
-                node.get_attribute(attribute)
+                    .and_then(first_f32)
+                    .map(AnimationValue::Scalar),
+                "translate_x" | "translate_y" => {
+                    if let Ok(item) = node.get_attribute(ArkUINodeAttributeType::Translate) {
+                        if let Some(values) = numbers(item) {
+                            for (index, value) in values.into_iter().take(3).enumerate() {
+                                binding.visual.translate[index] = value;
+                            }
+                        }
+                    }
+                    let index = usize::from(name == "translate_y");
+                    Some(AnimationValue::Length(Length::vp(
+                        binding.visual.translate[index],
+                    )))
+                }
+                "position_x" | "position_y" => {
+                    if let Ok(item) = node.get_attribute(ArkUINodeAttributeType::Position) {
+                        if let Some(values) = numbers(item) {
+                            for (index, value) in values.into_iter().take(2).enumerate() {
+                                binding.visual.position[index] = value;
+                            }
+                        }
+                    }
+                    let index = usize::from(name == "position_y");
+                    Some(AnimationValue::Length(Length::vp(
+                        binding.visual.position[index],
+                    )))
+                }
+                "scale_x" | "scale_y" => {
+                    if let Ok(item) = node.get_attribute(ArkUINodeAttributeType::Scale) {
+                        if let Some(values) = numbers(item) {
+                            for (index, value) in values.into_iter().take(2).enumerate() {
+                                binding.visual.scale[index] = value;
+                            }
+                        }
+                    }
+                    let index = usize::from(name == "scale_y");
+                    Some(AnimationValue::Scalar(binding.visual.scale[index]))
+                }
+                "rotation" => node
+                    .get_attribute(ArkUINodeAttributeType::Rotate)
+                    .ok()
+                    .and_then(numbers)
+                    .and_then(|values| values.get(3).copied())
+                    .map(Angle::degrees)
+                    .map(AnimationValue::Angle),
+                "background_color" | "font_color" | "border_color" | "foreground_color" => {
+                    let attribute = match name {
+                        "background_color" => ArkUINodeAttributeType::BackgroundColor,
+                        "font_color" => ArkUINodeAttributeType::FontColor,
+                        "border_color" => ArkUINodeAttributeType::BorderColor,
+                        _ => ArkUINodeAttributeType::ForegroundColor,
+                    };
+                    node.get_attribute(attribute)
+                        .ok()
+                        .and_then(first_u32)
+                        .map(LinearRgba::from_argb)
+                        .map(AnimationValue::Color)
+                }
+                "border_radius" | "border_width" => node
+                    .get_attribute(if name == "border_radius" {
+                        ArkUINodeAttributeType::BorderRadius
+                    } else {
+                        ArkUINodeAttributeType::BorderWidth
+                    })
                     .ok()
                     .and_then(first_f32)
                     .map(Length::vp)
-                    .map(AnimationValue::Length)
-            }
-            "brightness" | "saturation" | "grayscale" | "invert" | "sepia" | "contrast"
-            | "aspect_ratio" => {
-                let attribute = match name {
-                    "brightness" => ArkUINodeAttributeType::Brightness,
-                    "saturation" => ArkUINodeAttributeType::Saturation,
-                    "grayscale" => ArkUINodeAttributeType::GrayScale,
-                    "invert" => ArkUINodeAttributeType::Invert,
-                    "sepia" => ArkUINodeAttributeType::Sepia,
-                    "contrast" => ArkUINodeAttributeType::Contrast,
-                    _ => ArkUINodeAttributeType::AspectRatio,
-                };
-                node.get_attribute(attribute)
-                    .ok()
-                    .and_then(first_f32)
-                    .map(AnimationValue::Scalar)
-            }
-            _ => None,
-        };
+                    .map(AnimationValue::Length),
+                "blur" | "width" | "height" | "font_size" | "line_height" | "letter_spacing" => {
+                    let attribute = match name {
+                        "blur" => ArkUINodeAttributeType::Blur,
+                        "width" => ArkUINodeAttributeType::Width,
+                        "height" => ArkUINodeAttributeType::Height,
+                        "font_size" => ArkUINodeAttributeType::FontSize,
+                        "line_height" => ArkUINodeAttributeType::TextLineHeight,
+                        _ => ArkUINodeAttributeType::TextLetterSpacing,
+                    };
+                    node.get_attribute(attribute)
+                        .ok()
+                        .and_then(first_f32)
+                        .map(Length::vp)
+                        .map(AnimationValue::Length)
+                }
+                "brightness" | "saturation" | "grayscale" | "invert" | "sepia" | "contrast"
+                | "aspect_ratio" => {
+                    let attribute = match name {
+                        "brightness" => ArkUINodeAttributeType::Brightness,
+                        "saturation" => ArkUINodeAttributeType::Saturation,
+                        "grayscale" => ArkUINodeAttributeType::GrayScale,
+                        "invert" => ArkUINodeAttributeType::Invert,
+                        "sepia" => ArkUINodeAttributeType::Sepia,
+                        "contrast" => ArkUINodeAttributeType::Contrast,
+                        _ => ArkUINodeAttributeType::AspectRatio,
+                    };
+                    node.get_attribute(attribute)
+                        .ok()
+                        .and_then(first_f32)
+                        .map(AnimationValue::Scalar)
+                }
+                _ => None,
+            })
+        }
+        .flatten();
         result.ok_or(AnimationAdapterError::NativeRead { target, property })
     }
 

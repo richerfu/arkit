@@ -64,9 +64,11 @@ pub struct RouteProviderProps {
 ///
 /// Render one `RouteProvider` at each route page root. It records ArkUI's
 /// per-frame scroll deltas without rerendering and restores the route's saved
-/// position when navigating back.
+/// position when navigating back. Content is anchored to the viewport's
+/// top-start edge when it is shorter than the viewport.
 #[component]
 pub fn RouteProvider(props: RouteProviderProps) -> Element {
+    let runtime = arkit_runtime::use_runtime_handle();
     let store = use_context::<RouteScrollStore>();
     let route = dioxus_router::router().full_route_string();
     let initial_route = route.clone();
@@ -86,10 +88,11 @@ pub fn RouteProvider(props: RouteProviderProps) -> Element {
     let restore_command = use_signal(|| None::<(String, f32)>);
     let last_effect_route = use_hook(|| RefCell::new(String::new()));
     let effect_route = route.clone();
+    let effect_runtime = runtime.clone();
     let mut restore_effect = use_effect(move || {
         let desired = restored.map(|position| (effect_route.clone(), position));
         let mut command = restore_command;
-        arkit_runtime::queue_ui_loop(move || {
+        effect_runtime.queue_ui(move || {
             let Ok(current) = command.try_peek() else {
                 return;
             };
@@ -117,6 +120,7 @@ pub fn RouteProvider(props: RouteProviderProps) -> Element {
             width: "100%",
             height: "100%",
             layout_weight: 1.0,
+            alignment: "top-start",
             scroll_bar: "auto",
             scroll_enabled: true,
             scroll_offset: offset,

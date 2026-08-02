@@ -15,7 +15,7 @@ fn app() -> Element {
     let mut selected = use_signal(|| String::from("Tap a chart item to inspect it"));
     let controller = use_hook(ChartController::new);
     let stream_controller = use_hook(ChartController::new);
-    let handle = arkit::tokio_handle();
+    let handle = arkit::use_runtime_handle().tokio();
 
     use_future(move || {
         let handle = handle.clone();

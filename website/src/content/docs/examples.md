@@ -169,7 +169,7 @@ cd ../../
 - 首次 mount 与 layout frame。
 - URL 输入和显式 load。
 - reload、focus、zoom。
-- title callback 经 `queue_ui_loop` 更新。
+- title callback 经当前 root 的 `RuntimeHandle::queue_ui` 更新。
 - 页面卸载、返回与 resize。
 
 ## Workspace 验证

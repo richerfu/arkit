@@ -1,61 +1,60 @@
 ---
 title: 原生节点与布局 Hooks
-description: "需要摸到原生节点、布局尺寸或切回 UI loop 时可以用的 hooks。"
+description: "用精确元素引用观测布局，并在受控边界访问原生节点。"
 ---
 
 # 原生节点与布局 Hooks
 
-大多数页面用 RSX 就够了。真要拿原生句柄、听布局变化，或把结果丢回 UI 线程时，再用这组 native hooks。
+大多数页面只需要 RSX。布局观测、动画 target、XComponent 和 WebView 等集成需要原生节点时，使用绑定到具体元素的 `NativeElementRef`，不要按 component scope 猜测某个“根节点”。
 
-## ArkHost 与 use_ark_node
-
-`#[entry]` 会自动安装 `ArkHost`。组件调用 `use_ark_node()` 后，runtime 在完成一次 Dioxus render 后把该 scope 对应的 mounted root node 写回 `ArkNodeRef`。
+## 精确元素引用
 
 ```rust
-let node_ref = use_ark_node();
+let reference = use_native_element_ref();
 
-use_effect(move || {
-    if let Some(node) = node_ref.peek() {
-        // node 是 renderer 当前持有的同一个 Rc<RefCell<ArkUINode>>
-        let native = node.borrow();
-        // 只做必要的原生操作
+use_layout_frame(reference.clone(), move |frame| {
+    if frame.is_measured() {
+        // frame 是 window-relative 物理像素
     }
 });
-```
 
-节点可能在首帧尚未 resolve，也可能随 subtree 替换而变化。不要把裸 native handle 存到 process-global 状态。
-
-`use_ark_host_provider()` 只用于手工构造 `VirtualDom` 并直接挂载 runtime 的高级场景；普通 `#[entry]` 应用不得重复调用。
-
-## 布局观测
-
-布局 hook 有三个层次：
-
-| API                     | 回调参数                  | 典型用途                              |
-| ----------------------- | ------------------------- | ------------------------------------- |
-| `use_layout_size`       | `LayoutSize`              | 只关心 width/height                   |
-| `use_layout_frame`      | `LayoutFrame`             | 需要 window-relative x/y/width/height |
-| `use_layout_frame_node` | `ArkUINode + LayoutFrame` | 需要把原生 child/adapter 挂到宿主     |
-
-`LayoutSize` 与 `LayoutFrame` 使用物理像素；`is_measured()` 可过滤零尺寸首帧。
-
-```rust
-use_layout_frame_node(move |mut node, frame| {
-    if !frame.is_measured() {
-        return;
+rsx! {
+    row {
+        native_ref: reference,
+        width: "100%",
+        height: 48.0,
     }
-    // 同步原生 child 的尺寸或挂载 adapter
-});
+}
 ```
 
-同一 node 的多个订阅共享一个 native area-change listener。hook 卸载会按 token 移除对应订阅；native handle 被复用时 generation 会隔离旧 callback。
+一个 ref 只描述携带 `native_ref` 属性的那个元素。renderer 挂载节点时生成 `MountedNodeLease`；节点重建或卸载后，旧 lease 会因 generation 不匹配而自动失效。
 
-## NodeBuilder
+`NativeElementRef` 不会自动猜测 component 的根节点。ref 没有实际挂到
+`native_ref` 时，布局、生命周期和动画 target 都不会收到事件；可复用组件若要支持这些能力，应把可选 ref 显式转发到自己的原生根元素。
 
-`use_virtual_node_adapter` 根据 `render_item` 返回类型选择渲染路径。返回 `ArkUIResult<ArkUINode>` 时 callback 在 Dioxus render cycle 外执行；`NodeBuilder` 为这个原生边界提供链式、可清理的构造器：
+## 布局与生命周期
+
+| API                               | 回调参数                   | 用途                       |
+| --------------------------------- | -------------------------- | -------------------------- |
+| `use_layout_size(ref, callback)`  | `LayoutSize`               | width / height             |
+| `use_layout_frame(ref, callback)` | `LayoutFrame`              | window-relative 完整 frame |
+| `use_component_lifecycle(ref)`    | `ComponentLifecycleState`  | 精确节点的挂载与可见状态   |
+| `use_component_visibility(ref)`   | `bool`                     | 精确节点是否可见           |
+| `use_mounted_node(ref, callback)` | `Option<MountedNodeLease>` | 框架级原生集成             |
+
+`LayoutSize` 与 `LayoutFrame` 使用物理像素；`is_measured()` 可过滤零尺寸首帧。ref 的多个消费者复用 renderer 的统一 native event route，不会互相覆盖 ArkUI callback。
+
+`MountedNodeLease` 是非 owning、generation-checked 的借用。普通业务不需要访问它；框架组件只有在 binding API 无法声明式表达时，才通过带安全约束的 `with_native` / `with_native_mut` 调用原生能力。
+
+## NodeBuilder 与 OwnedNativeNode
+
+虚拟列表的 native item 在 Dioxus render cycle 外创建。该边界使用 `arkit::native::NodeBuilder`，并返回唯一 owner `OwnedNativeNode`：
 
 ```rust
-fn render_item(index: u32) -> ArkUIResult<ArkUINode> {
+use arkit::native::{NodeBuilder, OwnedNativeNode};
+use ohos_arkui_binding::common::error::ArkUIResult;
+
+fn render_item(index: u32) -> ArkUIResult<OwnedNativeNode> {
     let label = NodeBuilder::new("text")?
         .font_size(14.0)?
         .font_color("#ff334155")?
@@ -71,57 +70,43 @@ fn render_item(index: u32) -> ArkUIResult<ArkUINode> {
 }
 ```
 
-`NodeBuilder` 直接操作 ArkUI 属性（非 RSX 编码器）：
+builder 或未转移的 `OwnedNativeNode` 被 drop 时会 dispose；`.child(...)` 成功后所有权转给父节点；virtual source 接收根 owner 后再接管生命周期。facade 不再导出裸 `create_node*` 和 `NodeKind`，避免出现无 owner 的原生句柄。
 
-| 方法                                                             | 含义                                       |
-| ---------------------------------------------------------------- | ------------------------------------------ |
-| `width` / `height`                                               | 固定尺寸（vp）                             |
-| `percent_width` / `percent_height`                               | 相对父级，取值 `0.0`–`1.0`（`1.0` = 100%） |
-| `background_color` / `font_size` / `font_color` / `text_content` | 常用外观与文本                             |
-| `padding` / `margin` / `child`                                   | 盒模型与子节点                             |
-| `attr`                                                           | 任意 `ArkUINodeAttributeType`              |
-
-声明式 RSX 使用 CSS 写法（`width: "100%"`、`height: 48.0`）；`NodeBuilder` 是 render cycle 外的命令式路径。两者都使用 `use_virtual_node_adapter`，由 callback 返回 `Element` 或 `ArkUIResult<ArkUINode>` 自动选择实现。
-
-builder 在 `build` 前持有 native cleanup guard。任一步返回错误或 builder 被提前 drop，已创建 node 会被 dispose；`build` 后所有权转移给调用方。
-
-## Tag 与原生创建
-
-facade 还导出：
-
-| API                  | 说明                                  |
-| -------------------- | ------------------------------------- |
-| `canonical_tag`      | 把 alias 规范化为 canonical ArkUI tag |
-| `kind_from_tag`      | tag 到 `NodeKind`                     |
-| `create_node`        | 按 `NodeKind` 创建                    |
-| `create_node_by_tag` | 按 RSX/ArkUI tag 创建                 |
-
-普通业务不要绕过 `NodeBuilder` 直接拼 early-error path；binding 的 `ArkUINode` 没有隐式 `Drop`，遗漏 dispose 会泄漏原生对象。
-
-## UI-loop handoff
-
-原生 callback 不能在 native patch 期间同步写 Dioxus：
+## 回到当前 root 的 UI loop
 
 ```rust
+let runtime = use_runtime_handle();
 let mut value = use_signal(String::new);
 
 register_native_callback(move |payload| {
-    queue_ui_loop(move || {
-        value.set(payload);
-    });
+    runtime.queue_ui(move || value.set(payload));
 });
 ```
 
-`queue_ui_loop` 把 owned closure 绑定到当前 root，唤醒 OpenHarmony loop；root 卸载后其 pending effects 会被清理。
+`RuntimeHandle` 属于当前 root。它同时提供 `queue_ui`、`tokio()` 和 RAII back handler；root 卸载后 pending UI work 会被清理，也不会误唤醒另一个应用 root。
 
-## ScopeNodeResolver
+`use_runtime_handle()` 只能在 Arkit 挂载的 Dioxus root 内调用。缺少该上下文属于宿主接入错误，API 会直接失败，而不是回退到某个进程全局 runtime。
 
-`ScopeNodeResolver`、`register_scope_resolver` 和 `ScopeResolverRegistration` 是 runtime 与 hooks crate 之间的公开窄接口。它们负责将 `ScopeId` 解析为 renderer 已挂载节点，通常只由 `ArkHost` 实现。应用层只消费 `use_ark_node`，不应自行注册第二个 resolver。
+## 从旧版 host API 迁移
+
+| 旧 API                                               | 新 API / 做法                                                      |
+| ---------------------------------------------------- | ------------------------------------------------------------------ |
+| `use_ark_node()` / `ArkNodeRef`                      | `use_native_element_ref()`，把同一 ref 挂到目标元素的 `native_ref` |
+| `use_layout_frame(callback)`                         | `use_layout_frame(ref, callback)`                                  |
+| `use_ark_host_provider()` / `ArkHost`                | 由 `mount_entry` 自动安装 root-local 上下文                        |
+| `OverlayRoot` / `use_overlay()`                      | 在声明位置使用 `Portal` / `ModalPortal`                            |
+| `use_virtual_node_adapter*()` / `VirtualNodeAdapter` | `use_virtual_source*()` / `VirtualSource`                          |
+| `queue_ui_loop(...)`                                 | `use_runtime_handle().queue_ui(...)`                               |
+| `tokio_handle()`                                     | `use_runtime_handle().tokio()`                                     |
+| `register_back_press_handler(...)`                   | `use_runtime_handle().register_back_handler(...)`                  |
+
+Portal 是受声明状态控制的：受控组件收到关闭操作时会调用
+`on_close` / `on_open_change(false)`，调用方需要同步更新 `open`；框架不再从组件外部命令式删除仍被声明为打开的浮层。
 
 ## 所有权规则
 
-- Dioxus/renderer 创建的 node：借用，不 dispose。
-- `NodeBuilder::build` 返回且尚未交给 adapter/tree 的 node：调用方拥有。
-- NodeAdapter item：adapter 接管 wrapper/item 生命周期。
-- 原生 subscription/registration：持有 RAII registration 到对应 component scope。
-- 不跨线程移动 ArkUI node、WebView 或 Drawing handle。
+- RSX / renderer 创建的 node：renderer 独占，外部只有 `MountedNodeLease`。
+- `NodeBuilder::build` 返回且尚未转移的 node：`OwnedNativeNode` 独占。
+- `VirtualSource` item：source 接管 wrapper、content 和 item-local runtime。
+- 原生 subscription / registration：用 RAII owner 绑定到 component scope。
+- ArkUI node、WebView、Drawing handle 不跨线程移动或析构。

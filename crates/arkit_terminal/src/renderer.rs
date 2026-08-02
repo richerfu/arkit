@@ -81,6 +81,12 @@ impl TerminalRenderer {
     pub(crate) fn new(surface: NativeSurface) -> Result<Self, String> {
         let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
         descriptor.backends = wgpu::Backends::GL;
+        // OHOS' EGL implementation crashes while creating a debug context
+        // (`d_eglCreateDebugMessageBuffer`) instead of returning an error.
+        // Keep wgpu's validation enabled, but do not ask the driver for the
+        // optional API debug context on OHOS debug builds.
+        #[cfg(target_env = "ohos")]
+        descriptor.flags.remove(wgpu::InstanceFlags::DEBUG);
         let instance = wgpu::Instance::new(descriptor);
         let raw_surface = create_surface(&instance, &surface)?;
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
@@ -90,8 +96,14 @@ impl TerminalRenderer {
             ..Default::default()
         }))
         .map_err(|error| format!("request_adapter: {error}"))?;
+        // Some OHOS GLES drivers report conservative limits below wgpu's
+        // defaults (for example, no compute and seven inter-stage variables).
+        // This renderer does not need the omitted capabilities, so request
+        // exactly what the selected adapter exposes.
+        let required_limits = adapter.limits();
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("arkit terminal device"),
+            required_limits,
             ..Default::default()
         }))
         .map_err(|error| format!("request_device: {error}"))?;

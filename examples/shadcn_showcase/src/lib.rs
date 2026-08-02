@@ -416,6 +416,7 @@ fn app() -> Element {
 
 #[component]
 fn ShowcaseShell() -> Element {
+    let runtime = arkit::use_runtime_handle();
     let state = use_context::<ShowcaseState>();
     let navigator = use_navigator();
     let mut language_menu_open = state.language_menu_open;
@@ -438,7 +439,7 @@ fn ShowcaseShell() -> Element {
     });
     let back_press_handler: Rc<dyn Fn() -> bool> = Rc::new(move || scoped_back_press.call(()));
     let _back_press_registration =
-        use_hook(move || Rc::new(arkit::register_back_press_handler(back_press_handler)));
+        use_hook(move || Rc::new(runtime.register_back_handler(back_press_handler)));
 
     rsx! { Outlet::<Route> {} }
 }
@@ -1283,7 +1284,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let mut markdown_chunk_index = use_signal(|| 0_usize);
     let mut markdown_streaming = use_signal(|| true);
 
-    let async_runtime = arkit::tokio_handle();
+    let async_runtime = arkit::use_runtime_handle().tokio();
     let markdown_stream_task = use_future(move || {
         let async_runtime = async_runtime.clone();
         async move {
@@ -2516,25 +2517,28 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         v_gap { height: spacing::XXL }
                         GuideTarget {
                             id: "guide-profile".to_string(),
-                            Card {
-                                CardHeader {
-                                    title: "Arkit workspace".to_string(),
-                                    description: "12 components updated this week".to_string(),
-                                }
-                                CardContent {
-                                    row {
-                                        width: "100%",
-                                        align_items: "center",
-                                        justify_content: "space_between",
-                                        Badge {
-                                            content: "Active".to_string(),
-                                            variant: BadgeVariant::Secondary,
-                                        }
-                                        text {
-                                            content: "Last opened today".to_string(),
-                                            font_size: typography::XS,
-                                            font_color: theme.colors.muted_foreground,
-                                            line_height: 18.0,
+                            render: move |target_ref| rsx! {
+                                Card {
+                                    native_ref: target_ref,
+                                    CardHeader {
+                                        title: "Arkit workspace".to_string(),
+                                        description: "12 components updated this week".to_string(),
+                                    }
+                                    CardContent {
+                                        row {
+                                            width: "100%",
+                                            align_items: "center",
+                                            justify_content: "space_between",
+                                            Badge {
+                                                content: "Active".to_string(),
+                                                variant: BadgeVariant::Secondary,
+                                            }
+                                            text {
+                                                content: "Last opened today".to_string(),
+                                                font_size: typography::XS,
+                                                font_color: theme.colors.muted_foreground,
+                                                line_height: 18.0,
+                                            }
                                         }
                                     }
                                 }
@@ -2547,27 +2551,33 @@ fn ComponentDemo(slug: &'static str) -> Element {
                             justify_content: "space_between",
                             GuideTarget {
                                 id: "guide-search".to_string(),
-                                Button {
-                                    variant: ButtonVariant::Outline,
-                                    onclick: move |_| {},
-                                    row {
-                                        align_items: "center",
-                                        {icon_placeholder("search", 18.0, theme.colors.foreground)}
-                                        h_gap { width: spacing::SM }
-                                        "Search"
+                                render: move |target_ref| rsx! {
+                                    Button {
+                                        native_ref: target_ref,
+                                        variant: ButtonVariant::Outline,
+                                        onclick: move |_| {},
+                                        row {
+                                            align_items: "center",
+                                            {icon_placeholder("search", 18.0, theme.colors.foreground)}
+                                            h_gap { width: spacing::SM }
+                                            "Search"
+                                        }
                                     }
                                 }
                             }
                             GuideTarget {
                                 id: "guide-settings".to_string(),
-                                Button {
-                                    variant: ButtonVariant::Outline,
-                                    onclick: move |_| {},
-                                    row {
-                                        align_items: "center",
-                                        {icon_placeholder("settings-2", 18.0, theme.colors.foreground)}
-                                        h_gap { width: spacing::SM }
-                                        "Preferences"
+                                render: move |target_ref| rsx! {
+                                    Button {
+                                        native_ref: target_ref,
+                                        variant: ButtonVariant::Outline,
+                                        onclick: move |_| {},
+                                        row {
+                                            align_items: "center",
+                                            {icon_placeholder("settings-2", 18.0, theme.colors.foreground)}
+                                            h_gap { width: spacing::SM }
+                                            "Preferences"
+                                        }
                                     }
                                 }
                             }
@@ -4774,7 +4784,7 @@ fn RefreshLoadMoreDemo() -> Element {
     let mut operation_epoch = use_signal(|| 0_u64);
     let mut refresh_request = use_signal(|| 0_u64);
     let mut load_request = use_signal(|| 0_u64);
-    let async_runtime = arkit::tokio_handle();
+    let async_runtime = arkit::use_runtime_handle().tokio();
 
     let refresh_runtime = async_runtime.clone();
     let _refresh_task = use_resource(move || {
@@ -4958,22 +4968,22 @@ fn RefreshVirtualListDemo(
     item_keys.push(u64::MAX - load_more_state_key(state));
     let item_controller = controller.clone();
     let footer_controller = controller.clone();
-    let adapter =
-        use_virtual_node_adapter_items_keyed(VirtualKind::List, item_keys, move |index| {
-            if index < item_count {
-                let visible_controller = item_controller.clone();
-                arkit::queue_ui_loop(move || visible_controller.on_virtual_item(index));
-                refresh_demo_row(index, theme)
-            } else {
-                let retry_controller = footer_controller.clone();
-                rsx! {
-                    LoadMoreIndicator {
-                        state,
-                        on_retry: move |_| retry_controller.retry(),
-                    }
+    let runtime = arkit::use_runtime_handle();
+    let source = use_virtual_source_items_keyed(VirtualKind::List, item_keys, move |index| {
+        if index < item_count {
+            let visible_controller = item_controller.clone();
+            runtime.queue_ui(move || visible_controller.on_virtual_item(index));
+            refresh_demo_row(index, theme)
+        } else {
+            let retry_controller = footer_controller.clone();
+            rsx! {
+                LoadMoreIndicator {
+                    state,
+                    on_retry: move |_| retry_controller.retry(),
                 }
             }
-        });
+        }
+    });
     let scroll_controller = controller.clone();
     let refresh_controller = controller;
 
@@ -4985,7 +4995,7 @@ fn RefreshVirtualListDemo(
                 on_refresh.call(());
             },
             ShowcaseVirtualListHost {
-                adapter,
+                source,
                 on_scroll: move |data| scroll_controller.on_virtual_scroll(data),
             }
         }
@@ -4994,16 +5004,12 @@ fn RefreshVirtualListDemo(
 
 #[component]
 fn ShowcaseVirtualListHost(
-    adapter: VirtualNodeAdapter,
+    source: VirtualSource,
     on_scroll: EventHandler<dioxus_elements::event::ScrollData>,
 ) -> Element {
-    let attach_adapter = adapter.clone();
-    use_layout_frame_node(move |host_node, _frame| {
-        let _ = attach_adapter.attach(&host_node);
-    });
-
     rsx! {
         list {
+            virtual_source: source,
             width: "100%",
             height: "100%",
             scroll_bar: "off",

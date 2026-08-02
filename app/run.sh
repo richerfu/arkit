@@ -14,29 +14,88 @@ HVIGWORW="/Users/ranger/Downloads/command-line-tools/bin/hvigorw"
 OHPM="/Users/ranger/Downloads/command-line-tools/bin/ohpm"
 BUNDLE="com.arkit.example"
 ABILITY="EntryAbility"
-HDC_TARGET="${HDC_TARGET:-$(hdc list targets -v 2>/dev/null | awk '$3 == "Connected" { print $1; exit }')}"
+HDC_TARGET="${HDC_TARGET:-}"
 HDC=(hdc)
-if [ -n "$HDC_TARGET" ]; then
-  HDC+=(-t "$HDC_TARGET")
-fi
+HDC_READY=0
 
-# hdc can transiently report "Connect server failed" with a zero exit code
-# after a longer hvigor build. Retry it and turn that text failure into a real
-# shell failure so `all` never claims a deployment that did not happen.
-run_hdc() {
-  local output=""
+hdc_output_is_transient_failure() {
+  local output="$1"
+  [[ "$output" == *"Connect server failed"* || \
+    "$output" == *"[Fail]"* || \
+    "$output" == *"Device not found or connected"* ]]
+}
+
+hdc_output_is_fatal_failure() {
+  local output="$1"
+  [[ "$output" == *"error: failed"* || \
+    "$output" == *"failed to install bundle"* || \
+    "$output" == *"no signature file"* ]]
+}
+
+# hdc can transiently report a textual connection failure with exit code 0
+# after a longer hvigor build. Normalize both status and output before the
+# caller is allowed to report a successful deployment.
+retry_hdc() {
   local attempt
-  for attempt in 1 2 3; do
-    output=$("${HDC[@]}" "$@" 2>&1) || true
-    if [[ "$output" != *"Connect server failed"* && \
-      "$output" != *"[Fail]"* && \
-      "$output" != *"Device not found or connected"* ]]; then
-      printf '%s\n' "$output"
+  local max_attempts=5
+  local output=""
+  local status=0
+  for ((attempt = 1; attempt <= max_attempts; attempt++)); do
+    status=0
+    output=$("$@" 2>&1) || status=$?
+    if [ "$status" -eq 0 ] && \
+      ! hdc_output_is_transient_failure "$output" && \
+      ! hdc_output_is_fatal_failure "$output"; then
+      [ -z "$output" ] || printf '%s\n' "$output"
       return 0
     fi
+    if hdc_output_is_fatal_failure "$output"; then
+      printf '%s\n' "$output" >&2
+      return 1
+    fi
+    if [ "$attempt" -lt "$max_attempts" ]; then
+      echo ">> hdc attempt $attempt failed; retrying" >&2
+      sleep "$attempt"
+    fi
   done
-  printf '%s\n' "$output" >&2
+  [ -z "$output" ] || printf '%s\n' "$output" >&2
+  echo "hdc command failed after $max_attempts attempts (exit $status)" >&2
   return 1
+}
+
+ensure_hdc_target() {
+  [ "$HDC_READY" -eq 1 ] && return 0
+
+  if [ -z "$HDC_TARGET" ]; then
+    local target_output
+    local connected_targets
+    local target_count
+    target_output=$(retry_hdc hdc list targets -v)
+    connected_targets=$(printf '%s\n' "$target_output" | awk '$3 == "Connected" { print $1 }')
+    target_count=$(printf '%s\n' "$connected_targets" | awk 'NF { count++ } END { print count + 0 }')
+    case "$target_count" in
+      0)
+        echo "no connected hdc target; connect a device or set HDC_TARGET" >&2
+        return 1
+        ;;
+      1)
+        HDC_TARGET="$connected_targets"
+        ;;
+      *)
+        echo "multiple connected hdc targets; set HDC_TARGET explicitly:" >&2
+        printf '%s\n' "$connected_targets" | sed 's/^/  - /' >&2
+        return 1
+        ;;
+    esac
+  fi
+
+  HDC=(hdc -t "$HDC_TARGET")
+  HDC_READY=1
+}
+
+run_hdc() {
+  ensure_hdc_target
+  retry_hdc "${HDC[@]}" "$@"
 }
 
 EX="${1:?usage: $0 <example-dir> [build|install|start|log]}"
@@ -111,15 +170,19 @@ do_build() {
 }
 
 do_install() {
-  HAP=$(find "$APP/entry/build" -name "*.hap" -path "*outputs*" 2>/dev/null | head -1 || true)
+  HAP=$(find "$APP/entry/build" -name "*-signed.hap" -path "*outputs*" 2>/dev/null | head -1 || true)
+  if [ -z "$HAP" ]; then
+    HAP=$(find "$APP/entry/build" -name "*.hap" -path "*outputs*" 2>/dev/null | head -1 || true)
+  fi
   [ -n "$HAP" ] || { echo "no hap found, build first"; exit 1; }
-  echo ">> hdc ${HDC_TARGET:+-t $HDC_TARGET }install $HAP"
-  run_hdc install -r "$HAP" | tail -3
+  ensure_hdc_target
+  echo ">> hdc -t $HDC_TARGET install $HAP"
+  run_hdc install -r "$HAP"
 }
 
 do_start() {
   echo ">> aa start $ABILITY / $BUNDLE"
-  run_hdc shell aa start -a "$ABILITY" -b "$BUNDLE" | tail -3
+  run_hdc shell aa start -a "$ABILITY" -b "$BUNDLE"
 }
 
 case "$ACTION" in
@@ -130,7 +193,10 @@ case "$ACTION" in
     ;;
   install) do_install ;;
   start) do_start ;;
-  log) "${HDC[@]}" hilog | grep -iE "arkit|ArkUI|dioxus|error|fatal" ;;
+  log)
+    ensure_hdc_target
+    "${HDC[@]}" hilog | grep -iE "arkit|ArkUI|dioxus|error|fatal"
+    ;;
   all)
     sync_shell
     do_build

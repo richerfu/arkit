@@ -3,7 +3,7 @@
 //!
 //! Migrated from the legacy Elm builder API. The trigger opens the card on
 //! hover (`on_hover`) and toggles it on click; the panel renders through the app
-//! overlay root so parent layout cannot clip it. Panel styling preserved
+//! root-projected portal so parent layout cannot clip it. Panel styling preserved
 //! (legacy `panel_surface`): default width `256` (Tailwind `w-64`),
 //! `spacing::LG` padding, `md` radius, 1px border, `popover`/`border` tokens,
 //! small outer shadow, start-aligned content. Anchored below the trigger.
@@ -28,9 +28,10 @@ pub fn HoverCard(
     children: Element,
 ) -> Element {
     let theme = use_theme();
-    let overlay = arkit_hooks::use_overlay();
+    let viewport = arkit_hooks::use_overlay_viewport();
+    let trigger_ref = arkit_hooks::use_native_element_ref();
     let trigger_frame = use_signal(arkit_hooks::LayoutFrame::default);
-    arkit_hooks::use_layout_frame(move |frame| {
+    arkit_hooks::use_layout_frame(trigger_ref.clone(), move |frame| {
         let mut trigger_frame = trigger_frame;
         trigger_frame.set(frame);
     });
@@ -56,53 +57,32 @@ pub fn HoverCard(
         }
     });
 
-    let show_overlay = overlay.clone();
     let show_card = EventHandler::new(move |_: ()| {
-        if current {
-            return;
-        }
-        set_open.call(true);
-        let panel = children.clone();
-        let frame = *trigger_frame.read();
-        let viewport = show_overlay.viewport();
-        let placement = FloatingPanelPlacement::resolve(
-            frame,
-            viewport,
-            panel_width,
-            HOVER_CARD_ESTIMATED_HEIGHT,
-            FloatingSide::Bottom,
-            FloatingAlign::Center,
-            spacing::XXS,
-        );
-        show_overlay.show_floating(move || {
-            hover_card_overlay_content(theme, panel_width, placement, panel)
-        });
-    });
-
-    let leave_overlay = overlay.clone();
-    let close_card = EventHandler::new(move |_: ()| {
         if !current {
-            return;
+            set_open.call(true);
         }
-        set_open.call(false);
-        leave_overlay.dismiss();
     });
 
-    let toggle_overlay = overlay.clone();
-    let toggle = move |_| {
+    let close_card = EventHandler::new(move |_: ()| {
         if current {
             set_open.call(false);
-            toggle_overlay.dismiss();
-        } else {
-            show_card.call(());
         }
-    };
+    });
+
+    let placement = FloatingPanelPlacement::resolve(
+        *trigger_frame.read(),
+        viewport,
+        panel_width,
+        HOVER_CARD_ESTIMATED_HEIGHT,
+        FloatingSide::Bottom,
+        FloatingAlign::Center,
+        spacing::XXS,
+    );
 
     rsx! {
         row {
-            onclick: move |_| {
-                toggle(());
-            },
+            native_ref: trigger_ref,
+            onclick: move |_| set_open.call(!current),
             on_hover: move |evt| {
                 if evt.data().is_hovering {
                     show_card.call(());
@@ -111,6 +91,12 @@ pub fn HoverCard(
                 }
             },
             {trigger}
+        }
+        if current {
+            arkit_hooks::Portal {
+                layer: arkit_hooks::OverlayLayer::Floating,
+                {hover_card_overlay_content(theme, panel_width, placement, children)}
+            }
         }
     }
 }

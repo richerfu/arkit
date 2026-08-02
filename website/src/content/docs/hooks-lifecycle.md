@@ -51,18 +51,26 @@ use_application_lifecycle_event(move |event, state| {
 
 ## 组件展示与隐藏
 
-组件仍然挂载，但因 `visibility`、父级裁剪、Tab 切换或移出可见区域而不可见时，Dioxus 的 `use_drop` 不会执行。此时使用 `use_component_lifecycle()`：
+组件仍然挂载，但因 `visibility`、父级裁剪、Tab 切换或移出可见区域而不可见时，Dioxus 的 `use_drop` 不会执行。此时给目标元素绑定精确 ref：
 
 ```rust
-let component = use_component_lifecycle();
+let reference = use_native_element_ref();
+let component = use_component_lifecycle(reference.clone());
 let should_run = use_app_foreground() && component.is_visible();
 
 use_effect(use_reactive(&should_run, move |active| {
     player.set_active(active);
 }));
+
+rsx! {
+    stack {
+        native_ref: reference,
+        PlayerSurface {}
+    }
+}
 ```
 
-快照包含 `visible` 和 ArkUI 上报的 `visible_fraction`；`use_component_visibility()` 是布尔简写。同一 native node 的多个订阅共享一组 appear/disappear/visible-area listener，卸载时按 token 清理。
+快照包含 `visible` 和 ArkUI 上报的 `visible_fraction`；`use_component_visibility(reference)` 是布尔简写。同一精确元素的多个订阅共享 renderer 的 native event route，卸载时按 RAII token 清理。
 
 组件创建和销毁已经由 scope 生命周期完整表达，因此不再增加一套重复的 `on_create`/`on_destroy` API：首次 `use_effect` 负责创建或订阅，`use_drop` 负责销毁；展示/隐藏由上述组件生命周期 Hook 补齐。
 

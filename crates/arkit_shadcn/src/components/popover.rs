@@ -2,8 +2,8 @@
 //! trigger and dismissed by tapping outside.
 //!
 //! Migrated from the legacy Elm builder API. The trigger toggles the open
-//! state (click mode). The panel renders through the app overlay root so it is
-//! not clipped by the trigger's parent layout. Panel styling preserved: default
+//! state (click mode). The panel renders through a root-projected portal so it
+//! is not clipped by the trigger's parent layout. Panel styling preserved: default
 //! width `288` (Tailwind `w-72`), `spacing::LG` padding, `md` radius, 1px
 //! border, `popover`/`border` tokens, small outer shadow, start-aligned
 //! content.
@@ -30,9 +30,10 @@ pub fn Popover(
     children: Element,
 ) -> Element {
     let theme = use_theme();
-    let overlay = arkit_hooks::use_overlay();
+    let viewport = arkit_hooks::use_overlay_viewport();
+    let trigger_ref = arkit_hooks::use_native_element_ref();
     let trigger_frame = use_signal(arkit_hooks::LayoutFrame::default);
-    arkit_hooks::use_layout_frame(move |frame| {
+    arkit_hooks::use_layout_frame(trigger_ref.clone(), move |frame| {
         let mut trigger_frame = trigger_frame;
         trigger_frame.set(frame);
     });
@@ -58,41 +59,28 @@ pub fn Popover(
         }
     });
 
-    let toggle = move |_| {
-        if current {
-            set_open.call(false);
-            overlay.dismiss();
-        } else {
-            set_open.call(true);
-            let panel = children.clone();
-            let frame = *trigger_frame.read();
-            let viewport = overlay.viewport();
-            let placement = FloatingPanelPlacement::resolve(
-                frame,
-                viewport,
-                panel_width,
-                POPOVER_ESTIMATED_HEIGHT,
-                FloatingSide::Bottom,
-                FloatingAlign::Center,
-                spacing::XXS,
-            );
-            let dismiss_overlay = overlay.clone();
-            let dismiss = EventHandler::new(move |_: ()| {
-                set_open.call(false);
-                dismiss_overlay.dismiss();
-            });
-            overlay.show_floating(move || {
-                popover_overlay_content(theme, panel_width, placement, dismiss, panel)
-            });
-        }
-    };
+    let placement = FloatingPanelPlacement::resolve(
+        *trigger_frame.read(),
+        viewport,
+        panel_width,
+        POPOVER_ESTIMATED_HEIGHT,
+        FloatingSide::Bottom,
+        FloatingAlign::Center,
+        spacing::XXS,
+    );
+    let dismiss = EventHandler::new(move |_: ()| set_open.call(false));
 
     rsx! {
         row {
-            onclick: move |_| {
-                toggle(());
-            },
+            native_ref: trigger_ref,
+            onclick: move |_| set_open.call(!current),
             {trigger}
+        }
+        if current {
+            arkit_hooks::Portal {
+                layer: arkit_hooks::OverlayLayer::Floating,
+                {popover_overlay_content(theme, panel_width, placement, dismiss, children)}
+            }
         }
     }
 }

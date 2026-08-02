@@ -318,6 +318,7 @@ pub fn InputOtp(props: InputOtpProps) -> Element {
 fn InputOtpCaret(color: u32, radius: f32) -> Element {
     let target_name = use_hook(next_input_otp_caret_target_name);
     let target = arkit_animation::use_animation_target(target_name.clone());
+    let target_ref = target.native_ref();
     let controls = arkit_animation::use_animation(input_otp_caret_timeline(&target_name));
     let animation = controls.clone();
 
@@ -329,6 +330,7 @@ fn InputOtpCaret(color: u32, radius: f32) -> Element {
 
     rsx! {
         row {
+            native_ref: target_ref,
             width: 1.5,
             height: 24.0,
             opacity: 1.0_f32,
