@@ -11,6 +11,38 @@ use openharmony_ability::{get_helper, get_main_thread_env, WebViewInitData, Webv
 
 pub use openharmony_ability::WebViewStyle;
 
+/// Layout frame used to size an embedded WebView inside a native ArkUI host.
+///
+/// The ArkTS `ComponentContent` root is a `FrameNode` with no measure
+/// callback of its own; inside a native (CAPI) tree it would measure to zero
+/// and the Web component would never create its surface. The host's measured
+/// frame is therefore applied explicitly to the node.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WebViewFrame {
+    pub width: f32,
+    pub height: f32,
+}
+
+impl WebViewFrame {
+    pub fn is_valid(self) -> bool {
+        self.layout_rect_px().is_some()
+    }
+
+    fn layout_rect_px(self) -> Option<[i32; 4]> {
+        fn physical_extent(value: f32) -> Option<i32> {
+            let rounded = f64::from(value).round();
+            (rounded >= 1.0 && rounded <= f64::from(i32::MAX)).then_some(rounded as i32)
+        }
+
+        Some([
+            0,
+            0,
+            physical_extent(self.width)?,
+            physical_extent(self.height)?,
+        ])
+    }
+}
+
 /// Initial configuration for a renderer-owned embedded WebView.
 #[derive(Clone)]
 pub struct EmbeddedWebViewInit {
@@ -54,6 +86,7 @@ struct EmbeddedWebViewState {
     mount_generation: u64,
     webview: Option<Webview>,
     node: Option<ArkUINode>,
+    frame: Option<WebViewFrame>,
     current_url: Option<String>,
     current_html: Option<String>,
     desired_visible: bool,
@@ -66,14 +99,13 @@ impl Default for EmbeddedWebViewState {
             mount_generation: 0,
             webview: None,
             node: None,
+            frame: None,
             current_url: None,
             current_html: None,
             desired_visible: true,
         }
     }
 }
-
-/// Owned controller state used across ArkTS/N-API calls.
 ///
 /// Native WebView operations may synchronously invoke callbacks. Keeping an
 /// owned snapshot guarantees that no `RefCell` borrow crosses that re-entrant
@@ -150,6 +182,7 @@ impl EmbeddedWebViewController {
         &self,
         host: &MountedNodeLease,
         mut init: EmbeddedWebViewInit,
+        frame: Option<WebViewFrame>,
     ) -> Result<()> {
         if init.id.is_empty() {
             init.id = self.id();
@@ -186,6 +219,27 @@ impl EmbeddedWebViewController {
                     }
                     return Err(error);
                 }
+                // ComponentContent recalculates its builder root when it is
+                // inserted into the CAPI tree. Apply the explicit rect only
+                // after attachment; setting it before insertion is silently
+                // overwritten by that first parent measure and leaves the Web
+                // surface at 0x0 even though navigation callbacks still fire.
+                let applied_frame = if let Some(frame) = frame {
+                    match apply_webview_frame(&mount.node, frame) {
+                        Ok(true) => Some(frame),
+                        Ok(false) => None,
+                        Err(error) => {
+                            if let Err(dispose_error) = mount.webview.dispose() {
+                                ohos_hilog_binding::error(format!(
+                                    "embedded webview cleanup after frame failure failed: {dispose_error}"
+                                ));
+                            }
+                            return Err(error);
+                        }
+                    }
+                } else {
+                    None
+                };
                 let generation = {
                     let mut state = self.inner.borrow_mut();
                     state.mount_generation = state
@@ -195,6 +249,7 @@ impl EmbeddedWebViewController {
                     state.id = mount.id;
                     state.node = Some(mount.node);
                     state.webview = Some(mount.webview);
+                    state.frame = applied_frame;
                     state.current_url = requested_url;
                     state.current_html = requested_html;
                     state.mount_generation
@@ -240,6 +295,36 @@ impl EmbeddedWebViewController {
             }
         }
 
+        if let Some(frame) = frame {
+            self.sync_frame(frame)?;
+        }
+
+        Ok(())
+    }
+
+    /// Apply the host's measured frame to the embedded WebView node.
+    ///
+    /// The node resolved from the ArkTS `ComponentContent` is a builder node;
+    /// the native node API rejects `POSITION`/`SIZE` attributes on such nodes
+    /// with 106103 (`ARKTS_NODE_NOT_SUPPORTED`) and only permits
+    /// `LAYOUT_RECT`, which sets position and size in a single attribute. That
+    /// attribute specifically consumes four signed integers in physical pixels;
+    /// passing ArkUI's float attribute variant makes native read the union with
+    /// the wrong type and leaves the embedded surface with unusable bounds.
+    /// Without an explicit frame the Web component would render at 0x0 inside
+    /// the native tree and its surface would never be created (blank page).
+    pub fn sync_frame(&self, frame: WebViewFrame) -> Result<()> {
+        if !frame.is_valid() {
+            return Ok(());
+        }
+        if self.inner.borrow().frame == Some(frame) {
+            return Ok(());
+        }
+        let Some(node) = self.inner.borrow().node.clone() else {
+            return Ok(());
+        };
+        apply_webview_frame(&node, frame)?;
+        self.inner.borrow_mut().frame = Some(frame);
         Ok(())
     }
 
@@ -329,6 +414,7 @@ impl EmbeddedWebViewController {
         let mut state = self.inner.borrow_mut();
         state.webview = None;
         state.node = None;
+        state.frame = None;
         state.current_url = None;
         state.current_html = None;
         Ok(())
@@ -463,6 +549,44 @@ fn attach_embedded_node_to_lease(host: &MountedNodeLease, node: &ArkUINode) -> R
         .ok_or_else(|| Error::from_reason("embedded webview host is no longer mounted"))?
 }
 
+fn apply_webview_frame(node: &ArkUINode, frame: WebViewFrame) -> Result<bool> {
+    let Some(layout_rect) = frame.layout_rect_px() else {
+        return Ok(false);
+    };
+    node.set_layout_rect(layout_rect.to_vec())
+        .map_err(map_arkui_error)?;
+    Ok(true)
+}
+
 fn map_arkui_error(error: impl ToString) -> Error {
     Error::from_reason(error.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn webview_layout_rect_uses_integer_physical_pixels() {
+        let frame = WebViewFrame {
+            width: 320.6,
+            height: 123.4,
+        };
+
+        assert_eq!(frame.layout_rect_px(), Some([0, 0, 321, 123]));
+    }
+
+    #[test]
+    fn webview_layout_rect_rejects_invalid_extents() {
+        assert!(!WebViewFrame {
+            width: f32::NAN,
+            height: 100.0,
+        }
+        .is_valid());
+        assert!(!WebViewFrame {
+            width: 100.0,
+            height: 0.0,
+        }
+        .is_valid());
+    }
 }
