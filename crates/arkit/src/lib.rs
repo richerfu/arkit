@@ -18,7 +18,7 @@ pub use arkit_runtime::{
     use_runtime_handle, ApplicationLifecycleEvent, ApplicationLifecycleHandle,
     ApplicationLifecyclePhase, ApplicationLifecycleState, ApplicationLifecycleSubscription,
     ArkRuntime, BackPressRegistration, EdgeInsets, EmbeddedWebViewController, EmbeddedWebViewInit,
-    PhysicalRect, RuntimeHandle, RuntimeId, SafeAreaPolicy, VirtualDom, WebViewStyle,
+    PhysicalRect, RuntimeHandle, RuntimeId, SafeAreaPolicy, VirtualDom, WebViewFrame, WebViewStyle,
     WindowMetrics, WindowMetricsHandle, WindowMetricsSubscription,
 };
 
@@ -327,7 +327,7 @@ pub mod prelude {
         ApplicationLifecycleHandle, ApplicationLifecyclePhase, ApplicationLifecycleState,
         ApplicationLifecycleSubscription, ArkRuntime, EdgeInsets, EmbeddedWebViewController,
         EmbeddedWebViewInit, PhysicalRect, RuntimeHandle, RuntimeId, SafeAreaPolicy, VirtualDom,
-        WebViewStyle, WindowMetrics, WindowMetricsHandle, WindowMetricsSubscription,
+        WebViewFrame, WebViewStyle, WindowMetrics, WindowMetricsHandle, WindowMetricsSubscription,
     };
 
     // Renderer-owned safe handles.

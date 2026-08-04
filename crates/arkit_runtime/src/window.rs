@@ -201,7 +201,7 @@ pub struct WindowMetricsHandle(Rc<WindowMetricsHandleInner>);
 
 type WindowMetricsSubscriber = Rc<dyn Fn(WindowMetrics)>;
 
-struct WindowMetricsHandleInner {
+pub(crate) struct WindowMetricsHandleInner {
     metrics: Cell<WindowMetrics>,
     reported_content_rect: Cell<Option<PhysicalRect>>,
     subscribers: RefCell<BTreeMap<usize, WindowMetricsSubscriber>>,
@@ -216,6 +216,17 @@ impl WindowMetricsHandle {
             subscribers: RefCell::new(BTreeMap::new()),
             next_subscriber_id: Cell::new(0),
         }))
+    }
+
+    /// Weak reference for process-lifetime closures that must not keep a
+    /// retired runtime's metrics state alive.
+    pub(crate) fn downgrade(&self) -> std::rc::Weak<WindowMetricsHandleInner> {
+        Rc::downgrade(&self.0)
+    }
+
+    /// Re-wrap a strong inner reference (upgraded from a [`Self::downgrade`]).
+    pub(crate) fn from_inner(inner: Rc<WindowMetricsHandleInner>) -> Self {
+        Self(inner)
     }
 
     pub fn get(&self) -> WindowMetrics {

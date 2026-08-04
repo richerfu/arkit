@@ -141,6 +141,21 @@ impl ohos_arkui_binding::component::attribute::ArkUIAttributeBasic for GestureNo
 
 impl ArkUIGesture for GestureNode<'_> {}
 
+/// Mutable node adapter for `ArkUIEvent` registrations.
+struct EventNode<'a>(&'a mut ArkUINode);
+
+impl ohos_arkui_binding::component::attribute::ArkUIAttributeBasic for EventNode<'_> {
+    fn raw(&self) -> &ArkUINode {
+        self.0
+    }
+
+    fn borrow_mut(&mut self) -> &mut ArkUINode {
+        self.0
+    }
+}
+
+impl ohos_arkui_binding::component::attribute::ArkUIEvent for EventNode<'_> {}
+
 struct RegisteredGestureListener {
     name: &'static str,
     id: ElementId,
@@ -177,6 +192,10 @@ struct RoutedNodeEvent {
 struct NativeHostState {
     native: Option<NodeRef>,
     native_attached: bool,
+    /// One-shot `EventOnAppear` declarative replay armed for this host (see
+    /// [`ArkUIRenderer::arm_appear_replay`]). Cleared when the replay fires or
+    /// the host is released.
+    appear_replay_armed: bool,
     /// Renderer-managed content container for composite native projections.
     ///
     /// Dioxus still sees this host as one logical/native root. For `button`,
@@ -239,6 +258,13 @@ pub struct ArkUIRenderer {
     /// First structural native failure. Once set, projection is no longer
     /// trustworthy and the owning runtime must stop after the mutation batch.
     fault: Option<RendererFault>,
+    /// Native subtree destroyed outside this renderer: teardown must release
+    /// only Rust state (see [`Self::make_inert`]).
+    inert: bool,
+    /// One-shot appear-replay dispatcher installed by the runtime. It is
+    /// invoked from the native `EventOnAppear` callback so declarative attrs
+    /// are reapplied after ArkUI control skins settle, before first paint.
+    appear_replay_handler: Option<Rc<dyn Fn(ElementId)>>,
 }
 
 #[derive(Default)]
@@ -452,12 +478,30 @@ impl ArkUIRenderer {
             sink: None,
             projection: ProjectionState::default(),
             fault: None,
+            inert: false,
+            appear_replay_handler: None,
         }
     }
 
     /// Install the event sink used to forward native events into the VirtualDom.
     pub fn set_sink(&mut self, sink: Rc<dyn EventSink>) {
         self.sink = Some(sink);
+    }
+
+    /// Switch this renderer into inert mode: the native subtree it projected
+    /// onto has been destroyed outside the renderer. All further teardown
+    /// (Drop, unmount) releases only Rust-side state and never calls native
+    /// APIs on the dead handles.
+    pub fn make_inert(&mut self) {
+        if self.inert {
+            return;
+        }
+        self.inert = true;
+        if let RendererRootMount::NodeContent(root) =
+            std::mem::replace(&mut self.root_mount, RendererRootMount::Embedded)
+        {
+            root.into_inert();
+        }
     }
 
     /// Take the first structural projection failure, if any.
@@ -695,6 +739,10 @@ impl ArkUIRenderer {
             self.replay_after_attach(host);
             self.replay_composite_content(host);
             self.apply_host_image_source(host);
+            // Arm the one-shot EventOnAppear replay so declarative styles are
+            // reapplied after ArkUI control skins settle (single-frame
+            // convergence instead of a default-skin first frame).
+            self.arm_appear_replay(host);
         }
         self.bind_native_ref(host);
         self.attach_virtual_source(host);
@@ -1412,10 +1460,22 @@ impl ArkUIRenderer {
     fn dispose_prepared_subtree(&mut self, host: HostId) {
         if let Some(native) = self.hosts[host].native.take() {
             let result = native.borrow_mut().dispose();
-            self.latch_structural("dispose_subtree dispose", result);
+            let disposed = self
+                .latch_structural("dispose_subtree dispose", result)
+                .is_some();
             let children = self.hosts[host].children.clone();
             for c in children {
                 self.clear_subtree_state(c);
+            }
+            if !disposed {
+                // `disposeNode` failed: the native subtree still owns its
+                // handles. Releasing this arena slot would let a later `alloc`
+                // alias it while the ghost native tree stays alive, so pin the
+                // slot instead. The fault has been latched and the owning
+                // runtime stops after this batch.
+                self.hosts[host].children.clear();
+                self.hosts[host].parent = None;
+                return;
             }
         } else {
             let children = self.hosts[host].children.clone();
@@ -1937,9 +1997,19 @@ impl WriteMutations for ArkUIRenderer {
             .borrow_mut()
             .set(tag, name, value);
 
+        // Attributes currently driven by an animation stay declarative-only:
+        // writing them here would fight the animation's per-frame writes (and
+        // be fought back, causing visible jitter). The animation clears its
+        // declaration when it finishes, after which the declarative value
+        // becomes the steady state again.
+        let animated = self.hosts[host]
+            .native_ref
+            .as_ref()
+            .is_some_and(|reference| reference.animates(name));
+
         if let Some(native) = self.hosts[host].native.clone() {
             let desired_attrs = self.hosts[host].desired_attrs.borrow();
-            if !matches!(mutation, AttrMutation::Unchanged) {
+            if !matches!(mutation, AttrMutation::Unchanged) && !animated {
                 let mut native = native.borrow_mut();
                 desired_attrs.apply_mutation(&mut native, tag, name, mutation);
                 desired_attrs.after_patch(&mut native, tag);
@@ -2024,27 +2094,96 @@ impl WriteMutations for ArkUIRenderer {
 }
 
 impl ArkUIRenderer {
-    /// Replay all declarative attrs onto currently mounted native nodes.
+    /// Install the runtime-side dispatcher used by one-shot `EventOnAppear`
+    /// declarative replays.
     ///
-    /// Some ArkUI controls (notably `Button`) perform native skin writes after
-    /// insertion into the mounted tree. Initial mutation replay can therefore
-    /// happen before the control's own first-frame defaults settle. The runtime
-    /// calls this once on the next UI-loop tick after the initial mount, and
-    /// composite elements get the same late replay used by normal patches.
-    pub fn replay_declarative_attrs(&mut self) {
-        for host_index in 0..self.hosts.len() {
-            let host = HostId::new(host_index);
-            let tag = self.hosts[host].tag();
-            let Some(native) = self.hosts[host].native.clone() else {
-                continue;
-            };
-            let attrs = self.hosts[host].desired_attrs.borrow();
-            attrs.apply_to(&mut native.borrow_mut(), tag);
-            attrs.after_patch(&mut native.borrow_mut(), tag);
-            drop(attrs);
-            self.apply_host_image_source(host);
-            self.replay_composite_content(host);
+    /// The closure receives the dioxus element id of the host whose native
+    /// node just appeared; the runtime routes it back into
+    /// [`Self::replay_element_attrs`] on the UI thread.
+    pub fn set_appear_replay_handler(&mut self, handler: Rc<dyn Fn(ElementId)>) {
+        self.appear_replay_handler = Some(handler);
+    }
+
+    /// Arm a one-shot `EventOnAppear` replay for a freshly attached host.
+    ///
+    /// ArkUI controls (notably `Button`) may write their own skin attributes
+    /// after insertion into the mounted tree, so the synchronous replay done
+    /// during the mutation batch can be clobbered before first paint.
+    /// `EventOnAppear` fires after layout and before the node is drawn, so a
+    /// replay from this callback converges on the declarative style in a
+    /// single frame.
+    fn arm_appear_replay(&mut self, host: HostId) {
+        if self.appear_replay_handler.is_none() || self.hosts[host].appear_replay_armed {
+            return;
         }
+        let Some(native) = self.hosts[host].native.clone() else {
+            return;
+        };
+        if !self.hosts[host].native_attached {
+            return;
+        }
+        let Some(element) = self.hosts.element_for_host(host) else {
+            return;
+        };
+        let handler = self.appear_replay_handler.clone().expect("checked above");
+        let active = Rc::new(std::cell::Cell::new(true));
+        let callback_active = active.clone();
+        {
+            let mut borrowed = native.borrow_mut();
+            let mut event_node = EventNode(&mut borrowed);
+            event_node.on_event(NodeEventType::EventOnAppear, move |_| {
+                if !callback_active.get() {
+                    return;
+                }
+                callback_active.set(false);
+                handler(ElementId(element.index()));
+            });
+        }
+        self.hosts[host].appear_replay_armed = true;
+        self.hosts[host]
+            .registered_event_listeners
+            .push(RegisteredEventListener {
+                event_type: NodeEventType::EventOnAppear,
+                native_wrapper: native.borrow().raw_handle() as usize,
+                active,
+            });
+    }
+
+    /// Replay declarative attrs for one element after its native node
+    /// appeared. No-op when the element is gone or already replayed.
+    ///
+    /// Attributes currently driven by an animation are skipped (the animation
+    /// owns the live value until it finishes).
+    pub fn replay_element_attrs(&mut self, element: ElementId) {
+        let Some(host) = self
+            .hosts
+            .host_for_element(ElementKey::new(element.0))
+        else {
+            return;
+        };
+        if !self.hosts[host].appear_replay_armed {
+            return;
+        }
+        self.hosts[host].appear_replay_armed = false;
+        let Some(native) = self.hosts[host].native.clone() else {
+            return;
+        };
+        let tag = self.hosts[host].tag();
+        let animated = self.hosts[host]
+            .native_ref
+            .as_ref()
+            .map(NativeElementRef::animated_attrs)
+            .unwrap_or_default();
+        let attrs = self.hosts[host].desired_attrs.borrow();
+        if animated.is_empty() {
+            attrs.apply_to(&mut native.borrow_mut(), tag);
+        } else {
+            attrs.apply_to_skipping(&mut native.borrow_mut(), tag, &animated);
+        }
+        attrs.after_patch(&mut native.borrow_mut(), tag);
+        drop(attrs);
+        self.apply_host_image_source(host);
+        self.replay_composite_content(host);
     }
 
     /// Commit renderer work that must run after a complete Dioxus mutation
@@ -2064,6 +2203,20 @@ impl ArkUIRenderer {
 
     /// Unmount the root from the NodeContent slot.
     pub fn unmount(&mut self) -> ArkUIResult<()> {
+        if self.inert {
+            // The native subtree is already gone. Release every Rust-side
+            // handle without touching native APIs: wrapper drops are inert
+            // (ArkUINode has no Drop), virtual sources dispose their
+            // independently-owned adapters, and retained teardown closures are
+            // dropped unexecuted — their resources release through their own
+            // Drop impls (WebView unrefs its N-API reference, animators dispose
+            // independent native objects).
+            self.hosts = HostTree::new(NativeHostState::default());
+            self.templates.clear();
+            self.projection = ProjectionState::default();
+            self.fault = None;
+            return Ok(());
+        }
         // Every native-dependent integration must stop before RootNode
         // destroys the native subtree (or before an embedded root's caller
         // disposes it). This pass is idempotent, so explicit unmount followed
@@ -2103,17 +2256,6 @@ fn register_routed_node_event(
     event_type: NodeEventType,
     route: Rc<RefCell<NodeEventRoute>>,
 ) -> Rc<std::cell::Cell<bool>> {
-    struct EventNode<'a>(&'a mut ArkUINode);
-    impl ohos_arkui_binding::component::attribute::ArkUIAttributeBasic for EventNode<'_> {
-        fn raw(&self) -> &ArkUINode {
-            self.0
-        }
-        fn borrow_mut(&mut self) -> &mut ArkUINode {
-            self.0
-        }
-    }
-    impl ohos_arkui_binding::component::attribute::ArkUIEvent for EventNode<'_> {}
-
     let mut borrowed = node.borrow_mut();
     let mut event_node = EventNode(&mut borrowed);
     let active = Rc::new(std::cell::Cell::new(true));

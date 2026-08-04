@@ -97,4 +97,9 @@ impl TargetStore {
     pub fn id_for_name(&self, name: &TargetName) -> Option<AdapterTargetId> {
         self.names.get(name).copied()
     }
+
+    /// Iterate every currently registered target binding.
+    pub fn iter(&self) -> impl Iterator<Item = &AnimationTargetBinding> {
+        self.targets.raw.iter().flatten()
+    }
 }

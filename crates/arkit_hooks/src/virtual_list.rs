@@ -197,9 +197,20 @@ fn rsx_mount_item(
 fn use_virtual_source_count(source: VirtualSource, total_count: u32) {
     // Count changes mutate ArkUI and may synchronously emit adapter events.
     // Defer them until after Dioxus commits the render that supplied the new
-    // callback and backing data.
+    // callback and backing data. Grow/shrink is applied as a tail insert or
+    // remove so existing rows (and their scroll anchor) are never rebuilt.
+    let previous = use_hook(|| std::cell::Cell::new(total_count));
     use_effect(use_reactive((&total_count,), move |(next_total,)| {
-        if let Err(error) = source.set_total_count(next_total) {
+        let previous_total = previous.replace(next_total);
+        if next_total == previous_total {
+            return;
+        }
+        let result = if next_total > previous_total {
+            source.insert_items(previous_total, next_total - previous_total)
+        } else {
+            source.remove_items(next_total, previous_total - next_total)
+        };
+        if let Err(error) = result {
             ohos_hilog_binding::error(format!(
                 "arkit_hooks: virtual adapter count update failed: {error}"
             ));
@@ -377,7 +388,8 @@ fn reset_virtual_items(source: &VirtualSource, next_len: usize) -> ArkUIResult<(
     if source.total_count() == next_total {
         source.reload_all_items()
     } else {
-        source.set_total_count(next_total)
+        source.set_total_count(next_total)?;
+        source.reload_all_items()
     }
 }
 

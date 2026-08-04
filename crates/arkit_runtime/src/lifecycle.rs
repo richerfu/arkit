@@ -162,7 +162,7 @@ type LifecycleSubscriber = Rc<dyn Fn(ApplicationLifecycleEvent, ApplicationLifec
 #[derive(Clone)]
 pub struct ApplicationLifecycleHandle(Rc<ApplicationLifecycleHandleInner>);
 
-struct ApplicationLifecycleHandleInner {
+pub(crate) struct ApplicationLifecycleHandleInner {
     state: Cell<ApplicationLifecycleState>,
     subscribers: RefCell<BTreeMap<usize, LifecycleSubscriber>>,
     next_subscriber_id: Cell<usize>,
@@ -175,6 +175,17 @@ impl ApplicationLifecycleHandle {
             subscribers: RefCell::new(BTreeMap::new()),
             next_subscriber_id: Cell::new(0),
         }))
+    }
+
+    /// Weak reference for process-lifetime closures that must not keep a
+    /// retired runtime's lifecycle state alive.
+    pub(crate) fn downgrade(&self) -> std::rc::Weak<ApplicationLifecycleHandleInner> {
+        Rc::downgrade(&self.0)
+    }
+
+    /// Re-wrap a strong inner reference (upgraded from a [`Self::downgrade`]).
+    pub(crate) fn from_inner(inner: Rc<ApplicationLifecycleHandleInner>) -> Self {
+        Self(inner)
     }
 
     pub fn get(&self) -> ApplicationLifecycleState {

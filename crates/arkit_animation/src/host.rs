@@ -201,6 +201,9 @@ impl AnimationHost {
         // node is still valid. The sampled engine remains usable if Dioxus
         // later rebinds the animation root.
         self.native_instances.borrow_mut().clear();
+        // No animation can drive attributes anymore; restore declarative
+        // ownership so the renderer's next patch lands on the node.
+        self.arkui.clear_all_animated_attrs();
         for instance in instances {
             self.record_runtime_fallback(
                 instance,
@@ -495,6 +498,21 @@ impl AnimationHost {
         drop(engine);
         self.publish_events(&events);
         self.remove_hosted_for_events(&events);
+        // Hosted instances finished: from this frame the renderer owns the
+        // driven attributes again (declarative value = steady state). Cleared
+        // declarations also let the next declarative patch land immediately
+        // instead of being skipped forever.
+        if events.iter().any(|event| {
+            matches!(
+                event,
+                EngineEvent::Complete { .. }
+                    | EngineEvent::Cancel { .. }
+                    | EngineEvent::Settled { .. }
+                    | EngineEvent::Removed { .. }
+            )
+        }) {
+            self.arkui.clear_all_animated_attrs();
+        }
         events.clear();
         let displaced = self.event_scratch.replace(events);
         debug_assert!(displaced.is_empty());

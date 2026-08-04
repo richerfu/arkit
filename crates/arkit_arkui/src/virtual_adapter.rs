@@ -404,11 +404,13 @@ impl VirtualSource {
         }
     }
 
-    /// Replace the logical item count and rebuild currently visible content.
+    /// Replace the logical item count.
     ///
-    /// Prefer [`insert_items`](Self::insert_items) and
-    /// [`remove_items`](Self::remove_items) when the structural change is
-    /// known; they preserve unaffected native rows and scroll state.
+    /// This changes only the adapter's total count; it never rebuilds visible
+    /// items. Call [`reload_items`](Self::reload_items) (or
+    /// [`insert_items`](Self::insert_items) / [`remove_items`](Self::remove_items))
+    /// explicitly for content/structural updates so unaffected rows and scroll
+    /// state are preserved.
     pub fn set_total_count(&self, total: u32) -> ArkUIResult<()> {
         if self.total_count() == total {
             return Ok(());
@@ -416,7 +418,7 @@ impl VirtualSource {
 
         self.with_native_adapter(|adapter| adapter.set_total_node_count(total))?;
         self.state.borrow_mut().total_count = total;
-        self.reload_all_items()
+        Ok(())
     }
 
     /// Re-render all currently visible items without replacing the host

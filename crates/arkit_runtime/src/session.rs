@@ -23,7 +23,7 @@ impl RuntimeId {
     }
 }
 
-struct RuntimeSessionState {
+pub(crate) struct RuntimeSessionState {
     id: RuntimeId,
     next_registration: Cell<u64>,
     active: Cell<bool>,
@@ -78,6 +78,17 @@ impl RuntimeHandle {
 
     pub fn id(&self) -> RuntimeId {
         self.state.id
+    }
+
+    /// Weak reference for process-lifetime closures (UI loop, back-press
+    /// interception) that must not keep a retired runtime's session alive.
+    pub(crate) fn downgrade(&self) -> Weak<RuntimeSessionState> {
+        Rc::downgrade(&self.state)
+    }
+
+    /// Re-wrap a strong inner reference (upgraded from a [`Self::downgrade`]).
+    pub(crate) fn from_inner(state: Rc<RuntimeSessionState>) -> Self {
+        Self { state }
     }
 
     pub fn is_active(&self) -> bool {
