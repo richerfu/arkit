@@ -142,11 +142,15 @@ tree-sitter-go = "0.23"
 tree-sitter-c = "0.23"
 
 
-# crates.io 0.3.0 does not include the back intercept and embedded webview
-# dispose APIs used by arkit_runtime yet. Keep the upstream commit pinned until released.
-openharmony-ability = { git = "https://github.com/harmony-contrib/openharmony-ability.git", rev = "edc4e49d0d431035c6c001fc5e583abf62a998e3" }
+# fix/webview-object-ref-lifecycle carries the Webview ObjectRef unref fix.
+# crates.io 0.3.0 lacks the back intercept and embedded webview dispose APIs
+# used by arkit_runtime.
+openharmony-ability = { git = "https://github.com/harmony-contrib/openharmony-ability.git", rev = "bd66a489720c1cfc6faecfbc61a6a93b039b42c0" }
 
-ohos-arkui-binding = { version = "0.2.3", default-features = false, features = ["napi", "image", "drawing", "api-20"] }
+# fix/arkui-wrapper-lifecycle-023 carries the wrapper user_data ownership fixes
+# (release wrapper-owned node state, self-describing magic-header user_data)
+# on top of the published 0.2.3 release.
+ohos-arkui-binding = { git = "https://github.com/ohos-rs/ohos-native-bindings.git", rev = "62bea2edc6f85f13d206ac9667812aaebd2dcbd6", package = "ohos-arkui-binding", default-features = false, features = ["napi", "image", "drawing", "api-20"] }
 ohos-arkui-sys = { version = "0.1.1", default-features = false, features = ["api-20"] }
 ohos-drawing-binding = { version = "0.2.2", default-features = false, features = ["api-20"] }
 ohos-native-drawing-sys = { version = "0.2.2", default-features = false, features = ["api-20"] }
