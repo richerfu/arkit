@@ -74,3 +74,4 @@ export declare function init(context?: AbilityInitContext): ApplicationLifecycle
 export declare function onBackPressIntercept(): boolean
 
 export declare function render(helper: object, slot: NodeContent): void
+

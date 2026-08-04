@@ -166,6 +166,8 @@ do_build() {
   echo ">> ohpm install"
   (cd "$APP" && "$OHPM" install)
   echo ">> hvigorw assembleHap"
+  # hvigor 数据目录默认在 ~/.hvigor；受保护/沙箱 home 环境可用官方
+  # HVIGOR_USER_HOME 环境变量重定向（hvigorw 原生支持，脚本无需感知）。
   (cd "$APP" && "$HVIGWORW" assembleHap --no-daemon --mode module -p product=default -p buildMode=debug --no-hvigorw-daemon)
 }
 

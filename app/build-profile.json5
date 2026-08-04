@@ -6,6 +6,7 @@
         "compatibleSdkVersion": "5.0.0(12)",
         "targetSdkVersion": "6.0.1(21)",
         "runtimeOS": "HarmonyOS",
+        "signingConfig": "default",
         "buildOption": {
           "strictMode": {
             "caseSensitiveCheck": true,
@@ -20,6 +21,21 @@
       },
       {
         "name": "release"
+      }
+    ],
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "/Users/ranger/.ohos/config/default_app_oUEppoTHanTDLTVzxcm0sOHkVSPef2e743H_1nngUqU=.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000001B1D428B70174FD9B6736C9BEF9BEAB950A3B902A7F6F0459919177A8613E0C78C529C9107AB3112",
+          "profile": "/Users/ranger/.ohos/config/default_app_oUEppoTHanTDLTVzxcm0sOHkVSPef2e743H_1nngUqU=.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "/Users/ranger/.ohos/config/default_app_oUEppoTHanTDLTVzxcm0sOHkVSPef2e743H_1nngUqU=.p12",
+          "storePassword": "0000001B6ADFAAFF6F98279331EC74B3B02A01CD0709395785346C50666B2ADD887E8AD17DA25FFF730E16"
+        }
       }
     ]
   },
