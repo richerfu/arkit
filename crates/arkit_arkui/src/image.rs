@@ -258,7 +258,9 @@ impl RetainedImage {
             width,
             height,
             row_stride,
-            alpha_type,
+            // Binding 0.2.5 reports the alpha type as a typed PixelMapAlphaType
+            // enum; ArkImagePixels keeps the raw i32 for the callers.
+            alpha_type: alpha_type.into(),
             pixels,
         })
     }
