@@ -351,7 +351,13 @@ pub fn LottiePlayer(props: LottiePlayerProps) -> Element {
         let Some(tick_pending) = tick_pending else {
             return;
         };
-        let attachment = SurfaceRegistration::attach(&node, sender, tick_pending, frame_rate);
+        let attachment = SurfaceRegistration::attach(
+            &node,
+            sender,
+            tick_pending,
+            frame_rate,
+            dioxus_core::try_consume_context::<arkit_runtime::NativeLiveness>(),
+        );
         match attachment {
             Ok(registration) => {
                 effect_registration.borrow_mut().replace(registration);

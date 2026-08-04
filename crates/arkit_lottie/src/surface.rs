@@ -16,6 +16,11 @@ use crate::{LottieError, LottieErrorKind, LottieResult};
 /// Owns callback routing between one mounted XComponent and its render worker.
 pub(crate) struct SurfaceRegistration {
     component: NativeXComponent,
+    /// Runtime liveness of the backing native node. When the host subtree was
+    /// destroyed outside the renderer, unregistering native frame delivery
+    /// through the dead XComponent handle would be a use-after-free, so the
+    /// Drop skips it.
+    liveness: Option<arkit_runtime::NativeLiveness>,
 }
 
 impl SurfaceRegistration {
@@ -24,6 +29,7 @@ impl SurfaceRegistration {
         sender: Sender<WorkerMessage>,
         tick_pending: Arc<AtomicBool>,
         frames_per_second: u16,
+        liveness: Option<arkit_runtime::NativeLiveness>,
     ) -> LottieResult<Self> {
         // SAFETY: context lookup is synchronous inside the generation-checked
         // borrow. The returned XComponent is retained by the registration,
@@ -71,7 +77,10 @@ impl SurfaceRegistration {
             let _ = destroyed_sender.send(WorkerMessage::SurfaceLost);
             Ok(())
         });
-        let registration = Self { component };
+        let registration = Self {
+            component,
+            liveness,
+        };
         registration
             .component
             .register_callback()
@@ -139,6 +148,13 @@ impl SurfaceRegistration {
 
 impl Drop for SurfaceRegistration {
     fn drop(&mut self) {
+        if !self.liveness.as_ref().is_none_or(|liveness| liveness.is_alive()) {
+            // Host native subtree destroyed outside the renderer: the
+            // XComponent handle is invalid, so native unregistration is
+            // skipped. Rust-side callback slots and worker senders still
+            // release through their own drops.
+            return;
+        }
         self.component.on_surface_created(|_, _| Ok(()));
         self.component.on_surface_changed(|_, _| Ok(()));
         self.component.on_surface_destroyed(|_, _| Ok(()));

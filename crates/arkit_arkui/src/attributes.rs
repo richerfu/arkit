@@ -189,6 +189,20 @@ impl DesiredAttrs {
     }
 
     pub(crate) fn apply_to(&self, node: &mut ArkUINode, tag: &str) {
+        self.apply_to_skipping(node, tag, &rustc_hash::FxHashSet::default());
+    }
+
+    /// Apply every desired attribute except those named in `skip`.
+    ///
+    /// Animation-driven attributes are kept out of native writes this way: the
+    /// declarative value stays authoritative in storage while the animation
+    /// owns the live value on the node.
+    pub(crate) fn apply_to_skipping(
+        &self,
+        node: &mut ArkUINode,
+        tag: &str,
+        skip: &rustc_hash::FxHashSet<String>,
+    ) {
         for group in [
             AttrGroup::Control,
             AttrGroup::Layout,
@@ -196,11 +210,17 @@ impl DesiredAttrs {
             AttrGroup::Text,
             AttrGroup::Image,
         ] {
-            self.apply_group(node, tag, group);
+            self.apply_group(node, tag, group, skip);
         }
     }
 
-    fn apply_group(&self, node: &mut ArkUINode, tag: &str, group: AttrGroup) {
+    fn apply_group(
+        &self,
+        node: &mut ArkUINode,
+        tag: &str,
+        group: AttrGroup,
+        skip: &rustc_hash::FxHashSet<String>,
+    ) {
         if group == AttrGroup::Layout {
             // Geometry must be committed before alignment. Dioxus stores
             // static attributes before dynamic ones, so insertion order is
@@ -214,6 +234,7 @@ impl DesiredAttrs {
                 .filter(|attr| !is_constraint_attr(attr.name()))
                 .filter(|attr| !is_flex_option_attr(attr.name()))
                 .filter(|attr| !is_alignment_attr(attr.name()))
+                .filter(|attr| !skip.contains(attr.name()))
             {
                 let _ = attr.apply(node, tag);
             }
@@ -228,6 +249,7 @@ impl DesiredAttrs {
                 .iter()
                 .filter(|attr| attr_group(attr.name()) == group)
                 .filter(|attr| is_alignment_attr(attr.name()))
+                .filter(|attr| !skip.contains(attr.name()))
             {
                 let _ = attr.apply(node, tag);
             }
@@ -239,6 +261,7 @@ impl DesiredAttrs {
             .attrs
             .iter()
             .filter(|attr| attr_group(attr.name()) == group)
+            .filter(|attr| !skip.contains(attr.name()))
         {
             if is_deferred_attr(attr.name()) {
                 deferred.push(attr);

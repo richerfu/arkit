@@ -7,7 +7,7 @@ use arkit_dom::{MountEpochEvent, MountEpochSubscriber};
 use dioxus_core::{AttributeValue, IntoAttributeValue};
 use ohos_arkui_binding::api::node_custom_event::{IntOffset, IntSize};
 use ohos_arkui_binding::common::node::ArkUINode;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 pub(crate) type SharedNativeNode = Rc<RefCell<ArkUINode>>;
 
@@ -133,6 +133,36 @@ impl MountedNodeLease {
         state.native_teardowns.push((self.epoch, Box::new(cleanup)));
         true
     }
+
+    /// Declare that the named native attributes are currently driven by an
+    /// animation on this element.
+    ///
+    /// The renderer keeps declarative values authoritative in `desired_attrs`
+    /// but skips native writes for declared names until the declaration is
+    /// cleared, so an animation and a rerender cannot fight each other.
+    /// Returns `false` when this lease is already stale (nothing declared).
+    pub fn declare_animated_attrs(&self, attrs: &[&str]) -> bool {
+        let mut state = self.reference.state.borrow_mut();
+        if state.epoch != self.epoch {
+            return false;
+        }
+        state.animated_attrs.extend(attrs.iter().map(|name| name.to_string()));
+        true
+    }
+
+    /// Stop declaring animated attributes on this element.
+    ///
+    /// Returns `false` when this lease is already stale. After a successful
+    /// clear the renderer resumes native writes for the affected attributes
+    /// (with the declarative value, which is the steady state).
+    pub fn clear_animated_attrs(&self) -> bool {
+        let mut state = self.reference.state.borrow_mut();
+        if state.epoch != self.epoch {
+            return false;
+        }
+        state.animated_attrs.clear();
+        true
+    }
 }
 
 /// Event stream emitted for one exact mounted element.
@@ -189,6 +219,11 @@ struct NativeElementState {
     layout: Option<LayoutFramePx>,
     visibility: NativeVisibility,
     native_teardowns: Vec<(u64, Box<dyn FnOnce()>)>,
+    /// Attribute names currently driven by an animation on this element. The
+    /// renderer keeps `desired_attrs` up to date but skips native writes for
+    /// these names so a rerender cannot fight (and be fought by) the
+    /// animation.
+    animated_attrs: FxHashSet<String>,
     next_subscription: u64,
     subscribers: FxHashMap<u64, NativeElementSubscriber>,
 }
@@ -223,6 +258,15 @@ impl IntoAttributeValue for NativeElementRef {
 }
 
 impl NativeElementRef {
+    /// Attribute names currently declared as animation-driven on this element.
+    pub(crate) fn animated_attrs(&self) -> FxHashSet<String> {
+        self.state.borrow().animated_attrs.clone()
+    }
+
+    /// Whether `name` is currently declared as animation-driven.
+    pub(crate) fn animates(&self, name: &str) -> bool {
+        self.state.borrow().animated_attrs.contains(name)
+    }
     pub fn new() -> Self {
         Self::default()
     }

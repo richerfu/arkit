@@ -264,6 +264,14 @@ impl<P: Default> HostTree<P> {
         self.element_to_host.get(element.index()).copied().flatten()
     }
 
+    /// First element currently bound to `host`, if any.
+    ///
+    /// Exact-element observers use this to correlate a native node back to the
+    /// dioxus element that declared it.
+    pub fn element_for_host(&self, host: HostId) -> Option<ElementKey> {
+        self.nodes[host].bound_elements.first().copied()
+    }
+
     pub fn release(&mut self, host: HostId) {
         assert_ne!(host, self.root(), "the synthetic root cannot be released");
         for element in std::mem::take(&mut self.nodes[host].bound_elements) {

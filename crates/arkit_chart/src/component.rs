@@ -1892,7 +1892,11 @@ fn mounted_node_size(node: &MountedNodeLease) -> (f32, f32) {
 #[component]
 pub fn ECharts(props: EChartsProps) -> Element {
     let node_ref = use_native_element_ref();
-    let lifecycle_active = use_app_foreground() && use_component_visibility(node_ref.clone());
+    // Both hooks must execute on every render. An `&&` expression would skip
+    // the visibility hook in the background and corrupt Dioxus' hook indices.
+    let app_foreground = use_app_foreground();
+    let component_visible = use_component_visibility(node_ref.clone());
+    let lifecycle_active = app_foreground && component_visible;
     let transition_progress = arkit_animation::use_animatable(0.0_f32);
     let state_progress = arkit_animation::use_animatable(0.0_f32);
     let clock_pulse = arkit_animation::use_animatable(0.0_f32);

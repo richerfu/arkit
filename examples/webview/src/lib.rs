@@ -195,7 +195,12 @@ fn WebviewArea(
     let webview: EmbeddedWebViewController = use_context();
     let node_ref = use_native_element_ref();
     let runtime = use_runtime_handle();
-    let lifecycle_visible = use_app_foreground() && use_component_visibility(node_ref.clone());
+    // Hooks must run unconditionally and in the same order on every render.
+    // Keeping these calls separate avoids Rust's `&&` short-circuit skipping
+    // the element-visibility hook while the app is in the background.
+    let app_foreground = use_app_foreground();
+    let component_visible = use_component_visibility(node_ref.clone());
+    let lifecycle_visible = app_foreground && component_visible;
 
     let lifecycle_webview = webview.clone();
     let mut lifecycle_status = status;
@@ -237,7 +242,14 @@ fn WebviewArea(
             });
         }));
 
-        let result = webview_for_frame.mount_or_sync(&host_node, init);
+        let result = webview_for_frame.mount_or_sync(
+            &host_node,
+            init,
+            Some(WebViewFrame {
+                width: frame.width,
+                height: frame.height,
+            }),
+        );
 
         match result {
             Ok(()) if webview_for_frame.is_mounted() => {

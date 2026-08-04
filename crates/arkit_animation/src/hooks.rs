@@ -58,10 +58,21 @@ pub fn use_animation_host_provider() -> NativeElementRef {
             height_vp: metrics.content_rect.height.max(0) as f32 / density,
             density,
         });
-    let mount_driver = context.driver.clone();
-    let mount_host = context.host.clone();
+    let mount_driver = Rc::downgrade(&context.driver);
+    let mount_host = Rc::downgrade(&context.host);
     use_mounted_node(frame_node.clone(), move |mounted| {
         let Some(node) = mounted else {
+            return;
+        };
+        // The mounted-node subscription must not keep the animation host alive
+        // (subscribers -> closure -> driver/host -> reference -> subscribers is
+        // a reference cycle that would leak the whole animation graph when the
+        // owning root or item runtime is dropped). Weak refs break the cycle;
+        // the context owns the strong references.
+        let Some(mount_host) = mount_host.upgrade() else {
+            return;
+        };
+        let Some(mount_driver) = mount_driver.upgrade() else {
             return;
         };
         let teardown_host = Rc::downgrade(&mount_host);
@@ -92,7 +103,9 @@ pub fn use_animation_target(name: impl Into<String>) -> AnimationTarget {
     let name = use_hook(|| TargetName::owned(name.into()));
     let ready = use_signal(|| false);
     let registered = use_hook(|| Rc::new(Cell::new(None::<AdapterTargetId>)));
-    let register_context = context.clone();
+    let register_host = Rc::downgrade(&context.host);
+    let target_version = context.target_version;
+    let pending_controls = context.pending_controls.clone();
     let register_name = name.clone();
     let register_slot = registered.clone();
     use_mounted_node(reference.clone(), move |mounted| match mounted {
@@ -100,18 +113,20 @@ pub fn use_animation_target(name: impl Into<String>) -> AnimationTarget {
             if register_slot.get().is_some() {
                 return;
             }
-            match register_context.host.arkui().register_target(
-                register_name.clone(),
-                host_node,
-                None,
-            ) {
+            // Weak reference: the subscription must not participate in a
+            // reference cycle through the target store (subscribers -> closure
+            // -> host -> target_store -> lease -> reference -> subscribers).
+            let Some(register_host) = register_host.upgrade() else {
+                return;
+            };
+            match register_host.arkui().register_target(register_name.clone(), host_node, None) {
                 Ok(id) => {
                     register_slot.set(Some(id));
                     let mut target_ready = ready;
                     target_ready.set(true);
-                    let mut version = register_context.target_version;
+                    let mut version = target_version;
                     version += 1;
-                    retry_pending_controls(&register_context);
+                    retry_pending_controls(&pending_controls);
                 }
                 Err(error) => {
                     ohos_hilog_binding::error(format!(
@@ -122,11 +137,13 @@ pub fn use_animation_target(name: impl Into<String>) -> AnimationTarget {
         }
         None => {
             if let Some(id) = register_slot.take() {
-                register_context.host.unregister_arkui_target(id);
-                let mut target_ready = ready;
-                target_ready.set(false);
-                let mut version = register_context.target_version;
-                version += 1;
+                if let Some(register_host) = register_host.upgrade() {
+                    register_host.unregister_arkui_target(id);
+                    let mut target_ready = ready;
+                    target_ready.set(false);
+                    let mut version = target_version;
+                    version += 1;
+                }
             }
         }
     });
@@ -172,9 +189,9 @@ pub fn use_animation(timeline: Timeline) -> AnimationControls {
     AnimationControls { inner }
 }
 
-fn retry_pending_controls(context: &AnimationHostContext) {
+fn retry_pending_controls(pending_controls: &Rc<RefCell<Vec<Weak<ControlsInner>>>>) {
     let pending = {
-        let mut entries = context.pending_controls.borrow_mut();
+        let mut entries = pending_controls.borrow_mut();
         entries.retain(|entry| entry.strong_count() > 0);
         entries.iter().filter_map(Weak::upgrade).collect::<Vec<_>>()
     };
