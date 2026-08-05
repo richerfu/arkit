@@ -112,25 +112,23 @@ fn app() -> Element {
 
 ## 安全区策略
 
-默认入口把业务内容放在 visual safe area 内：
+业务内容默认铺满挂载表面（edge-to-edge），框架不做安全区避让。需要避让时在业务组件里按需取 insets 自己应用：
 
 ```rust
 #[entry]
 fn app() -> Element {
-    // ...
+    // 默认：内容铺满，无安全区 padding
+    let safe = use_safe_area(); // 需要时取 insets（vp）
+    rsx! {
+        column {
+            padding_top: safe.top,   // 自行决定是否避让状态栏
+            // ...
+        }
+    }
 }
 ```
 
-沉浸式内容使用：
-
-```rust
-#[entry(edge_to_edge)]
-fn app() -> Element {
-    // ...
-}
-```
-
-edge-to-edge 只取消业务 root 的默认 padding。`use_window_metrics()`、`use_safe_area()` 和框架浮层避让仍然有效；ArkTS 宿主也必须配置对应的 window 模式。
+`use_safe_area()` 返回当前安全区 insets，`SafeArea` 组件可以按边选择应用；`use_window_metrics()` 等窗口度量始终可用。显式挂载时也可用 `mount_entry_with_policy(..., SafeAreaPolicy::Safe)` 恢复框架 root 的自动 padding。
 
 ## 构建
 

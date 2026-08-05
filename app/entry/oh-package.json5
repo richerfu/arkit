@@ -6,7 +6,8 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "libshadcn_showcase.so": "file:./src/main/cpp/types/libshadcn_showcase",
-    "@ohos-rs/ability": "0.4.0-beta.7"
+    "libwebview_example.so": "file:./src/main/cpp/types/libwebview_example",
+    "@ohos-rs/ability": "1.0.0-beta.1",
+    "@ohos-rs/ability-plugin-webview": "1.0.0-beta.1"
   }
 }

@@ -9,7 +9,7 @@ enum DemoMode {
     Scan,
 }
 
-#[entry(edge_to_edge)]
+#[entry]
 fn app() -> Element {
     let controller = use_hook(CameraController::new);
     let mut demo_mode = use_signal(|| DemoMode::Photo);

@@ -185,14 +185,20 @@ impl AvoidAreas {
 }
 
 /// Root-content policy used by the Arkit application wrapper.
+///
+/// Safe-area avoidance is not applied by default: business content fills the
+/// surface edge-to-edge and integrators opt in through [`crate::use_safe_area`]
+/// (or the `SafeArea` component) where their layout needs insets.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SafeAreaPolicy {
-    /// Keep business content inside the effective visual safe area.
-    #[default]
-    Safe,
     /// Let business content fill the XComponent surface. Window metrics and
-    /// framework-owned overlay avoidance remain available.
+    /// the safe-area insets remain available through the hooks.
+    #[default]
     EdgeToEdge,
+    /// Keep business content inside the effective visual safe area by padding
+    /// the framework root. Opt-in for mount points that want the framework to
+    /// own the avoidance (see `mount_entry_with_policy`).
+    Safe,
 }
 
 /// Shared root context updated by the OpenHarmony event loop.

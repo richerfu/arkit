@@ -368,6 +368,7 @@ dependencies = [
  "ohos-arkui-binding",
  "ohos-hilog-binding",
  "openharmony-ability",
+ "openharmony-ability-plugin-webview",
  "tokio",
 ]
 
@@ -3144,16 +3145,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ohos-resource-manager-binding"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5baae91a5379fc2d1ee8f85409c4e0cedaefc7988244efb2dcf17097a8074182"
-dependencies = [
- "napi-ohos",
- "ohos-resource-manager-sys",
-]
-
-[[package]]
 name = "ohos-resource-manager-sys"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3240,18 +3231,27 @@ checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
 [[package]]
 name = "openharmony-ability"
 version = "0.3.0"
-source = "git+https://github.com/harmony-contrib/openharmony-ability.git?rev=bd66a489720c1cfc6faecfbc61a6a93b039b42c0#bd66a489720c1cfc6faecfbc61a6a93b039b42c0"
+source = "git+https://github.com/harmony-contrib/openharmony-activity.git?rev=41ffef1cb00f92e333fc106dc854cc7ad7ac73f6#41ffef1cb00f92e333fc106dc854cc7ad7ac73f6"
 dependencies = [
  "futures-channel",
- "http",
  "napi-derive-ohos",
  "napi-ohos",
  "ohos-arkui-binding",
  "ohos-display-binding",
  "ohos-ime-binding",
- "ohos-resource-manager-binding",
- "ohos-web-binding",
  "ohos-xcomponent-binding",
+]
+
+[[package]]
+name = "openharmony-ability-plugin-webview"
+version = "0.3.0"
+source = "git+https://github.com/harmony-contrib/openharmony-activity.git?rev=41ffef1cb00f92e333fc106dc854cc7ad7ac73f6#41ffef1cb00f92e333fc106dc854cc7ad7ac73f6"
+dependencies = [
+ "http",
+ "napi-derive-ohos",
+ "napi-ohos",
+ "ohos-web-binding",
+ "openharmony-ability",
 ]
 
 [[package]]
@@ -5303,9 +5303,12 @@ name = "webview_example"
 version = "0.0.1-beta.0"
 dependencies = [
  "arkit",
+ "futures-channel",
+ "futures-util",
  "napi-build-ohos",
  "napi-derive-ohos",
  "napi-ohos",
+ "tokio",
 ]
 
 [[package]]

@@ -9,12 +9,21 @@ license.workspace = true
 [lints]
 workspace = true
 
+[features]
+# WebView capability through the `ohos.webview` bridge plugin
+# (openharmony-ability-plugin-webview). Enabling the feature registers the
+# Rust plugin facade and exposes the plugin-backed WebView client; integrators
+# do not need to register anything themselves.
+webview = ["dep:openharmony-ability-plugin-webview"]
+
 [dependencies]
 arkit_arkui.workspace = true
 arkit_elements.workspace = true
 dioxus-core.workspace = true
 ohos-arkui-binding.workspace = true
 ohos-hilog-binding.workspace = true
-openharmony-ability = { workspace = true, features = ["webview"] }
+openharmony-ability.workspace = true
+# Optional: pluginized WebView facade (see the `webview` feature above).
+openharmony-ability-plugin-webview = { workspace = true, optional = true }
 napi-ohos.workspace = true
 tokio.workspace = true
