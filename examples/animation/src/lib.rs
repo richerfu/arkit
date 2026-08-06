@@ -6,7 +6,6 @@ mod lifecycle_lab;
 mod orchestration_lab;
 mod timeline_lab;
 
-use arkit::entry;
 use arkit::prelude::*;
 
 use easing_lab::EasingLab;
@@ -42,8 +41,8 @@ impl ShowcasePage {
     ];
 }
 
-#[entry]
-fn app() -> Element {
+#[component]
+pub fn AnimationPage() -> Element {
     let mut page = use_signal(|| ShowcasePage::Timeline);
     let selected = page();
     let scroll_reset = format!("0,0,0,{}", selected as i32);

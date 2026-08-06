@@ -7,11 +7,10 @@
 
 use std::time::Duration;
 
-use arkit::entry;
 use arkit::prelude::*;
 
-#[entry]
-fn app() -> Element {
+#[component]
+pub fn AsyncTaskPage() -> Element {
     let mut request_id = use_signal(|| 0_u32);
     let handle = arkit::use_runtime_handle().tokio();
 

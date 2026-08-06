@@ -1,11 +1,10 @@
-use arkit::entry;
 use arkit::prelude::*;
 
 const ORBIT: &[u8] = include_bytes!("../assets/orbit.json");
 const REMOTE_ANIMATION: &str = "https://assets3.lottiefiles.com/packages/lf20_UJNc2t.json";
 
-#[entry]
-fn app() -> Element {
+#[component]
+pub fn LottiePage() -> Element {
     let controller = use_hook(LottieController::new);
     let remote_source = use_hook(|| LottieSource::url(REMOTE_ANIMATION));
     let mut status = use_signal(LottieStatus::default);

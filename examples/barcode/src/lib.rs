@@ -1,13 +1,12 @@
 //! Barcode / QR generation demo — component, hook, PNG export.
 
-use arkit::entry;
 use arkit::prelude::*;
 
 /// Full encode surface — same order as [`BarcodeFormat::ALL`].
 const FORMATS: &[BarcodeFormat] = BarcodeFormat::ALL;
 
-#[entry]
-fn app() -> Element {
+#[component]
+pub fn BarcodePage() -> Element {
     let mut contents = use_signal(|| String::from("https://example.com/arkit"));
     let mut format_index = use_signal(|| 0_usize);
     let mut options = use_signal(|| BarcodeOptions::qr(220));

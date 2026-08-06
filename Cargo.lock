@@ -81,9 +81,6 @@ name = "animation"
 version = "0.0.1-beta.0"
 dependencies = [
  "arkit",
- "napi-build-ohos",
- "napi-derive-ohos",
- "napi-ohos",
 ]
 
 [[package]]
@@ -464,9 +461,6 @@ name = "async_task"
 version = "0.0.1-beta.0"
 dependencies = [
  "arkit",
- "napi-build-ohos",
- "napi-derive-ohos",
- "napi-ohos",
  "tokio",
 ]
 
@@ -487,9 +481,6 @@ name = "barcode_example"
 version = "0.0.1-beta.0"
 dependencies = [
  "arkit",
- "napi-build-ohos",
- "napi-derive-ohos",
- "napi-ohos",
 ]
 
 [[package]]
@@ -714,9 +705,6 @@ name = "camera_example"
 version = "0.0.1-beta.0"
 dependencies = [
  "arkit",
- "napi-build-ohos",
- "napi-derive-ohos",
- "napi-ohos",
 ]
 
 [[package]]
@@ -724,9 +712,6 @@ name = "canvas_example"
 version = "0.0.1-beta.0"
 dependencies = [
  "arkit",
- "napi-build-ohos",
- "napi-derive-ohos",
- "napi-ohos",
  "serde_json",
 ]
 
@@ -797,9 +782,6 @@ name = "chart_example"
 version = "0.0.1-beta.0"
 dependencies = [
  "arkit",
- "napi-build-ohos",
- "napi-derive-ohos",
- "napi-ohos",
  "tokio",
 ]
 
@@ -860,9 +842,6 @@ name = "complex_cases"
 version = "0.0.1-beta.0"
 dependencies = [
  "arkit",
- "napi-build-ohos",
- "napi-derive-ohos",
- "napi-ohos",
 ]
 
 [[package]]
@@ -987,9 +966,6 @@ name = "counter"
 version = "0.0.1-beta.0"
 dependencies = [
  "arkit",
- "napi-build-ohos",
- "napi-derive-ohos",
- "napi-ohos",
 ]
 
 [[package]]
@@ -1179,6 +1155,34 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "demos"
+version = "0.0.1-beta.0"
+dependencies = [
+ "animation",
+ "arkit",
+ "arkit_calendar_icu",
+ "arkit_terminal",
+ "async_task",
+ "barcode_example",
+ "camera_example",
+ "canvas_example",
+ "chart_example",
+ "complex_cases",
+ "counter",
+ "dioxus",
+ "i18n_example",
+ "lottie_example",
+ "napi-build-ohos",
+ "napi-derive-ohos",
+ "napi-ohos",
+ "router_example",
+ "shadcn_showcase",
+ "terminal_example",
+ "tokio",
+ "webview_example",
 ]
 
 [[package]]
@@ -2140,9 +2144,6 @@ name = "i18n_example"
 version = "0.0.1-beta.0"
 dependencies = [
  "arkit",
- "napi-build-ohos",
- "napi-derive-ohos",
- "napi-ohos",
 ]
 
 [[package]]
@@ -2557,9 +2558,6 @@ name = "lottie_example"
 version = "0.0.1-beta.0"
 dependencies = [
  "arkit",
- "napi-build-ohos",
- "napi-derive-ohos",
- "napi-ohos",
 ]
 
 [[package]]
@@ -3902,9 +3900,6 @@ version = "0.0.1-beta.0"
 dependencies = [
  "arkit",
  "dioxus",
- "napi-build-ohos",
- "napi-derive-ohos",
- "napi-ohos",
 ]
 
 [[package]]
@@ -4331,9 +4326,6 @@ dependencies = [
  "arkit",
  "arkit_calendar_icu",
  "dioxus",
- "napi-build-ohos",
- "napi-derive-ohos",
- "napi-ohos",
  "tokio",
 ]
 
@@ -4608,9 +4600,6 @@ name = "terminal_example"
 version = "0.0.1-beta.0"
 dependencies = [
  "arkit",
- "napi-build-ohos",
- "napi-derive-ohos",
- "napi-ohos",
  "russh",
  "tokio",
 ]
@@ -5305,9 +5294,6 @@ dependencies = [
  "arkit",
  "futures-channel",
  "futures-util",
- "napi-build-ohos",
- "napi-derive-ohos",
- "napi-ohos",
  "tokio",
 ]
 

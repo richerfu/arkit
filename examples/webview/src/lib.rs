@@ -16,11 +16,10 @@
 //! thread), so awaiting a call re-enters the UI loop and signals can be
 //! written directly.
 
-use arkit::entry;
+use arkit::napi_ohos::Either;
 use arkit::prelude::*;
 use futures_channel::mpsc::UnboundedReceiver;
 use futures_util::StreamExt;
-use napi_ohos::Either;
 
 const RUST_URL: &str = "https://www.rust-lang.org";
 const DOCS_URL: &str = "https://docs.rs";
@@ -70,7 +69,7 @@ async fn create_webview_with_retry(
     loop {
         match create_webview(runtime, style.clone()).await {
             Ok(()) => return Ok(()),
-            Err(error) if attempt < 10 => {
+            Err(_error) if attempt < 10 => {
                 attempt += 1;
                 // Sleep on the framework tokio runtime; the JoinHandle itself
                 // is polled here on the dioxus local executor.
@@ -99,8 +98,8 @@ fn style_from_frame(frame: LayoutFrame, scale: f32) -> WebviewStyle {
     }
 }
 
-#[entry]
-fn app() -> Element {
+#[component]
+pub fn WebviewPage() -> Element {
     let runtime = use_runtime_handle();
 
     let url = use_signal(|| RUST_URL.to_string());

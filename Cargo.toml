@@ -36,6 +36,7 @@ members = [
     "examples/shadcn_showcase",
     "examples/terminal",
     "examples/webview",
+    "examples/demos",
 ]
 # `app/` is an OpenHarmony application shell (ArkTS + hvigor), not a Rust crate.
 exclude = ["app"]

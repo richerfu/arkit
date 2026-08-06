@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use arkit::entry;
 use arkit::prelude::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -9,8 +8,8 @@ enum DemoMode {
     Scan,
 }
 
-#[entry]
-fn app() -> Element {
+#[component]
+pub fn CameraPage() -> Element {
     let controller = use_hook(CameraController::new);
     let mut demo_mode = use_signal(|| DemoMode::Photo);
     let mut position = use_signal(|| CameraPosition::Back);

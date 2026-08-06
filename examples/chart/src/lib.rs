@@ -5,11 +5,10 @@
 
 use std::time::Duration;
 
-use arkit::entry;
 use arkit::prelude::*;
 
-#[entry]
-fn app() -> Element {
+#[component]
+pub fn ChartPage() -> Element {
     let mut tick = use_signal(|| 0_u32);
     let mut appended = use_signal(|| 0_u32);
     let mut selected = use_signal(|| String::from("Tap a chart item to inspect it"));

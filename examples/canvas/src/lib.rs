@@ -5,7 +5,6 @@ mod tiger;
 use std::f32::consts::{PI, TAU};
 use std::rc::Rc;
 
-use arkit::entry;
 use arkit::prelude::*;
 
 use tiger::TigerScene;
@@ -17,8 +16,8 @@ enum Demo {
     Pipeline,
 }
 
-#[entry]
-fn app() -> Element {
+#[component]
+pub fn CanvasPage() -> Element {
     let mut active = use_signal(|| Demo::Tiger);
     let mut rotation = use_signal(|| 0.0_f32);
     let mut dashed = use_signal(|| true);
