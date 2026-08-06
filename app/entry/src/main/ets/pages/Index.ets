@@ -4,13 +4,13 @@ interface NativeBackPressModule {
   onBackPressIntercept?: () => boolean;
 }
 
-// moduleName 由 EntryAbility 写入 AppStorage（NativeAbility.onCreate 里
-// AppStorage.setOrCreate("moduleName", this.moduleName)）。这里在 aboutToAppear
-// 读出存入 @State，传给 DefaultXComponent——保持单一来源。
+// 整合 demo 壳:moduleName 固定为 demos（libdemos.so 内含全部示例,
+// 由 Rust 侧路由做页面分发）。这里在 aboutToAppear 读出存入 @State,
+// 传给 DefaultXComponent——保持单一来源。
 @Entry
 @Component
 struct Index {
-  @State moduleName: string = "shadcn_showcase";
+  @State moduleName: string = "demos";
 
   aboutToAppear(): void {
     const stored = AppStorage.get<string>("moduleName");

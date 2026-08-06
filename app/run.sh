@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-# 把指定 arkit example 打包成 hap 安装到 OpenHarmony 模拟器并启动。
+# 构建整合 demo（examples/demos,单一 libdemos.so,内含全部示例页面并做
+# Rust 侧路由分发）,打包成 hap 安装到 OpenHarmony 模拟器并启动。
 #
-# 用法: ./run.sh <example-dir> [install|build|start|log]
-#   example-dir: counter | async_task | animation | barcode | camera | canvas | chart | complex_cases | i18n | lottie | router | shadcn_showcase | terminal | webview
-#
-# 每个 example 的 .so 名 = lib<crate-name>.so（crate-name 取自 examples/<dir>/Cargo.toml）。
-# 切换 example 时同步更新 app 壳的 moduleName / lib 依赖 / cpp/types，保持名字一致。
+# 用法: ./run.sh [build|install|start|log|sync]
+#   sync     仅同步 .so + d.ts + 类型包到 app 壳
+#   build    sync + ohpm install + hvigor assembleHap
+#   install  安装最新 hap
+#   start    启动 EntryAbility
+#   log      过滤查看 arkit 相关日志
+#   (默认)   build + install + start
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -17,6 +20,12 @@ ABILITY="EntryAbility"
 HDC_TARGET="${HDC_TARGET:-}"
 HDC=(hdc)
 HDC_READY=0
+
+# 整合后的单一 native 模块:全部示例编译进 examples/demos 这一个 cdylib。
+EX="demos"
+CRATE="demos"
+SO_SRC="$ROOT/examples/$EX/dist/arm64-v8a/lib${CRATE}.so"
+DTS_SRC="$ROOT/examples/$EX/dist/index.d.ts"
 
 hdc_output_is_transient_failure() {
   local output="$1"
@@ -98,21 +107,16 @@ run_hdc() {
   retry_hdc "${HDC[@]}" "$@"
 }
 
-EX="${1:?usage: $0 <example-dir> [build|install|start|log]}"
-ACTION="${2:-all}"
+ACTION="${1:-all}"
 
-# 解析 example 的 crate 名（= .so 名）
-CARGO_TOML="$ROOT/examples/$EX/Cargo.toml"
-[ -f "$CARGO_TOML" ] || { echo "example not found: $EX"; exit 1; }
-CRATE=$(grep '^name' "$CARGO_TOML" | head -1 | sed 's/.*= *"\(.*\)"/\1/')
-SO_SRC="$ROOT/examples/$EX/dist/arm64-v8a/lib${CRATE}.so"
-DTS_SRC="$ROOT/examples/$EX/dist/index.d.ts"
-[ -f "$SO_SRC" ] || { echo ".so not found, build first: ohrs build --arch aarch in examples/$EX ($SO_SRC)"; exit 1; }
-
-echo ">> example=$EX crate=$CRATE"
-
-# 1) 同步 .so + d.ts + moduleName + oh-package 依赖到 app 壳
+# 1) 构建 Rust 侧(如 .so 缺失),2) 同步 .so + d.ts + 类型包到 app 壳
 sync_shell() {
+  if [ ! -f "$SO_SRC" ]; then
+    echo ">> building lib${CRATE}.so (examples/$EX)"
+    (cd "$ROOT/examples/$EX" && ohrs build --arch aarch)
+  fi
+  [ -f "$SO_SRC" ] || { echo "build failed, .so missing: $SO_SRC"; exit 1; }
+
   echo ">> syncing lib${CRATE}.so + types into app shell"
   # 清旧 types，建新
   rm -rf "$APP/entry/src/main/cpp/types"/lib*
@@ -147,7 +151,7 @@ EOF
 {
   "name": "entry",
   "version": "1.0.0",
-  "description": "arkit example entry",
+  "description": "arkit demos entry",
   "main": "",
   "author": "",
   "license": "Apache-2.0",
@@ -158,11 +162,7 @@ EOF
   }
 }
 EOF
-  # EntryAbility moduleName + Index 默认值
-  LC_ALL=C LANG=C perl -0pi -e 's/(public moduleName: string = ")[^"]*(")/${1}'"$CRATE"'${2}/' \
-    "$APP/entry/src/main/ets/entryability/EntryAbility.ets"
-  LC_ALL=C LANG=C perl -0pi -e 's/(@State moduleName: string = ")[^"]*(")/${1}'"$CRATE"'${2}/' \
-    "$APP/entry/src/main/ets/pages/Index.ets"
+  # EntryAbility / Index 的 moduleName 已固定为 demos,无需再改写。
 }
 
 do_build() {
@@ -171,7 +171,29 @@ do_build() {
   echo ">> hvigorw assembleHap"
   # hvigor 数据目录默认在 ~/.hvigor；受保护/沙箱 home 环境可用官方
   # HVIGOR_USER_HOME 环境变量重定向（hvigorw 原生支持，脚本无需感知）。
-  (cd "$APP" && "$HVIGWORW" assembleHap --no-daemon --mode module -p product=default -p buildMode=debug --no-hvigorw-daemon)
+  if ! (cd "$APP" && "$HVIGWORW" assembleHap --no-daemon --mode module -p product=default -p buildMode=debug --no-hvigorw-daemon); then
+    # SignHap 依赖 ~/.ohos/config 下的签名材料（build-profile.json5 的
+    # signingConfigs）。材料缺失时（如被 DevEco 清理）容忍未签名产物,
+    # 由 do_sign 用自签材料补签。
+    UNSIGNED=$(find "$APP/entry/build" -name "*-unsigned.hap" -path "*outputs*" 2>/dev/null | head -1 || true)
+    if [ -n "$UNSIGNED" ]; then
+      echo ">> SignHap failed (missing signing material); continuing with unsigned hap" >&2
+      return 0
+    fi
+    echo ">> hvigor build failed and no unsigned hap produced" >&2
+    return 1
+  fi
+}
+
+# 用 OpenHarmony 自签材料补签 unsigned hap(DevEco 自动签名材料缺失时的兜底)。
+do_sign() {
+  UNSIGNED=$(find "$APP/entry/build" -name "*-unsigned.hap" -path "*outputs*" 2>/dev/null | head -1 || true)
+  SIGNED=$(find "$APP/entry/build" -name "*-signed.hap" -path "*outputs*" 2>/dev/null | head -1 || true)
+  if [ -n "$SIGNED" ]; then
+    return 0
+  fi
+  [ -n "$UNSIGNED" ] || return 0
+  "$ROOT/app/sign.sh" "$UNSIGNED" "${UNSIGNED%-unsigned.hap}-signed.hap"
 }
 
 do_install() {
@@ -195,6 +217,7 @@ case "$ACTION" in
   build)
     sync_shell
     do_build
+    do_sign
     ;;
   install) do_install ;;
   start) do_start ;;
@@ -207,7 +230,7 @@ case "$ACTION" in
     do_build
     do_install
     do_start
-    echo ">> deployed $EX ($CRATE). tail logs: $0 $EX log"
+    echo ">> deployed demos (libdemos.so). tail logs: $0 log"
     ;;
   *) echo "unknown action: $ACTION"; exit 1 ;;
 esac

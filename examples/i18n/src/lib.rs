@@ -1,7 +1,6 @@
 //! i18n example — `arkit_i18n` dioxus context + `t!` macro, locale toggled
 //! via a `Signal<String>` (the active locale id).
 
-use framework::entry;
 use framework::prelude::*;
 use framework::{t, use_i18n, use_i18n_provider};
 
@@ -13,8 +12,8 @@ framework::i18n! {
     }
 }
 
-#[entry]
-fn app() -> Element {
+#[component]
+pub fn I18nPage() -> Element {
     let _ = use_i18n_provider(&tr::CATALOG, tr::FALLBACK_LOCALE.id());
     let i18n = use_i18n();
     let mut value = use_signal(|| 0_i32);

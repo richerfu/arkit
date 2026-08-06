@@ -9,7 +9,6 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use arkit::dioxus_signals::WritableExt;
-use arkit::entry;
 use arkit::native::NodeBuilder;
 use arkit::prelude::*;
 use dioxus_core_macro::{component, Props};
@@ -24,8 +23,8 @@ enum Case {
 
 const TOTAL: u32 = 10_000;
 
-#[entry]
-fn app() -> Element {
+#[component]
+pub fn ComplexCasesPage() -> Element {
     let mut active = use_signal(|| Case::List);
     let cur = active();
 

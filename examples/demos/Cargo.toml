@@ -1,0 +1,66 @@
+[package]
+name = "demos"
+description = "Consolidated arkit demo — every example as a routed page in one module"
+publish = false
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# Every example feature is enabled here. The examples below compile in as
+# rlib page components, and cargo feature unification must cover all of them.
+arkit = { workspace = true, features = [
+    "animation",
+    "barcode",
+    "camera-scan",
+    "canvas",
+    "chart",
+    "code",
+    "i18n",
+    "lottie",
+    "lottie-network",
+    "markdown",
+    "router",
+    "shadcn",
+    "terminal",
+    "webview",
+] }
+arkit_calendar_icu.workspace = true
+arkit_terminal.workspace = true
+dioxus.workspace = true
+tokio = { workspace = true, features = ["time"] }
+napi-ohos.workspace = true
+napi-derive-ohos.workspace = true
+
+# Example page components, compiled in as libraries.
+animation = { path = "../animation" }
+async_task = { path = "../async_task" }
+barcode_example = { path = "../barcode" }
+camera_example = { path = "../camera" }
+canvas_example = { path = "../canvas" }
+chart_example = { path = "../chart" }
+complex_cases = { path = "../complex_cases" }
+counter = { path = "../counter" }
+i18n_example = { path = "../i18n" }
+lottie_example = { path = "../lottie" }
+router_example = { path = "../router" }
+shadcn_showcase = { path = "../shadcn_showcase" }
+terminal_example = { path = "../terminal" }
+webview_example = { path = "../webview" }
+
+[features]
+# Use arkit_terminal's pure-Rust stub instead of building libghostty-vt.
+# Lets host-side type-checks (`ohrs cargo -- check --features terminal-stub`)
+# run without a working Zig toolchain; production builds omit this feature so
+# the real VT engine is linked.
+terminal-stub = ["arkit_terminal/stub"]
+
+[build-dependencies]
+napi-build-ohos.workspace = true

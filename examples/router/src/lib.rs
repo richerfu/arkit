@@ -3,7 +3,6 @@
 //! clickable text, not a button or HTML anchor).
 
 use arkit::dioxus_core::VNode;
-use arkit::entry;
 use arkit::prelude::*;
 // The upstream derive emits `::dioxus_router` paths. Bind that name through
 // Arkit's supported router namespace instead of adding an internal crate edge.
@@ -23,8 +22,8 @@ enum Route {
     Users { id: u32 },
 }
 
-#[entry]
-fn app() -> Element {
+#[component]
+pub fn RouterPage() -> Element {
     rsx! {
         Router::<Route> {}
     }

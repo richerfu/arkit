@@ -1,12 +1,12 @@
 {
   "name": "entry",
   "version": "1.0.0",
-  "description": "arkit example entry",
+  "description": "arkit demos entry",
   "main": "",
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "libwebview_example.so": "file:./src/main/cpp/types/libwebview_example",
+    "libdemos.so": "file:./src/main/cpp/types/libdemos",
     "@ohos-rs/ability": "1.0.0-beta.1",
     "@ohos-rs/ability-plugin-webview": "1.0.0-beta.1"
   }

@@ -4,7 +4,6 @@ use std::{rc::Rc, time::Duration};
 
 use arkit::dioxus_core::{AttributeValue, EventHandler, VNode};
 use arkit::dioxus_signals::WritableExt;
-use arkit::entry;
 use arkit::prelude::*;
 // The Routable derive emits `::dioxus_router` paths.
 use arkit::router::dioxus_router;
@@ -391,8 +390,8 @@ struct ShowcaseState {
     query: Signal<String>,
 }
 
-#[entry]
-fn app() -> Element {
+#[component]
+pub fn ShadcnShowcasePage() -> Element {
     let _i18n = use_i18n_provider(&tr::CATALOG, tr::FALLBACK_LOCALE.id());
     let state = ShowcaseState {
         mode: use_signal(|| ThemeMode::Light),
