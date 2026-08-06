@@ -11,7 +11,7 @@ workspace = true
 
 [features]
 default = []
-full = ["animation", "barcode", "camera-scan", "canvas", "chart", "code", "i18n", "icon", "lottie-network", "markdown", "router", "shadcn", "terminal"]
+full = ["animation", "barcode", "camera-scan", "canvas", "chart", "code", "i18n", "icon", "lottie-network", "markdown", "router", "shadcn", "terminal", "webview"]
 animation = ["dep:arkit_animation"]
 # Standalone barcode / QR generation (no camera required).
 barcode = ["dep:arkit_barcode"]
@@ -33,6 +33,10 @@ router = ["animation", "dep:arkit_router"]
 shadcn = ["animation", "i18n", "icon", "dep:arkit_shadcn"]
 # Embedded terminal (libghostty-vt via Zig).
 terminal = ["dep:arkit_terminal"]
+# Pluginized WebView capability (ohos.webview bridge plugin). The framework
+# registers the plugin facade and injects initialization automatically;
+# integrators just enable the feature.
+webview = ["arkit_runtime/webview"]
 
 [dependencies]
 arkit_derive.workspace = true

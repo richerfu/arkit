@@ -3,12 +3,15 @@
 //! The default facade exports Dioxus core (`rsx!`, `use_signal`, `Element`),
 //! the ArkUI element registry, per-root runtime, and exact-element hooks. Domain
 //! libraries are opt-in through the `animation`, `barcode`, `camera`, `canvas`,
-//! `chart`, `code`, `i18n`, `icon`, `lottie`, `markdown`, `router`, and `shadcn`
-//! and `terminal` features (or `full`). Barcode/QR generation is the `barcode`
-//! feature (no camera). Code highlighting uses `code`; Markdown fences need
-//! `markdown` + `code`. Terminal uses `terminal` (libghostty-vt).
-//! The `#[entry]` macro mounts a `fn() -> Element` root component into a
-//! NodeContent slot.
+//! `chart`, `code`, `i18n`, `icon`, `lottie`, `markdown`, `router`, `shadcn`,
+//! `terminal`, and `webview` features (or `full`). Barcode/QR generation is the
+//! `barcode` feature (no camera). Code highlighting uses `code`; Markdown
+//! fences need `markdown` + `code`. Terminal uses `terminal` (libghostty-vt).
+//! `webview` enables the pluginized WebView capability (`ohos.webview` bridge
+//! plugin): the framework registers the plugin facade and injects its
+//! initialization automatically, so integrators only enable the feature and
+//! use [`RuntimeHandle::webview`]. The `#[entry]` macro mounts a
+//! `fn() -> Element` root component into a NodeContent slot.
 
 // --- Entry macro ---
 pub use arkit_derive::entry;
@@ -17,9 +20,20 @@ pub use arkit_derive::entry;
 pub use arkit_runtime::{
     use_runtime_handle, ApplicationLifecycleEvent, ApplicationLifecycleHandle,
     ApplicationLifecyclePhase, ApplicationLifecycleState, ApplicationLifecycleSubscription,
-    ArkRuntime, BackPressRegistration, EdgeInsets, EmbeddedWebViewController, EmbeddedWebViewInit,
-    PhysicalRect, RuntimeHandle, RuntimeId, SafeAreaPolicy, VirtualDom, WebViewFrame, WebViewStyle,
-    WindowMetrics, WindowMetricsHandle, WindowMetricsSubscription,
+    ArkRuntime, BackPressRegistration, EdgeInsets, PhysicalRect, RuntimeHandle, RuntimeId,
+    SafeAreaPolicy, VirtualDom, WindowMetrics, WindowMetricsHandle, WindowMetricsSubscription,
+};
+// The runtime crate is part of the public facade: the `#[entry]` expansion
+// reaches `arkit_runtime::inject_plugins` through it, and advanced users can
+// mount runtimes directly.
+pub use arkit_runtime;
+
+// --- Pluginized WebView capability (feature `webview`) ---
+#[cfg(feature = "webview")]
+pub use arkit_runtime::{
+    inject_webview_plugins, NodeExt, NodeSurface, WebviewCallbacksBuilder, WebviewClient,
+    WebviewCreateRequest, WebviewHandle, WebviewJavascriptProxyBuilder, WebviewProtocol,
+    WebviewProtocolOptions, WebviewProtocolRequest, WebviewProtocolResponse, WebviewStyle,
 };
 
 // --- Renderer-owned handles safe for application code ---
@@ -229,13 +243,14 @@ impl PartialEq for EntryRootProps {
 ///
 /// The public facade installs root-specific runtime/window contexts. Exact
 /// native observation and root portals remain local to their declaring
-/// components.
+/// components. Business content fills the surface edge-to-edge; safe-area
+/// avoidance is opt-in through [`use_safe_area`] (or `SafeArea`).
 pub fn mount_entry(
     slot: ohos_arkui_binding::common::handle::ArkUIHandle,
     app: openharmony_ability::OpenHarmonyApp,
     root: fn() -> Element,
 ) -> napi_ohos::Result<ArkRuntime> {
-    mount_entry_with_policy(slot, app, root, SafeAreaPolicy::Safe)
+    mount_entry_with_policy(slot, app, root, SafeAreaPolicy::EdgeToEdge)
 }
 
 /// Mount an Arkit entry component with an explicit root safe-area policy.
@@ -256,6 +271,10 @@ fn arkit_entry_root(props: EntryRootProps) -> Element {
     #[cfg(not(feature = "animation"))]
     let root_ref = arkit_hooks::use_native_element_ref();
     use_root_content_rect(root_ref.clone());
+    // Safe-area avoidance is opt-in: by default business content fills the
+    // surface edge-to-edge and integrators apply insets where they need them
+    // through `use_safe_area` (or the `SafeArea` component). Only explicit
+    // `SafeAreaPolicy::Safe` mount points keep the framework-owned padding.
     let policy = use_safe_area_policy();
     let measured_safe_area = use_safe_area();
     let safe_area = if policy == SafeAreaPolicy::Safe {
@@ -325,9 +344,17 @@ pub mod prelude {
     pub use crate::{
         entry, mount_entry, mount_entry_with_policy, use_runtime_handle, ApplicationLifecycleEvent,
         ApplicationLifecycleHandle, ApplicationLifecyclePhase, ApplicationLifecycleState,
-        ApplicationLifecycleSubscription, ArkRuntime, EdgeInsets, EmbeddedWebViewController,
-        EmbeddedWebViewInit, PhysicalRect, RuntimeHandle, RuntimeId, SafeAreaPolicy, VirtualDom,
-        WebViewFrame, WebViewStyle, WindowMetrics, WindowMetricsHandle, WindowMetricsSubscription,
+        ApplicationLifecycleSubscription, ArkRuntime, EdgeInsets, PhysicalRect, RuntimeHandle,
+        RuntimeId, SafeAreaPolicy, VirtualDom, WindowMetrics, WindowMetricsHandle,
+        WindowMetricsSubscription,
+    };
+
+    // Pluginized WebView capability (feature `webview`).
+    #[cfg(feature = "webview")]
+    pub use crate::{
+        NodeExt, NodeSurface, WebviewCallbacksBuilder, WebviewClient, WebviewCreateRequest,
+        WebviewHandle, WebviewJavascriptProxyBuilder, WebviewProtocol, WebviewProtocolOptions,
+        WebviewProtocolRequest, WebviewProtocolResponse, WebviewStyle,
     };
 
     // Renderer-owned safe handles.

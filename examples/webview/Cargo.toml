@@ -1,6 +1,6 @@
 [package]
 name = "webview_example"
-description = "Embedded native WebView example for Arkit"
+description = "Pluginized WebView example for Arkit"
 publish = false
 version.workspace = true
 edition.workspace = true
@@ -14,9 +14,14 @@ workspace = true
 crate-type = ["cdylib"]
 
 [dependencies]
-arkit.workspace = true
+# The `webview` feature enables the ohos.webview bridge plugin; the framework
+# registers the plugin facade and injects its initialization automatically.
+arkit = { workspace = true, features = ["webview"] }
+futures-channel = "0.3"
+futures-util = "0.3"
 napi-ohos.workspace = true
 napi-derive-ohos.workspace = true
+tokio.workspace = true
 
 [build-dependencies]
 napi-build-ohos.workspace = true

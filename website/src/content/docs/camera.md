@@ -53,7 +53,7 @@ rsx! {
 ```rust
 use arkit::prelude::*;
 
-#[entry(edge_to_edge)]
+#[entry]
 fn app() -> Element {
     let controller = use_hook(CameraController::new);
     let mut position = use_signal(|| CameraPosition::Back);

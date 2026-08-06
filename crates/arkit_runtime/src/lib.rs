@@ -32,6 +32,7 @@ use openharmony_ability::{Event as AbilityEvent, OpenHarmonyApp, OpenHarmonyWake
 
 mod lifecycle;
 mod session;
+#[cfg(feature = "webview")]
 mod webview;
 mod window;
 
@@ -61,8 +62,15 @@ pub use lifecycle::{
     ApplicationLifecycleEvent, ApplicationLifecycleHandle, ApplicationLifecyclePhase,
     ApplicationLifecycleState, ApplicationLifecycleSubscription,
 };
+#[cfg(feature = "webview")]
+pub use openharmony_ability::{NodeExt, NodeSurface};
 pub use session::{use_runtime_handle, BackPressRegistration, RuntimeHandle, RuntimeId};
-pub use webview::{EmbeddedWebViewController, EmbeddedWebViewInit, WebViewFrame, WebViewStyle};
+#[cfg(feature = "webview")]
+pub use webview::{
+    inject_webview_plugins, WebviewCallbacksBuilder, WebviewClient, WebviewCreateRequest,
+    WebviewHandle, WebviewJavascriptProxyBuilder, WebviewProtocol, WebviewProtocolOptions,
+    WebviewProtocolRequest, WebviewProtocolResponse, WebviewStyle,
+};
 pub use window::{
     EdgeInsets, PhysicalRect, SafeAreaPolicy, WindowMetrics, WindowMetricsHandle,
     WindowMetricsSubscription,
@@ -74,6 +82,26 @@ static NEXT_RUNTIME_ID: AtomicU64 = AtomicU64::new(1);
 
 fn next_runtime_id() -> RuntimeId {
     RuntimeId::new(NEXT_RUNTIME_ID.fetch_add(1, Ordering::Relaxed))
+}
+
+/// Framework-owned plugin injection for the ability-init stage.
+///
+/// Called by the `#[entry]` generated `init` (the earliest Rust-visible
+/// lifecycle stage, before any ArkTS plugin event is delivered). Every
+/// pluginized capability compiled into this runtime registers its bridge
+/// facade here, so integrators never touch the plugin registry themselves.
+/// Without a capability feature this is a no-op.
+pub fn inject_plugins(app: &OpenHarmonyApp) {
+    #[cfg(feature = "webview")]
+    {
+        if let Err(error) = inject_webview_plugins(app) {
+            ohos_hilog_binding::error(format!(
+                "arkit_runtime: webview plugin injection failed: {error}"
+            ));
+        }
+    }
+    #[cfg(not(feature = "webview"))]
+    let _ = app;
 }
 
 fn run_ui_loop_effects(handle: &RuntimeHandle, runtime: &Rc<DioxusRuntime>) {
@@ -432,7 +460,7 @@ impl ArkRuntime {
         app: OpenHarmonyApp,
         dom: VirtualDom,
     ) -> Result<Self> {
-        Self::from_virtual_dom_with_policy(slot, app, dom, SafeAreaPolicy::Safe)
+        Self::from_virtual_dom_with_policy(slot, app, dom, SafeAreaPolicy::EdgeToEdge)
     }
 
     /// Create and mount a runtime with an explicit root safe-area policy.
@@ -468,7 +496,11 @@ impl ArkRuntime {
         async_runtime: tokio::runtime::Runtime,
     ) -> Result<Self> {
         install_panic_hook();
-        let runtime_handle = RuntimeHandle::new(next_runtime_id(), async_runtime.handle().clone());
+        let runtime_handle = RuntimeHandle::new(
+            next_runtime_id(),
+            app.clone(),
+            async_runtime.handle().clone(),
+        );
 
         let mut renderer = ArkUIRenderer::new(slot).map_err(map_arkui_error)?;
 
@@ -617,9 +649,9 @@ impl ArkRuntime {
         // becomes a no-op instead of leaking.
         let back_runtime = runtime_handle.downgrade();
         app.on_back_press_intercept(move || {
-            back_runtime.upgrade().is_some_and(|state| {
-                RuntimeHandle::from_inner(state).dispatch_back_press()
-            })
+            back_runtime
+                .upgrade()
+                .is_some_and(|state| RuntimeHandle::from_inner(state).dispatch_back_press())
         });
 
         // `rebuild` does not finish a render cycle, so run one immediate pass
@@ -743,7 +775,11 @@ mod tests {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .build()
             .expect("test tokio runtime");
-        let handle = RuntimeHandle::new(next_runtime_id(), runtime.handle().clone());
+        let handle = RuntimeHandle::new(
+            next_runtime_id(),
+            openharmony_ability::OpenHarmonyApp::new(),
+            runtime.handle().clone(),
+        );
         (runtime, handle)
     }
 

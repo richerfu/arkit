@@ -5,6 +5,8 @@ use std::collections::VecDeque;
 use std::rc::{Rc, Weak};
 use std::task::Waker;
 
+use openharmony_ability::OpenHarmonyApp;
+
 use super::EmbeddedRuntimeInner;
 
 type BackPressHandler = Rc<dyn Fn() -> bool>;
@@ -33,6 +35,15 @@ pub(crate) struct RuntimeSessionState {
     async_handle: tokio::runtime::Handle,
     back_handlers: RefCell<Vec<(u64, BackPressHandler)>>,
     embedded_runtimes: RefCell<Vec<(u64, Weak<RefCell<EmbeddedRuntimeInner>>)>>,
+    // The shared native ability backing this root. Pluginized capabilities
+    // (e.g. the `webview` bridge plugin) resolve their clients through it
+    // after `openharmony_ability::render` installs the bridge bindings.
+    #[cfg(feature = "webview")]
+    app: OpenHarmonyApp,
+    #[cfg(feature = "webview")]
+    webview_client: RefCell<Option<crate::webview::WebviewClient>>,
+    #[cfg(feature = "webview")]
+    node_surface: RefCell<Option<openharmony_ability::NodeSurface>>,
 }
 
 /// Cloneable, root-specific UI/async/back-dispatch handle.
@@ -60,19 +71,33 @@ impl PartialEq for RuntimeHandle {
 impl Eq for RuntimeHandle {}
 
 impl RuntimeHandle {
-    pub(crate) fn new(id: RuntimeId, async_handle: tokio::runtime::Handle) -> Self {
+    pub(crate) fn new(
+        id: RuntimeId,
+        app: OpenHarmonyApp,
+        async_handle: tokio::runtime::Handle,
+    ) -> Self {
+        let state = RuntimeSessionState {
+            id,
+            next_registration: Cell::new(0),
+            active: Cell::new(true),
+            ui_waker: RefCell::new(None),
+            scheduler_waker: RefCell::new(None),
+            ui_effects: RefCell::new(VecDeque::new()),
+            async_handle,
+            back_handlers: RefCell::new(Vec::new()),
+            embedded_runtimes: RefCell::new(Vec::new()),
+            #[cfg(feature = "webview")]
+            app,
+            #[cfg(feature = "webview")]
+            webview_client: RefCell::new(None),
+            #[cfg(feature = "webview")]
+            node_surface: RefCell::new(None),
+        };
+        // Without capability features the shared ability is not retained.
+        #[cfg(not(feature = "webview"))]
+        let _ = app;
         Self {
-            state: Rc::new(RuntimeSessionState {
-                id,
-                next_registration: Cell::new(0),
-                active: Cell::new(true),
-                ui_waker: RefCell::new(None),
-                scheduler_waker: RefCell::new(None),
-                ui_effects: RefCell::new(VecDeque::new()),
-                async_handle,
-                back_handlers: RefCell::new(Vec::new()),
-                embedded_runtimes: RefCell::new(Vec::new()),
-            }),
+            state: Rc::new(state),
         }
     }
 
@@ -97,6 +122,50 @@ impl RuntimeHandle {
 
     pub fn tokio(&self) -> tokio::runtime::Handle {
         self.state.async_handle.clone()
+    }
+
+    /// Resolve the plugin-backed WebView client for this root.
+    ///
+    /// The client is created lazily from the shared ability and cached; it
+    /// becomes available once `openharmony_ability::render` installs the
+    /// bridge bindings (that is, from the first dioxus render onward). The
+    /// `ohos.webview` plugin facade itself is registered by the `#[entry]`
+    /// generated init via [`inject_webview_plugins`](crate::webview::inject_webview_plugins),
+    /// so integrators only need the `webview` feature.
+    #[cfg(feature = "webview")]
+    pub fn webview(&self) -> napi_ohos::Result<crate::webview::WebviewClient> {
+        if let Some(client) = self.state.webview_client.borrow().as_ref() {
+            return Ok(client.clone());
+        }
+        let client = crate::webview::WebviewClient::new(&self.state.app)?;
+        *self.state.webview_client.borrow_mut() = Some(client.clone());
+        Ok(client)
+    }
+
+    /// Resolve the built-in `ohos.node` surface facade for this root.
+    ///
+    /// The facade creates opaque container handles in the ArkTS session tree
+    /// (`create_container`) and composes handle-owned FrameNodes; WebView
+    /// surfaces can be adopted under a container through
+    /// [`WebviewCreateRequest::parent_node`]. Like [`Self::webview`], it is
+    /// created lazily once the bridge bindings are installed.
+    #[cfg(feature = "webview")]
+    pub fn node(&self) -> napi_ohos::Result<openharmony_ability::NodeSurface> {
+        if let Some(surface) = self.state.node_surface.borrow().as_ref() {
+            return Ok(surface.clone());
+        }
+        let surface = openharmony_ability::NodeExt::node(&self.state.app)?;
+        *self.state.node_surface.borrow_mut() = Some(surface.clone());
+        Ok(surface)
+    }
+
+    /// Current display scale factor (physical px per vp).
+    ///
+    /// Plugin WebView styles are expressed in vp; dioxus layout frames are in
+    /// physical px, so `px / scale` converts between them.
+    #[cfg(feature = "webview")]
+    pub fn scale(&self) -> f32 {
+        self.state.app.scale()
     }
 
     /// Queue owned work for this root's next UI tick.

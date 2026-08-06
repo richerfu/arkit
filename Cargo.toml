@@ -142,10 +142,12 @@ tree-sitter-go = "0.23"
 tree-sitter-c = "0.23"
 
 
-# fix/webview-object-ref-lifecycle carries the Webview ObjectRef unref fix.
-# crates.io 0.3.0 lacks the back intercept and embedded webview dispose APIs
-# used by arkit_runtime.
-openharmony-ability = { git = "https://github.com/harmony-contrib/openharmony-ability.git", rev = "bd66a489720c1cfc6faecfbc61a6a93b039b42c0" }
+# Pluginized mainline: the built-in `ohos.node` surface plugin (opaque
+# container handles so RS-layer node trees can adopt WebView FrameNodes as
+# children), `WebviewStyle.width/height` and `WebviewCreateRequest::parent_node`
+# land on the mainline `#70 normalize node surface`.
+openharmony-ability = { git = "https://github.com/harmony-contrib/openharmony-activity.git", rev = "41ffef1cb00f92e333fc106dc854cc7ad7ac73f6" }
+openharmony-ability-plugin-webview = { git = "https://github.com/harmony-contrib/openharmony-activity.git", rev = "41ffef1cb00f92e333fc106dc854cc7ad7ac73f6" }
 
 # Published on crates.io. The wrapper user_data ownership fixes previously
 # pinned to fix/arkui-wrapper-lifecycle-023 are integrated upstream; declare
