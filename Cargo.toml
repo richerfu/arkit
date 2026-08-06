@@ -142,12 +142,10 @@ tree-sitter-go = "0.23"
 tree-sitter-c = "0.23"
 
 
-# Pluginized mainline: the built-in `ohos.node` surface plugin (opaque
-# container handles so RS-layer node trees can adopt WebView FrameNodes as
-# children), `WebviewStyle.width/height` and `WebviewCreateRequest::parent_node`
-# land on the mainline `#70 normalize node surface`.
-openharmony-ability = { git = "https://github.com/harmony-contrib/openharmony-activity.git", rev = "41ffef1cb00f92e333fc106dc854cc7ad7ac73f6" }
-openharmony-ability-plugin-webview = { git = "https://github.com/harmony-contrib/openharmony-activity.git", rev = "41ffef1cb00f92e333fc106dc854cc7ad7ac73f6" }
+# Pluginized mainline with the normalized node surface (#70) and transparent
+# native XComponent background (#73). Keep both packages on the same revision.
+openharmony-ability = { git = "https://github.com/harmony-contrib/openharmony-activity.git", rev = "77548ad83570101d85085ab55ddd9b5d549c8705" }
+openharmony-ability-plugin-webview = { git = "https://github.com/harmony-contrib/openharmony-activity.git", rev = "77548ad83570101d85085ab55ddd9b5d549c8705" }
 
 # Published on crates.io. The wrapper user_data ownership fixes previously
 # pinned to fix/arkui-wrapper-lifecycle-023 are integrated upstream; declare

@@ -3231,7 +3231,7 @@ checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
 [[package]]
 name = "openharmony-ability"
 version = "0.3.0"
-source = "git+https://github.com/harmony-contrib/openharmony-activity.git?rev=41ffef1cb00f92e333fc106dc854cc7ad7ac73f6#41ffef1cb00f92e333fc106dc854cc7ad7ac73f6"
+source = "git+https://github.com/harmony-contrib/openharmony-activity.git?rev=77548ad83570101d85085ab55ddd9b5d549c8705#77548ad83570101d85085ab55ddd9b5d549c8705"
 dependencies = [
  "futures-channel",
  "napi-derive-ohos",
@@ -3245,7 +3245,7 @@ dependencies = [
 [[package]]
 name = "openharmony-ability-plugin-webview"
 version = "0.3.0"
-source = "git+https://github.com/harmony-contrib/openharmony-activity.git?rev=41ffef1cb00f92e333fc106dc854cc7ad7ac73f6#41ffef1cb00f92e333fc106dc854cc7ad7ac73f6"
+source = "git+https://github.com/harmony-contrib/openharmony-activity.git?rev=77548ad83570101d85085ab55ddd9b5d549c8705#77548ad83570101d85085ab55ddd9b5d549c8705"
 dependencies = [
  "http",
  "napi-derive-ohos",
