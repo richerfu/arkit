@@ -32,6 +32,7 @@ members = [
     "examples/complex_cases",
     "examples/i18n",
     "examples/lottie",
+    "examples/plugins",
     "examples/router",
     "examples/shadcn_showcase",
     "examples/terminal",

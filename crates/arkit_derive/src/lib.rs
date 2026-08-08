@@ -2,13 +2,16 @@ use proc_macro::TokenStream;
 use proc_macro2::{Ident as MacroIdent, Span, TokenStream as TokenStream2};
 use proc_macro_crate::{crate_name, FoundCrate};
 use quote::quote;
+use syn::parse::Parser;
 use syn::{parse_macro_input, ItemFn};
 
 /// Mark a function as the application entry point.
 ///
 /// Generates OpenHarmony NAPI bindings (init / render / destroy lifecycle,
 /// plus the pluginized bridge event ports) that call the entry function. The
-/// entry function must take no arguments and return `Element`.
+/// entry function returns `Element` and either takes no arguments, or a
+/// single [`OpenHarmonyApp`] handle received at mount time (see "Custom
+/// bridge plugins" below).
 ///
 /// Business content fills the mounted surface edge-to-edge by default.
 /// Safe-area avoidance is opt-in: read the insets with [`use_safe_area`]
@@ -21,7 +24,8 @@ use syn::{parse_macro_input, ItemFn};
 ///
 /// - `init` installs the ability init context, injects framework-owned bridge
 ///   plugins ([`arkit_runtime::inject_plugins`], e.g. the `ohos.webview`
-///   facade when the `webview` feature is enabled), and creates the lifecycle
+///   facade when the `webview` feature is enabled), registers the application
+///   plugins declared with `plugins = [...]`, and creates the lifecycle
 ///   handle. `onBridgeSyncEvent` / `onBridgeLifecycle` are exported so the
 ///   ArkTS host can deliver main-thread plugin events and UI-context
 ///   readiness transitions into the Rust plugin registry.
@@ -29,6 +33,30 @@ use syn::{parse_macro_input, ItemFn};
 ///   bridge bindings (`bridgeInvoke`/`bridgeInvokeSync`/`bridgeDispatch`) and
 ///   mounts the native XComponent. Only then is the dioxus runtime mounted, so
 ///   plugin clients resolve from the first render onward.
+///
+/// ## Custom bridge plugins
+///
+/// Applications register their own `openharmony_ability::BridgePlugin`
+/// facades in either of two composable ways:
+///
+/// - Declarative list: `#[entry(plugins = [MyPlugin, UrlBridgePlugin])]`.
+///   Each item is an expression evaluated inside the generated `init`, after
+///   the framework-owned plugins and before any ArkTS plugin event is
+///   delivered. Items resolve at module scope, so entry-function locals
+///   cannot be referenced; unit types and constructor calls both work.
+///   Registration failures are logged, not fatal.
+/// - App handle argument: `fn app(handle: OpenHarmonyApp) -> Element`.
+///   The handle is a clone of the shared ability and is passed at first
+///   render (after the bridge bindings are installed), so
+///   `handle.register_plugin(...)` may run arbitrary setup. Late registration
+///   is safe: the registry replays the bounded lifecycle history to plugins
+///   whose `REQUIRED_CONTEXTS` are already satisfied.
+///
+/// A plugin implements [`openharmony_ability::BridgePlugin`] (`type Mode =
+/// AsyncBridge` or `MainThreadSyncBridge`, `ID`, optional `REQUIRED_CONTEXTS`
+/// and lifecycle / main-thread-event hooks). Its ArkTS counterpart must be
+/// installed in the host ability's `bridgePlugins` array — that side is
+/// hand-managed; this macro cannot touch ArkTS sources.
 ///
 /// ## How it works (for IDE / rust-analyzer)
 ///
@@ -38,20 +66,16 @@ use syn::{parse_macro_input, ItemFn};
 /// call chain — no `#[allow(dead_code)]` needed.
 #[proc_macro_attribute]
 pub fn entry(attr: TokenStream, item: TokenStream) -> TokenStream {
-    if !attr.is_empty() {
-        return syn::Error::new(
-            proc_macro2::Span::call_site(),
-            "#[entry] takes no options; safe-area avoidance is opt-in through `use_safe_area`",
-        )
-        .to_compile_error()
-        .into();
-    }
+    let plugins = match parse_entry_options(attr) {
+        Ok(plugins) => plugins,
+        Err(error) => return error.to_compile_error().into(),
+    };
     let input = parse_macro_input!(item as ItemFn);
 
-    if !input.sig.inputs.is_empty() {
+    if input.sig.inputs.len() > 1 {
         return syn::Error::new_spanned(
             &input.sig.inputs,
-            "#[entry] function must not have arguments",
+            "#[entry] function must have at most one argument (an `OpenHarmonyApp` handle)",
         )
         .to_compile_error()
         .into();
@@ -69,6 +93,34 @@ pub fn entry(attr: TokenStream, item: TokenStream) -> TokenStream {
         Err(error) => return error.to_compile_error().into(),
     };
     let safe_area_policy = quote!(#framework::SafeAreaPolicy::EdgeToEdge);
+    let has_app_arg = input.sig.inputs.len() == 1;
+    // The fn passed to `mount_entry_with_policy` (which takes
+    // `root: fn() -> Element`): the user fn itself for zero-arg entries, the
+    // generated adapter otherwise.
+    let root_fn = if has_app_arg {
+        quote!(__arkit_entry_root)
+    } else {
+        quote!(#fn_name)
+    };
+    let entry_adapter = if has_app_arg {
+        quote! {
+            // One-argument entry roots receive the shared app handle at
+            // mount time (inside the `render` NAPI call, after the bridge
+            // bindings are installed). Registering plugins here is safe:
+            // the registry replays the bounded lifecycle history to plugins
+            // whose required contexts are already ready.
+            fn __arkit_entry_root() -> #framework::Element {
+                #fn_name((*APP).clone())
+            }
+        }
+    } else {
+        TokenStream2::new()
+    };
+    let plugin_registrations = plugins.iter().map(|plugin| {
+        quote! {
+            #framework::arkit_runtime::register_user_plugin(&(*APP), #plugin);
+        }
+    });
 
     let expanded = quote! {
         #input
@@ -91,6 +143,8 @@ pub fn entry(attr: TokenStream, item: TokenStream) -> TokenStream {
                     RefCell::new(None);
             }
 
+            #entry_adapter
+
             #[#framework::napi_derive_ohos::napi]
             pub fn on_back_press_intercept() -> bool {
                 (*APP).get_back_press_interceptor()
@@ -110,6 +164,10 @@ pub fn entry(attr: TokenStream, item: TokenStream) -> TokenStream {
                 // ability-init stage, before any ArkTS plugin event is
                 // delivered to the registry.
                 #framework::arkit_runtime::inject_plugins(&(*APP));
+                // Application-owned bridge plugins declared with
+                // `#[entry(plugins = [...])]` — after the framework-owned
+                // set, still before any plugin event reaches the registry.
+                #(#plugin_registrations)*
                 #framework::openharmony_ability::create_lifecycle_handle(env, (*APP).clone())
             }
 
@@ -136,13 +194,14 @@ pub fn entry(attr: TokenStream, item: TokenStream) -> TokenStream {
                     )?;
                     ROOT_NODE.with(|root_node| root_node.replace(Some(root)));
 
-                    // `#fn_name` is the user's root component `fn() -> Element`.
-                    // The runtime creates a VirtualDom from it and rebuilds
-                    // into an ArkUIRenderer mounted on `slot`.
+                    // `#root_fn` is the user's root component `fn() -> Element`,
+                    // or the generated adapter when the entry fn takes the
+                    // app handle. The runtime creates a VirtualDom from it and
+                    // rebuilds into an ArkUIRenderer mounted on `slot`.
                     let runtime = #framework::mount_entry_with_policy(
                         slot,
                         (*APP).clone(),
-                        #fn_name,
+                        #root_fn,
                         #safe_area_policy,
                     )?;
                     state.replace(Some(runtime));
@@ -195,6 +254,44 @@ pub fn entry(attr: TokenStream, item: TokenStream) -> TokenStream {
     };
 
     expanded.into()
+}
+
+/// Parses `#[entry(plugins = [plugin, ...])]` into the plugin expressions.
+///
+/// Only the `plugins` option is supported. Each element is an arbitrary
+/// expression (a unit-struct path, a constructor call, ...) evaluated inside
+/// the generated `init`; type errors surface naturally at the generated
+/// `register_plugin` call site.
+fn parse_entry_options(attr: TokenStream) -> syn::Result<Vec<syn::Expr>> {
+    if attr.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut plugins = Vec::new();
+    let parser = syn::meta::parser(|meta| {
+        if meta.path.is_ident("plugins") {
+            if !meta.input.peek(syn::Token![=]) {
+                return Err(meta.error("expected `plugins = [plugin, ...]`"));
+            }
+            let value: syn::Expr = meta.value()?.parse()?;
+            match value {
+                syn::Expr::Array(array) => {
+                    plugins.extend(array.elems);
+                    Ok(())
+                }
+                value => Err(syn::Error::new_spanned(
+                    value,
+                    "expected `plugins = [plugin, ...]`",
+                )),
+            }
+        } else {
+            Err(syn::Error::new_spanned(
+                &meta.path,
+                "unsupported #[entry] option; the only supported option is `plugins = [plugin, ...]`",
+            ))
+        }
+    });
+    parser.parse2(attr.into())?;
+    Ok(plugins)
 }
 
 fn dependency_path(package: &str) -> syn::Result<TokenStream2> {

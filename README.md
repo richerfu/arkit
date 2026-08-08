@@ -31,6 +31,10 @@ fn app() -> Element {
 
 The complete runnable version is in [examples/counter](examples/counter/src/lib.rs).
 
+Applications can register their own openharmony-ability bridge plugins
+(`BridgePlugin` facades) through `#[entry(plugins = [...])]` or by taking an
+`OpenHarmonyApp` handle in the entry function — see [examples/plugins](examples/plugins/src/lib.rs) and the [getting-started guide](website/src/content/docs/getting-started.md).
+
 Optional domain APIs are feature-gated. For example, native CameraKit preview
 and JPEG capture are enabled with `arkit = { features = ["camera"] }`; configurable
 barcode scanning is added by `camera-scan`. CameraKit and scan-decoder dependency edges

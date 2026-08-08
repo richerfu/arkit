@@ -11,7 +11,9 @@
 //! plugin): the framework registers the plugin facade and injects its
 //! initialization automatically, so integrators only enable the feature and
 //! use [`RuntimeHandle::webview`]. The `#[entry]` macro mounts a
-//! `fn() -> Element` root component into a NodeContent slot.
+//! `fn() -> Element` root component (or a one-argument form that receives an
+//! [`openharmony_ability::OpenHarmonyApp`] handle for registering application
+//! `BridgePlugin`s) into a NodeContent slot.
 
 // --- Entry macro ---
 pub use arkit_derive::entry;

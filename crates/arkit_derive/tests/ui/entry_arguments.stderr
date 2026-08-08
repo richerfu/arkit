@@ -1,5 +1,5 @@
-error: #[entry] function must not have arguments
+error: #[entry] function must have at most one argument (an `OpenHarmonyApp` handle)
  --> tests/ui/entry_arguments.rs:2:8
   |
-2 | fn app(_input: ()) {}
-  |        ^^^^^^^^^^
+2 | fn app(_input: (), _more: ()) {}
+  |        ^^^^^^^^^^^^^^^^^^^^^

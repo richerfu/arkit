@@ -28,7 +28,7 @@ use dioxus_core::{ElementId, Runtime as DioxusRuntime};
 use napi_ohos::{Error, Result};
 use ohos_arkui_binding::common::handle::ArkUIHandle;
 use ohos_arkui_binding::common::node::ArkUINode;
-use openharmony_ability::{Event as AbilityEvent, OpenHarmonyApp, OpenHarmonyWaker};
+use openharmony_ability::{BridgePlugin, Event as AbilityEvent, OpenHarmonyApp, OpenHarmonyWaker};
 
 mod lifecycle;
 mod session;
@@ -102,6 +102,26 @@ pub fn inject_plugins(app: &OpenHarmonyApp) {
     }
     #[cfg(not(feature = "webview"))]
     let _ = app;
+}
+
+/// Registers one application-owned bridge plugin on the shared ability.
+///
+/// Called by the `#[entry(plugins = [...])]` generated `init`, after the
+/// framework-owned plugins ([`inject_plugins`]) and before any ArkTS plugin
+/// event is delivered. Failures are logged (hilog) and swallowed: a broken
+/// plugin must not take down ability initialization. Late registration is
+/// safe — the registry replays the bounded lifecycle history to plugins whose
+/// `REQUIRED_CONTEXTS` are already satisfied.
+pub fn register_user_plugin<P>(app: &OpenHarmonyApp, plugin: P)
+where
+    P: BridgePlugin,
+{
+    if let Err(error) = app.register_plugin(plugin) {
+        ohos_hilog_binding::error(format!(
+            "arkit_runtime: user bridge plugin '{}' registration failed: {error}",
+            P::ID
+        ));
+    }
 }
 
 fn run_ui_loop_effects(handle: &RuntimeHandle, runtime: &Rc<DioxusRuntime>) {
