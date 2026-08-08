@@ -1,4 +1,4 @@
-error: unsupported #[entry] option
+error: unsupported #[entry] option; the only supported option is `plugins = [plugin, ...]`
  --> tests/ui/unsupported_option.rs:1:23
   |
 1 | #[arkit_derive::entry(unsafe_area)]
