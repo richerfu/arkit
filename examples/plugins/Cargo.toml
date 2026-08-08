@@ -1,0 +1,24 @@
+[package]
+name = "plugins_example"
+description = "Custom openharmony-ability bridge plugin registration example for Arkit"
+publish = false
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+arkit.workspace = true
+napi-ohos.workspace = true
+napi-derive-ohos.workspace = true
+ohos-hilog-binding.workspace = true
+openharmony-ability.workspace = true
+
+[build-dependencies]
+napi-build-ohos.workspace = true
