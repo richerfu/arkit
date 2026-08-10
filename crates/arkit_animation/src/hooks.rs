@@ -119,7 +119,10 @@ pub fn use_animation_target(name: impl Into<String>) -> AnimationTarget {
             let Some(register_host) = register_host.upgrade() else {
                 return;
             };
-            match register_host.arkui().register_target(register_name.clone(), host_node, None) {
+            match register_host
+                .arkui()
+                .register_target(register_name.clone(), host_node, None)
+            {
                 Ok(id) => {
                     register_slot.set(Some(id));
                     let mut target_ready = ready;
