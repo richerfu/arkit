@@ -11,11 +11,12 @@ use arkit::router::dioxus_router;
 use arkit::router::{use_navigator, Outlet, Routable, RouteProvider, Router};
 use arkit::shadcn as arkit_shadcn;
 use arkit::shadcn::components::{
-    Accordion, AccordionItemSpec, Alert, AlertDescription, AlertDialog, AlertDialogAction,
-    AlertList, AlertTitle, AlertVariant, AspectRatio, Avatar, AvatarFallback, Badge, BadgeVariant,
-    BottomNavigation, BottomNavigationItem, BottomSheet, BottomSheetTextInput, Button, ButtonSize,
-    ButtonVariant, Calendar, CalendarYearRange, Card, CardContent, CardFooter, CardHeader,
-    Carousel, CarouselControlsPlacement, CarouselIndicatorVariant, CarouselStyle, Checkbox, Code,
+    use_anchor, Accordion, AccordionItemSpec, Alert, AlertDescription, AlertDialog,
+    AlertDialogAction, AlertList, AlertTitle, AlertVariant, Anchor, AnchorItem, AnchorSection,
+    AspectRatio, Avatar, AvatarFallback, Badge, BadgeVariant, BottomNavigation,
+    BottomNavigationItem, BottomSheet, BottomSheetTextInput, Button, ButtonSize, ButtonVariant,
+    Calendar, CalendarYearRange, Card, CardContent, CardFooter, CardHeader, Carousel,
+    CarouselControlsPlacement, CarouselIndicatorVariant, CarouselStyle, Checkbox, Code,
     Collapsible, ContextMenu, DatePicker, Dialog, DialogFooter, DialogHeader, DropdownMenu, Field,
     FieldContent, FieldDescription, FieldError, FieldGroup, FieldOrientation, FieldSeparator,
     FieldSet, FieldTitle, Form, FormItem, Guide, GuideSide, GuideStep, GuideTarget, HoverCard,
@@ -181,6 +182,10 @@ const COMPONENTS: &[ComponentSpec] = &[
     ComponentSpec {
         slug: "alert-dialog",
         name: "Alert Dialog",
+    },
+    ComponentSpec {
+        slug: "anchor",
+        name: "Anchor",
     },
     ComponentSpec {
         slug: "aspect-ratio",
@@ -1137,6 +1142,12 @@ fn demo_canvas_policy(slug: &str) -> DemoCanvasPolicy {
             fill_height: true,
             padding: [spacing::LG, spacing::LG, spacing::LG, spacing::LG],
         },
+        "anchor" => DemoCanvasPolicy {
+            center_x: false,
+            center_y: false,
+            fill_height: false,
+            padding: [spacing::LG, spacing::LG, spacing::XXL, spacing::LG],
+        },
         "refresh-load-more" => DemoCanvasPolicy {
             center_x: false,
             center_y: false,
@@ -1184,6 +1195,8 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let mut dialog_name = use_signal(|| "Pedro Duarte".to_string());
     let mut dialog_username = use_signal(|| "@peduarte".to_string());
     let mut alert_open = use_signal(|| false);
+    let mut anchor_last_jump =
+        use_signal(|| "Click an anchor item to jump to a section.".to_string());
     let mut bottom_navigation_selected = use_signal(|| 0_usize);
     let mut bottom_sheet_open = use_signal(|| false);
     let mut bottom_sheet_name = use_signal(|| "Pedro Duarte".to_string());
@@ -1454,6 +1467,103 @@ fn ComponentDemo(slug: &'static str) -> Element {
                             "OK"
                         }
                     },
+                }
+            }
+        },
+        "anchor" => rsx! {
+            column {
+                width: "100%",
+                align_items: "start",
+                demo_mode_label {
+                    title: "Anchor".to_string(),
+                    detail: Some(anchor_last_jump()),
+                }
+                row {
+                    width: "100%",
+                    height: 520.0,
+                    Anchor {
+                        scroll_duration: 300,
+                        active_threshold: 8.0,
+                        nav: rsx! {
+                            column {
+                                width: 176.0,
+                                background_color: theme.colors.popover,
+                                border_width: 1.0,
+                                border_color: theme.colors.border,
+                                border_radius: theme.radii.md,
+                                padding_top: spacing::SM,
+                                padding_right: spacing::SM,
+                                padding_bottom: spacing::SM,
+                                padding_left: spacing::SM,
+                                AnchorActiveLabel {}
+                                v_gap { height: spacing::SM }
+                                AnchorItem {
+                                    id: "intro".to_string(),
+                                    title: "Introduction".to_string(),
+                                    onclick: move |_| {
+                                        anchor_last_jump.set("Jump to Introduction".to_string());
+                                    },
+                                }
+                                v_gap { height: 2.0 }
+                                AnchorItem {
+                                    id: "install".to_string(),
+                                    title: "Installation".to_string(),
+                                    onclick: move |_| {
+                                        anchor_last_jump.set("Jump to Installation".to_string());
+                                    },
+                                }
+                                v_gap { height: 2.0 }
+                                AnchorItem {
+                                    id: "usage".to_string(),
+                                    title: "Usage".to_string(),
+                                    onclick: move |_| {
+                                        anchor_last_jump.set("Jump to Usage".to_string());
+                                    },
+                                }
+                                v_gap { height: 2.0 }
+                                AnchorItem {
+                                    id: "api".to_string(),
+                                    title: "API Reference".to_string(),
+                                    onclick: move |_| {
+                                        anchor_last_jump.set("Jump to API Reference".to_string());
+                                    },
+                                }
+                            }
+                        },
+                        children: rsx! {
+                            column {
+                                width: "100%",
+                                AnchorSection {
+                                    id: "intro".to_string(),
+                                    children: anchor_section_card(
+                                        "Introduction",
+                                        "Anchor 提供页内锚点导航：左侧导航项对应右侧内容区块，点击后滚动到对应位置，滚动时高亮自动跟随当前可见区块。",
+                                    ),
+                                }
+                                AnchorSection {
+                                    id: "install".to_string(),
+                                    children: anchor_section_card(
+                                        "Installation",
+                                        "使用 Anchor 时，先声明滚动容器和区块：Anchor 渲染 row { nav, scroll }，children 里的 AnchorSection 会被测量并注册为可跳转锚点。",
+                                    ),
+                                }
+                                AnchorSection {
+                                    id: "usage".to_string(),
+                                    children: anchor_section_card(
+                                        "Usage",
+                                        "导航项用 AnchorItem 声明，点击后调用上下文 jump(id) 发起一次 scroll_offset 命令；滚动位置由 onscroll 增量累积，与区块帧比对得出激活项。",
+                                    ),
+                                }
+                                AnchorSection {
+                                    id: "api".to_string(),
+                                    children: anchor_section_card(
+                                        "API Reference",
+                                        "use_anchor() 返回 AnchorContext，提供 jump(id)、active_id()、scroll_position()；scroll_duration 控制跳转动画时长，active_threshold 调节区块进入视口的判定阈值。",
+                                    ),
+                                }
+                            }
+                        },
+                    }
                 }
             }
         },
@@ -5115,6 +5225,39 @@ fn demo_mode_divider() -> Element {
             Separator {}
             v_gap { height: spacing::XL }
         }
+    }
+}
+
+/// 显示当前 Anchor 激活区块（演示 `use_anchor` 公共 hook，必须在 Anchor 子树内）。
+#[component]
+fn AnchorActiveLabel() -> Element {
+    let theme = arkit_shadcn::theme::use_theme();
+    let active = use_anchor()
+        .and_then(|context| context.active_id())
+        .unwrap_or_else(|| "none".to_string());
+    rsx! {
+        text {
+            content: format!("Active: {active}"),
+            font_size: typography::XS,
+            font_color: theme.colors.muted_foreground,
+            line_height: 16.0,
+        }
+    }
+}
+
+/// Anchor demo 的一个内容区块：Card + 标题 + 正文。
+fn anchor_section_card(title: &'static str, body: &'static str) -> Element {
+    rsx! {
+        Card {
+            CardHeader {
+                title: title.to_string(),
+                description: "Scroll to this section from the nav.".to_string(),
+            }
+            CardContent {
+                Text { content: body.to_string() }
+            }
+        }
+        v_gap { height: spacing::MD }
     }
 }
 

@@ -120,7 +120,14 @@ const componentGroups: readonly NavGroup[] = [
   },
   {
     title: "导航组件",
-    sections: ["breadcrumb", "pagination", "navigation-menu", "sidebar", "bottom-navigation"],
+    sections: [
+      "anchor",
+      "breadcrumb",
+      "pagination",
+      "navigation-menu",
+      "sidebar",
+      "bottom-navigation",
+    ],
   },
   {
     title: "浮层与菜单",

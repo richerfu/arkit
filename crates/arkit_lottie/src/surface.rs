@@ -148,7 +148,11 @@ impl SurfaceRegistration {
 
 impl Drop for SurfaceRegistration {
     fn drop(&mut self) {
-        if !self.liveness.as_ref().is_none_or(|liveness| liveness.is_alive()) {
+        if !self
+            .liveness
+            .as_ref()
+            .is_none_or(|liveness| liveness.is_alive())
+        {
             // Host native subtree destroyed outside the renderer: the
             // XComponent handle is invalid, so native unregistration is
             // skipped. Rust-side callback slots and worker senders still

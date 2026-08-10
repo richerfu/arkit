@@ -14,11 +14,6 @@ export interface ApplicationLifecycle {
   keyboardEventCallback: KeyboardCallback
 }
 
-export interface DownloadStartResult {
-  allow: boolean
-  tempPath?: string
-}
-
 export interface EnvironmentCallback {
   onConfigurationUpdated: () => void
   onMemoryLevel: (arg: number) => void
@@ -28,36 +23,47 @@ export interface KeyboardCallback {
   onKeyboardHeightChange: (arg: number) => void
 }
 
-export interface WebViewInitData {
-  url?: string
-  id?: string
-  style?: WebViewStyle
-  javascriptEnabled?: boolean
-  devtools?: boolean
-  userAgent?: string
-  autoplay?: boolean
-  initializationScripts?: Array<string>
-  headers?: Record<string, string>
-  html?: string
-  transparent?: boolean
-  onDragAndDrop?: (arg: string) => void
-  onDownloadStart: OnDownloadStart
-  onDownloadEnd: OnDownloadEnd
-  onNavigationRequest?: (arg: string) => boolean
-  onTitleChange?: (arg: string) => void
+export interface NodeAcknowledgement {
+  accepted: boolean
 }
 
-export interface WebViewStyle {
-  x?: number | string
-  y?: number | string
-  visible?: boolean
-  backgroundColor?: string
+/** Appends the node of `child_handle` under the node of `parent_handle`. */
+export interface NodeAppendChildRequest {
+  parentHandle: number
+  childHandle: number
+  /** Window surface key; defaults to `"main"`. Parent and child must share the same window. */
+  windowKey?: string
+}
+
+/** Window-scoped request marker for `create-container`: the response carries the new handle. */
+export interface NodeCreateContainerRequest {
+  /** Window surface key; defaults to `"main"`. */
+  windowKey?: string
+}
+
+/** Detaches a handle-owned node from its parent and disposes it. */
+export interface NodeDisposeRequest {
+  handle: number
+  /** Window surface key; defaults to `"main"`. */
+  windowKey?: string
+}
+
+/** Opaque handle of a container `FrameNode` created in ArkTS. */
+export interface NodeHandleResponse {
+  handle: number
+}
+
+/** Appends a handle-owned node to the window root. */
+export interface NodeMountIntoRootRequest {
+  handle: number
+  /** Window surface key; defaults to `"main"`. */
+  windowKey?: string
 }
 
 export interface WindowStageEventCallback {
   onWindowStageCreate: () => void
   onWindowStageDestroy: () => void
-  onAbilityCreate: () => void
+  onAbilityCreate: (arg: string) => void
   onAbilityDestroy: () => void
   onAbilitySaveState: () => void
   onAbilityRestoreState: () => void
@@ -73,5 +79,15 @@ export declare function init(context?: AbilityInitContext): ApplicationLifecycle
 
 export declare function onBackPressIntercept(): boolean
 
-export declare function render(helper: object, slot: NodeContent): void
+/** r" ArkTS-only lifecycle transitions, currently UI-context readiness. */
+export declare function onBridgeLifecycle(kind: string): void
 
+/**
+  * r" Synchronous ArkTS platform callback -> Rust plugin decision port.
+  * r"
+  * r" The N-API value is scoped to this call; the returned value is
+  * r" produced before ArkTS resumes the originating platform callback.
+  */
+export declare function onBridgeSyncEvent(pluginId: string, event: string, requestTypeName: string, responseTypeName: string, value: unknown): unknown
+
+export declare function render(bindings: object, slot: NodeContent): void

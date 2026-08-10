@@ -319,7 +319,9 @@ impl TargetAdapter for ArkUiAdapter {
             .ok_or(AnimationAdapterError::UnknownTargetId(update.target))?;
         // Declare the driven attribute so the renderer keeps its declarative
         // value authoritative but stops fighting this animation's writes.
-        let _ = binding.node.declare_animated_attrs(std::slice::from_ref(&name));
+        let _ = binding
+            .node
+            .declare_animated_attrs(std::slice::from_ref(&name));
         property_writer::write(binding, update.property, name, &update.value)
     }
 

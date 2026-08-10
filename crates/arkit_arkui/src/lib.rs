@@ -2155,10 +2155,7 @@ impl ArkUIRenderer {
     /// Attributes currently driven by an animation are skipped (the animation
     /// owns the live value until it finishes).
     pub fn replay_element_attrs(&mut self, element: ElementId) {
-        let Some(host) = self
-            .hosts
-            .host_for_element(ElementKey::new(element.0))
-        else {
+        let Some(host) = self.hosts.host_for_element(ElementKey::new(element.0)) else {
             return;
         };
         if !self.hosts[host].appear_replay_armed {
