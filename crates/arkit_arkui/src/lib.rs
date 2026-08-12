@@ -255,6 +255,11 @@ pub struct ArkUIRenderer {
     /// batch. Local host mutations never invalidate the renderer root directly;
     /// only active portal membership/order changes do.
     projection: ProjectionState,
+    /// Detached subtrees are disposed only after Dioxus finishes the current
+    /// mutation batch. ArkUI can retain transient references during a native
+    /// child-list patch, so destroying a removed `FrameNode` in the middle of
+    /// reconciliation is unsafe.
+    pending_subtree_disposals: Vec<HostId>,
     /// First structural native failure. Once set, projection is no longer
     /// trustworthy and the owning runtime must stop after the mutation batch.
     fault: Option<RendererFault>,
@@ -477,6 +482,7 @@ impl ArkUIRenderer {
             root_mount,
             sink: None,
             projection: ProjectionState::default(),
+            pending_subtree_disposals: Vec::new(),
             fault: None,
             inert: false,
             appear_replay_handler: None,
@@ -1455,6 +1461,32 @@ impl ArkUIRenderer {
         self.dispose_prepared_subtree(host);
     }
 
+    /// Queue a subtree that has already been detached from the logical and
+    /// native parent trees for disposal at the mutation-batch boundary.
+    ///
+    /// ArkUI may keep transient references to removed FrameNodes while a
+    /// child-list patch is in progress. Releasing those nodes synchronously
+    /// from `replace_node_with` or `remove_node` can therefore invalidate
+    /// native reconciliation state that is still on the stack.
+    fn retire_subtree(&mut self, host: HostId) {
+        debug_assert!(
+            self.hosts[host].parent.is_none(),
+            "only detached subtrees can be retired"
+        );
+        debug_assert!(
+            !self.pending_subtree_disposals.contains(&host),
+            "a subtree can only be retired once"
+        );
+        self.pending_subtree_disposals.push(host);
+    }
+
+    fn dispose_retired_subtrees(&mut self) {
+        let pending = std::mem::take(&mut self.pending_subtree_disposals);
+        for host in pending {
+            self.dispose_subtree(host);
+        }
+    }
+
     /// Dispose a subtree after [`Self::prepare_subtree_native_dispose`] has
     /// released every native-dependent integration.
     fn dispose_prepared_subtree(&mut self, host: HostId) {
@@ -1787,7 +1819,7 @@ impl WriteMutations for ArkUIRenderer {
             self.activate_portals_in_subtree(child);
         }
         self.sync_native_children(parent);
-        self.dispose_subtree(target);
+        self.retire_subtree(target);
     }
 
     fn replace_placeholder_with_nodes(&mut self, path: &'static [u8], m: usize) {
@@ -2084,7 +2116,7 @@ impl WriteMutations for ArkUIRenderer {
         self.hosts[parent].children.remove(logical_index);
         self.hosts[host].parent = None;
         self.sync_native_children(parent);
-        self.dispose_subtree(host);
+        self.retire_subtree(host);
     }
 
     fn push_root(&mut self, id: ElementId) {
@@ -2191,6 +2223,7 @@ impl ArkUIRenderer {
     /// deduplicated during mutation writing and consumed exactly once here.
     pub fn finish_mutation_batch(&mut self) {
         self.flush_root_projection();
+        self.dispose_retired_subtrees();
         for host in self.projection.deferred_event_hosts.drain() {
             if self.hosts[host].native_attached {
                 let _ = self.replay_event_listeners_inner(host, true);
@@ -2211,9 +2244,11 @@ impl ArkUIRenderer {
             self.hosts = HostTree::new(NativeHostState::default());
             self.templates.clear();
             self.projection = ProjectionState::default();
+            self.pending_subtree_disposals.clear();
             self.fault = None;
             return Ok(());
         }
+        self.dispose_retired_subtrees();
         // Every native-dependent integration must stop before RootNode
         // destroys the native subtree (or before an embedded root's caller
         // disposes it). This pass is idempotent, so explicit unmount followed
