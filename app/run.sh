@@ -142,7 +142,7 @@ EOF
   fi
   # entry oh-package.json5 的 lib 依赖。
   # @ohos-rs/ability / ability-plugin-webview 走 ohpm 注册表版本
-  # （1.0.0-beta.1，含 ohos.node 插件与 webview 尺寸/父节点扩展）。
+  # （1.0.0-beta.2，含 Ability-session bridge 与 render-owner 生命周期）。
   cat > "$APP/entry/oh-package.json5" <<EOF
 {
   "name": "entry",
@@ -153,8 +153,8 @@ EOF
   "license": "Apache-2.0",
   "dependencies": {
     "lib${CRATE}.so": "file:./src/main/cpp/types/lib${CRATE}",
-    "@ohos-rs/ability": "1.0.0-beta.1",
-    "@ohos-rs/ability-plugin-webview": "1.0.0-beta.1"
+    "@ohos-rs/ability": "1.0.0-beta.2",
+    "@ohos-rs/ability-plugin-webview": "1.0.0-beta.2"
   }
 }
 EOF

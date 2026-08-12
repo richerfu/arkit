@@ -9,9 +9,22 @@ export interface AbilityInitContext {
 }
 
 export interface ApplicationLifecycle {
+  bridgePlugins: Array<BridgePluginDeclaration>
   environmentCallback: EnvironmentCallback
   windowStageEventCallback: WindowStageEventCallback
   keyboardEventCallback: KeyboardCallback
+}
+
+/**
+  * Structural declaration exported to ArkTS after the native module has configured its Rust
+  * plugin registry. The host uses this to select the matching factory automatically and to
+  * validate the parts of the contract that affect scheduling. Request and response ABI identity
+  * remains pinned by each named N-API type.
+  */
+export interface BridgePluginDeclaration {
+  id: string
+  execution: string
+  requires: Array<string>
 }
 
 export interface EnvironmentCallback {
@@ -31,21 +44,16 @@ export interface NodeAcknowledgement {
 export interface NodeAppendChildRequest {
   parentHandle: number
   childHandle: number
-  /** Window surface key; defaults to `"main"`. Parent and child must share the same window. */
-  windowKey?: string
 }
 
-/** Window-scoped request marker for `create-container`: the response carries the new handle. */
+/** Request marker for `create-container`: the response carries the new handle. */
 export interface NodeCreateContainerRequest {
-  /** Window surface key; defaults to `"main"`. */
-  windowKey?: string
+
 }
 
 /** Detaches a handle-owned node from its parent and disposes it. */
 export interface NodeDisposeRequest {
   handle: number
-  /** Window surface key; defaults to `"main"`. */
-  windowKey?: string
 }
 
 /** Opaque handle of a container `FrameNode` created in ArkTS. */
@@ -53,11 +61,9 @@ export interface NodeHandleResponse {
   handle: number
 }
 
-/** Appends a handle-owned node to the window root. */
+/** Appends a handle-owned node to this module's component root. */
 export interface NodeMountIntoRootRequest {
   handle: number
-  /** Window surface key; defaults to `"main"`. */
-  windowKey?: string
 }
 
 export interface WindowStageEventCallback {
@@ -73,9 +79,17 @@ export interface WindowStageEventCallback {
   onAvoidAreaChange: (arg: object) => void
 }
 
-export declare function destroy(): void
+export declare function disposeAllRenders(): void
 
-export declare function init(context?: AbilityInitContext): ApplicationLifecycle
+/**
+  * r" Releases only the matching Ability-session transport. A stale
+  * r" owner cannot clear endpoints installed for a later session.
+  */
+export declare function disposeBridge(bridgeOwner: string): void
+
+export declare function disposeRender(renderOwner: string): void
+
+export declare function init(bindings: object, bridgeOwner: string, context?: AbilityInitContext): ApplicationLifecycle
 
 export declare function onBackPressIntercept(): boolean
 
@@ -90,4 +104,4 @@ export declare function onBridgeLifecycle(kind: string): void
   */
 export declare function onBridgeSyncEvent(pluginId: string, event: string, requestTypeName: string, responseTypeName: string, value: unknown): unknown
 
-export declare function render(bindings: object, slot: NodeContent): void
+export declare function render(slot: NodeContent, renderOwner: string): void
