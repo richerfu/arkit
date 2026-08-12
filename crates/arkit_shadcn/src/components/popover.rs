@@ -4,9 +4,9 @@
 //! Migrated from the legacy Elm builder API. The trigger toggles the open
 //! state (click mode). The panel renders through a root-projected portal so it
 //! is not clipped by the trigger's parent layout. Panel styling preserved: default
-//! width `288` (Tailwind `w-72`), `spacing::LG` padding, `md` radius, 1px
-//! border, `popover`/`border` tokens, small outer shadow, start-aligned
-//! content.
+//! width `288` (Tailwind `w-72`), configurable padding that defaults to
+//! `spacing::LG`, `md` radius, 1px border, `popover`/`border` tokens, small
+//! outer shadow, and start-aligned content.
 
 use super::floating_layer::{
     FloatingAlign, FloatingPanelPlacement, FloatingSide, FLOATING_CAPTURE_COLOR,
@@ -27,6 +27,7 @@ pub fn Popover(
     on_close: Option<EventHandler<()>>,
     on_open_change: Option<EventHandler<bool>>,
     width: Option<f32>,
+    padding: Option<f32>,
     children: Element,
 ) -> Element {
     let theme = use_theme();
@@ -44,6 +45,7 @@ pub fn Popover(
     };
     let controlled = open.is_some();
     let panel_width = width.unwrap_or(POPOVER_DEFAULT_WIDTH);
+    let panel_padding = padding.unwrap_or(spacing::LG);
 
     let set_open = EventHandler::new(move |next: bool| {
         if !controlled {
@@ -79,7 +81,14 @@ pub fn Popover(
         if current {
             arkit_hooks::Portal {
                 layer: arkit_hooks::OverlayLayer::Floating,
-                {popover_overlay_content(theme, panel_width, placement, dismiss, children)}
+                {popover_overlay_content(
+                    theme,
+                    panel_width,
+                    panel_padding,
+                    placement,
+                    dismiss,
+                    children,
+                )}
             }
         }
     }
@@ -88,6 +97,7 @@ pub fn Popover(
 fn popover_overlay_content(
     theme: Theme,
     panel_width: f32,
+    panel_padding: f32,
     placement: FloatingPanelPlacement,
     on_dismiss: EventHandler<()>,
     children: Element,
@@ -106,7 +116,7 @@ fn popover_overlay_content(
                 width: panel_width,
                 onclick: move |evt| evt.stop_propagation(),
                 align_items: "start",
-                padding: spacing::LG,
+                padding: panel_padding,
                 border_radius: theme.radii.md,
                 border_width: 1.0,
                 border_color: theme.colors.border,
