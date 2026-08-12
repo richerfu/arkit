@@ -260,6 +260,14 @@ pub struct ArkUIRenderer {
     /// child-list patch, so destroying a removed `FrameNode` in the middle of
     /// reconciliation is unsafe.
     pending_subtree_disposals: Vec<HostId>,
+    /// Detached native subtrees isolated from the mounted projection.
+    ///
+    /// Some platform builds keep `FrameNode` and layout references beyond the
+    /// removal callback, while `disposeNode` invalidates the opaque handle
+    /// immediately. Keeping the detached root alive avoids a later-vsync use
+    /// after free. High-frequency UI branches should remain mounted and switch
+    /// visibility so this exceptional retirement list stays small.
+    retired_native_subtrees: Vec<NodeRef>,
     /// First structural native failure. Once set, projection is no longer
     /// trustworthy and the owning runtime must stop after the mutation batch.
     fault: Option<RendererFault>,
@@ -483,6 +491,7 @@ impl ArkUIRenderer {
             sink: None,
             projection: ProjectionState::default(),
             pending_subtree_disposals: Vec::new(),
+            retired_native_subtrees: Vec::new(),
             fault: None,
             inert: false,
             appear_replay_handler: None,
@@ -1402,8 +1411,8 @@ impl ArkUIRenderer {
         }
     }
 
-    /// Clear renderer-owned state for a subtree whose native root has already
-    /// been disposed by an ancestor's `disposeNode`.
+    /// Clear renderer-owned state for a subtree whose native roots are already
+    /// retained by an isolated ancestor.
     fn clear_subtree_state(&mut self, host: HostId) {
         let children = self.hosts[host].children.clone();
         for c in children {
@@ -1440,12 +1449,7 @@ impl ArkUIRenderer {
         self.release_host(host);
     }
 
-    /// Dispose a host subtree and clear renderer state.
-    ///
-    /// ArkUI `disposeNode` owns the native subtree. Once a host has a native
-    /// root, disposing descendants separately can double free raw handles,
-    /// especially for composite projections such as `button` where the
-    /// renderer owns an internal content Row not represented in the HostTree.
+    /// Retire a host subtree and clear renderer state.
     fn dispose_subtree(&mut self, host: HostId) {
         let removed_active_portal = self.deactivate_portals_in_subtree(host);
         let portal_branches = self.detach_portal_branches(host);
@@ -1480,39 +1484,37 @@ impl ArkUIRenderer {
         self.pending_subtree_disposals.push(host);
     }
 
-    fn dispose_retired_subtrees(&mut self) {
+    /// Finalize subtrees retired by a completed mutation batch.
+    ///
+    /// The runtime calls this from a later OpenHarmony event-loop turn. ArkUI
+    /// can retain transient FrameNode references until the native callback
+    /// that triggered reconciliation has returned, so disposal must not run
+    /// from [`Self::finish_mutation_batch`].
+    pub fn dispose_retired_subtrees(&mut self) {
         let pending = std::mem::take(&mut self.pending_subtree_disposals);
         for host in pending {
             self.dispose_subtree(host);
         }
     }
 
-    /// Dispose a subtree after [`Self::prepare_subtree_native_dispose`] has
+    /// Whether a later event-loop turn must finish native subtree disposal.
+    pub fn has_retired_subtrees(&self) -> bool {
+        !self.pending_subtree_disposals.is_empty()
+    }
+
+    /// Isolate a subtree after [`Self::prepare_subtree_native_dispose`] has
     /// released every native-dependent integration.
     fn dispose_prepared_subtree(&mut self, host: HostId) {
         if let Some(native) = self.hosts[host].native.take() {
-            let result = native.borrow_mut().dispose();
-            let disposed = self
-                .latch_structural("dispose_subtree dispose", result)
-                .is_some();
+            self.retired_native_subtrees.push(native);
             let children = self.hosts[host].children.clone();
-            for c in children {
-                self.clear_subtree_state(c);
-            }
-            if !disposed {
-                // `disposeNode` failed: the native subtree still owns its
-                // handles. Releasing this arena slot would let a later `alloc`
-                // alias it while the ghost native tree stays alive, so pin the
-                // slot instead. The fault has been latched and the owning
-                // runtime stops after this batch.
-                self.hosts[host].children.clear();
-                self.hosts[host].parent = None;
-                return;
+            for child in children {
+                self.clear_subtree_state(child);
             }
         } else {
             let children = self.hosts[host].children.clone();
-            for c in children {
-                self.dispose_prepared_subtree(c);
+            for child in children {
+                self.dispose_prepared_subtree(child);
             }
         }
         self.hosts[host].content_native = None;
@@ -2223,7 +2225,6 @@ impl ArkUIRenderer {
     /// deduplicated during mutation writing and consumed exactly once here.
     pub fn finish_mutation_batch(&mut self) {
         self.flush_root_projection();
-        self.dispose_retired_subtrees();
         for host in self.projection.deferred_event_hosts.drain() {
             if self.hosts[host].native_attached {
                 let _ = self.replay_event_listeners_inner(host, true);
@@ -2245,6 +2246,7 @@ impl ArkUIRenderer {
             self.templates.clear();
             self.projection = ProjectionState::default();
             self.pending_subtree_disposals.clear();
+            self.retired_native_subtrees.clear();
             self.fault = None;
             return Ok(());
         }
