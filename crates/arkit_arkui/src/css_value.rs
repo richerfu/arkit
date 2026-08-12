@@ -227,6 +227,14 @@ pub fn scroll_bar_keyword(s: &str) -> Option<i32> {
     }
 }
 
+pub fn scroll_direction_keyword(s: &str) -> Option<i32> {
+    match enum_token(s).as_str() {
+        "vertical" | "y" => Some(0),
+        "horizontal" | "x" => Some(1),
+        _ => None,
+    }
+}
+
 pub fn text_decoration_keyword(s: &str) -> Option<i32> {
     match enum_token(s).as_str() {
         "none" => Some(0),
@@ -494,6 +502,9 @@ mod tests {
         assert_eq!(map_font_weight_to_arkui(700), 6);
         assert_eq!(object_fit_value("cover"), Some(1));
         assert_eq!(scroll_bar_keyword("off"), Some(0));
+        assert_eq!(scroll_direction_keyword("vertical"), Some(0));
+        assert_eq!(scroll_direction_keyword("horizontal"), Some(1));
+        assert_eq!(scroll_direction_keyword("both"), None);
         assert_eq!(border_style_keyword("dashed"), Some(1));
     }
 

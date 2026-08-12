@@ -145,6 +145,12 @@ pub struct ButtonProps {
     pub variant: ButtonVariant,
     #[props(default)]
     pub size: ButtonSize,
+    /// Optional exact height override for compact host-app surfaces.
+    #[props(default)]
+    pub height: Option<f32>,
+    /// Optional exact corner radius override.
+    #[props(default)]
+    pub border_radius: Option<f32>,
     pub disabled: Option<bool>,
     /// CSS width (`"100%"`, `"48%"`, `"120"`). When unset, size defaults apply.
     pub width: Option<String>,
@@ -175,7 +181,7 @@ pub fn Button(props: ButtonProps) -> Element {
             button_type: "normal",
             focusable: false,
             focus_on_touch: false,
-            height: ss.height,
+            height: props.height.unwrap_or(ss.height),
             width: if let Some(w) = props.width {
                 w
             } else if let Some(w) = ss.width {
@@ -193,7 +199,7 @@ pub fn Button(props: ButtonProps) -> Element {
             border_style: ARKUI_BORDER_STYLE_SOLID,
             border_width: vs.border_width,
             border_color: vs.border_color,
-            border_radius: theme.radii.md,
+            border_radius: props.border_radius.unwrap_or(theme.radii.md),
             clip: true,
             alignment: "center",
             shadow: if shadow { "sm" },
