@@ -7,11 +7,11 @@ use syn::{parse_macro_input, ItemFn};
 
 /// Mark a function as the application entry point.
 ///
-/// Generates OpenHarmony NAPI bindings (init / render / destroy lifecycle,
-/// plus the pluginized bridge event ports) that call the entry function. The
-/// entry function returns `Element` and either takes no arguments, or a
-/// single [`OpenHarmonyApp`] handle received at mount time (see "Custom
-/// bridge plugins" below).
+/// Generates OpenHarmony NAPI bindings (Ability-session init/dispose and
+/// component render/dispose lifecycle, plus the pluginized bridge event
+/// ports) that call the entry function. The entry function returns `Element`
+/// and either takes no arguments, or a single [`OpenHarmonyApp`] handle
+/// received at mount time (see "Custom bridge plugins" below).
 ///
 /// Business content fills the mounted surface edge-to-edge by default.
 /// Safe-area avoidance is opt-in: read the insets with [`use_safe_area`]
@@ -22,17 +22,20 @@ use syn::{parse_macro_input, ItemFn};
 /// The generated module follows the `openharmony-ability` mainline bridge
 /// contract:
 ///
-/// - `init` installs the ability init context, injects framework-owned bridge
-///   plugins ([`arkit_runtime::inject_plugins`], e.g. the `ohos.webview`
-///   facade when the `webview` feature is enabled), registers the application
-///   plugins declared with `plugins = [...]`, and creates the lifecycle
-///   handle. `onBridgeSyncEvent` / `onBridgeLifecycle` are exported so the
-///   ArkTS host can deliver main-thread plugin events and UI-context
-///   readiness transitions into the Rust plugin registry.
-/// - `render` calls `openharmony_ability::render` first: it installs the
-///   bridge bindings (`bridgeInvoke`/`bridgeInvokeSync`/`bridgeDispatch`) and
-///   mounts the native XComponent. Only then is the dioxus runtime mounted, so
-///   plugin clients resolve from the first render onward.
+/// - `init` installs the Ability-session bridge bindings
+///   (`bridgeInvoke`/`bridgeInvokeSync`/`bridgeDispatch`) and init context,
+///   injects framework-owned bridge plugins
+///   ([`arkit_runtime::inject_plugins`], e.g. the `ohos.webview` facade when
+///   the `webview` feature is enabled), registers the application plugins
+///   declared with `plugins = [...]`, and creates the lifecycle handle.
+///   Process-wide plugin registration runs only once even if OpenHarmony
+///   recreates the Ability while the native module stays loaded.
+/// - `render` mounts the native XComponent and then the dioxus runtime under a
+///   render-owner token. `disposeRender` and `disposeAllRenders` unmount both
+///   trees without releasing the independent Ability-session bridge.
+/// - `onBridgeSyncEvent` / `onBridgeLifecycle` are exported so the ArkTS host
+///   can deliver main-thread plugin events and UI-context readiness
+///   transitions into the Rust plugin registry.
 ///
 /// ## Custom bridge plugins
 ///
@@ -46,8 +49,8 @@ use syn::{parse_macro_input, ItemFn};
 ///   cannot be referenced; unit types and constructor calls both work.
 ///   Registration failures are logged, not fatal.
 /// - App handle argument: `fn app(handle: OpenHarmonyApp) -> Element`.
-///   The handle is a clone of the shared ability and is passed at first
-///   render (after the bridge bindings are installed), so
+///   The handle is a clone of the shared ability and is passed at render time
+///   (after the Ability-session bridge is installed), so
 ///   `handle.register_plugin(...)` may run arbitrary setup. Late registration
 ///   is safe: the registry replays the bounded lifecycle history to plugins
 ///   whose `REQUIRED_CONTEXTS` are already satisfied.
@@ -105,8 +108,8 @@ pub fn entry(attr: TokenStream, item: TokenStream) -> TokenStream {
     let entry_adapter = if has_app_arg {
         quote! {
             // One-argument entry roots receive the shared app handle at
-            // mount time (inside the `render` NAPI call, after the bridge
-            // bindings are installed). Registering plugins here is safe:
+            // mount time (inside the `render` NAPI call, after the
+            // Ability-session bridge is installed). Registering plugins here is safe:
             // the registry replays the bounded lifecycle history to plugins
             // whose required contexts are already ready.
             fn __arkit_entry_root() -> #framework::Element {
@@ -133,14 +136,69 @@ pub fn entry(attr: TokenStream, item: TokenStream) -> TokenStream {
 
             static APP: LazyLock<#framework::openharmony_ability::OpenHarmonyApp> =
                 LazyLock::new(#framework::openharmony_ability::OpenHarmonyApp::new);
+            static APP_CONFIGURED: std::sync::OnceLock<()> = std::sync::OnceLock::new();
+
+            struct BridgeSessionInitGuard {
+                owner: Option<String>,
+            }
+
+            impl BridgeSessionInitGuard {
+                fn new(owner: String) -> Self {
+                    Self { owner: Some(owner) }
+                }
+
+                fn disarm(&mut self) {
+                    self.owner = None;
+                }
+            }
+
+            impl Drop for BridgeSessionInitGuard {
+                fn drop(&mut self) {
+                    if let Some(owner) = self.owner.take() {
+                        (*APP).release_bridge_session(&owner);
+                    }
+                }
+            }
 
             thread_local! {
                 static RUNTIME: RefCell<Option<#framework::ArkRuntime>> = RefCell::new(None);
                 // Renderer-owned root created by `openharmony_ability::render`
-                // (native XComponent + bridge bindings). Kept alive for the
-                // module lifetime; dropping it would unmount the XComponent.
-                static ROOT_NODE: RefCell<Option<#framework::openharmony_ability::arkui::RootNode>> =
+                // (native XComponent). The owner token makes delayed component
+                // cleanup unable to tear down a replacement render.
+                static ROOT_NODE: RefCell<Option<(String, #framework::openharmony_ability::arkui::RootNode)>> =
                     RefCell::new(None);
+            }
+
+            fn dispose_owned_render(expected_owner: Option<&str>) -> #framework::napi_ohos::Result<()> {
+                let owns_render = ROOT_NODE.with(|root_node| {
+                    let root_node = root_node.borrow();
+                    match (expected_owner, root_node.as_ref()) {
+                        (Some(expected), Some((owner, _))) => owner == expected,
+                        (Some(_), None) => false,
+                        (None, Some(_)) => true,
+                        (None, None) => false,
+                    }
+                });
+                if !owns_render {
+                    return Ok(());
+                }
+
+                // The dioxus tree owns nodes in the shared slot, so unmount it
+                // before dropping the XComponent root. Always release the
+                // render owner even when renderer cleanup reports an error.
+                let unmount_result = RUNTIME.with(|state| {
+                    if let Some(runtime) = state.borrow_mut().take() {
+                        runtime.unmount()
+                    } else {
+                        Ok(())
+                    }
+                });
+                let root = ROOT_NODE.with(|root_node| root_node.borrow_mut().take());
+                if let Some((owner, root)) = root {
+                    drop(root);
+                    (*APP).release_render(&owner);
+                }
+                unmount_result
             }
 
             #entry_adapter
@@ -153,70 +211,102 @@ pub fn entry(attr: TokenStream, item: TokenStream) -> TokenStream {
             #[#framework::napi_derive_ohos::napi]
             pub fn init<'a>(
                 env: &'a #framework::napi_ohos::Env,
+                bindings: #framework::napi_ohos::bindgen_prelude::ObjectRef,
+                bridge_owner: String,
                 #[napi(ts_arg_type = "AbilityInitContext")]
                 context: Option<#framework::napi_ohos::bindgen_prelude::Object<'a>>,
             ) -> #framework::napi_ohos::Result<#framework::openharmony_ability::ApplicationLifecycle<'a>> {
                 let init_context =
                     #framework::openharmony_ability::AbilityInitContext::from_object(context.as_ref())?;
+                #framework::openharmony_ability::attach_bridge_session(
+                    env,
+                    bindings,
+                    &bridge_owner,
+                    &(*APP),
+                )?;
+                let mut bridge_guard = BridgeSessionInitGuard::new(bridge_owner);
                 (*APP).set_init_context(init_context);
-                // Framework-owned plugin injection (e.g. the `ohos.webview`
-                // bridge facade under the `webview` feature). Runs during the
-                // ability-init stage, before any ArkTS plugin event is
-                // delivered to the registry.
-                #framework::arkit_runtime::inject_plugins(&(*APP));
-                // Application-owned bridge plugins declared with
-                // `#[entry(plugins = [...])]` — after the framework-owned
-                // set, still before any plugin event reaches the registry.
-                #(#plugin_registrations)*
-                #framework::openharmony_ability::create_lifecycle_handle(env, (*APP).clone())
+                // The native module can outlive an Ability instance. Configure
+                // its process-wide registry once, while refreshing the bridge,
+                // init context, and lifecycle handle for every new session.
+                APP_CONFIGURED.get_or_init(|| {
+                    #framework::arkit_runtime::inject_plugins(&(*APP));
+                    #(#plugin_registrations)*
+                });
+                let lifecycle =
+                    #framework::openharmony_ability::create_lifecycle_handle(env, (*APP).clone())?;
+                bridge_guard.disarm();
+                Ok(lifecycle)
+            }
+
+            /// Releases only the matching Ability-session transport. A stale
+            /// owner cannot clear endpoints installed for a later session.
+            #[#framework::napi_derive_ohos::napi]
+            pub fn dispose_bridge(bridge_owner: String) {
+                (*APP).release_bridge_session(&bridge_owner);
             }
 
             #[#framework::napi_derive_ohos::napi]
             pub fn render<'a>(
                 env: &'a #framework::napi_ohos::Env,
-                bindings: #framework::napi_ohos::bindgen_prelude::ObjectRef,
                 #[napi(ts_arg_type = "NodeContent")] slot: #framework::ohos_arkui_binding::common::handle::ArkUIHandle,
+                render_owner: String,
             ) -> #framework::napi_ohos::Result<()> {
+                if render_owner.is_empty() {
+                    return Err(#framework::napi_ohos::Error::from_reason(
+                        "renderOwner must not be empty",
+                    ));
+                }
                 RUNTIME.with(|state| -> #framework::napi_ohos::Result<()> {
-                    if state.borrow().is_some() {
-                        // Already mounted — the OHOS entrypoint only mounts once.
-                        return Ok(());
+                    if state.borrow().is_some()
+                        || ROOT_NODE.with(|root_node| root_node.borrow().is_some())
+                    {
+                        return Err(#framework::napi_ohos::Error::from_reason(
+                            "This native module is already rendered by another DefaultXComponent; use a distinct native module for every active component",
+                        ));
                     }
-                    // Pluginized bridge initialization: installs the bridge
-                    // bindings and mounts the native XComponent before the
-                    // dioxus tree is built, so plugin clients resolve from the
-                    // first render onward.
+                    // The bridge session already exists from `init`; rendering
+                    // owns only the XComponent and dioxus trees.
                     let root = #framework::openharmony_ability::render(
                         env,
-                        bindings,
                         slot,
+                        render_owner.clone(),
                         (*APP).clone(),
                     )?;
-                    ROOT_NODE.with(|root_node| root_node.replace(Some(root)));
 
                     // `#root_fn` is the user's root component `fn() -> Element`,
                     // or the generated adapter when the entry fn takes the
                     // app handle. The runtime creates a VirtualDom from it and
                     // rebuilds into an ArkUIRenderer mounted on `slot`.
-                    let runtime = #framework::mount_entry_with_policy(
+                    let runtime = match #framework::mount_entry_with_policy(
                         slot,
                         (*APP).clone(),
                         #root_fn,
                         #safe_area_policy,
-                    )?;
+                    ) {
+                        Ok(runtime) => runtime,
+                        Err(error) => {
+                            drop(root);
+                            (*APP).release_render(&render_owner);
+                            return Err(error);
+                        }
+                    };
+                    ROOT_NODE.with(|root_node| {
+                        root_node.replace(Some((render_owner, root)));
+                    });
                     state.replace(Some(runtime));
                     Ok(())
                 })
             }
 
             #[#framework::napi_derive_ohos::napi]
-            pub fn destroy() -> #framework::napi_ohos::Result<()> {
-                RUNTIME.with(|state| {
-                    if let Some(runtime) = state.borrow_mut().take() {
-                        runtime.unmount()?;
-                    }
-                    Ok(())
-                })
+            pub fn dispose_render(render_owner: String) -> #framework::napi_ohos::Result<()> {
+                dispose_owned_render(Some(&render_owner))
+            }
+
+            #[#framework::napi_derive_ohos::napi]
+            pub fn dispose_all_renders() -> #framework::napi_ohos::Result<()> {
+                dispose_owned_render(None)
             }
 
             /// Synchronous ArkTS platform callback -> Rust plugin decision port.

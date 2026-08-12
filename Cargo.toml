@@ -146,8 +146,8 @@ tree-sitter-c = "0.23"
 # Pluginized mainline with the normalized node surface (#70) and transparent
 # native XComponent background (#73). Published on crates.io since 1.0.0-beta.0.
 # Keep both packages on the same version.
-openharmony-ability = "1.0.0-beta.0"
-openharmony-ability-plugin-webview = "1.0.0-beta.0"
+openharmony-ability = "1.0.0-beta.1"
+openharmony-ability-plugin-webview = "1.0.0-beta.1"
 
 # Published on crates.io. The wrapper user_data ownership fixes previously
 # pinned to fix/arkui-wrapper-lifecycle-023 are integrated upstream; declare

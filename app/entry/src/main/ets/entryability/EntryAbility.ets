@@ -1,11 +1,10 @@
 import { LazyPlugin, NativeAbility } from "@ohos-rs/ability";
 import { WebviewPlugin } from "@ohos-rs/ability-plugin-webview";
-import Want from "@ohos.app.ability.Want";
-import { AbilityConstant, abilityAccessCtrl, Permissions } from "@kit.AbilityKit";
+import { abilityAccessCtrl, Permissions } from "@kit.AbilityKit";
 import window from "@ohos.window";
 
 // moduleName 由 run.sh 按当前部署的 example 写入（对应 lib<crate>.so）。
-// NativeAbility 据此 Loadable.load 加载并调 init/render/destroy。
+// NativeAbility 据此加载模块并管理 bridge session 与 render owner 生命周期。
 export default class EntryAbility extends NativeAbility {
   public moduleName: string = "shadcn_showcase";
   public defaultPage: boolean = false;
@@ -15,13 +14,8 @@ export default class EntryAbility extends NativeAbility {
   // bridge 调用时被使用；未启用 feature 的应用不受影响。
   public bridgePlugins = [new LazyPlugin(() => new WebviewPlugin())];
 
-  async onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): Promise<void> {
-    super.onCreate(want, launchParam);
-  }
-
-  async onWindowStageCreate(windowStage: window.WindowStage): Promise<void> {
+  protected async loadWindowStageContent(windowStage: window.WindowStage): Promise<void> {
     try {
-      super.onWindowStageCreate(windowStage);
       if (this.moduleName === "camera_example") {
         const cameraPermission: Permissions = "ohos.permission.CAMERA";
         await abilityAccessCtrl.createAtManager()

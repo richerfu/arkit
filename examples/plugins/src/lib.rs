@@ -9,7 +9,7 @@
 //!    Items resolve at module scope, so unit types and constructor calls
 //!    both work; registration failures are logged, not fatal.
 //! 2. App handle argument — the entry fn receives an `OpenHarmonyApp`
-//!    clone at first render (after the bridge bindings are installed), so
+//!    clone at render time (after the Ability-session bridge is installed), so
 //!    `handle.register_plugin(...)` can run arbitrary setup.
 //!
 //! The ArkTS counterpart of a plugin (when one exists) is installed in the
@@ -59,8 +59,8 @@ impl BridgePlugin for ManualBridgePlugin {
 
 #[entry(plugins = [DeclarativeBridgePlugin])]
 fn app(handle: OpenHarmonyApp) -> Element {
-    // Manual registration: runs inside the first dioxus render, after
-    // `openharmony_ability::render` installed the bridge bindings. Late
+    // Manual registration: runs inside the first dioxus render, after the
+    // generated init installed the Ability-session bridge. Late
     // registration is safe — the registry replays the bounded lifecycle
     // history to plugins whose `REQUIRED_CONTEXTS` are satisfied.
     match handle.register_plugin(ManualBridgePlugin {

@@ -3230,9 +3230,9 @@ checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
 
 [[package]]
 name = "openharmony-ability"
-version = "1.0.0-beta.0"
+version = "1.0.0-beta.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b018deddd08232cd9dbafbe694613a22bb3e5e2a2b6b1c4cefec9aba2e962fe"
+checksum = "77ae98a8153699a376662976b17ae9c14df7325739c4dd58ec08c21ef0191a16"
 dependencies = [
  "futures-channel",
  "napi-derive-ohos",
@@ -3245,9 +3245,9 @@ dependencies = [
 
 [[package]]
 name = "openharmony-ability-plugin-webview"
-version = "1.0.0-beta.0"
+version = "1.0.0-beta.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "948ef3642b9b0c9b2279a4ffe96170aaa606d9b586451cc7fc281a2c860aa9a4"
+checksum = "62fc5dfff20c28fd0d7320951b31626c0581e360317bcb875b0ea3234846b4ab"
 dependencies = [
  "http",
  "napi-derive-ohos",

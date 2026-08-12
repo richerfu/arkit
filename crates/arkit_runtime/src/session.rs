@@ -36,8 +36,8 @@ pub(crate) struct RuntimeSessionState {
     back_handlers: RefCell<Vec<(u64, BackPressHandler)>>,
     embedded_runtimes: RefCell<Vec<(u64, Weak<RefCell<EmbeddedRuntimeInner>>)>>,
     // The shared native ability backing this root. Pluginized capabilities
-    // (e.g. the `webview` bridge plugin) resolve their clients through it
-    // after `openharmony_ability::render` installs the bridge bindings.
+    // (e.g. the `webview` bridge plugin) resolve their clients through the
+    // Ability-session bridge installed by the generated `#[entry]` init.
     #[cfg(feature = "webview")]
     app: OpenHarmonyApp,
     #[cfg(feature = "webview")]
@@ -126,9 +126,9 @@ impl RuntimeHandle {
 
     /// Resolve the plugin-backed WebView client for this root.
     ///
-    /// The client is created lazily from the shared ability and cached; it
-    /// becomes available once `openharmony_ability::render` installs the
-    /// bridge bindings (that is, from the first dioxus render onward). The
+    /// The client is created lazily from the shared ability and cached. Its
+    /// bridge transport is installed during Ability init, before this dioxus
+    /// root is rendered. The
     /// `ohos.webview` plugin facade itself is registered by the `#[entry]`
     /// generated init via [`inject_webview_plugins`](crate::webview::inject_webview_plugins),
     /// so integrators only need the `webview` feature.
@@ -148,7 +148,7 @@ impl RuntimeHandle {
     /// (`create_container`) and composes handle-owned FrameNodes; WebView
     /// surfaces can be adopted under a container through
     /// [`WebviewCreateRequest::parent_node`]. Like [`Self::webview`], it is
-    /// created lazily once the bridge bindings are installed.
+    /// created lazily over the Ability-session bridge.
     #[cfg(feature = "webview")]
     pub fn node(&self) -> napi_ohos::Result<openharmony_ability::NodeSurface> {
         if let Some(surface) = self.state.node_surface.borrow().as_ref() {
