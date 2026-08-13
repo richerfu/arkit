@@ -9,6 +9,7 @@
 use super::floating_layer::{
     trigger_width_vp, FloatingAlign, FloatingPanelPlacement, FloatingSide, FLOATING_CAPTURE_COLOR,
 };
+use super::motion::{OverlayPresence, FLOATING_DISTANCE, FLOATING_ENTER_MS, FLOATING_EXIT_MS};
 use crate::{i18n::use_component_i18n, theme::*};
 use arkit_prelude::*;
 
@@ -132,21 +133,25 @@ pub fn Select(
                 {crate::icon::icon_placeholder("chevron-down", 16.0, colors.muted_foreground)}
             }
         }
-        if current_open {
-            arkit_hooks::Portal {
-                layer: arkit_hooks::OverlayLayer::Floating,
-                {select_overlay_content(SelectOverlayContent {
-                    theme,
-                    i18n,
-                    panel_width,
-                    placement,
-                    options,
-                    label,
-                    selected: current_selected,
-                    set_selected,
-                    on_dismiss: dismiss,
-                })}
-            }
+        OverlayPresence {
+            open: current_open,
+            preset: Some(arkit_animation::TransitionPreset::SlideUp),
+            duration_ms: Some(FLOATING_ENTER_MS),
+            exit_duration_ms: Some(FLOATING_EXIT_MS),
+            distance: Some(FLOATING_DISTANCE),
+            fill: Some(true),
+            layer: Some(arkit_hooks::OverlayLayer::Floating),
+            {select_overlay_content(SelectOverlayContent {
+                theme,
+                i18n,
+                panel_width,
+                placement,
+                options,
+                label,
+                selected: current_selected,
+                set_selected,
+                on_dismiss: dismiss,
+            })}
         }
     }
 }

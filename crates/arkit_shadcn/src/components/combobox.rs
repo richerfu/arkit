@@ -5,6 +5,7 @@
 //! icon, the selected value (or placeholder), and a chevrons-up-down icon; the
 //! dropdown lists options with a check mark on the active one.
 
+use super::motion::ExpandPresence;
 use crate::{i18n::use_component_i18n, theme::*};
 use arkit_prelude::*;
 
@@ -90,7 +91,8 @@ pub fn Combobox(
                 }
                 {crate::icon::icon_placeholder("chevrons-up-down", 16.0, colors.muted_foreground)}
             }
-            if current_open {
+            ExpandPresence {
+                open: current_open,
                 column {
                     width: panel_width,
                     background_color: colors.popover,

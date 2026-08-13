@@ -4,6 +4,7 @@
 //! The panel is declared through a root-projected portal, preserving its
 //! component context while keeping it out of page layout.
 
+use super::motion::{AnimatedModal, OVERLAY_ENTER_MS, OVERLAY_EXIT_MS};
 use super::ARKUI_BORDER_STYLE_SOLID;
 use crate::icon::icon_placeholder;
 use crate::theme::*;
@@ -44,18 +45,17 @@ pub(crate) fn DialogCloseProvider(close: EventHandler<()>, children: Element) ->
 
 pub(crate) fn dialog_portal(open: bool, panel: Element, on_dismiss: EventHandler<()>) -> Element {
     rsx! {
-        arkit_hooks::ModalPortal {
+        AnimatedModal {
             open,
             presentation: arkit_hooks::ModalPresentation::CenteredDialog,
             dismiss_on_backdrop: true,
             backdrop_color: OVERLAY_BACKDROP_COLOR,
             viewport_inset: DIALOG_VIEWPORT_INSET,
             on_dismiss,
-            arkit_animation::MountTransition {
-                preset: Some(arkit_animation::TransitionPreset::Fade),
-                duration_ms: Some(160),
-                {panel}
-            }
+            preset: Some(arkit_animation::TransitionPreset::ZoomIn),
+            duration_ms: Some(OVERLAY_ENTER_MS),
+            exit_duration_ms: Some(OVERLAY_EXIT_MS),
+            {panel}
         }
     }
 }

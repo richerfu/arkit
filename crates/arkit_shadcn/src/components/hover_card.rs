@@ -9,6 +9,7 @@
 //! small outer shadow, start-aligned content. Anchored below the trigger.
 
 use super::floating_layer::{FloatingAlign, FloatingPanelPlacement, FloatingSide};
+use super::motion::{OverlayPresence, FLOATING_ENTER_MS, FLOATING_EXIT_MS};
 use crate::theme::*;
 use arkit_prelude::*;
 use dioxus_core_macro::component;
@@ -92,11 +93,14 @@ pub fn HoverCard(
             },
             {trigger}
         }
-        if current {
-            arkit_hooks::Portal {
-                layer: arkit_hooks::OverlayLayer::Floating,
-                {hover_card_overlay_content(theme, panel_width, placement, children)}
-            }
+        OverlayPresence {
+            open: current,
+            preset: Some(arkit_animation::TransitionPreset::Fade),
+            duration_ms: Some(FLOATING_ENTER_MS),
+            exit_duration_ms: Some(FLOATING_EXIT_MS),
+            fill: Some(true),
+            layer: Some(arkit_hooks::OverlayLayer::Floating),
+            {hover_card_overlay_content(theme, panel_width, placement, children)}
         }
     }
 }

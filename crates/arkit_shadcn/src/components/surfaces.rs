@@ -10,9 +10,16 @@
 use std::time::Duration;
 use std::{cell::RefCell, fmt, rc::Rc};
 
+use super::motion::{TOAST_DISTANCE, TOAST_ENTER_MS, TOAST_EXIT_MS, TOAST_STACK_MS};
 use super::{Spinner, ARKUI_BORDER_STYLE_SOLID};
 use crate::icon::icon_placeholder;
 use crate::theme::*;
+use arkit_animation::{
+    use_animate_presence, use_animation, use_animation_target, Animation, AnimationSelector,
+    BuiltinEase, EaseDirection, Easing, Length, PresenceKey, PresenceMode, PresencePhase,
+    PresenceTransition, TargetName, TimeSpan, Timeline, TimelinePosition, TransitionPreset,
+    OPACITY, POSITION_X, POSITION_Y, WIDTH,
+};
 use arkit_prelude::*;
 
 use super::floating_layer::{ALIGN_TOP, HIT_TEST_DEFAULT, HIT_TEST_NONE};
@@ -486,9 +493,9 @@ pub fn Toast(props: ToastProps) -> Element {
             DEFAULT_MIN_HEIGHT
         });
     let show_shadow = props.style.shadow.unwrap_or(true);
-    let show_description = !is_minimal && !stacked_back && props.description.is_some();
-    let show_action = !is_minimal && !stacked_back && props.action_label.is_some();
-    let show_close = !is_minimal && !stacked_back && props.dismissible;
+    let show_description = !is_minimal && props.description.is_some();
+    let show_action = !is_minimal && props.action_label.is_some();
+    let show_close = !is_minimal && props.dismissible;
     let icon_size = if is_minimal {
         MINIMAL_ICON_SIZE
     } else {
@@ -569,26 +576,6 @@ pub fn Toast(props: ToastProps) -> Element {
         };
     }
 
-    // Collapsed Sonner back cards are pure chrome peeks — same surface as the
-    // front toast, fixed to front height, no readable content (official sonner
-    // sets content opacity to 0 and height to --front-toast-height).
-    if stacked_back {
-        return rsx! {
-            row {
-                width: "100%",
-                height: min_height,
-                background_color: palette.background,
-                border_width: 1.0,
-                border_color: palette.border,
-                border_style: ARKUI_BORDER_STYLE_SOLID,
-                border_radius,
-                shadow: if show_shadow { "sm" },
-                clip: true,
-                hit_test_behavior: "none",
-            }
-        };
-    }
-
     rsx! {
         row {
             width: "100%",
@@ -609,7 +596,7 @@ pub fn Toast(props: ToastProps) -> Element {
             // The Sonner layer is intentionally pass-through. Re-enable hit
             // testing on the card itself so ArkUI delivers touch sequences to
             // the swipe recognizer while the empty overlay remains inert.
-            hit_test_behavior: "default",
+            hit_test_behavior: if stacked_back { "none" } else { "default" },
             on_touch: move |event| {
                 handle_toast_touch(
                     event,
@@ -621,6 +608,8 @@ pub fn Toast(props: ToastProps) -> Element {
                     on_dismiss,
                 );
             },
+            SonnerPeekContent {
+                visible: !stacked_back,
             if props.variant == ToastVariant::Loading {
                 row {
                     width: 28.0,
@@ -727,6 +716,7 @@ pub fn Toast(props: ToastProps) -> Element {
                     {icon_placeholder("x", 16.0, palette.description)}
                 }
             }
+            }
         }
     }
 }
@@ -798,19 +788,54 @@ pub fn Sonner(props: SonnerProps) -> Element {
         }
     });
 
-    let open = !items.is_empty();
+    let presence = use_animate_presence(
+        PresenceMode::PopLayout,
+        items.iter().map(|toast| {
+            (
+                PresenceKey::new(format!("{}:{}", toast.id, toast.revision)),
+                toast.clone(),
+            )
+        }),
+    );
+    let presence_entries = presence.entries();
+    let painted = presence_entries
+        .iter()
+        .map(|entry| ToastPresenceItem {
+            toast: entry.value.clone(),
+            key: entry.key.as_str().to_string(),
+            phase: entry.phase,
+            popped: entry.popped_from_layout,
+        })
+        .collect::<Vec<_>>();
+    let on_presence_terminal = {
+        let presence = presence.clone();
+        EventHandler::new(move |(key, phase): (String, PresencePhase)| {
+            let key = PresenceKey::new(key);
+            match phase {
+                PresencePhase::Entering => {
+                    presence.mark_present(&key);
+                }
+                PresencePhase::Leaving => {
+                    presence.settle_exit(&key);
+                }
+                PresencePhase::Present => {}
+            }
+        })
+    };
+    let open = !painted.is_empty();
     // Timer ownership stays in Sonner rather than the visible overlay deck.
     // Collapsing, expanding, or clipping the deck must not restart or delay it.
     let timer_items = items.clone();
     let layer = rsx! {
         SonnerLayer {
-            toasts: items,
+            entries: painted,
             position: props.position,
             visible_toasts: props.visible_toasts.max(1),
             rich_colors: props.rich_colors,
             style: props.style,
             theme,
             on_dismiss: dismiss,
+            on_presence_terminal,
         }
     };
     rsx! {
@@ -835,15 +860,24 @@ pub fn Sonner(props: SonnerProps) -> Element {
     }
 }
 
+#[derive(Clone, PartialEq)]
+struct ToastPresenceItem {
+    toast: SonnerToast,
+    key: String,
+    phase: PresencePhase,
+    popped: bool,
+}
+
 #[component]
 fn SonnerLayer(
-    toasts: Vec<SonnerToast>,
+    entries: Vec<ToastPresenceItem>,
     position: SonnerPosition,
     visible_toasts: usize,
     rich_colors: bool,
     style: SonnerStyle,
     theme: Theme,
     on_dismiss: EventHandler<ToastIdentity>,
+    on_presence_terminal: EventHandler<(String, PresencePhase)>,
 ) -> Element {
     let safe_area = arkit_hooks::use_safe_area();
     let viewport_width = viewport_width_vp();
@@ -852,33 +886,48 @@ fn SonnerLayer(
     let notification_width = available_width.min(style.max_width.max(1.0));
 
     // Newest last in the source vec → reverse to newest-first for stacking.
-    let ordered = toasts.into_iter().rev().collect::<Vec<_>>();
+    let ordered = entries.into_iter().rev().collect::<Vec<_>>();
     let mut notifications = Vec::new();
     let mut minimals = Vec::new();
-    for toast in ordered {
-        match toast.appearance {
-            ToastAppearance::Minimal => minimals.push(toast),
-            ToastAppearance::Notification => notifications.push(toast),
+    for entry in ordered {
+        match entry.toast.appearance {
+            ToastAppearance::Minimal => minimals.push(entry),
+            ToastAppearance::Notification => notifications.push(entry),
         }
     }
-    // Only the latest minimal chip is shown — minimal is not a stacked inbox.
-    if minimals.len() > 1 {
-        minimals.truncate(1);
-    }
+    // Only the latest live minimal chip is shown — leaving chips still paint
+    // so their hide timeline can finish. Extra live minimals stay hidden.
+    let mut seen_live_minimal = false;
+    minimals.retain(|entry| {
+        if entry.popped {
+            return true;
+        }
+        if seen_live_minimal {
+            return false;
+        }
+        seen_live_minimal = true;
+        true
+    });
 
+    let live_notifications = notifications.iter().filter(|entry| !entry.popped).count();
     let mut expanded = use_signal(|| false);
-    if notifications.len() <= 1 && expanded() {
+    if live_notifications <= 1 && expanded() {
         expanded.set(false);
     }
-    let is_expanded = expanded() && notifications.len() > 1;
+    let is_expanded = expanded() && live_notifications > 1;
     let visible_cap = visible_toasts.max(1);
     // Newest-first deck (index 0 = front), matching Sonner's toast index.
-    let deck: Vec<SonnerToast> = if is_expanded {
-        notifications
-    } else {
-        notifications.into_iter().take(visible_cap).collect()
-    };
-    let count = deck.len();
+    // Leaving cards stay mounted but are popped from stack geometry.
+    let mut live_deck = Vec::new();
+    let mut leaving_deck = Vec::new();
+    for entry in notifications {
+        if entry.popped {
+            leaving_deck.push(entry);
+        } else if is_expanded || live_deck.len() < visible_cap {
+            live_deck.push(entry);
+        }
+    }
+    let count = live_deck.len();
     let stackable = count > 1;
     let is_top = position.is_top();
     let horizontal = position.horizontal();
@@ -897,6 +946,24 @@ fn SonnerLayer(
     // safe-area edge whether we pin top or bottom.
     let (layouts, stack_height) =
         sonner_stack_layouts(count, is_expanded, is_top, gap, notification_width);
+    let layout_cache = use_hook(|| {
+        Rc::new(RefCell::new(std::collections::HashMap::<
+            String,
+            SonnerCardLayout,
+        >::new()))
+    });
+    {
+        let mut cache = layout_cache.borrow_mut();
+        for (index, entry) in live_deck.iter().enumerate() {
+            if let Some(layout) = layouts.get(index).copied() {
+                cache.insert(entry.key.clone(), layout);
+            }
+        }
+        cache.retain(|key, _| {
+            live_deck.iter().any(|entry| entry.key == *key)
+                || leaving_deck.iter().any(|entry| entry.key == *key)
+        });
+    }
     // Always top-align inside the stack; bottom placement is done by the outer
     // column spacer so `position.y` stays a simple top-left coordinate.
     let stack_alignment = ALIGN_TOP;
@@ -906,13 +973,14 @@ fn SonnerLayer(
         expand_signal.set(next);
     });
 
-    // Paint back peeks first so the front card is the topmost child.
-    let painted = deck
+    // Paint back peeks first so the front card is the topmost child. Leaving
+    // cards draw last (highest z) so they can slide off over the restack.
+    let painted = live_deck
         .into_iter()
         .enumerate()
         .rev()
-        .collect::<Vec<(usize, SonnerToast)>>();
-    let has_notifications = !painted.is_empty();
+        .collect::<Vec<(usize, ToastPresenceItem)>>();
+    let has_notifications = !painted.is_empty() || !leaving_deck.is_empty();
     let has_minimals = !minimals.is_empty();
 
     rsx! {
@@ -934,7 +1002,7 @@ fn SonnerLayer(
             // Minimal chips sit above notifications when bottom-anchored so the
             // compact toast is never buried under the stack.
             if is_top {
-                {render_minimal_row(minimals.clone(), horizontal, rich_colors, style.toast, theme, on_dismiss, swipe_direction)}
+                {render_minimal_row(minimals.clone(), horizontal, rich_colors, style.toast, theme, on_dismiss, on_presence_terminal, swipe_direction, is_top)}
                 if has_minimals && has_notifications {
                     row { height: spacing::SM, hit_test_behavior: "none" }
                 }
@@ -951,51 +1019,56 @@ fn SonnerLayer(
                         width: notification_width,
                         height: stack_height,
                         alignment: stack_alignment,
+                        clip: false,
                         hit_test_behavior: "none",
-                        for (index, toast) in painted {
+                        for (index, entry) in painted {
                             {
-                                let entry_key = format!("{}:{}", toast.id, toast.revision);
-                                let layout = layouts
-                                    .get(index)
+                                render_sonner_card(
+                                    entry,
+                                    layouts
+                                        .get(index)
+                                        .copied()
+                                        .unwrap_or(SonnerCardLayout::front(notification_width)),
+                                    index,
+                                    is_expanded,
+                                    stackable,
+                                    rich_colors,
+                                    swipe_direction,
+                                    style.toast,
+                                    theme,
+                                    is_top,
+                                    on_dismiss,
+                                    on_presence_terminal,
+                                    if index == 0 {
+                                        Some(on_expand_change)
+                                    } else {
+                                        None
+                                    },
+                                )
+                            }
+                        }
+                        for entry in leaving_deck {
+                            {
+                                let layout = layout_cache
+                                    .borrow()
+                                    .get(&entry.key)
                                     .copied()
                                     .unwrap_or(SonnerCardLayout::front(notification_width));
-                                let is_front = index == 0;
-                                rsx! {
-                                    column {
-                                        key: "{entry_key}",
-                                        width: layout.width,
-                                        height: layout.height,
-                                        position: format!("{},{}", layout.x, layout.y),
-                                        z_index: 100 - index as i32,
-                                        hit_test_behavior: if is_front || is_expanded {
-                                            HIT_TEST_DEFAULT
-                                        } else {
-                                            HIT_TEST_NONE
-                                        },
-                                        SonnerToastEntry {
-                                            toast,
-                                            rich_colors,
-                                            swipe_direction,
-                                            stackable: is_front && stackable,
-                                            expanded: is_expanded,
-                                            stacked_back: !is_front && !is_expanded,
-                                            stacked_height: if !is_front && !is_expanded {
-                                                Some(FRONT_TOAST_HEIGHT)
-                                            } else {
-                                                None
-                                            },
-                                            interactive: is_front || is_expanded,
-                                            style: style.toast,
-                                            theme,
-                                            on_dismiss,
-                                            on_expand_change: if is_front {
-                                                Some(on_expand_change)
-                                            } else {
-                                                None
-                                            },
-                                        }
-                                    }
-                                }
+                                render_sonner_card(
+                                    entry,
+                                    layout,
+                                    0,
+                                    is_expanded,
+                                    false,
+                                    rich_colors,
+                                    swipe_direction,
+                                    style.toast,
+                                    theme,
+                                    is_top,
+                                    on_dismiss,
+                                    on_presence_terminal,
+                                    None,
+                                )
                             }
                         }
                     }
@@ -1008,7 +1081,7 @@ fn SonnerLayer(
                 if has_minimals && has_notifications {
                     row { height: spacing::SM, hit_test_behavior: "none" }
                 }
-                {render_minimal_row(minimals, horizontal, rich_colors, style.toast, theme, on_dismiss, swipe_direction)}
+                {render_minimal_row(minimals, horizontal, rich_colors, style.toast, theme, on_dismiss, on_presence_terminal, swipe_direction, is_top)}
             }
             if is_top {
                 row {
@@ -1022,12 +1095,15 @@ fn SonnerLayer(
 }
 
 /// Per-card geometry for the official Sonner stack model.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 struct SonnerCardLayout {
     x: f32,
     y: f32,
     width: f32,
     height: f32,
+    /// Distance from the stack's anchor edge (top or bottom).
+    offset: f32,
+    stack_height: f32,
 }
 
 impl SonnerCardLayout {
@@ -1037,6 +1113,183 @@ impl SonnerCardLayout {
             y: 0.0,
             width,
             height: FRONT_TOAST_HEIGHT,
+            offset: 0.0,
+            stack_height: FRONT_TOAST_HEIGHT,
+        }
+    }
+}
+
+fn stack_anchor_y(offset: f32, height: f32, stack_height: f32, is_top: bool) -> f32 {
+    if is_top {
+        offset
+    } else {
+        stack_height - height - offset
+    }
+}
+
+/// Re-express `old` in `new`'s stack box so a bottom-aligned front card stays
+/// put on screen when the stack grows upward.
+fn stack_motion_origin(
+    old: SonnerCardLayout,
+    new: SonnerCardLayout,
+    is_top: bool,
+) -> SonnerCardLayout {
+    SonnerCardLayout {
+        x: old.x,
+        y: stack_anchor_y(old.offset, old.height, new.stack_height, is_top),
+        width: old.width,
+        height: old.height,
+        offset: old.offset,
+        stack_height: new.stack_height,
+    }
+}
+
+fn stack_easing() -> Easing {
+    Easing::cubic_bezier(0.21, 1.02, 0.73, 1.0)
+        .unwrap_or(Easing::Builtin(BuiltinEase::Cubic(EaseDirection::Out)))
+}
+
+fn configure_stack_tween(animation: Animation) -> Animation {
+    animation.configure_last(
+        stack_easing(),
+        Default::default(),
+        Default::default(),
+        TimeSpan::ZERO,
+        0,
+    )
+}
+
+fn stack_layout_timeline(
+    target: TargetName,
+    from: SonnerCardLayout,
+    to: SonnerCardLayout,
+    duration: TimeSpan,
+) -> Timeline {
+    let animation = configure_stack_tween(Animation::new(AnimationSelector::Target(target)).tween(
+        &POSITION_X,
+        Length::vp(from.x),
+        Length::vp(to.x),
+        duration,
+    ));
+    let animation = configure_stack_tween(animation.tween(
+        &POSITION_Y,
+        Length::vp(from.y),
+        Length::vp(to.y),
+        duration,
+    ));
+    let animation = configure_stack_tween(animation.tween(
+        &WIDTH,
+        Length::vp(from.width),
+        Length::vp(to.width),
+        duration,
+    ));
+    Timeline::new().add(animation, TimelinePosition::START)
+}
+
+fn peek_opacity_timeline(target: TargetName, visible: bool, duration: TimeSpan) -> Timeline {
+    let (from, to) = if visible { (0.0, 1.0) } else { (1.0, 0.0) };
+    let animation = configure_stack_tween(
+        Animation::new(AnimationSelector::Target(target)).tween(&OPACITY, from, to, duration),
+    );
+    Timeline::new().add(animation, TimelinePosition::START)
+}
+
+/// Interpolate a card from its previous stack slot into `layout`.
+///
+/// Destination coordinates are used for both ends so a bottom-anchored stack
+/// can grow upward without the front toast jumping.
+#[component]
+fn SonnerStackSlot(
+    layout: SonnerCardLayout,
+    is_top: bool,
+    skip_motion: bool,
+    z_index: i32,
+    hit_test_behavior: &'static str,
+    children: Element,
+) -> Element {
+    let name = use_hook(|| TargetName::owned(format!("sonner-stack-{:?}", current_scope_id())));
+    let target = use_animation_target(name.as_str().to_owned());
+    let target_ref = target.native_ref();
+    let duration = TimeSpan::from_millis(TOAST_STACK_MS.max(0) as u64);
+    let last = use_hook(|| Rc::new(std::cell::Cell::new(None::<SonnerCardLayout>)));
+    let controls = use_animation(stack_layout_timeline(
+        name.clone(),
+        layout,
+        layout,
+        duration,
+    ));
+    let request = (layout, is_top, skip_motion);
+    use_effect(use_reactive((&request,), move |(request,)| {
+        let layout = request.0;
+        let is_top = request.1;
+        let skip_motion = request.2;
+        let previous = last.get();
+        last.set(Some(layout));
+        if skip_motion || !target.is_ready() || !controls.is_ready() {
+            return;
+        }
+        let Some(previous) = previous else {
+            return;
+        };
+        if previous == layout {
+            return;
+        }
+        let from = stack_motion_origin(previous, layout, is_top);
+        if (from.x - layout.x).abs() < 0.5
+            && (from.y - layout.y).abs() < 0.5
+            && (from.width - layout.width).abs() < 0.5
+        {
+            return;
+        }
+        controls.set_timeline(stack_layout_timeline(name.clone(), from, layout, duration));
+        controls.restart();
+    }));
+    rsx! {
+        column {
+            native_ref: target_ref,
+            width: layout.width,
+            height: layout.height,
+            position: format!("{},{}", layout.x, layout.y),
+            z_index,
+            hit_test_behavior,
+            {children}
+        }
+    }
+}
+
+/// Fade toast internals when a collapsed peek becomes a full card.
+#[component]
+fn SonnerPeekContent(visible: bool, children: Element) -> Element {
+    let name = use_hook(|| TargetName::owned(format!("sonner-peek-{:?}", current_scope_id())));
+    let target = use_animation_target(name.as_str().to_owned());
+    let target_ref = target.native_ref();
+    let duration = TimeSpan::from_millis((TOAST_STACK_MS * 3 / 4).max(0) as u64);
+    let last = use_hook(|| Rc::new(std::cell::Cell::new(None::<bool>)));
+    let controls = use_animation(peek_opacity_timeline(name.clone(), visible, duration));
+    use_effect(use_reactive((&visible,), move |(visible,)| {
+        let previous = last.get();
+        last.set(Some(visible));
+        if !target.is_ready() || !controls.is_ready() {
+            return;
+        }
+        if previous == Some(visible) {
+            return;
+        }
+        if previous.is_none() {
+            return;
+        }
+        controls.set_timeline(peek_opacity_timeline(name.clone(), visible, duration));
+        controls.restart();
+    }));
+    rsx! {
+        row {
+            native_ref: target_ref,
+            layout_weight: 1.0,
+            align_items: "center",
+            justify_content: "start",
+            opacity: if visible { 1.0 } else { 0.0 },
+            hit_test_behavior: if visible { "default" } else { "none" },
+            {children}
         }
     }
 }
@@ -1122,6 +1375,8 @@ fn sonner_stack_layouts(
                 y,
                 width: card.width,
                 height: card.height,
+                offset: card.offset,
+                stack_height,
             }
         })
         .collect();
@@ -1129,14 +1384,75 @@ fn sonner_stack_layouts(
     (layouts, stack_height)
 }
 
+fn render_sonner_card(
+    entry: ToastPresenceItem,
+    layout: SonnerCardLayout,
+    index: usize,
+    is_expanded: bool,
+    stackable: bool,
+    rich_colors: bool,
+    swipe_direction: ToastSwipeDirection,
+    style: ToastStyle,
+    theme: Theme,
+    is_top: bool,
+    on_dismiss: EventHandler<ToastIdentity>,
+    on_presence_terminal: EventHandler<(String, PresencePhase)>,
+    on_expand_change: Option<EventHandler<bool>>,
+) -> Element {
+    let leaving = entry.phase == PresencePhase::Leaving;
+    let is_front = index == 0 && !leaving;
+    let entry_key = entry.key.clone();
+    let hit_test = if leaving {
+        HIT_TEST_NONE
+    } else if is_front || is_expanded {
+        HIT_TEST_DEFAULT
+    } else {
+        HIT_TEST_NONE
+    };
+    rsx! {
+        SonnerStackSlot {
+            key: "{entry_key}",
+            layout,
+            is_top,
+            skip_motion: entry.phase == PresencePhase::Entering || leaving,
+            z_index: if leaving { 200 } else { 100 - index as i32 },
+            hit_test_behavior: hit_test,
+            SonnerToastEntry {
+                toast: entry.toast,
+                phase: entry.phase,
+                presence_key: entry.key,
+                rich_colors,
+                swipe_direction,
+                stackable: is_front && stackable,
+                expanded: is_expanded,
+                stacked_back: !is_front && !is_expanded && !leaving,
+                stacked_height: if !is_front && !is_expanded && !leaving {
+                    Some(FRONT_TOAST_HEIGHT)
+                } else {
+                    None
+                },
+                interactive: !leaving && (is_front || is_expanded),
+                is_top,
+                style,
+                theme,
+                on_dismiss,
+                on_presence_terminal,
+                on_expand_change: if is_front { on_expand_change } else { None },
+            }
+        }
+    }
+}
+
 fn render_minimal_row(
-    minimals: Vec<SonnerToast>,
+    minimals: Vec<ToastPresenceItem>,
     horizontal: HorizontalPosition,
     rich_colors: bool,
     style: ToastStyle,
     theme: Theme,
     on_dismiss: EventHandler<ToastIdentity>,
+    on_presence_terminal: EventHandler<(String, PresencePhase)>,
     swipe_direction: ToastSwipeDirection,
+    is_top: bool,
 ) -> Element {
     if minimals.is_empty() {
         return rsx! {};
@@ -1152,25 +1468,30 @@ fn render_minimal_row(
             column {
                 align_items: "center",
                 hit_test_behavior: "none",
-                for toast in minimals {
+                for entry in minimals {
                     {
-                        let entry_key = format!("{}:{}", toast.id, toast.revision);
+                        let leaving = entry.phase == PresencePhase::Leaving;
+                        let entry_key = entry.key.clone();
                         rsx! {
                             column {
                                 key: "{entry_key}",
-                                hit_test_behavior: "default",
+                                hit_test_behavior: if leaving { HIT_TEST_NONE } else { HIT_TEST_DEFAULT },
                                 SonnerToastEntry {
-                                    toast,
+                                    toast: entry.toast,
+                                    phase: entry.phase,
+                                    presence_key: entry.key,
                                     rich_colors,
                                     swipe_direction,
                                     stackable: false,
                                     expanded: false,
                                     stacked_back: false,
                                     stacked_height: None,
-                                    interactive: true,
+                                    interactive: !leaving,
+                                    is_top,
                                     style,
                                     theme,
                                     on_dismiss,
+                                    on_presence_terminal,
                                     on_expand_change: None,
                                 }
                             }
@@ -1188,6 +1509,8 @@ fn render_minimal_row(
 #[component]
 fn SonnerToastEntry(
     toast: SonnerToast,
+    phase: PresencePhase,
+    presence_key: String,
     rich_colors: bool,
     swipe_direction: ToastSwipeDirection,
     stackable: bool,
@@ -1195,14 +1518,20 @@ fn SonnerToastEntry(
     stacked_back: bool,
     stacked_height: Option<f32>,
     interactive: bool,
+    is_top: bool,
     style: ToastStyle,
     theme: Theme,
     on_dismiss: EventHandler<ToastIdentity>,
+    on_presence_terminal: EventHandler<(String, PresencePhase)>,
     on_expand_change: Option<EventHandler<bool>>,
 ) -> Element {
     let identity = ToastIdentity::from(&toast);
     let action_handler = toast.action_handler.clone();
     let dismiss_handler = toast.dismiss_handler.clone();
+    let terminal_key = presence_key.clone();
+    let on_terminal = EventHandler::new(move |phase: PresencePhase| {
+        on_presence_terminal.call((terminal_key.clone(), phase));
+    });
 
     let action_dismiss_callback = dismiss_handler.clone();
     let action = EventHandler::new(move |_: ()| {
@@ -1237,24 +1566,36 @@ fn SonnerToastEntry(
     rsx! {
         ThemeProvider {
             theme,
-            Toast {
-                message: toast.title,
-                description: toast.description,
-                variant: toast.variant,
-                appearance: toast.appearance,
-                action_label: toast.action_label,
-                icon: toast.icon,
-                dismissible: toast.dismissible && interactive,
-                rich_colors,
-                swipe_direction,
-                stackable,
-                expanded,
-                stacked_back,
-                stacked_height,
-                style,
-                on_action: action,
-                on_dismiss: dismiss,
-                on_expand_change: expand,
+            PresenceTransition {
+                phase,
+                on_terminal,
+                preset: Some(if is_top {
+                    TransitionPreset::SlideDown
+                } else {
+                    TransitionPreset::SlideUp
+                }),
+                duration_ms: Some(TOAST_ENTER_MS),
+                exit_duration_ms: Some(TOAST_EXIT_MS),
+                distance: Some(TOAST_DISTANCE),
+                Toast {
+                    message: toast.title,
+                    description: toast.description,
+                    variant: toast.variant,
+                    appearance: toast.appearance,
+                    action_label: toast.action_label,
+                    icon: toast.icon,
+                    dismissible: toast.dismissible && interactive,
+                    rich_colors,
+                    swipe_direction,
+                    stackable,
+                    expanded,
+                    stacked_back,
+                    stacked_height,
+                    style,
+                    on_action: action,
+                    on_dismiss: dismiss,
+                    on_expand_change: expand,
+                }
             }
         }
     }
@@ -1573,6 +1914,31 @@ mod tests {
         assert_eq!(layouts[0].y, 0.0);
         assert_eq!(layouts[1].y, h + 14.0);
         assert_eq!(layouts[2].y, 2.0 * (h + 14.0));
+    }
+
+    #[test]
+    fn stack_motion_keeps_bottom_front_card_on_screen() {
+        let (collapsed, _) = sonner_stack_layouts(3, false, false, 14.0, 360.0);
+        let (expanded, _) = sonner_stack_layouts(3, true, false, 14.0, 360.0);
+        let origin = stack_motion_origin(collapsed[0], expanded[0], false);
+        assert!(
+            (origin.y - expanded[0].y).abs() < 0.01,
+            "front card must not jump when the stack box grows"
+        );
+        let mid = stack_motion_origin(collapsed[1], expanded[1], false);
+        assert!(
+            mid.y > expanded[1].y,
+            "back cards start closer to the front and travel away"
+        );
+    }
+
+    #[test]
+    fn stack_motion_keeps_top_front_card_on_screen() {
+        let (collapsed, _) = sonner_stack_layouts(3, false, true, 14.0, 360.0);
+        let (expanded, _) = sonner_stack_layouts(3, true, true, 14.0, 360.0);
+        let origin = stack_motion_origin(collapsed[0], expanded[0], true);
+        assert!((origin.y - expanded[0].y).abs() < 0.01);
+        assert_eq!(origin.y, 0.0);
     }
 
     #[test]
