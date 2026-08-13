@@ -6,7 +6,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "libshadcn_showcase.so": "file:./src/main/cpp/types/libshadcn_showcase",
+    "libcolorui_showcase.so": "file:./src/main/cpp/types/libcolorui_showcase",
     "@ohos-rs/ability": "1.0.0-beta.2",
     "@ohos-rs/ability-plugin-webview": "1.0.0-beta.2"
   }
