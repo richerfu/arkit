@@ -5,26 +5,27 @@ description: "仓库里有哪些示例、各自练什么，以及怎么编进真
 
 # 示例索引
 
-仓库里目前有 **14** 个可在设备上跑的示例（见 workspace 的 `members`）。它们既是上手材料，也是公开 API 是否还能编译、能否上真机的活合同。
+仓库里目前有 **15** 个可在设备上跑的示例（见 workspace 的 `members`）。它们既是上手材料，也是公开 API 是否还能编译、能否上真机的活合同。
 
 ## 一览
 
-| 示例              | 覆盖能力                                                                  | 关键入口                              |
-| ----------------- | ------------------------------------------------------------------------- | ------------------------------------- |
-| `counter`         | `#[entry]`、RSX、signal、click                                            | `examples/counter/src/lib.rs`         |
-| `async_task`      | `use_resource`、Tokio timer、UI wake                                      | `examples/async_task/src/lib.rs`      |
-| `animation`       | timeline、easing、controls、layout/presence、drag/scroll、lowering        | `examples/animation/src/lib.rs`       |
-| `camera`          | CameraKit 拍照/扫码双模式、可配置工具栏、分辨率与完整控制项               | `examples/camera/src/lib.rs`          |
-| `canvas`          | W3C Canvas 2D 完整绘制面：Path2D、paint、文字、图片与像素                 | `examples/canvas/src/lib.rs`          |
-| `barcode`         | 独立二维码/条形码生成、`Barcode` / `use_barcode`、PNG 导出                | `examples/barcode/src/lib.rs`         |
-| `chart`           | 22 series、realtime option、actions、events、appendData、coordinate query | `examples/chart/src/lib.rs`           |
-| `complex_cases`   | 10,000 item List/Grid/WaterFlow、单项动态更新与变高重排                   | `examples/complex_cases/src/lib.rs`   |
-| `i18n`            | Fluent macro、typed message、locale switch、Cargo rename                  | `examples/i18n/src/lib.rs`            |
-| `lottie`          | ThorVG worker、XComponent 帧同步、播放控制、fit/repeat/speed              | `examples/lottie/src/lib.rs`          |
-| `router`          | typed routes、ArkUI Link、dynamic param、route transition                 | `examples/router/src/lib.rs`          |
-| `shadcn_showcase` | themes、表单、导航、浮层、反馈、Guide、数据展示组件                       | `examples/shadcn_showcase/src/lib.rs` |
-| `terminal`        | GPU 终端、本地 shell / SSH Host、`feed_vt` 与 IME gutter                  | `examples/terminal/src/lib.rs`        |
-| `webview`         | embedded mount、URL、title callback、reload/focus/zoom                    | `examples/webview/src/lib.rs`         |
+| 示例               | 覆盖能力                                                                  | 关键入口                               |
+| ------------------ | ------------------------------------------------------------------------- | -------------------------------------- |
+| `counter`          | `#[entry]`、RSX、signal、click                                            | `examples/counter/src/lib.rs`          |
+| `async_task`       | `use_resource`、Tokio timer、UI wake                                      | `examples/async_task/src/lib.rs`       |
+| `animation`        | timeline、easing、controls、layout/presence、drag/scroll、lowering        | `examples/animation/src/lib.rs`        |
+| `camera`           | CameraKit 拍照/扫码双模式、可配置工具栏、分辨率与完整控制项               | `examples/camera/src/lib.rs`           |
+| `canvas`           | W3C Canvas 2D 完整绘制面：Path2D、paint、文字、图片与像素                 | `examples/canvas/src/lib.rs`           |
+| `barcode`          | 独立二维码/条形码生成、`Barcode` / `use_barcode`、PNG 导出                | `examples/barcode/src/lib.rs`          |
+| `chart`            | 22 series、realtime option、actions、events、appendData、coordinate query | `examples/chart/src/lib.rs`            |
+| `complex_cases`    | 10,000 item List/Grid/WaterFlow、单项动态更新与变高重排                   | `examples/complex_cases/src/lib.rs`    |
+| `i18n`             | Fluent macro、typed message、locale switch、Cargo rename                  | `examples/i18n/src/lib.rs`             |
+| `lottie`           | ThorVG worker、XComponent 帧同步、播放控制、fit/repeat/speed              | `examples/lottie/src/lib.rs`           |
+| `router`           | typed routes、ArkUI Link、dynamic param、route transition                 | `examples/router/src/lib.rs`           |
+| `shadcn_showcase`  | themes、表单、导航、浮层、反馈、Guide、数据展示组件                       | `examples/shadcn_showcase/src/lib.rs`  |
+| `colorui_showcase` | ColorUI 色板、按钮/标签、Bar、List、Timeline、Steps、Chat、Load           | `examples/colorui_showcase/src/lib.rs` |
+| `terminal`         | GPU 终端、本地 shell / SSH Host、`feed_vt` 与 IME gutter                  | `examples/terminal/src/lib.rs`         |
+| `webview`          | embedded mount、URL、title callback、reload/focus/zoom                    | `examples/webview/src/lib.rs`          |
 
 ## 怎么编、怎么装
 

@@ -11,6 +11,7 @@ const docsGroups: readonly NavGroup[] = [
       "application-model",
       "elements-layout",
       "styling",
+      "style-kits",
       "events",
       "state-management",
       "hooks-lifecycle",
@@ -66,7 +67,7 @@ const docsGroups: readonly NavGroup[] = [
 const componentGroups: readonly NavGroup[] = [
   {
     title: "通用指南",
-    sections: ["overview", "theme", "state-model", "layout-overlay", "accessibility"],
+    sections: ["overview", "theme", "colorui", "state-model", "layout-overlay", "accessibility"],
   },
   {
     title: "基础组件",

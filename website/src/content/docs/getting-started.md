@@ -50,16 +50,17 @@ arkit = {
 
 常用可选 feature（完整表见首页与 [架构](architecture/)）：
 
-| Feature                          | 作用                         |
-| -------------------------------- | ---------------------------- |
-| `animation` / `router` / `chart` | 动画与依赖动画的路由、图表   |
-| `i18n` / `icon`                  | Fluent 文案与 Lucide 图标    |
-| `shadcn` / `markdown` / `code`   | 业务组件、Markdown、语法高亮 |
-| `camera` / `camera-scan`         | 预览拍照 / 扫码              |
-| `barcode`                        | 无相机的码生成               |
-| `lottie` / `lottie-network`      | Lottie 渲染 / 网络源         |
-| `terminal`                       | GPU 终端组件                 |
-| `full`                           | 打开全部领域能力             |
+| Feature                            | 作用                                     |
+| ---------------------------------- | ---------------------------------------- |
+| `animation` / `router` / `chart`   | 动画与依赖动画的路由、图表               |
+| `i18n` / `icon`                    | Fluent 文案与 Lucide 图标                |
+| `component` / `shadcn` / `colorui` | headless 原语；shadcn 主题；ColorUI 组件 |
+| `markdown` / `code`                | Markdown、语法高亮（依赖 component）     |
+| `camera` / `camera-scan`           | 预览拍照 / 扫码                          |
+| `barcode`                          | 无相机的码生成                           |
+| `lottie` / `lottie-network`        | Lottie 渲染 / 网络源                     |
+| `terminal`                         | GPU 终端组件                             |
+| `full`                             | 打开全部领域能力                         |
 
 feature 会连同它的 native 依赖一起拉进来。比如没开 `camera`，就不会带上 `arkit_camera` 和 CameraKit；基础渲染用到的共享 ArkUI 绑定不受影响。
 

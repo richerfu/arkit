@@ -14,7 +14,7 @@ const capabilities = [
   },
   {
     title: "完整应用能力",
-    body: "路由、国际化、动画、Lottie、图表、图标、WebView、GPU 终端与 shadcn 风格组件库开箱即用。",
+    body: "路由、国际化、动画、Lottie、图表、图标、WebView、GPU 终端，以及可挂载的 shadcn / ColorUI 组件库。",
   },
   {
     title: "原生性能路径",
@@ -37,7 +37,7 @@ const contentEntries = [
     step: "02",
     title: "组件",
     href: joinBase(base, "components/"),
-    body: "Theme、表单、内容、导航、浮层与反馈组件的独立使用手册，对齐 shadcn 语义。",
+    body: "无样式原语、Theme / StyleKit 挂载、shadcn 与 ColorUI 两套皮肤。",
   },
   {
     step: "03",
@@ -58,7 +58,9 @@ const featureRows = [
   ["camera / camera-scan", "CameraKit 预览与 JPEG 拍照；camera-scan 增加可配置扫码解码"],
   ["barcode", "独立二维码/条形码生成（rxing），不依赖相机"],
   ["terminal", "GPU 加速终端（libghostty-vt），应用自管本地 shell / SSH I/O"],
-  ["shadcn", "主题 tokens 与 50+ 业务组件；自动启用 animation、i18n、icon"],
+  ["component", "无样式组件原语与 StyleKit 挂载面；自动启用 animation、i18n、icon"],
+  ["shadcn", "shadcn 预设与 appearance，挂到 component；自动启用 component"],
+  ["colorui", "ColorUI 色板、appearance 与 Bar/Timeline/Chat 等；自动启用 component"],
   ["markdown / code", "原生 Markdown 渲染与 tree-sitter 代码高亮；可单独或组合启用"],
   ["full", "启用全部领域能力（含 terminal、barcode、markdown-highlight 等）"],
 ];

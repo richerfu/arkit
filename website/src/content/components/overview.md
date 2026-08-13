@@ -5,11 +5,17 @@ description: "shadcn 风格原生组件库怎么装、怎么 import，以及和 
 
 # 组件库介绍
 
-`arkit_shadcn` 是一套跑在 ArkUI 上的原生组件，交互语义尽量对齐 [shadcn/ui](https://ui.shadcn.com)，但不是 Web 套壳，也不会再起一个 VirtualDom。打开 `shadcn` feature 就能用，并会顺带启用 `animation`、`i18n` 和 `icon`。
+组件分成三层：
+
+- `arkit_component`：headless 原语。结构、状态和交互，不带品牌皮。
+- `arkit_shadcn`：同一套原语 + [`Theme`](../theme/) 做 Zinc/明暗切换。
+- `arkit_colorui`：基于 headless **重写** 的 ColorUI 组件（自己的 Button/Card，外加 Bar / Tag / Timeline 等）。
+
+打开 `shadcn` 或 `colorui` feature 都会带上 `component`，并顺带启用 `animation`、`i18n` 和 `icon`。`use arkit::shadcn::components::*` 仍然是 headless 再导出；ColorUI 要用 `arkit::colorui::components::*`。
 
 `Markdown` 和 `Code` 是另外两个可选能力：
 
-- `markdown`：原生渲染 CommonMark / GFM（会自动带上 `shadcn`）
+- `markdown`：原生渲染 CommonMark / GFM（会自动带上 `component`）
 - `code`：独立代码高亮，底层 tree-sitter，可以不依赖 Markdown
 - 两个都开时，Markdown 围栏会复用 Code 管线；嫌麻烦可以用 `markdown-highlight`
 
@@ -20,6 +26,8 @@ description: "shadcn 风格原生组件库怎么装、怎么 import，以及和 
 ```toml
 [dependencies]
 arkit = { version = "*", features = ["shadcn"] }
+# 或: features = ["colorui"]
+# 或只要原语: features = ["component"]
 ```
 
 仅 Markdown：
@@ -43,8 +51,8 @@ arkit = { version = "*", features = ["markdown", "code"] }
 
 ```rust
 use arkit::prelude::*;
-use arkit::shadcn::components::*;
-use arkit::shadcn::theme::*;
+use arkit::component::components::*;
+use arkit::shadcn::theme::*; // ColorUI 则用 arkit::colorui::theme::*
 ```
 
 ## 文档结构

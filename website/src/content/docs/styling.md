@@ -66,7 +66,7 @@ rsx! {
 
 在组件层集中定义 color、spacing、radius、typography 与关键字常量，页面只消费 token，不散落硬编码色值与尺寸。
 
-需要完整主题系统时使用顶部“组件”中的 ThemeProvider。基础 element 本身不依赖 shadcn feature。
+需要 shadcn 换肤时挂 ThemeProvider。要用 ColorUI 就用 ColorUI 自己的组件，不要靠 Theme 换皮。基础 element 本身不依赖任何样式库。
 
 ## 文本与裁剪
 

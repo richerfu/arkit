@@ -30,9 +30,11 @@ Arkit 的 UI 只走 Dioxus 这一条路：业务写出组件树，运行时 diff
 | `arkit_camera`                     | CameraKit 预览、拍照；可选 scan 解码                                        |
 | `arkit_barcode`                    | 独立条码/二维码生成（rxing），无相机依赖                                    |
 | `arkit_terminal`                   | libghostty-vt + GPU surface；会话 I/O 由应用托管                            |
-| `arkit_shadcn`                     | 主题 tokens、业务组件和浮层组合                                             |
+| `arkit_component`                  | headless 原语（结构 / 状态 / 交互），可选 appearance 覆盖                   |
+| `arkit_shadcn`                     | shadcn 预设与 ThemeProvider（同一套组件内部换肤）                           |
+| `arkit_colorui`                    | ColorUI 组件（基于 headless 重写样式）+ Bar/Timeline/Steps/Chat             |
 
-领域 crate 不反向依赖 facade；facade 只是把它们拼起来对外。`arkit_prelude` 用来打断 shadcn / icon / animation 对 `arkit` 的环。
+领域 crate 不反向依赖 facade；facade 只是把它们拼起来对外。`arkit_prelude` 用来打断 component / shadcn / icon / animation 对 `arkit` 的环。
 
 ## HostTree 投影
 
