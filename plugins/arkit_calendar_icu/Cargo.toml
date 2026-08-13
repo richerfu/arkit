@@ -12,6 +12,6 @@ workspace = true
 [dependencies]
 arkit_i18n.workspace = true
 arkit_prelude.workspace = true
-arkit_shadcn.workspace = true
+arkit_component.workspace = true
 dioxus-hooks.workspace = true
 icu_calendar.workspace = true

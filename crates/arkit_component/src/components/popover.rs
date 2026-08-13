@@ -1,0 +1,129 @@
+//! Popover — a floating panel anchored to a trigger, toggled by tapping the
+//! trigger and dismissed by tapping outside.
+//!
+//! Migrated from the legacy Elm builder API. The trigger toggles the open
+//! state (click mode). The panel renders through a root-projected portal so it
+//! is not clipped by the trigger's parent layout. Panel styling preserved: default
+//! width `288` (Tailwind `w-72`), configurable padding that defaults to
+//! `spacing::LG`, `md` radius, 1px border, `popover`/`border` tokens, small
+//! outer shadow, and start-aligned content.
+
+use super::floating_layer::{
+    FloatingAlign, FloatingPanelPlacement, FloatingSide, FLOATING_CAPTURE_COLOR,
+};
+use crate::style::*;
+use arkit_prelude::*;
+use dioxus_core_macro::component;
+
+const POPOVER_DEFAULT_WIDTH: f32 = 288.0;
+const POPOVER_ESTIMATED_HEIGHT: f32 = 132.0;
+
+/// Popover floating panel.
+#[component]
+pub fn Popover(
+    trigger: Element,
+    open: Option<bool>,
+    default_open: Option<bool>,
+    on_close: Option<EventHandler<()>>,
+    on_open_change: Option<EventHandler<bool>>,
+    width: Option<f32>,
+    padding: Option<f32>,
+    children: Element,
+) -> Element {
+    let theme = use_theme();
+    let viewport = arkit_hooks::use_overlay_viewport();
+    let trigger_ref = arkit_hooks::use_native_element_ref();
+    let trigger_frame = use_signal(arkit_hooks::LayoutFrame::default);
+    arkit_hooks::use_layout_frame(trigger_ref.clone(), move |frame| {
+        let mut trigger_frame = trigger_frame;
+        trigger_frame.set(frame);
+    });
+    let mut internal = use_signal(|| default_open.unwrap_or(false));
+    let current = match open {
+        Some(v) => v,
+        None => *internal.read(),
+    };
+    let controlled = open.is_some();
+    let panel_width = width.unwrap_or(POPOVER_DEFAULT_WIDTH);
+    let panel_padding = padding.unwrap_or(spacing::LG);
+
+    let set_open = EventHandler::new(move |next: bool| {
+        if !controlled {
+            internal.set(next);
+        }
+        if let Some(handler) = on_open_change {
+            handler.call(next);
+        }
+        if !next {
+            if let Some(handler) = on_close {
+                handler.call(());
+            }
+        }
+    });
+
+    let placement = FloatingPanelPlacement::resolve(
+        *trigger_frame.read(),
+        viewport,
+        panel_width,
+        POPOVER_ESTIMATED_HEIGHT,
+        FloatingSide::Bottom,
+        FloatingAlign::Center,
+        spacing::XXS,
+    );
+    let dismiss = EventHandler::new(move |_: ()| set_open.call(false));
+
+    rsx! {
+        row {
+            native_ref: trigger_ref,
+            onclick: move |_| set_open.call(!current),
+            {trigger}
+        }
+        if current {
+            arkit_hooks::Portal {
+                layer: arkit_hooks::OverlayLayer::Floating,
+                {popover_overlay_content(
+                    theme,
+                    panel_width,
+                    panel_padding,
+                    placement,
+                    dismiss,
+                    children,
+                )}
+            }
+        }
+    }
+}
+
+fn popover_overlay_content(
+    theme: Theme,
+    panel_width: f32,
+    panel_padding: f32,
+    placement: FloatingPanelPlacement,
+    on_dismiss: EventHandler<()>,
+    children: Element,
+) -> Element {
+    let top = placement.y.max(0.0);
+    let left = placement.x.max(0.0);
+    rsx! {
+        stack {
+            width: "100%",
+            height: "100%",
+            background_color: FLOATING_CAPTURE_COLOR,
+            hit_test_behavior: "default",
+            onclick: move |_| on_dismiss.call(()),
+            column {
+                position: format!("{left},{top}"),
+                width: panel_width,
+                onclick: move |evt| evt.stop_propagation(),
+                align_items: "start",
+                padding: panel_padding,
+                border_radius: theme.radii.md,
+                border_width: 1.0,
+                border_color: theme.colors.border,
+                background_color: theme.colors.popover,
+                shadow: "sm",
+                {children}
+            }
+        }
+    }
+}

@@ -5,7 +5,7 @@
 //! descriptors.
 //!
 //! Both the `arkit` facade and the crates that the facade re-exports
-//! (`arkit_shadcn`, `arkit_icon`, `arkit_animation`) depend on this so they do
+//! (`arkit_component`, `arkit_shadcn`, `arkit_icon`, `arkit_animation`) depend on this so they do
 //! not need to depend on the `arkit` facade itself (which would be cyclic).
 
 mod layout;

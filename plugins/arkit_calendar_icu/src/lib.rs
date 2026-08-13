@@ -1,11 +1,11 @@
-//! ICU4X-backed optional plugins for [`arkit_shadcn::components::Calendar`].
+//! ICU4X-backed optional plugins for [`arkit_component::components::Calendar`].
 //!
-//! The crate is separate from `arkit_shadcn` so applications that do not need
+//! The crate is separate from `arkit_component` so applications that do not need
 //! non-Gregorian calendars do not pay for ICU4X in their dependency graph.
 
+use arkit_component::components::{CalendarDate, CalendarDayContext, CalendarDayPlugin};
 use arkit_i18n::{translate, I18nContext, TypedMessage};
 use arkit_prelude::*;
-use arkit_shadcn::components::{CalendarDate, CalendarDayContext, CalendarDayPlugin};
 use dioxus_hooks::use_callback;
 use icu_calendar::{cal::ChineseTraditional, Date};
 

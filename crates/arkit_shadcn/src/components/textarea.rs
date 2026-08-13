@@ -1,62 +1,48 @@
-//! Textarea — shadcn-style multi-line text input.
-//!
-//! Migrated from the original Elm builder API to dioxus 0.7 `#[component]` +
-//! `rsx!`. Preserves the original styling: input-surface shell with a
-//! transparent fill, `[SM, MD, SM, MD]` padding, `md` font size, 64px height,
-//! and a translucent `muted_foreground` placeholder.
+//! Textarea — official `min-h-16` / `text-base` / `rounded-md` field.
 
-use crate::theme::*;
 use arkit_prelude::*;
 
-use super::ARKUI_BORDER_STYLE_SOLID;
+use crate::spec;
+use crate::theme::use_theme;
 
-/// Props for [`Textarea`].
-#[derive(Props, Clone, PartialEq)]
-pub struct TextareaProps {
-    pub placeholder: Option<String>,
-    pub value: Option<String>,
-    pub height: Option<f32>,
-    /// CSS width (`"100%"`, `"50%"`). Unset leaves the field content-sized.
-    pub width: Option<String>,
-    /// Uses the destructive border treatment for validation failures.
-    #[props(default)]
-    pub invalid: bool,
-    /// Prevents editing while preserving the field's dimensions.
-    #[props(default)]
-    pub disabled: bool,
-    pub on_change: Option<EventHandler<String>>,
-}
-
-/// A multi-line text input.
 #[component]
-pub fn Textarea(props: TextareaProps) -> Element {
+pub fn Textarea(
+    placeholder: Option<String>,
+    value: Option<String>,
+    height: Option<f32>,
+    width: Option<String>,
+    #[props(default)] invalid: bool,
+    #[props(default)] disabled: bool,
+    on_change: Option<EventHandler<String>>,
+) -> Element {
     let theme = use_theme();
-    let on_change = props.on_change;
-
     rsx! {
         textarea {
-            value: if let Some(v) = props.value { v },
-            placeholder: if let Some(p) = props.placeholder { p },
+            value: if let Some(v) = value { v },
+            placeholder: if let Some(p) = placeholder { p },
             placeholder_color: with_alpha(theme.colors.muted_foreground, 0x80),
             caret_color: theme.colors.primary,
-            font_size: typography::MD,
+            font_size: spec::TEXT_BASE,
             font_color: theme.colors.foreground,
             line_height: 20.0,
-            height: props.height.unwrap_or(64.0),
-            border_style: ARKUI_BORDER_STYLE_SOLID,
+            height: height.unwrap_or(64.0),
             border_width: 1.0,
-            border_color: if props.invalid { theme.colors.destructive } else { theme.colors.input },
-            border_radius: theme.radii.md,
-            background_color: "#00000000",
-            opacity: if props.disabled { 0.5 } else { 1.0 },
-            enabled: !props.disabled,
-            padding_top: spacing::SM,
-            padding_right: spacing::MD,
-            padding_bottom: spacing::SM,
-            padding_left: spacing::MD,
-            width: if let Some(w) = props.width { w },
+            border_color: if invalid {
+                theme.colors.destructive
+            } else {
+                theme.colors.input
+            },
+            border_radius: spec::RADIUS_MD,
+            background_color: 0x00000000u32,
+            opacity: if disabled { spec::DISABLED_OPACITY } else { 1.0 },
+            enabled: !disabled,
+            padding_top: 8.0,
+            padding_right: 12.0,
+            padding_bottom: 8.0,
+            padding_left: 12.0,
+            width: if let Some(w) = width { w },
             on_change: move |evt| {
-                if !props.disabled {
+                if !disabled {
                     if let Some(handler) = on_change {
                         handler.call(evt.data().string_value.clone());
                     }
@@ -64,4 +50,8 @@ pub fn Textarea(props: TextareaProps) -> Element {
             },
         }
     }
+}
+
+fn with_alpha(color: u32, alpha: u32) -> u32 {
+    (color & 0x00FF_FFFF) | (alpha << 24)
 }

@@ -1,0 +1,24 @@
+[package]
+name = "arkit_colorui"
+description = "ColorUI style kit and components mounted onto arkit_component primitives"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+code = ["arkit_component/code"]
+markdown = ["arkit_component/markdown"]
+markdown-highlight = ["markdown", "code"]
+
+[dependencies]
+arkit_component = { workspace = true }
+arkit_hooks = { workspace = true }
+arkit_icon = { workspace = true }
+arkit_prelude = { workspace = true }
+
+[lib]

@@ -1,18 +1,18 @@
-//! Shadcn theme tokens + dioxus context provider.
+//! Shadcn theme presets and the provider that mounts them onto components.
 //!
-//! `ThemeProvider` seeds a Dioxus context and components read it through
-//! [`use_theme`] (which falls back to [`Theme::default`] when no provider is
-//! mounted).
+//! Token types live in [`arkit_component::style`]. This module owns the
+//! Zinc/Neutral/… palettes and installs a [`crate::kit::ShadcnKit`] so
+//! headless primitives pick up shadcn appearances.
 
+use arkit_component::style::{use_style_provider, StyleKitHandle};
 use arkit_prelude::*;
 use dioxus_core_macro::{component, Props};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum ThemeMode {
-    #[default]
-    Light,
-    Dark,
-}
+pub use arkit_component::style::{
+    color, radius, spacing, typography, with_alpha, ColorTokens, RadiusTokens, ThemeMode,
+};
+
+use crate::kit::ShadcnKit;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ThemePreset {
@@ -24,92 +24,6 @@ pub enum ThemePreset {
     Olive,
     Mist,
     Taupe,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ColorTokens {
-    pub background: u32,
-    pub foreground: u32,
-    pub card: u32,
-    pub card_foreground: u32,
-    pub popover: u32,
-    pub popover_foreground: u32,
-    pub primary: u32,
-    pub primary_foreground: u32,
-    pub primary_track: u32,
-    pub secondary: u32,
-    pub secondary_foreground: u32,
-    pub muted: u32,
-    pub muted_foreground: u32,
-    pub accent: u32,
-    pub accent_foreground: u32,
-    pub destructive: u32,
-    pub destructive_foreground: u32,
-    pub border: u32,
-    pub input: u32,
-    pub ring: u32,
-    pub surface: u32,
-    pub chart_1: u32,
-    pub chart_2: u32,
-    pub chart_3: u32,
-    pub chart_4: u32,
-    pub chart_5: u32,
-    pub sidebar: u32,
-    pub sidebar_foreground: u32,
-    pub sidebar_primary: u32,
-    pub sidebar_primary_foreground: u32,
-    pub sidebar_accent: u32,
-    pub sidebar_accent_foreground: u32,
-    pub sidebar_border: u32,
-    pub sidebar_ring: u32,
-}
-
-impl ColorTokens {
-    pub const fn with_primary_track(mut self, value: u32) -> Self {
-        self.primary_track = value;
-        self
-    }
-
-    pub const fn with_surface(mut self, value: u32) -> Self {
-        self.surface = value;
-        self
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct RadiusTokens {
-    pub sm: f32,
-    pub md: f32,
-    pub lg: f32,
-    pub xl: f32,
-    pub xxl: f32,
-    pub full: f32,
-}
-
-impl RadiusTokens {
-    pub const fn from_base(base: f32) -> Self {
-        Self {
-            sm: base * 0.5,
-            md: base * 0.75,
-            lg: base,
-            xl: base * 1.5,
-            xxl: base * 2.0,
-            full: 999.0,
-        }
-    }
-}
-
-impl Default for RadiusTokens {
-    fn default() -> Self {
-        Self {
-            sm: radius::SM,
-            md: radius::MD,
-            lg: radius::LG,
-            xl: radius::XL,
-            xxl: radius::XXL,
-            full: radius::FULL,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -175,6 +89,15 @@ impl Theme {
         self.radii = radii;
         self
     }
+
+    /// Token snapshot consumed by `arkit_component`.
+    pub const fn tokens(self) -> arkit_component::style::Theme {
+        arkit_component::style::Theme {
+            mode: self.mode,
+            colors: self.colors,
+            radii: self.radii,
+        }
+    }
 }
 
 impl Default for Theme {
@@ -199,10 +122,6 @@ pub fn use_theme() -> Theme {
     dioxus_core::try_consume_context::<dioxus_signals::Signal<Theme>>()
         .map(|sig| sig())
         .unwrap_or_default()
-}
-
-pub const fn with_alpha(color: u32, alpha: u8) -> u32 {
-    (color & 0x00FF_FFFF) | ((alpha as u32) << 24)
 }
 
 const fn preset_tokens(preset: ThemePreset, mode: ThemeMode) -> ColorTokens {
@@ -430,17 +349,17 @@ const fn base_tokens(seed: TokenSeed, mode: ThemeMode) -> ColorTokens {
         muted_foreground,
         accent: secondary,
         accent_foreground: secondary_foreground,
-        destructive: if dark { 0xFF7F1D1D } else { color::DESTRUCTIVE },
-        destructive_foreground: color::DESTRUCTIVE_FOREGROUND,
+        destructive: if dark { 0xFF7F1D1D } else { zinc::DESTRUCTIVE },
+        destructive_foreground: zinc::DESTRUCTIVE_FOREGROUND,
         border,
         input: border,
         ring,
         surface: background,
-        chart_1: if dark { 0xFF3B82F6 } else { color::CHART_1 },
-        chart_2: if dark { 0xFF10B981 } else { color::CHART_2 },
-        chart_3: if dark { 0xFFF59E0B } else { color::CHART_3 },
-        chart_4: if dark { 0xFFA855F7 } else { color::CHART_4 },
-        chart_5: if dark { 0xFFEF4444 } else { color::CHART_5 },
+        chart_1: if dark { 0xFF3B82F6 } else { zinc::CHART_1 },
+        chart_2: if dark { 0xFF10B981 } else { zinc::CHART_2 },
+        chart_3: if dark { 0xFFF59E0B } else { zinc::CHART_3 },
+        chart_4: if dark { 0xFFA855F7 } else { zinc::CHART_4 },
+        chart_5: if dark { 0xFFEF4444 } else { zinc::CHART_5 },
         sidebar: if dark { card } else { secondary },
         sidebar_foreground: foreground,
         sidebar_primary: primary,
@@ -452,61 +371,14 @@ const fn base_tokens(seed: TokenSeed, mode: ThemeMode) -> ColorTokens {
     }
 }
 
-pub mod color {
-    pub const BACKGROUND: u32 = 0xFFFFFFFF;
-    pub const FOREGROUND: u32 = 0xFF09090B;
-    pub const CARD: u32 = 0xFFFFFFFF;
-    pub const CARD_FOREGROUND: u32 = 0xFF09090B;
-    pub const POPOVER: u32 = 0xFFFFFFFF;
-    pub const POPOVER_FOREGROUND: u32 = 0xFF09090B;
-    pub const PRIMARY: u32 = 0xFF09090B;
-    pub const PRIMARY_FOREGROUND: u32 = 0xFFFAFAFA;
-    pub const PRIMARY_TRACK: u32 = 0x3309090B;
-    pub const SECONDARY: u32 = 0xFFF4F4F5;
-    pub const SECONDARY_FOREGROUND: u32 = 0xFF09090B;
-    pub const MUTED: u32 = 0xFFF4F4F5;
-    pub const MUTED_FOREGROUND: u32 = 0xFF71717A;
-    pub const ACCENT: u32 = 0xFFF4F4F5;
-    pub const ACCENT_FOREGROUND: u32 = 0xFF09090B;
+mod zinc {
     pub const DESTRUCTIVE: u32 = 0xFFEF4444;
     pub const DESTRUCTIVE_FOREGROUND: u32 = 0xFFFAFAFA;
-    pub const BORDER: u32 = 0xFFE4E4E7;
-    pub const INPUT: u32 = 0xFFE4E4E7;
-    pub const RING: u32 = 0xFF71717A;
-    pub const SURFACE: u32 = 0xFFFFFFFF;
     pub const CHART_1: u32 = 0xFFE76E50;
     pub const CHART_2: u32 = 0xFF2A9D90;
     pub const CHART_3: u32 = 0xFF274754;
     pub const CHART_4: u32 = 0xFFE8C468;
     pub const CHART_5: u32 = 0xFFF4A462;
-}
-
-pub mod radius {
-    pub const SM: f32 = 4.0;
-    pub const MD: f32 = 6.0;
-    pub const LG: f32 = 8.0;
-    pub const XL: f32 = 12.0;
-    pub const XXL: f32 = 16.0;
-    pub const FULL: f32 = 999.0;
-}
-
-pub mod spacing {
-    pub const XXS: f32 = 4.0;
-    pub const XS: f32 = 6.0;
-    pub const SM: f32 = 8.0;
-    pub const MD: f32 = 12.0;
-    pub const LG: f32 = 16.0;
-    pub const XL: f32 = 20.0;
-    pub const XXL: f32 = 24.0;
-}
-
-pub mod typography {
-    pub const XS: f32 = 12.0;
-    pub const SM: f32 = 14.0;
-    pub const MD: f32 = 16.0;
-    pub const LG: f32 = 18.0;
-    pub const XL: f32 = 20.0;
-    pub const XXL: f32 = 24.0;
 }
 
 /// Theme provider component. Mount near the app root to seed the dioxus
@@ -521,6 +393,9 @@ pub fn ThemeProvider(theme: Theme, children: Element) -> Element {
             provided.set(theme);
         }
     }));
+    let _ = use_style_provider(StyleKitHandle::new(ShadcnKit { theme: provided }));
+    let tokens = provided().tokens();
+    let _ = arkit_component::style::use_token_provider(tokens);
     rsx! { {children} }
 }
 
@@ -533,9 +408,9 @@ mod tests {
         let theme = Theme::default();
         assert_eq!(theme.mode, ThemeMode::Light);
         assert_eq!(theme.preset, Some(ThemePreset::Zinc));
-        assert_eq!(theme.colors.background, color::BACKGROUND);
-        assert_eq!(theme.colors.foreground, color::FOREGROUND);
-        assert_eq!(theme.colors.primary_track, color::PRIMARY_TRACK);
+        assert_eq!(theme.colors.background, 0xFFFFFFFF);
+        assert_eq!(theme.colors.foreground, 0xFF09090B);
+        assert_eq!(theme.colors.primary_track, 0x3309090B);
         assert_eq!(theme.radii.md, radius::MD);
     }
 

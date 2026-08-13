@@ -3,7 +3,7 @@
 //! The default facade exports Dioxus core (`rsx!`, `use_signal`, `Element`),
 //! the ArkUI element registry, per-root runtime, and exact-element hooks. Domain
 //! libraries are opt-in through the `animation`, `barcode`, `camera`, `canvas`,
-//! `chart`, `code`, `i18n`, `icon`, `lottie`, `markdown`, `router`, `shadcn`,
+//! `chart`, `code`, `i18n`, `icon`, `lottie`, `markdown`, `router`, `component`, `shadcn`, `colorui`,
 //! `terminal`, and `webview` features (or `full`). Barcode/QR generation is the
 //! `barcode` feature (no camera). Code highlighting uses `code`; Markdown
 //! fences need `markdown` + `code`. Terminal uses `terminal` (libghostty-vt).
@@ -212,9 +212,17 @@ pub use arkit_terminal::{
     TerminalRun, TerminalScrollbar, TerminalSize,
 };
 
-// --- shadcn component library ---
+// --- Unstyled component primitives ---
+#[cfg(feature = "component")]
+pub use arkit_component as component;
+
+// --- shadcn style kit ---
 #[cfg(feature = "shadcn")]
 pub use arkit_shadcn as shadcn;
+
+// --- ColorUI style kit ---
+#[cfg(feature = "colorui")]
+pub use arkit_colorui as colorui;
 
 // --- Dioxus core pieces — re-exported so `rsx!`-emitted paths
 // (`dioxus_core::...`, `dioxus_elements::...`) resolve at the call site after
@@ -490,6 +498,12 @@ pub mod prelude {
         TerminalProps, TerminalResult, TerminalRun, TerminalScrollbar, TerminalSize,
     };
 
+    #[cfg(feature = "component")]
+    pub use crate::component;
+
     #[cfg(feature = "shadcn")]
     pub use crate::shadcn;
+
+    #[cfg(feature = "colorui")]
+    pub use crate::colorui;
 }

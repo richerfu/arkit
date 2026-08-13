@@ -8,7 +8,9 @@ members = [
     "crates/arkit_elements",
     "crates/arkit_prelude",
     "crates/arkit_hooks",
+    "crates/arkit_component",
     "crates/arkit_shadcn",
+    "crates/arkit_colorui",
     "plugins/arkit_calendar_icu",
     "crates/arkit_router",
     "crates/arkit_i18n",
@@ -35,6 +37,7 @@ members = [
     "examples/plugins",
     "examples/router",
     "examples/shadcn_showcase",
+    "examples/colorui_showcase",
     "examples/terminal",
     "examples/webview",
 ]
@@ -79,7 +82,9 @@ arkit_i18n_macros = { path = "crates/arkit_i18n_macros" }
 arkit_lottie = { path = "crates/arkit_lottie" }
 arkit_router = { path = "crates/arkit_router" }
 arkit_runtime = { path = "crates/arkit_runtime" }
+arkit_component = { path = "crates/arkit_component" }
 arkit_shadcn = { path = "crates/arkit_shadcn" }
+arkit_colorui = { path = "crates/arkit_colorui" }
 arkit_calendar_icu = { path = "plugins/arkit_calendar_icu" }
 arkit_arkui = { path = "crates/arkit_arkui" }
 arkit_dom = { path = "crates/arkit_dom" }
