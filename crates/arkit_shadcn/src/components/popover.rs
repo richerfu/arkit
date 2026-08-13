@@ -11,6 +11,7 @@
 use super::floating_layer::{
     FloatingAlign, FloatingPanelPlacement, FloatingSide, FLOATING_CAPTURE_COLOR,
 };
+use super::motion::{OverlayPresence, FLOATING_ENTER_MS, FLOATING_EXIT_MS};
 use crate::theme::*;
 use arkit_prelude::*;
 use dioxus_core_macro::component;
@@ -78,18 +79,21 @@ pub fn Popover(
             onclick: move |_| set_open.call(!current),
             {trigger}
         }
-        if current {
-            arkit_hooks::Portal {
-                layer: arkit_hooks::OverlayLayer::Floating,
-                {popover_overlay_content(
-                    theme,
-                    panel_width,
-                    panel_padding,
-                    placement,
-                    dismiss,
-                    children,
-                )}
-            }
+        OverlayPresence {
+            open: current,
+            preset: Some(arkit_animation::TransitionPreset::Fade),
+            duration_ms: Some(FLOATING_ENTER_MS),
+            exit_duration_ms: Some(FLOATING_EXIT_MS),
+            fill: Some(true),
+            layer: Some(arkit_hooks::OverlayLayer::Floating),
+            {popover_overlay_content(
+                theme,
+                panel_width,
+                panel_padding,
+                placement,
+                dismiss,
+                children,
+            )}
         }
     }
 }
