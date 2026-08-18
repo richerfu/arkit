@@ -682,11 +682,14 @@ fn build_item(kind: VirtualKind, index: u32, renderer: &ItemRenderer) -> ArkUIRe
                     return Err(error);
                 }
             };
-            if let Err(error) = wrapper.borrow_mut().add_child(content.as_raw().clone()) {
+            // `add_child` takes ownership of the mounted wrapper `Rc`; from
+            // this point the parent owns disposal of the native subtree.
+            let content = Rc::new(RefCell::new(content.into_raw()));
+            if let Err(error) = wrapper.borrow_mut().add_child(content.clone()) {
+                let _ = content.borrow_mut().dispose();
                 let _ = wrapper.borrow_mut().dispose();
                 return Err(error);
             }
-            drop(content.into_raw());
             None
         }
         ItemRenderer::Mounted(mount_item) => match mount_item(index, wrapper.clone()) {

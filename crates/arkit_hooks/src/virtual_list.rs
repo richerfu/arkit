@@ -90,6 +90,11 @@ impl PartialEq for VirtualRsxItemProps {
 }
 
 fn virtual_rsx_item_root(props: VirtualRsxItemProps) -> Element {
+    // Each embedded item tree installs its own reactive metrics/lifecycle
+    // signal providers, fed by the handles forwarded from the host tree in
+    // `rsx_mount_item`. Window/keyboard changes reach item components through
+    // precise signal subscriptions — there is no whole-tree invalidation.
+    crate::use_runtime_context_providers();
     let render_item = props.render_item.borrow().clone();
     render_item(props.index.get())
 }

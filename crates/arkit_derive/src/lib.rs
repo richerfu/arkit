@@ -121,7 +121,7 @@ pub fn entry(attr: TokenStream, item: TokenStream) -> TokenStream {
     };
     let plugin_registrations = plugins.iter().map(|plugin| {
         quote! {
-            #framework::arkit_runtime::register_user_plugin(&(*APP), #plugin);
+            #framework::__private::arkit_runtime::register_user_plugin(&(*APP), #plugin);
         }
     });
 
@@ -134,8 +134,8 @@ pub fn entry(attr: TokenStream, item: TokenStream) -> TokenStream {
             use std::cell::RefCell;
             use std::sync::LazyLock;
 
-            static APP: LazyLock<#framework::openharmony_ability::OpenHarmonyApp> =
-                LazyLock::new(#framework::openharmony_ability::OpenHarmonyApp::new);
+            static APP: LazyLock<#framework::__private::openharmony_ability::OpenHarmonyApp> =
+                LazyLock::new(#framework::__private::openharmony_ability::OpenHarmonyApp::new);
             static APP_CONFIGURED: std::sync::OnceLock<()> = std::sync::OnceLock::new();
 
             struct BridgeSessionInitGuard {
@@ -165,11 +165,11 @@ pub fn entry(attr: TokenStream, item: TokenStream) -> TokenStream {
                 // Renderer-owned root created by `openharmony_ability::render`
                 // (native XComponent). The owner token makes delayed component
                 // cleanup unable to tear down a replacement render.
-                static ROOT_NODE: RefCell<Option<(String, #framework::openharmony_ability::arkui::RootNode)>> =
+                static ROOT_NODE: RefCell<Option<(String, #framework::__private::openharmony_ability::arkui::RootNode)>> =
                     RefCell::new(None);
             }
 
-            fn dispose_owned_render(expected_owner: Option<&str>) -> #framework::napi_ohos::Result<()> {
+            fn dispose_owned_render(expected_owner: Option<&str>) -> #framework::__private::napi_ohos::Result<()> {
                 let owns_render = ROOT_NODE.with(|root_node| {
                     let root_node = root_node.borrow();
                     match (expected_owner, root_node.as_ref()) {
@@ -203,22 +203,22 @@ pub fn entry(attr: TokenStream, item: TokenStream) -> TokenStream {
 
             #entry_adapter
 
-            #[#framework::napi_derive_ohos::napi]
+            #[#framework::__private::napi_derive_ohos::napi]
             pub fn on_back_press_intercept() -> bool {
                 (*APP).get_back_press_interceptor()
             }
 
-            #[#framework::napi_derive_ohos::napi]
+            #[#framework::__private::napi_derive_ohos::napi]
             pub fn init<'a>(
-                env: &'a #framework::napi_ohos::Env,
-                bindings: #framework::napi_ohos::bindgen_prelude::ObjectRef,
+                env: &'a #framework::__private::napi_ohos::Env,
+                bindings: #framework::__private::napi_ohos::bindgen_prelude::ObjectRef,
                 bridge_owner: String,
                 #[napi(ts_arg_type = "AbilityInitContext")]
-                context: Option<#framework::napi_ohos::bindgen_prelude::Object<'a>>,
-            ) -> #framework::napi_ohos::Result<#framework::openharmony_ability::ApplicationLifecycle<'a>> {
+                context: Option<#framework::__private::napi_ohos::bindgen_prelude::Object<'a>>,
+            ) -> #framework::__private::napi_ohos::Result<#framework::__private::openharmony_ability::ApplicationLifecycle<'a>> {
                 let init_context =
-                    #framework::openharmony_ability::AbilityInitContext::from_object(context.as_ref())?;
-                #framework::openharmony_ability::attach_bridge_session(
+                    #framework::__private::openharmony_ability::AbilityInitContext::from_object(context.as_ref())?;
+                #framework::__private::openharmony_ability::attach_bridge_session(
                     env,
                     bindings,
                     &bridge_owner,
@@ -230,44 +230,44 @@ pub fn entry(attr: TokenStream, item: TokenStream) -> TokenStream {
                 // its process-wide registry once, while refreshing the bridge,
                 // init context, and lifecycle handle for every new session.
                 APP_CONFIGURED.get_or_init(|| {
-                    #framework::arkit_runtime::inject_plugins(&(*APP));
+                    #framework::__private::arkit_runtime::inject_plugins(&(*APP));
                     #(#plugin_registrations)*
                 });
                 let lifecycle =
-                    #framework::openharmony_ability::create_lifecycle_handle(env, (*APP).clone())?;
+                    #framework::__private::openharmony_ability::create_lifecycle_handle(env, (*APP).clone())?;
                 bridge_guard.disarm();
                 Ok(lifecycle)
             }
 
             /// Releases only the matching Ability-session transport. A stale
             /// owner cannot clear endpoints installed for a later session.
-            #[#framework::napi_derive_ohos::napi]
+            #[#framework::__private::napi_derive_ohos::napi]
             pub fn dispose_bridge(bridge_owner: String) {
                 (*APP).release_bridge_session(&bridge_owner);
             }
 
-            #[#framework::napi_derive_ohos::napi]
+            #[#framework::__private::napi_derive_ohos::napi]
             pub fn render<'a>(
-                env: &'a #framework::napi_ohos::Env,
-                #[napi(ts_arg_type = "NodeContent")] slot: #framework::ohos_arkui_binding::common::handle::ArkUIHandle,
+                env: &'a #framework::__private::napi_ohos::Env,
+                #[napi(ts_arg_type = "NodeContent")] slot: #framework::__private::ohos_arkui_binding::common::handle::ArkUIHandle,
                 render_owner: String,
-            ) -> #framework::napi_ohos::Result<()> {
+            ) -> #framework::__private::napi_ohos::Result<()> {
                 if render_owner.is_empty() {
-                    return Err(#framework::napi_ohos::Error::from_reason(
+                    return Err(#framework::__private::napi_ohos::Error::from_reason(
                         "renderOwner must not be empty",
                     ));
                 }
-                RUNTIME.with(|state| -> #framework::napi_ohos::Result<()> {
+                RUNTIME.with(|state| -> #framework::__private::napi_ohos::Result<()> {
                     if state.borrow().is_some()
                         || ROOT_NODE.with(|root_node| root_node.borrow().is_some())
                     {
-                        return Err(#framework::napi_ohos::Error::from_reason(
+                        return Err(#framework::__private::napi_ohos::Error::from_reason(
                             "This native module is already rendered by another DefaultXComponent; use a distinct native module for every active component",
                         ));
                     }
                     // The bridge session already exists from `init`; rendering
                     // owns only the XComponent and dioxus trees.
-                    let root = #framework::openharmony_ability::render(
+                    let root = #framework::__private::openharmony_ability::render(
                         env,
                         slot,
                         render_owner.clone(),
@@ -299,13 +299,13 @@ pub fn entry(attr: TokenStream, item: TokenStream) -> TokenStream {
                 })
             }
 
-            #[#framework::napi_derive_ohos::napi]
-            pub fn dispose_render(render_owner: String) -> #framework::napi_ohos::Result<()> {
+            #[#framework::__private::napi_derive_ohos::napi]
+            pub fn dispose_render(render_owner: String) -> #framework::__private::napi_ohos::Result<()> {
                 dispose_owned_render(Some(&render_owner))
             }
 
-            #[#framework::napi_derive_ohos::napi]
-            pub fn dispose_all_renders() -> #framework::napi_ohos::Result<()> {
+            #[#framework::__private::napi_derive_ohos::napi]
+            pub fn dispose_all_renders() -> #framework::__private::napi_ohos::Result<()> {
                 dispose_owned_render(None)
             }
 
@@ -313,16 +313,16 @@ pub fn entry(attr: TokenStream, item: TokenStream) -> TokenStream {
             ///
             /// The N-API value is scoped to this call; the returned value is
             /// produced before ArkTS resumes the originating platform callback.
-            #[#framework::napi_derive_ohos::napi]
+            #[#framework::__private::napi_derive_ohos::napi]
             pub fn on_bridge_sync_event<'a>(
-                env: &'a #framework::napi_ohos::Env,
+                env: &'a #framework::__private::napi_ohos::Env,
                 plugin_id: String,
                 event: String,
                 request_type_name: String,
                 response_type_name: String,
-                value: #framework::napi_ohos::bindgen_prelude::Unknown<'a>,
-            ) -> #framework::napi_ohos::Result<#framework::napi_ohos::bindgen_prelude::Unknown<'a>> {
-                let event = #framework::openharmony_ability::BridgeMainThreadEvent::new(
+                value: #framework::__private::napi_ohos::bindgen_prelude::Unknown<'a>,
+            ) -> #framework::__private::napi_ohos::Result<#framework::__private::napi_ohos::bindgen_prelude::Unknown<'a>> {
+                let event = #framework::__private::openharmony_ability::BridgeMainThreadEvent::new(
                     env,
                     plugin_id,
                     event,
@@ -334,10 +334,10 @@ pub fn entry(attr: TokenStream, item: TokenStream) -> TokenStream {
             }
 
             /// ArkTS-only lifecycle transitions, currently UI-context readiness.
-            #[#framework::napi_derive_ohos::napi]
-            pub fn on_bridge_lifecycle(kind: String) -> #framework::napi_ohos::Result<()> {
+            #[#framework::__private::napi_derive_ohos::napi]
+            pub fn on_bridge_lifecycle(kind: String) -> #framework::__private::napi_ohos::Result<()> {
                 let event =
-                    #framework::openharmony_ability::PluginLifecycleEvent::from_arkts(&kind)?;
+                    #framework::__private::openharmony_ability::PluginLifecycleEvent::from_arkts(&kind)?;
                 (*APP).dispatch_plugin_lifecycle(event)
             }
         }

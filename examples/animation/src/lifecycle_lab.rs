@@ -399,7 +399,7 @@ fn LayoutTarget(expanded: bool) -> Element {
 
 #[component]
 fn LayoutRegistryReadout() -> Element {
-    let snapshot = use_layout_snapshot(AnimationWindowMetrics {
+    let snapshot = use_layout_snapshot(arkit::animation::WindowMetrics {
         width_vp: 360.0,
         height_vp: 720.0,
         density: 1.0,
@@ -432,7 +432,7 @@ fn layout_timeline(expanded: bool) -> Timeline {
 
 fn layout_snapshot(expanded: bool, generation: u64) -> LayoutSnapshot {
     let mut snapshot = LayoutSnapshot::new(
-        AnimationWindowMetrics {
+        arkit::animation::WindowMetrics {
             width_vp: 360.0,
             height_vp: 720.0,
             density: 1.0,

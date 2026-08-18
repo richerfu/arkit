@@ -25,10 +25,20 @@ pub use arkit_runtime::{
     ArkRuntime, BackPressRegistration, EdgeInsets, PhysicalRect, RuntimeHandle, RuntimeId,
     SafeAreaPolicy, VirtualDom, WindowMetrics, WindowMetricsHandle, WindowMetricsSubscription,
 };
-// The runtime crate is part of the public facade: the `#[entry]` expansion
-// reaches `arkit_runtime::inject_plugins` through it, and advanced users can
-// mount runtimes directly.
-pub use arkit_runtime;
+/// Macro-support re-exports.
+///
+/// The `#[entry]` expansion resolves the runtime, N-API, ability, and ArkUI
+/// crates through this hidden module. Not public API: paths and contents
+/// change together with the macro. Applications reach runtime types through
+/// the curated re-exports above.
+#[doc(hidden)]
+pub mod __private {
+    pub use arkit_runtime;
+    pub use napi_derive_ohos;
+    pub use napi_ohos;
+    pub use ohos_arkui_binding;
+    pub use openharmony_ability;
+}
 
 // --- Pluginized WebView capability (feature `webview`) ---
 #[cfg(feature = "webview")]
@@ -88,39 +98,11 @@ pub use arkit_router::{
 };
 
 // --- Animation ---
+// Namespace-only at the crate root: `arkit::animation::Timeline`. Glob
+// ergonomics live in `arkit::prelude`, which forwards the domain-owned
+// `arkit_animation::prelude` so the curated list cannot drift.
 #[cfg(feature = "animation")]
 pub use arkit_animation as animation;
-#[cfg(feature = "animation")]
-pub use arkit_animation::WindowMetrics as AnimationWindowMetrics;
-#[cfg(feature = "animation")]
-pub use arkit_animation::{
-    stagger, use_animatable, use_animatable_with_defaults, use_animate_presence, use_animation,
-    use_animation_host_provider, use_animation_layout, use_animation_scope, use_animation_snapshot,
-    use_animation_target, use_draggable, use_layout_snapshot, use_scoped_animation,
-    use_scroll_observer, Angle, Animatable, AnimatableDefaults, AnimatableValue, AnimatePresence,
-    Animation, AnimationAdapterError, AnimationBackend, AnimationBuildError, AnimationControls,
-    AnimationFinished, AnimationHostError, AnimationInstanceSnapshot, AnimationOutcome,
-    AnimationPerformanceCounters, AnimationScope, AnimationScopeDefaults, AnimationSelector,
-    AnimationSubscription, AnimationTarget, AnimationValue, AutoScroll, BackendRejection,
-    BuiltinEase, CallPolicy, CapabilityRequirements, Composition, DiscreteValue, DragAxis,
-    DragConstraints, DragMapping, DragPhase, DragSnap, DragUpdate, Draggable, DraggableCallbacks,
-    DraggableConfig, DraggableHandle, EaseDirection, Easing, EasingError, ExecutionPolicy,
-    ExitCancelPolicy, InvalidationClass, IrregularEase, IterationCount, JumpMode, LabelName,
-    LayoutAnimation, LayoutAnimationMode, LayoutChangeKind, LayoutDelta, LayoutEngine, LayoutId,
-    LayoutMountState, LayoutNode, LayoutNodeId, LayoutSnapshot, Length, LengthUnit, LinearPoint,
-    LinearRgba, LoweringReport, Modifier, MountTransition, NativeCapability, NativeLoweringError,
-    PlaybackDirection, PlaybackRate, PlaybackSettings, PlaybackState, PresenceEntry,
-    PresenceHandle, PresenceKey, PresenceMode, PresencePhase, Property, PropertyKeyframe,
-    PropertyName, ScopeCleanupPolicy, ScopeMethodName, ScrollAxis, ScrollCallbacks,
-    ScrollDirection, ScrollObserver, ScrollRange, ScrollSample, ScrollSync, ScrollThreshold,
-    ShadowValue, SharedElementProjection, SpringSpec, Stagger, StaggerAxis, StaggerDirection,
-    StaggerFrom, StaggerGrid, TargetName, TimeError, TimeOffset, TimePoint, TimeSpan, Timeline,
-    TimelinePosition, TransformValue, TransitionPreset, UnsupportedFeature, ValueError, ValueKind,
-    Vec2, Vec3, VelocityTracker, WindowCondition, ASPECT_RATIO, BACKGROUND_COLOR, BLUR,
-    BORDER_COLOR, BORDER_RADIUS, BORDER_WIDTH, BRIGHTNESS, CONTRAST, FONT_COLOR, FONT_SIZE,
-    FOREGROUND_COLOR, GRAYSCALE, HEIGHT, INVERT, LETTER_SPACING, LINE_HEIGHT, OPACITY, POSITION_X,
-    POSITION_Y, ROTATION, SATURATION, SCALE_X, SCALE_Y, SEPIA, TRANSLATE_X, TRANSLATE_Y, WIDTH,
-};
 
 // --- Barcode / QR generation ---
 #[cfg(feature = "barcode")]
@@ -399,36 +381,10 @@ pub mod prelude {
         RouteProviderProps, RouteTransition, Router, RouterProps,
     };
 
+    // Domain-owned animation curation; excludes `animation::WindowMetrics`
+    // (name collision with the runtime metrics — use the namespace for it).
     #[cfg(feature = "animation")]
-    pub use crate::{
-        stagger, use_animatable, use_animatable_with_defaults, use_animate_presence, use_animation,
-        use_animation_layout, use_animation_scope, use_animation_snapshot, use_animation_target,
-        use_draggable, use_layout_snapshot, use_scoped_animation, use_scroll_observer, Angle,
-        Animatable, AnimatableDefaults, AnimatableValue, AnimatePresence, Animation,
-        AnimationAdapterError, AnimationBackend, AnimationBuildError, AnimationControls,
-        AnimationFinished, AnimationHostError, AnimationInstanceSnapshot, AnimationOutcome,
-        AnimationPerformanceCounters, AnimationScope, AnimationScopeDefaults, AnimationSelector,
-        AnimationSubscription, AnimationTarget, AnimationValue, AnimationWindowMetrics, AutoScroll,
-        BackendRejection, BuiltinEase, CallPolicy, CapabilityRequirements, Composition,
-        DiscreteValue, DragAxis, DragConstraints, DragMapping, DragPhase, DragSnap, DragUpdate,
-        Draggable, DraggableCallbacks, DraggableConfig, DraggableHandle, EaseDirection, Easing,
-        EasingError, ExecutionPolicy, ExitCancelPolicy, InvalidationClass, IrregularEase,
-        IterationCount, JumpMode, LabelName, LayoutAnimation, LayoutAnimationMode,
-        LayoutChangeKind, LayoutDelta, LayoutEngine, LayoutId, LayoutMountState, LayoutNode,
-        LayoutNodeId, LayoutSnapshot, Length, LengthUnit, LinearPoint, LinearRgba, LoweringReport,
-        Modifier, MountTransition, NativeCapability, NativeLoweringError, PlaybackDirection,
-        PlaybackRate, PlaybackSettings, PlaybackState, PresenceEntry, PresenceHandle, PresenceKey,
-        PresenceMode, PresencePhase, Property, PropertyKeyframe, PropertyName, ScopeCleanupPolicy,
-        ScopeMethodName, ScrollAxis, ScrollCallbacks, ScrollDirection, ScrollObserver, ScrollRange,
-        ScrollSample, ScrollSync, ScrollThreshold, ShadowValue, SharedElementProjection,
-        SpringSpec, Stagger, StaggerAxis, StaggerDirection, StaggerFrom, StaggerGrid, TargetName,
-        TimeError, TimeOffset, TimePoint, TimeSpan, Timeline, TimelinePosition, TransformValue,
-        TransitionPreset, UnsupportedFeature, ValueError, ValueKind, Vec2, Vec3, VelocityTracker,
-        WindowCondition, ASPECT_RATIO, BACKGROUND_COLOR, BLUR, BORDER_COLOR, BORDER_RADIUS,
-        BORDER_WIDTH, BRIGHTNESS, CONTRAST, FONT_COLOR, FONT_SIZE, FOREGROUND_COLOR, GRAYSCALE,
-        HEIGHT, INVERT, LETTER_SPACING, LINE_HEIGHT, OPACITY, POSITION_X, POSITION_Y, ROTATION,
-        SATURATION, SCALE_X, SCALE_Y, SEPIA, TRANSLATE_X, TRANSLATE_Y, WIDTH,
-    };
+    pub use crate::animation::prelude::*;
 
     #[cfg(feature = "chart")]
     pub use crate::{

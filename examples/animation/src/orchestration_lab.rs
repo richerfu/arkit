@@ -323,7 +323,7 @@ fn CapabilityDemo() -> Element {
     let report = arkit::animation::NativeLowerer
         .lower(ExecutionPolicy::Auto, requirements)
         .expect("sampled backend supports the full requirement set");
-    let metrics = AnimationWindowMetrics {
+    let metrics = arkit::animation::WindowMetrics {
         width_vp: 360.0,
         height_vp: 720.0,
         density: 3.0,

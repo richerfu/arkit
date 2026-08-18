@@ -102,3 +102,42 @@ pub use arkit_animation_core::{
     TargetName, TargetSetName, TimeError, TimeOffset, TimePoint, TimeSpan, TimelinePosition,
     TransformValue, ValueError, ValueKind, Vec2, Vec3, WindowMetrics,
 };
+
+/// Animation symbols intended for glob import (`use arkit::prelude::*`).
+///
+/// This is the domain-owned curation consumed by the `arkit` facade prelude,
+/// so the list cannot drift from the crate's actual API. It deliberately
+/// excludes [`WindowMetrics`]: that name collides with the runtime's window
+/// metrics and must be referenced through the `animation::` namespace.
+pub mod prelude {
+    pub use crate::{
+        stagger, use_animatable, use_animatable_with_defaults, use_animate_presence, use_animation,
+        use_animation_host_provider, use_animation_layout, use_animation_scope,
+        use_animation_snapshot, use_animation_target, use_draggable, use_layout_snapshot,
+        use_scoped_animation, use_scroll_observer, Angle, Animatable, AnimatableDefaults,
+        AnimatableValue, AnimatePresence, Animation, AnimationAdapterError, AnimationBackend,
+        AnimationBuildError, AnimationControls, AnimationFinished, AnimationHostError,
+        AnimationInstanceSnapshot, AnimationOutcome, AnimationPerformanceCounters, AnimationScope,
+        AnimationScopeDefaults, AnimationSelector, AnimationSubscription, AnimationTarget,
+        AnimationValue, AutoScroll, BackendRejection, BuiltinEase, CallPolicy,
+        CapabilityRequirements, Composition, DiscreteValue, DragAxis, DragConstraints, DragMapping,
+        DragPhase, DragSnap, DragUpdate, Draggable, DraggableCallbacks, DraggableConfig,
+        DraggableHandle, EaseDirection, Easing, EasingError, ExecutionPolicy, ExitCancelPolicy,
+        InvalidationClass, IrregularEase, IterationCount, JumpMode, LabelName, LayoutAnimation,
+        LayoutAnimationMode, LayoutChangeKind, LayoutDelta, LayoutEngine, LayoutId,
+        LayoutMountState, LayoutNode, LayoutNodeId, LayoutSnapshot, Length, LengthUnit,
+        LinearPoint, LinearRgba, LoweringReport, Modifier, MountTransition, NativeCapability,
+        NativeLoweringError, PlaybackDirection, PlaybackRate, PlaybackSettings, PlaybackState,
+        PresenceEntry, PresenceHandle, PresenceKey, PresenceMode, PresencePhase, Property,
+        PropertyKeyframe, PropertyName, ScopeCleanupPolicy, ScopeMethodName, ScrollAxis,
+        ScrollCallbacks, ScrollDirection, ScrollObserver, ScrollRange, ScrollSample, ScrollSync,
+        ScrollThreshold, ShadowValue, SharedElementProjection, SpringSpec, Stagger, StaggerAxis,
+        StaggerDirection, StaggerFrom, StaggerGrid, TargetName, TimeError, TimeOffset, TimePoint,
+        TimeSpan, Timeline, TimelinePosition, TransformValue, TransitionPreset, UnsupportedFeature,
+        ValueError, ValueKind, Vec2, Vec3, VelocityTracker, WindowCondition, ASPECT_RATIO,
+        BACKGROUND_COLOR, BLUR, BORDER_COLOR, BORDER_RADIUS, BORDER_WIDTH, BRIGHTNESS, CONTRAST,
+        FONT_COLOR, FONT_SIZE, FOREGROUND_COLOR, GRAYSCALE, HEIGHT, INVERT, LETTER_SPACING,
+        LINE_HEIGHT, OPACITY, POSITION_X, POSITION_Y, ROTATION, SATURATION, SCALE_X, SCALE_Y,
+        SEPIA, TRANSLATE_X, TRANSLATE_Y, WIDTH,
+    };
+}

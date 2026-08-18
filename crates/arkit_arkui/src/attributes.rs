@@ -70,22 +70,21 @@ impl EncodedAttrValue {
 
 #[derive(Clone, Debug, PartialEq)]
 struct EncodedAttr {
-    name: String,
+    /// Attribute names come from dioxus templates and mutations, which hand
+    /// out `&'static str`; storing them as such makes comparisons pointer
+    /// friendly and keeps the encode path allocation-free for names.
+    name: &'static str,
     ty: ArkUINodeAttributeType,
     value: EncodedAttrValue,
 }
 
 impl EncodedAttr {
-    fn new(name: impl Into<String>, ty: ArkUINodeAttributeType, value: EncodedAttrValue) -> Self {
-        Self {
-            name: name.into(),
-            ty,
-            value,
-        }
+    fn new(name: &'static str, ty: ArkUINodeAttributeType, value: EncodedAttrValue) -> Self {
+        Self { name, ty, value }
     }
 
-    fn name(&self) -> &str {
-        &self.name
+    fn name(&self) -> &'static str {
+        self.name
     }
 
     fn apply(&self, node: &mut ArkUINode, tag: &str) -> ArkUIResult<()> {
@@ -155,7 +154,7 @@ impl DesiredAttrs {
     pub(crate) fn set(
         &mut self,
         tag: &str,
-        name: &str,
+        name: &'static str,
         value: &dioxus_core::AttributeValue,
     ) -> AttrMutation {
         if matches!(value, dioxus_core::AttributeValue::None) {
@@ -167,6 +166,12 @@ impl DesiredAttrs {
                 .unwrap_or(AttrMutation::Unchanged);
         }
         let Some(attr) = encode_attr(tag, name, value) else {
+            // Unknown attribute or unparseable value: dropping it silently
+            // makes typos invisible, so surface it in debug builds.
+            #[cfg(debug_assertions)]
+            ohos_hilog_binding::warn(format!(
+                "arkit_arkui: unsupported attribute `{name}` on <{tag}> ignored (value: {value:?})"
+            ));
             return AttrMutation::Unchanged;
         };
         if let Some(existing) = self.attrs.iter_mut().find(|item| item.name == attr.name) {
@@ -870,7 +875,11 @@ fn attr_group(name: &str) -> AttrGroup {
     }
 }
 
-fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Option<EncodedAttr> {
+fn encode_attr(
+    tag: &str,
+    name: &'static str,
+    value: &dioxus_core::AttributeValue,
+) -> Option<EncodedAttr> {
     let as_f32 = |v: &dioxus_core::AttributeValue| {
         parse_vp(v).or_else(|| match v {
             dioxus_core::AttributeValue::Float(f) => Some(*f as f32),
@@ -888,7 +897,7 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
     let as_bool = |v: &dioxus_core::AttributeValue| match v {
         dioxus_core::AttributeValue::Bool(b) => Some(*b),
         dioxus_core::AttributeValue::Int(i) => Some(*i != 0),
-        dioxus_core::AttributeValue::Text(s) => match css_value::enum_token(s).as_str() {
+        dioxus_core::AttributeValue::Text(s) => match css_value::enum_token(s).as_ref() {
             "true" | "yes" | "on" => Some(true),
             "false" | "no" | "off" => Some(false),
             _ => None,
@@ -1597,7 +1606,7 @@ fn align_items_value(tag: &str, s: &str) -> Option<i32> {
     let lower = css_value::enum_token(s);
     match tag {
         // Column/Row AlignItems enum is distinct from Flex AlignSelf.
-        "column" | "row" => match lower.as_str() {
+        "column" | "row" => match lower.as_ref() {
             "start" | "top" | "left" | "flex_start" => Some(0),
             "center" => Some(1),
             "end" | "bottom" | "right" | "flex_end" => Some(2),
@@ -1618,7 +1627,7 @@ fn justify_content_attr(tag: &str) -> Option<ArkUINodeAttributeType> {
 }
 
 fn justify_content_value(s: &str) -> Option<i32> {
-    match css_value::enum_token(s).as_str() {
+    match css_value::enum_token(s).as_ref() {
         "start" | "flex_start" | "left" | "top" => Some(1),
         "center" => Some(2),
         "end" | "flex_end" | "right" | "bottom" => Some(3),
@@ -1634,7 +1643,7 @@ fn item_alignment_value(s: &str) -> Option<i32> {
 }
 
 fn flex_direction_value(s: &str) -> Option<i32> {
-    match css_value::enum_token(s).as_str() {
+    match css_value::enum_token(s).as_ref() {
         "row" | "horizontal" => Some(0),
         "column" | "vertical" => Some(1),
         "row_reverse" | "rowreverse" => Some(2),
@@ -1644,7 +1653,7 @@ fn flex_direction_value(s: &str) -> Option<i32> {
 }
 
 fn flex_wrap_value(s: &str) -> Option<i32> {
-    match css_value::enum_token(s).as_str() {
+    match css_value::enum_token(s).as_ref() {
         "nowrap" | "no_wrap" | "false" | "off" => Some(0),
         "wrap" | "true" | "on" => Some(1),
         "wrap_reverse" | "wrapreverse" => Some(2),

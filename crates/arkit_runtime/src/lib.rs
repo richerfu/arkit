@@ -522,6 +522,17 @@ fn event_bubbles(name: &str) -> bool {
     dioxus_elements::event::classify_event_name(name).is_some_and(|kind| kind.bubbles())
 }
 
+/// Debounce raw keyboard-height reports.
+///
+/// The keyboard show/hide animation emits many intermediate heights. The
+/// first report always propagates (there is no previous value to compare
+/// against); afterwards only steps of at least one physical pixel do, so
+/// metrics subscribers are not spammed with sub-pixel animation frames.
+fn keyboard_height_update(previous: Option<i32>, height: i32) -> Option<i32> {
+    let step = previous.map_or(i32::MAX, |previous| height - previous);
+    (step.abs() >= 1).then_some(height)
+}
+
 impl ArkRuntime {
     /// Create and mount a runtime from an already-configured dioxus
     /// [`VirtualDom`].
@@ -668,14 +679,8 @@ impl ArkRuntime {
             );
 
             if let AbilityEvent::KeyboardEvent(height) = &event {
-                // Debounce keyboard height changes: the keyboard show/hide
-                // animation emits many intermediate heights, and each metrics
-                // change currently marks the whole tree dirty. Only significant
-                // steps (>= 1vp) propagate to avoid a re-render storm that
-                // fights the keyboard animation visually.
-                let step = height - keyboard_height_px.unwrap_or(*height);
-                if step.abs() >= 1 {
-                    keyboard_height_px = Some(*height);
+                if let Some(next) = keyboard_height_update(keyboard_height_px, *height) {
+                    keyboard_height_px = Some(next);
                 }
             }
 
@@ -691,8 +696,21 @@ impl ArkRuntime {
                         if refresh_window_metrics {
                             let next = WindowMetrics::from_app(&metrics_app, keyboard_height_px);
                             if let Some(metrics) = loop_metrics.upgrade() {
-                                if WindowMetricsHandle::from_inner(metrics).update(next) {
-                                    inner.borrow_mut().dom.mark_all_dirty();
+                                // Metrics subscribers include the reactive
+                                // window-metrics signal providers installed at
+                                // every Arkit root (entry and embedded item
+                                // roots). Setting a dioxus signal from the
+                                // NAPI loop needs the runtime guard, exactly
+                                // like `run_ui_loop_effects`. Precise signal
+                                // subscriptions replace the previous
+                                // whole-tree `mark_all_dirty`, so only
+                                // components that read metrics re-render on
+                                // geometry, keyboard, or config changes.
+                                if let Some(runtime) = weak_runtime.upgrade() {
+                                    let _guard = dioxus_core::RuntimeGuard::new(runtime);
+                                    let _ = WindowMetricsHandle::from_inner(metrics).update(next);
+                                } else {
+                                    let _ = WindowMetricsHandle::from_inner(metrics).update(next);
                                 }
                             }
                         }
@@ -863,6 +881,20 @@ mod tests {
             runtime.handle().clone(),
         );
         (runtime, handle)
+    }
+
+    #[test]
+    fn first_keyboard_height_report_always_propagates() {
+        assert_eq!(keyboard_height_update(None, 0), Some(0));
+        assert_eq!(keyboard_height_update(None, 812), Some(812));
+    }
+
+    #[test]
+    fn keyboard_height_steps_below_one_pixel_are_debounced() {
+        assert_eq!(keyboard_height_update(Some(300), 300), None);
+        assert_eq!(keyboard_height_update(Some(300), 301), Some(301));
+        assert_eq!(keyboard_height_update(Some(300), 299), Some(299));
+        assert_eq!(keyboard_height_update(Some(300), 0), Some(0));
     }
 
     #[test]

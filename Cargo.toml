@@ -149,9 +149,6 @@ tree-sitter-c = "0.23"
 openharmony-ability = "1.0.0-beta.1"
 openharmony-ability-plugin-webview = "1.0.0-beta.1"
 
-# Published on crates.io. The wrapper user_data ownership fixes previously
-# pinned to fix/arkui-wrapper-lifecycle-023 are integrated upstream; declare
-# `0.2` (no patch) so resolution always lands on the latest 0.2.x.
 ohos-arkui-binding = { version = "0.2", default-features = false, features = ["napi", "image", "drawing", "api-20"] }
 ohos-arkui-sys = { version = "0.1", default-features = false, features = ["api-20"] }
 ohos-drawing-binding = { version = "0.2", default-features = false, features = ["api-20"] }
@@ -170,3 +167,17 @@ ohos-native-window-binding = { version = "0.2", default-features = false, featur
 thorvg = { version = "0.5.0", default-features = false, features = ["vendored", "lottie", "png", "fonts", "threads"] }
 thorvg-sys = { version = "0.3.0", default-features = false }
 wgpu = { version = "30.0.0", default-features = false, features = ["std", "gles", "wgsl"] }
+
+# The identity-preserving mount API (add_child/insert_child taking the mounted
+# `Rc` directly) plus the dispose-order and user_data lifetime fixes live in
+# the local bindings workspace until they ship as ohos-arkui-binding 0.3 /
+# ohos-xcomponent-binding 0.4. Release order: publish the bindings first, bump
+# the version requirements above, then delete this patch section.
+[patch.crates-io]
+ohos-arkui-binding = { path = "../ohos-native-bindings/crates/arkui" }
+ohos-xcomponent-binding = { path = "../ohos-native-bindings/crates/xcomponent" }
+# The patched bindings resolve their sys crates by path, so direct sys
+# consumers in this workspace must use the same source or the graph carries
+# two copies of each sys crate with incompatible types.
+ohos-arkui-sys = { path = "../ohos-native-bindings/sys/ohos-arkui-sys" }
+ohos-xcomponent-sys = { path = "../ohos-native-bindings/sys/ohos-xcomponent-sys" }

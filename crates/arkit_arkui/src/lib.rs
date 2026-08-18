@@ -246,7 +246,7 @@ pub struct ArkUIRenderer {
     /// Cached static-template host subtrees, keyed by template address. Each
     /// entry is a ready-to-clone host subtree (kinds + structure) that
     /// `load_template` instantiates.
-    templates: FxHashMap<usize, Vec<TemplateHostNode>>,
+    templates: FxHashMap<usize, Rc<[TemplateHostNode]>>,
     /// Ownership boundary for the synthetic host root.
     root_mount: RendererRootMount,
     /// Event sink (set by the runtime after construction).
@@ -620,17 +620,11 @@ impl ArkUIRenderer {
                 Row::new().expect("arkit_arkui: button content Row").into();
             let content = Rc::new(RefCell::new(content_node));
             root.borrow_mut()
-                .insert_child(content.borrow().clone(), 0)
+                .insert_child(content.clone(), 0)
                 .unwrap_or_else(|error| {
                     panic!("arkit_arkui: failed to create button content projection: {error}")
                 });
-            let mounted_content = root
-                .borrow()
-                .children()
-                .first()
-                .cloned()
-                .expect("button content insertion succeeded without a mounted wrapper");
-            return (root, Some(mounted_content));
+            return (root, Some(content));
         }
         (root, None)
     }
@@ -826,8 +820,11 @@ impl ArkUIRenderer {
             // parent's child list.
             HostKind::Portal { .. } => Vec::new(),
             HostKind::Text { .. } => {
-                // Text under text/button merges into parent → no native root.
-                // Text under a normal container → its own native Text.
+                // Text under a merging parent (only `text`; see
+                // `merges_text_children`) contributes to the parent's content
+                // attribute → no native root. Button text stays a real native
+                // child inside the button's content Row. Text under a normal
+                // container → its own native Text.
                 match h.parent {
                     Some(parent) => {
                         let parent_tag = self.hosts[parent].tag();
@@ -968,7 +965,7 @@ impl ArkUIRenderer {
         let native_index = self.projected_native_len_before(parent, child);
         let insert_result = {
             let mut parent_mut = parent_native.borrow_mut();
-            parent_mut.insert_child(child_native.borrow().clone(), native_index)
+            parent_mut.insert_child(child_native.clone(), native_index)
         };
         let inserted = self
             .latch_structural("attach_native insert_child", insert_result)
@@ -979,20 +976,12 @@ impl ArkUIRenderer {
             return;
         }
 
-        // `insert_child` consumes the child and wraps it in a *new* `Rc` inside
-        // the parent's `children` — the wrapper we held (`child_native`) is NOT
-        // the one now mounted. Event callbacks (`on_event`) are stored on the
-        // wrapper's `event_handle` field, so we must rebind `hosts[child].native`
-        // to the actually-mounted wrapper, else event registration silently
-        // targets a detached wrapper and clicks never fire. (Doc §"Native
-        // wrapper 处理计划".)
-        let mounted = parent_native.borrow().children().get(native_index).cloned();
-        if let Some(mounted) = mounted {
-            let parent_attached = self.hosts[parent].native_attached;
-            self.hosts[child].native = Some(mounted);
-            self.hosts[child].native_attached = parent_attached;
-            self.rebind_mounted_projection(child, parent_attached);
-        }
+        // `insert_child` mounts the passed `Rc` itself, so `child_native` is
+        // the mounted wrapper and event callbacks registered on it dispatch
+        // directly; only attach state and post-attach replays remain.
+        let parent_attached = self.hosts[parent].native_attached;
+        self.hosts[child].native_attached = parent_attached;
+        self.rebind_mounted_projection(child, parent_attached);
     }
 
     /// Ensure a host node has a native node allocated if its kind projects one.
@@ -1346,28 +1335,25 @@ impl ArkUIRenderer {
                 }
             } else {
                 // The desired node may already be mounted later in the same
-                // parent (a Dioxus reorder). Move that native node instead of
-                // inserting a duplicate and leaving a stale tail child.
+                // parent (a Dioxus reorder). Detach it first, then re-insert
+                // the same wrapper at the target position instead of leaving
+                // a duplicate and a stale tail child.
                 let mounted_elsewhere = parent_native
                     .borrow()
                     .children()
                     .iter()
                     .position(|mounted| Self::native_raw_id(mounted) == desired_raw);
-                let node_to_insert = if let Some(index) = mounted_elsewhere {
+                if let Some(index) = mounted_elsewhere {
                     let result = parent_native.borrow_mut().remove_child(index);
                     let removed = self
                         .latch_structural("sync_native_children detach reordered child", result);
-                    let Some(Some(removed)) = removed else {
+                    let Some(Some(_)) = removed else {
                         return;
                     };
-                    let node = removed.borrow().clone();
-                    node
-                } else {
-                    child_native.borrow().clone()
-                };
+                }
                 let result = {
                     let mut parent_mut = parent_native.borrow_mut();
-                    parent_mut.insert_child(node_to_insert, native_index)
+                    parent_mut.insert_child(child_native.clone(), native_index)
                 };
                 let inserted = self
                     .latch_structural("sync_native_children insert_child", result)
@@ -1375,12 +1361,10 @@ impl ArkUIRenderer {
                 if !inserted {
                     return;
                 }
-                let mounted = parent_native.borrow().children().get(native_index).cloned();
-                if let Some(mounted) = mounted {
-                    self.hosts[child].native = Some(mounted);
-                    self.hosts[child].native_attached = parent_attached;
-                    self.rebind_mounted_projection(child, parent_attached);
-                }
+                // Identity-preserving insert: `child_native` is the mounted
+                // wrapper, so only attach state and replays remain.
+                self.hosts[child].native_attached = parent_attached;
+                self.rebind_mounted_projection(child, parent_attached);
             }
         }
     }
@@ -1757,9 +1741,12 @@ impl WriteMutations for ArkUIRenderer {
     }
 
     fn load_template(&mut self, template: Template, index: usize, id: ElementId) {
-        // Cache the template structure by its roots pointer identity.
+        // Cache the template structure by its roots pointer identity. The
+        // cache stores `Rc<[TemplateHostNode]>`, so the clone below (needed to
+        // escape the map borrow while `instantiate_template` takes `&mut
+        // self`) is a refcount bump, not a deep copy of the template tree.
         let key = template.roots.as_ptr() as usize;
-        let tpl = self
+        let tpl: Rc<[TemplateHostNode]> = self
             .templates
             .entry(key)
             .or_insert_with(|| {

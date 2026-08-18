@@ -133,18 +133,21 @@ pub fn split_css_list(s: &str) -> Vec<&str> {
         .collect()
 }
 
-pub fn enum_token(s: &str) -> String {
-    s.trim()
-        .trim_matches('"')
-        .trim_matches('\'')
-        .to_ascii_lowercase()
-        .replace('-', "_")
+pub fn enum_token(s: &str) -> std::borrow::Cow<'_, str> {
+    let trimmed = s.trim().trim_matches('"').trim_matches('\'');
+    if trimmed.chars().any(|c| c.is_ascii_uppercase() || c == '-') {
+        std::borrow::Cow::Owned(trimmed.to_ascii_lowercase().replace('-', "_"))
+    } else {
+        // Keyword attributes are usually already lowercase; skip the
+        // per-lookup allocation for that common case.
+        std::borrow::Cow::Borrowed(trimmed)
+    }
 }
 
 // --- Keyword maps (ArkUI enums) ---------------------------------------------
 
 pub fn text_align_keyword(s: &str) -> Option<i32> {
-    match enum_token(s).as_str() {
+    match enum_token(s).as_ref() {
         "start" | "left" => Some(0),
         "center" => Some(1),
         "end" | "right" => Some(2),
@@ -154,7 +157,7 @@ pub fn text_align_keyword(s: &str) -> Option<i32> {
 }
 
 pub fn visibility_keyword(s: &str) -> Option<i32> {
-    match enum_token(s).as_str() {
+    match enum_token(s).as_ref() {
         "visible" | "show" => Some(0),
         "hidden" | "invisible" => Some(1),
         "none" | "gone" => Some(2),
@@ -163,7 +166,7 @@ pub fn visibility_keyword(s: &str) -> Option<i32> {
 }
 
 pub fn font_style_keyword(s: &str) -> Option<i32> {
-    match enum_token(s).as_str() {
+    match enum_token(s).as_ref() {
         "normal" => Some(0),
         "italic" | "oblique" => Some(1),
         _ => None,
@@ -172,7 +175,7 @@ pub fn font_style_keyword(s: &str) -> Option<i32> {
 
 pub fn font_weight_keyword(s: &str) -> Option<i32> {
     // Return *CSS-like* weights (100–900); caller maps to ArkUI 0–8 index.
-    match enum_token(s).as_str() {
+    match enum_token(s).as_ref() {
         "thin" | "hairline" => Some(100),
         "extralight" | "ultralight" => Some(200),
         "light" => Some(300),
@@ -187,7 +190,7 @@ pub fn font_weight_keyword(s: &str) -> Option<i32> {
 }
 
 pub fn border_style_keyword(s: &str) -> Option<i32> {
-    match enum_token(s).as_str() {
+    match enum_token(s).as_ref() {
         "solid" => Some(0),
         "dashed" => Some(1),
         "dotted" => Some(2),
@@ -197,7 +200,7 @@ pub fn border_style_keyword(s: &str) -> Option<i32> {
 }
 
 pub fn text_overflow_keyword(s: &str) -> Option<i32> {
-    match enum_token(s).as_str() {
+    match enum_token(s).as_ref() {
         "none" => Some(0),
         "clip" => Some(1),
         "ellipsis" => Some(2),
@@ -207,7 +210,7 @@ pub fn text_overflow_keyword(s: &str) -> Option<i32> {
 }
 
 pub fn object_fit_value(s: &str) -> Option<i32> {
-    match enum_token(s).as_str() {
+    match enum_token(s).as_ref() {
         "contain" => Some(0),
         "cover" => Some(1),
         "auto" => Some(2),
@@ -219,7 +222,7 @@ pub fn object_fit_value(s: &str) -> Option<i32> {
 }
 
 pub fn scroll_bar_keyword(s: &str) -> Option<i32> {
-    match enum_token(s).as_str() {
+    match enum_token(s).as_ref() {
         "off" | "hidden" | "none" | "false" => Some(0),
         "auto" => Some(1),
         "on" | "visible" | "always" | "true" | "show" => Some(2),
@@ -228,7 +231,7 @@ pub fn scroll_bar_keyword(s: &str) -> Option<i32> {
 }
 
 pub fn scroll_direction_keyword(s: &str) -> Option<i32> {
-    match enum_token(s).as_str() {
+    match enum_token(s).as_ref() {
         "vertical" | "y" => Some(0),
         "horizontal" | "x" => Some(1),
         _ => None,
@@ -236,7 +239,7 @@ pub fn scroll_direction_keyword(s: &str) -> Option<i32> {
 }
 
 pub fn text_decoration_keyword(s: &str) -> Option<i32> {
-    match enum_token(s).as_str() {
+    match enum_token(s).as_ref() {
         "none" => Some(0),
         "underline" => Some(1),
         "overline" => Some(2),
@@ -247,7 +250,7 @@ pub fn text_decoration_keyword(s: &str) -> Option<i32> {
 
 /// Stack / absolute `alignment` (ArkUI Alignment 0–8).
 pub fn alignment_keyword(s: &str) -> Option<i32> {
-    match enum_token(s).as_str() {
+    match enum_token(s).as_ref() {
         "top_start" | "top_left" | "start_top" | "left_top" => Some(0),
         "top" | "top_center" => Some(1),
         "top_end" | "top_right" | "end_top" | "right_top" => Some(2),
@@ -262,7 +265,7 @@ pub fn alignment_keyword(s: &str) -> Option<i32> {
 }
 
 pub fn hit_test_keyword(s: &str) -> Option<i32> {
-    match enum_token(s).as_str() {
+    match enum_token(s).as_ref() {
         "default" | "auto" => Some(0),
         "block" => Some(1),
         "transparent" => Some(2),
@@ -272,7 +275,7 @@ pub fn hit_test_keyword(s: &str) -> Option<i32> {
 }
 
 pub fn scroll_edge_effect_keyword(s: &str) -> Option<i32> {
-    match enum_token(s).as_str() {
+    match enum_token(s).as_ref() {
         "spring" | "bounce" => Some(0),
         "fade" => Some(1),
         "none" | "hard" | "clamp" => Some(2),
@@ -282,7 +285,7 @@ pub fn scroll_edge_effect_keyword(s: &str) -> Option<i32> {
 
 /// Shadow style presets (ArkUI ShadowStyle).
 pub fn shadow_keyword(s: &str) -> Option<i32> {
-    match enum_token(s).as_str() {
+    match enum_token(s).as_ref() {
         "none" | "off" | "false" => Some(-1), // special: caller may skip apply
         "xs" | "outer_default_xs" => Some(0),
         "sm" | "small" | "outer_default_sm" => Some(1),
@@ -295,7 +298,7 @@ pub fn shadow_keyword(s: &str) -> Option<i32> {
 }
 
 pub fn input_type_keyword(s: &str) -> Option<i32> {
-    match enum_token(s).as_str() {
+    match enum_token(s).as_ref() {
         "text" | "normal" | "default" => Some(0),
         "number" | "numeric" | "tel_number" => Some(2),
         "phone" | "phone_number" | "tel" => Some(3),
@@ -312,7 +315,7 @@ pub fn input_type_keyword(s: &str) -> Option<i32> {
 }
 
 pub fn progress_type_keyword(s: &str) -> Option<i32> {
-    match enum_token(s).as_str() {
+    match enum_token(s).as_ref() {
         "linear" | "bar" | "line" => Some(0),
         "ring" | "circle" => Some(1),
         "eclipse" | "arc" => Some(2),
@@ -323,7 +326,7 @@ pub fn progress_type_keyword(s: &str) -> Option<i32> {
 }
 
 pub fn list_sticky_keyword(s: &str) -> Option<i32> {
-    match enum_token(s).as_str() {
+    match enum_token(s).as_ref() {
         "none" | "off" | "false" => Some(0),
         "header" | "start" => Some(1),
         "footer" | "end" => Some(2),
@@ -333,7 +336,7 @@ pub fn list_sticky_keyword(s: &str) -> Option<i32> {
 }
 
 pub fn button_type_keyword(s: &str) -> Option<i32> {
-    match enum_token(s).as_str() {
+    match enum_token(s).as_ref() {
         "normal" | "default" | "rectangle" | "rect" => Some(0),
         "capsule" | "pill" | "rounded" => Some(1),
         "circle" | "round" => Some(2),
@@ -342,7 +345,7 @@ pub fn button_type_keyword(s: &str) -> Option<i32> {
 }
 
 pub fn animation_curve_keyword(s: &str) -> Option<i32> {
-    match enum_token(s).as_str() {
+    match enum_token(s).as_ref() {
         "linear" => Some(0),
         "ease" => Some(1),
         "ease_in" | "easein" => Some(2),
@@ -362,7 +365,7 @@ pub fn animation_curve_keyword(s: &str) -> Option<i32> {
 
 /// Flex / row / column `align-items` style keywords (FlexOption path uses AlignSelf enum).
 pub fn flex_align_items_keyword(s: &str) -> Option<i32> {
-    match enum_token(s).as_str() {
+    match enum_token(s).as_ref() {
         "auto" => Some(0),
         "start" | "flex_start" | "top" | "left" => Some(1),
         "center" => Some(2),
