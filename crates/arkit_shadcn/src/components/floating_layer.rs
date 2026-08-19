@@ -169,6 +169,25 @@ impl FloatingPanelPlacement {
     }
 }
 
+/// Resolve the frame a floating panel should anchor to, right now.
+///
+/// [`arkit_hooks::use_layout_frame`] observation only re-fires on
+/// layout-driven area changes: scrolling an ancestor `scroll` moves the
+/// trigger in the window without re-laying-out (or re-notifying) it, so a
+/// cached frame anchors panels at the trigger's pre-scroll position. Panels
+/// therefore re-query the native node on every render while open — the frame
+/// is fresh exactly when the anchor matters — and fall back to the last
+/// observed frame when the node cannot be queried (e.g. between mounts).
+pub(crate) fn live_trigger_frame(
+    reference: &arkit_arkui::NativeElementRef,
+    fallback: arkit_hooks::LayoutFrame,
+) -> arkit_hooks::LayoutFrame {
+    reference
+        .current_layout_frame()
+        .filter(|frame| frame.is_measured())
+        .unwrap_or(fallback)
+}
+
 /// Clamp horizontal placement while preferring start alignment when possible.
 fn clamp_preserving_start(raw_x: f32, min_x: f32, max_x: f32, align: FloatingAlign) -> f32 {
     match align {

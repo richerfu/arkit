@@ -6,6 +6,7 @@
 //! closes the others. All original entry variants/styles are preserved via
 //! [`crate::components::menu_common`].
 
+use crate::components::floating_layer::live_trigger_frame;
 use crate::components::menu_common::{
     menu_closed_panel_height, menu_overlay_content, MenuEntry, MenuOverlayPassThroughRegion,
     MenuOverlayPlacement, MenuStyle,
@@ -53,7 +54,7 @@ pub fn Menubar(
     let mut internal_active = use_signal(|| default_active);
     let is_controlled = active.is_some();
     let current_active = active.unwrap_or_else(|| *internal_active.read());
-    let current_menubar_frame = *menubar_frame.read();
+    let current_menubar_frame = live_trigger_frame(&menubar_ref, *menubar_frame.read());
 
     let set_active = EventHandler::new(move |value: Option<usize>| {
         if !is_controlled {
@@ -132,7 +133,7 @@ fn MenubarMenu(
     let pass_through_region =
         MenuOverlayPassThroughRegion::from_frame(pass_through_frame, viewport.frame);
     let placement = MenuOverlayPlacement::resolve(
-        *trigger_frame.read(),
+        live_trigger_frame(&trigger_ref, *trigger_frame.read()),
         viewport,
         style.width,
         panel_height,

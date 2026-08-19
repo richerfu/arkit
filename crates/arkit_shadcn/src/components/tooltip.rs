@@ -8,7 +8,9 @@
 //! `popover_foreground` text at native text-base size. Anchored above the
 //! trigger.
 
-use super::floating_layer::{FloatingAlign, FloatingPanelPlacement, FloatingSide};
+use super::floating_layer::{
+    live_trigger_frame, FloatingAlign, FloatingPanelPlacement, FloatingSide,
+};
 use crate::theme::*;
 use arkit_prelude::*;
 use dioxus_core_macro::component;
@@ -68,7 +70,7 @@ pub fn Tooltip(
     });
 
     let placement = FloatingPanelPlacement::resolve(
-        *trigger_frame.read(),
+        live_trigger_frame(&trigger_ref, *trigger_frame.read()),
         viewport,
         panel_width,
         TOOLTIP_ESTIMATED_HEIGHT,

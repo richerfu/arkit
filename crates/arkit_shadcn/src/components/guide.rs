@@ -244,6 +244,11 @@ pub fn GuideTarget(
 ) -> Element {
     let target_ref = arkit_hooks::use_native_element_ref();
     let registry = try_use_context::<GuideRegistry>();
+    // Register the handle so the tour can live-query the target's current
+    // window frame (layout observation alone lags behind ancestor scrolls).
+    if let Some(registry) = registry.as_ref() {
+        registry.register(&id, target_ref.clone());
+    }
     let frame_registry = registry.clone();
     let frame_id = id.clone();
     arkit_hooks::use_layout_frame(target_ref.clone(), move |frame| {
@@ -263,14 +268,21 @@ pub fn GuideTarget(
 
 #[derive(Clone)]
 struct GuideRegistry {
-    frames: Rc<RefCell<Vec<(String, arkit_hooks::LayoutFrame)>>>,
+    targets: Rc<RefCell<Vec<GuideTargetEntry>>>,
     revision: Signal<u64>,
+}
+
+/// One registered guide target: its native handle plus the last observed frame.
+struct GuideTargetEntry {
+    id: String,
+    reference: arkit_arkui::NativeElementRef,
+    frame: arkit_hooks::LayoutFrame,
 }
 
 impl GuideRegistry {
     fn new() -> Self {
         Self {
-            frames: Rc::new(RefCell::new(Vec::new())),
+            targets: Rc::new(RefCell::new(Vec::new())),
             revision: Signal::new(0),
         }
     }
@@ -279,34 +291,58 @@ impl GuideRegistry {
         (self.revision)()
     }
 
+    /// Resolve the target's current frame, right now.
+    ///
+    /// Layout observation only re-fires on layout-driven area changes, so the
+    /// cached frame can lag behind an ancestor scroll. The spotlight is
+    /// anchored to "where the target is when the tour opens/advances", hence
+    /// the live query with the observed frame as fallback.
     fn frame(&self, id: &str) -> Option<arkit_hooks::LayoutFrame> {
-        self.frames
+        self.targets
             .borrow()
             .iter()
-            .find(|(registered, _)| registered == id)
-            .map(|(_, frame)| *frame)
+            .find(|target| target.id == id)
+            .map(|target| {
+                target
+                    .reference
+                    .current_layout_frame()
+                    .filter(|frame| frame.is_measured())
+                    .unwrap_or(target.frame)
+            })
+    }
+
+    fn register(&self, id: &str, reference: arkit_arkui::NativeElementRef) {
+        let mut targets = self.targets.borrow_mut();
+        match targets.iter_mut().find(|target| target.id == id) {
+            Some(existing) => existing.reference = reference,
+            None => targets.push(GuideTargetEntry {
+                id: id.to_owned(),
+                reference,
+                frame: arkit_hooks::LayoutFrame::default(),
+            }),
+        }
     }
 
     fn update(&self, id: &str, frame: arkit_hooks::LayoutFrame) {
-        let mut frames = self.frames.borrow_mut();
-        if let Some((_, current)) = frames.iter_mut().find(|(registered, _)| registered == id) {
-            if *current == frame {
+        let mut targets = self.targets.borrow_mut();
+        if let Some(target) = targets.iter_mut().find(|target| target.id == id) {
+            if target.frame == frame {
                 return;
             }
-            *current = frame;
+            target.frame = frame;
         } else {
-            frames.push((id.to_owned(), frame));
+            return;
         }
-        drop(frames);
+        drop(targets);
         self.bump_revision();
     }
 
     fn remove(&self, id: &str) {
         let removed = {
-            let mut frames = self.frames.borrow_mut();
-            let before = frames.len();
-            frames.retain(|(registered, _)| registered != id);
-            frames.len() != before
+            let mut targets = self.targets.borrow_mut();
+            let before = targets.len();
+            targets.retain(|target| target.id != id);
+            targets.len() != before
         };
         if removed {
             self.bump_revision();

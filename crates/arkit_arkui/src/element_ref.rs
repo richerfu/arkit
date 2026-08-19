@@ -318,6 +318,18 @@ impl NativeElementRef {
         })
     }
 
+    /// Query this element's current window frame imperatively.
+    ///
+    /// Unlike layout observation ([`crate::NativeElementEvent::Layout`]), which
+    /// only fires on layout-driven area changes, this reads the live geometry
+    /// from the native node — including offsets introduced by an ancestor
+    /// `Scroll` scrolling, which does not re-layout its children. Use it
+    /// whenever a cached observed frame would be positioned relative to "now"
+    /// (floating-panel anchoring, spotlights, hit regions).
+    pub fn current_layout_frame(&self) -> Option<LayoutFramePx> {
+        self.current()?.layout_frame_px()
+    }
+
     pub fn subscribe(
         &self,
         callback: impl Fn(NativeElementEvent) + 'static,

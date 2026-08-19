@@ -7,7 +7,8 @@
 //! callers.
 
 use super::floating_layer::{
-    trigger_width_vp, FloatingAlign, FloatingPanelPlacement, FloatingSide, FLOATING_CAPTURE_COLOR,
+    live_trigger_frame, trigger_width_vp, FloatingAlign, FloatingPanelPlacement, FloatingSide,
+    FLOATING_CAPTURE_COLOR,
 };
 use crate::{i18n::use_component_i18n, theme::*};
 use arkit_prelude::*;
@@ -83,7 +84,7 @@ pub fn Select(
     let count = options.len();
     let has_panel_label = label.as_deref() != Some("");
 
-    let frame = *trigger_frame.read();
+    let frame = live_trigger_frame(&trigger_ref, *trigger_frame.read());
     let panel_width = trigger_width_vp(frame, viewport, SELECT_PANEL_FALLBACK_WIDTH);
     let panel_height = select_panel_estimated_height(count, has_panel_label);
     let placement = FloatingPanelPlacement::resolve(

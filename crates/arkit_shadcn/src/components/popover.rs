@@ -9,7 +9,7 @@
 //! outer shadow, and start-aligned content.
 
 use super::floating_layer::{
-    FloatingAlign, FloatingPanelPlacement, FloatingSide, FLOATING_CAPTURE_COLOR,
+    live_trigger_frame, FloatingAlign, FloatingPanelPlacement, FloatingSide, FLOATING_CAPTURE_COLOR,
 };
 use crate::theme::*;
 use arkit_prelude::*;
@@ -62,7 +62,7 @@ pub fn Popover(
     });
 
     let placement = FloatingPanelPlacement::resolve(
-        *trigger_frame.read(),
+        live_trigger_frame(&trigger_ref, *trigger_frame.read()),
         viewport,
         panel_width,
         POPOVER_ESTIMATED_HEIGHT,

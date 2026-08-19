@@ -8,7 +8,9 @@
 //! `spacing::LG` padding, `md` radius, 1px border, `popover`/`border` tokens,
 //! small outer shadow, start-aligned content. Anchored below the trigger.
 
-use super::floating_layer::{FloatingAlign, FloatingPanelPlacement, FloatingSide};
+use super::floating_layer::{
+    live_trigger_frame, FloatingAlign, FloatingPanelPlacement, FloatingSide,
+};
 use crate::theme::*;
 use arkit_prelude::*;
 use dioxus_core_macro::component;
@@ -70,7 +72,7 @@ pub fn HoverCard(
     });
 
     let placement = FloatingPanelPlacement::resolve(
-        *trigger_frame.read(),
+        live_trigger_frame(&trigger_ref, *trigger_frame.read()),
         viewport,
         panel_width,
         HOVER_CARD_ESTIMATED_HEIGHT,
