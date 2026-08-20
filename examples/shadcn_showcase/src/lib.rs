@@ -3697,17 +3697,21 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 width: 320.0,
                 column {
                     width: "100%",
+                    align_items: "start",
                     padding: spacing::LG,
                     background_color: theme.colors.background,
                     border_radius: theme.radii.lg,
                     border_width: 1.0,
                     border_color: theme.colors.border,
                     row {
+                        width: "100%",
                         align_items: "center",
                         justify_content: "start",
                         Skeleton { width: 48.0, height: 48.0 }
                         h_gap { width: spacing::LG }
                         column {
+                            layout_weight: 1.0,
+                            align_items: "start",
                             Skeleton { width: 220.0, height: 16.0 }
                             v_gap { height: spacing::SM }
                             Skeleton { width: 180.0, height: 16.0 }

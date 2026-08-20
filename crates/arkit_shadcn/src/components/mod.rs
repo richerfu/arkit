@@ -53,6 +53,7 @@ mod label;
 mod markdown;
 mod menu_common;
 mod menubar;
+mod motion;
 mod navigation_menu;
 mod pagination;
 mod popover;

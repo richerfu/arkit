@@ -90,7 +90,10 @@ pub use selector::AnimationSelector;
 pub use stagger::{stagger, Stagger, StaggerAxis, StaggerDirection, StaggerFrom, StaggerGrid};
 pub use target::{AnimationTargetBinding, TargetVisualState};
 pub use target_store::TargetStore;
-pub use transition::{MountTransition, TransitionPreset};
+pub use transition::{
+    use_presence_visibility, MountTransition, PresenceTransition, PresenceVisibility,
+    TransitionPreset, VisibleTransition,
+};
 
 pub use arkit_animation_core::{
     Angle, AnimatableValue, AnimationInstanceSnapshot, AnimationOutcome, AnimationValue,

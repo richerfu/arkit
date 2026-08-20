@@ -5,6 +5,7 @@
 //! ghost icon, space-between layout, `LG` horizontal padding), the `SM` top
 //! margin on the expanded body, and the open/close toggle.
 
+use super::motion::ExpandPresence;
 use crate::theme::*;
 use arkit_prelude::*;
 
@@ -75,14 +76,11 @@ pub fn Collapsible(props: CollapsibleProps) -> Element {
                     {arkit_icon::icon("chevrons-up-down".to_string(), 16.0, theme.colors.foreground)}
                 }
             }
-            if open {
-                arkit_animation::MountTransition {
-                    preset: Some(arkit_animation::TransitionPreset::SlideUp),
-                    duration_ms: Some(140),
-                    row {
-                        margin_top: spacing::SM,
-                        {props.children}
-                    }
+            ExpandPresence {
+                open,
+                row {
+                    margin_top: spacing::SM,
+                    {props.children}
                 }
             }
         }

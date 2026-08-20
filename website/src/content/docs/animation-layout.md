@@ -38,6 +38,12 @@ let presence = use_animate_presence::<Item>(PresenceMode::Wait);
 
 leaving child 保留到调用 `settle_exit`。没有固定 timeout，因此 spring、reverse、pause 或 backend fallback 都不会提前卸载。
 
+## PresenceTransition
+
+`PresenceTransition` 按 `PresencePhase` 播进入或离开 timeline，结束时回调 `on_terminal`。`VisibleTransition` / `use_presence_visibility` 是布尔开关的封装，用来让 dialog、sheet、tooltip 这类 overlay 在 `open = false` 之后仍留一帧把离场播完。
+
+Sonner 这类多条目队列不要用布尔封装，直接 `use_animate_presence` + 每条 `PresenceTransition`。
+
 ## 取消退出
 
 同 key 在退出期间重新出现时，按 `ExitCancelPolicy` 选择 re-enter 或完成退出。业务应保持 key 和领域身份一致，避免把两个不同对象误认为取消退出。
