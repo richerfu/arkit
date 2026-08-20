@@ -85,7 +85,7 @@ struct PaintSettings {
 /// Props for [`Terminal`].
 #[derive(Props, Clone, PartialEq)]
 pub struct TerminalProps {
-    /// Full Ghostty-aligned configuration (colors, cursor, metrics, …).
+    /// Colors, cursor, cell metrics, and grid size.
     #[props(default)]
     pub config: Option<TerminalConfig>,
     /// Initial VT written once on mount (host→terminal path).
@@ -164,9 +164,11 @@ pub struct TerminalController {
     pending_updates: Rc<RefCell<VecDeque<TerminalUpdate>>>,
     publishing: Rc<Cell<bool>>,
     callback_epoch: Rc<Cell<u64>>,
+    show_keyboard: Rc<RefCell<Option<ShowKeyboardFn>>>,
 }
 
 type TerminalChangeCallback = dyn FnMut(TerminalFrame, TerminalEffects, Option<TerminalError>);
+type ShowKeyboardFn = Rc<dyn Fn()>;
 
 struct TerminalUpdate {
     frame: TerminalFrame,
@@ -185,7 +187,18 @@ impl TerminalController {
         Self::default()
     }
 
-    /// Host → terminal (PTY/SSH output). Preferred name for the Ghostty model.
+    /// Open the native IME, matching `@ohos-rs/terminal` `showKeyboard()`.
+    pub fn show_keyboard(&self) {
+        if let Some(show) = self.show_keyboard.borrow().clone() {
+            show();
+        }
+    }
+
+    pub(crate) fn bind_show_keyboard(&self, show: ShowKeyboardFn) {
+        *self.show_keyboard.borrow_mut() = Some(show);
+    }
+
+    /// Host → terminal (PTY/SSH output).
     pub fn feed_vt(&self, data: &[u8]) {
         self.write_bytes(data);
     }
@@ -266,8 +279,8 @@ impl TerminalController {
 
     /// Scroll history by signed rows (negative = up into scrollback).
     ///
-    /// This is Ghostty `ghostty_terminal_scroll_viewport` DELTA — not UI layout
-    /// scrolling of a tall bitmap. The paint surface always shows one viewport.
+    /// Signed row delta — not UI layout scrolling of a tall bitmap. The paint
+    /// surface always shows one viewport.
     pub fn scroll_by(&self, delta_rows: i64) {
         if delta_rows == 0 {
             return;
@@ -416,11 +429,11 @@ fn fallback_key_bytes(name: &str) -> Vec<u8> {
     }
 }
 
-/// Terminal surface aligned with Ghostty:
+/// Terminal surface:
 /// - fixed cols×rows VT geometry (keyboard height must not reflow cols)
 /// - paint cells **scale to fit** the surface so nothing is center-clipped
 /// - DECAWM wrap for long lines
-/// - scrollback via Ghostty `scroll_viewport` (finger-follows-content)
+/// - scrollback via viewport pin (finger-follows-content)
 /// - direct native IME activation only after a gesture resolves to a tap
 #[component]
 pub fn Terminal(props: TerminalProps) -> Element {
@@ -431,7 +444,7 @@ pub fn Terminal(props: TerminalProps) -> Element {
     let registered_node = use_hook(|| Rc::new(Cell::new(None::<u64>)));
     // Pointer tracking is transient interaction state, not paint state. A
     // reactive Signal here rerendered the entire terminal on every move and
-    // again for every Ghostty row update, which made touch scrolling stutter.
+    // again for every VT row update, which made touch scrolling stutter.
     let gesture = use_hook(|| Rc::new(RefCell::new(TouchGesture::default())));
     let surface_metrics =
         use_hook(|| Rc::new(Cell::new(TerminalSurfaceMetrics::fallback(window_scale()))));
@@ -463,6 +476,10 @@ pub fn Terminal(props: TerminalProps) -> Element {
         let controller = controller.clone();
         let on_input = callbacks.on_input.clone();
         move || Rc::new(TerminalImeSession::new(controller, on_input))
+    });
+    controller.bind_show_keyboard({
+        let ime_session = ime_session.clone();
+        Rc::new(move || ime_session.show_keyboard())
     });
 
     let config = props.config.clone().unwrap_or_else(|| {
@@ -670,8 +687,8 @@ pub fn Terminal(props: TerminalProps) -> Element {
                 settings.metrics = next;
                 fit_settings.set(settings);
 
-                // Ghostty and the native renderer share the same physical cell
-                // box while VT columns/rows remain stable across IME resize.
+                // The engine and the native renderer share the same physical
+                // cell box while VT columns/rows remain stable across IME resize.
                 let native_width = next.native_cell_width_px();
                 let native_height = next.native_cell_height_px();
                 if native_width != fit_config.cell_width_px
@@ -720,9 +737,9 @@ pub fn Terminal(props: TerminalProps) -> Element {
                             if !g.is_scroll {
                                 0
                             } else {
-                                // Pointer coordinates are vp. Ghostty DELTA:
-                                // negative = into history. Finger down makes
-                                // older rows follow the content downward.
+                                // Pointer coordinates are vp. Negative delta
+                                // is into history. Finger down makes older
+                                // rows follow the content downward.
                                 let step = p.y - g.last_y;
                                 g.last_y = p.y;
                                 g.pixel_acc += step;
@@ -732,9 +749,8 @@ pub fn Terminal(props: TerminalProps) -> Element {
                             }
                         };
                         if rows != 0 {
-                            // Ghostty moves its cheap viewport pin immediately.
-                            // The render worker independently replaces stale
-                            // snapshots, matching Ghostty's queueRender model.
+                            // Move the viewport pin immediately. The render
+                            // worker independently replaces stale snapshots.
                             c_touch.scroll_by(-rows);
                         }
                     }

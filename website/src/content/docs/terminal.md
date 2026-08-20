@@ -5,9 +5,11 @@ description: "嵌入 GPU 终端：组件只负责渲染，shell / SSH 由你自�
 
 # GPU 终端
 
-`terminal` feature 提供一块 GPU 加速的嵌入式终端。VT 解析和栅格化交给 libghostty-vt（Zig），像素画在 ArkUI 的 XComponent / NativeWindow 上。
+`terminal` feature 提供一块 GPU 加速的嵌入式终端。VT 解析交给 **rio-vt**（纯 Rust，不依赖 Zig），栅格在 GPU 上展开：顶点着色器按 `instance_index` 走格子，片元着色器采样字形图集并画光标/下划线。像素画在 ArkUI 的 XComponent / NativeWindow 上。
 
 有一点要先说清楚：**本地 shell 和 SSH 会话由你自己管**。框架不帮你 fork 进程，也不内置伪终端管理器——组件只负责「画出来」和「把输入交出去」。
+
+ANSI 状态机是顺序的，所以 **VT 解析留在 CPU**。这和 Ghostty / Rio / Alacritty 一样。GPU 负责的是格子布局、装饰和字形采样，而不是把整屏 CPU 栅格化后再 blit。
 
 ## 启用方式
 
@@ -66,7 +68,7 @@ rsx! {
 
 ## 运行与依赖
 
-- 构建目标需要可用的 Zig 工具链以编译 libghostty-vt 侧产物（见 `crates/arkit_terminal`）。
+- 构建目标只需要 Rust 工具链（`rio-vt`，无 Zig）。
 - 设备侧依赖 GPU/XComponent 路径；模拟器是否完整取决于平台实现。
 - 打包进 HAP 时与其他 example 相同：一次只部署一个 `cdylib`，`moduleName` 与 `.so` 名称对齐。
 

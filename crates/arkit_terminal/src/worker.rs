@@ -57,9 +57,9 @@ impl WorkerHandle {
 
     /// Replace any frame not yet consumed by the renderer.
     ///
-    /// Ghostty may publish more viewport snapshots than the native window can
-    /// present. Keeping exactly the newest one prevents stale scroll frames
-    /// from becoming visible after the finger has already moved on.
+    /// The terminal may publish more viewport snapshots than the native window
+    /// can present. Keeping exactly the newest one prevents stale scroll
+    /// frames from becoming visible after the finger has already moved on.
     pub(crate) fn publish(&self, packet: RenderPacket) {
         match self.latest.lock() {
             Ok(mut latest) => *latest = Some(packet),

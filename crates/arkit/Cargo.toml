@@ -31,7 +31,7 @@ markdown = ["shadcn", "arkit_shadcn/markdown"]
 markdown-highlight = ["markdown", "code"]
 router = ["animation", "dep:arkit_router"]
 shadcn = ["animation", "i18n", "icon", "dep:arkit_shadcn"]
-# Embedded terminal (libghostty-vt via Zig).
+# Embedded terminal (rio-vt + wgpu cell renderer).
 terminal = ["dep:arkit_terminal"]
 # Pluginized WebView capability (ohos.webview bridge plugin). The framework
 # registers the plugin facade and injects initialization automatically;

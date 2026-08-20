@@ -1,6 +1,6 @@
 [package]
 name = "terminal_example"
-description = "libghostty-vt embedded terminal showcase for arkit"
+description = "rio-vt embedded terminal showcase for arkit"
 publish = false
 version.workspace = true
 edition.workspace = true

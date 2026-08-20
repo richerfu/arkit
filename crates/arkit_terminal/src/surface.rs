@@ -1,7 +1,7 @@
 //! Terminal surface geometry.
 //!
 //! ArkUI layout attributes and pointer-local coordinates are expressed in vp,
-//! while `onarea` and Ghostty cell metrics are physical pixels. Keeping both
+//! while `onarea` and cell metrics are physical pixels. Keeping both
 //! units in one value prevents scroll/mouse hit testing and VT size reports
 //! from drifting away from the painted grid.
 

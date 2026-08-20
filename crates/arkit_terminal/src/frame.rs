@@ -1,9 +1,7 @@
-//! Screen frame model aligned with libghostty-vt render-state output.
+//! Screen frame model captured from the rio-vt visible grid.
 //!
-//! Embedders are expected to paint from `GhosttyRenderState` (see Ghostty's
-//! `example/c-vt-render`): per-cell graphemes + styles, palette-resolved
-//! colors, selection, and viewport cursor visual style. This module is the
-//! Rust-side snapshot consumed by the XComponent render worker.
+//! Per-cell graphemes + styles, palette-resolved colors, and viewport
+//! cursor visual style. The GPU renderer packs this into cell instances.
 
 /// Visual caret style (DECSCUSR / render-state cursor visual style).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -39,6 +37,8 @@ pub struct TerminalCell {
     pub italic: bool,
     pub faint: bool,
     pub underline: bool,
+    /// 0 none, 1 single, 2 double, 3 curly, 4 dotted, 5 dashed.
+    pub underline_kind: u8,
     pub strikethrough: bool,
     pub inverse: bool,
     pub selected: bool,
@@ -59,6 +59,7 @@ impl Default for TerminalCell {
             italic: false,
             faint: false,
             underline: false,
+            underline_kind: 0,
             strikethrough: false,
             inverse: false,
             selected: false,
@@ -107,12 +108,12 @@ pub struct TerminalRun {
     pub cursor_color: Option<u32>,
 }
 
-/// Scrollbar / history window (mirrors `GhosttyTerminalScrollbar`).
+/// Scrollbar / history window.
 ///
-/// Ghostty model: the paint surface is always one **viewport** of `len` rows.
-/// Older lines live in scrollback; `offset` is the first visible row from the
-/// top of the scrollable area. When [`Self::viewport_active`] is true the
-/// viewport is pinned to the live bottom (standard “follow output” mode).
+/// The paint surface is always one **viewport** of `len` rows. Older lines
+/// live in scrollback; `offset` is the first visible row from the top of
+/// the scrollable area. When [`Self::viewport_active`] is true the viewport
+/// is pinned to the live bottom (standard “follow output” mode).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct TerminalScrollbar {
     /// Total scrollable rows (scrollback + active viewport).
@@ -125,7 +126,7 @@ pub struct TerminalScrollbar {
     pub viewport_active: bool,
 }
 
-/// Full viewport frame captured from libghostty-vt render state.
+/// Full viewport frame captured from rio-vt.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TerminalFrame {
     pub cols: u16,
@@ -226,7 +227,7 @@ impl TerminalFrame {
                 cursor_paint = Some(cursor_color);
                 match self.cursor.style {
                     CursorVisualStyle::Block => {
-                        // Ghostty solid block: invert the single cell only
+                        // Solid block: invert the single cell only
                         // (character stays; no second overlay glyph).
                         bg = cursor_color;
                         // Prefer cell's original bg as ink so the glyph stays
@@ -339,8 +340,7 @@ impl TerminalFrame {
     }
 }
 
-/// Terminal display width of a single codepoint (1 or 2), used when Ghostty
-/// cell metadata is unavailable (stub / fallback).
+/// Terminal display width of a single codepoint (1 or 2).
 #[allow(dead_code)] // used by stub capture and public embedders
 pub fn east_asian_width(c: char) -> u8 {
     if is_likely_wide_char(c) {

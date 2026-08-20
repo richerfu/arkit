@@ -1,45 +1,18 @@
 [package]
 name = "arkit_terminal"
-description = "Embedded terminal for arkit powered by libghostty-vt (Zig)"
+description = "Embedded terminal for arkit powered by rio-vt and a wgpu cell renderer"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-links = "ghostty_vt"
-# When `include` is set, cargo packages matching **filesystem** paths (not
-# only git-tracked files). That is required so the `vendor/ghostty` git
-# submodule contents ship in the published crate. Note: `exclude` is ignored
-# whenever `include` is present, so we only list what is needed to build
-# libghostty-vt (omitting macos app, images, tests, packaging metadata, …).
-include = [
-    "Cargo.toml",
-    "build.rs",
-    "README.md",
-    "src/**",
-    "scripts/**",
-    "vendor/ghostty-include/**",
-    # Ghostty (submodule) — libghostty-vt surface
-    "vendor/ghostty/LICENSE",
-    "vendor/ghostty/build.zig",
-    "vendor/ghostty/build.zig.zon",
-    "vendor/ghostty/build.zig.zon.json",
-    "vendor/ghostty/build.zig.zon.txt",
-    "vendor/ghostty/src/**",
-    "vendor/ghostty/include/**",
-    "vendor/ghostty/pkg/**",
-    "vendor/ghostty/vendor/**",
-]
-
-[package.metadata.docs.rs]
-# docs.rs has no Zig toolchain; always document the stub surface.
-features = ["stub"]
 
 [lints]
 workspace = true
 
 [features]
 default = []
-# Skip linking libghostty-vt; use a pure-Rust stub for host type-checking.
+# Kept so existing `--features stub` type-check commands keep working.
+# The engine is pure Rust now; this flag is a no-op.
 stub = []
 
 [dependencies]
@@ -49,7 +22,6 @@ arkit_prelude.workspace = true
 arkit_elements.workspace = true
 arkit_runtime.workspace = true
 bytemuck.workspace = true
-glyphon.workspace = true
 ohos-arkui-binding.workspace = true
 ohos-drawing-binding.workspace = true
 ohos-hilog-binding.workspace = true
@@ -59,9 +31,7 @@ ohos-native-window-binding.workspace = true
 ohos-xcomponent-binding.workspace = true
 ohos-xcomponent-sys.workspace = true
 pollster.workspace = true
+rio-vt = { version = "0.5.25", default-features = false }
 rustc-hash.workspace = true
 tokio.workspace = true
 wgpu.workspace = true
-
-[build-dependencies]
-bindgen.workspace = true
