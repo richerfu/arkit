@@ -1,512 +1,64 @@
-//! Capture a [`TerminalFrame`] from libghostty-vt `GhosttyRenderState`.
-//!
-//! Mirrors Ghostty `example/c-vt-render`: update render state → colors →
-//! row/cell iterators → resolve styles → cursor visual.
+//! Snapshot a [`TerminalFrame`] from rio-vt `Crosswords` visible rows.
 
-#[cfg(not(ghostty_vt_stub))]
-use std::os::raw::c_void;
-#[cfg(not(ghostty_vt_stub))]
-use std::ptr;
+use rio_vt::ansi::CursorShape;
+use rio_vt::config::colors::term::TermColors;
+use rio_vt::config::colors::{AnsiColor, NamedColor};
+use rio_vt::crosswords::grid::Dimensions;
+use rio_vt::crosswords::pos::Column;
+use rio_vt::crosswords::square::{ContentTag, Wide};
+use rio_vt::crosswords::style::StyleFlags;
+use rio_vt::crosswords::Crosswords;
+use rio_vt::event::EventListener;
 
-#[cfg(not(ghostty_vt_stub))]
-use crate::error::{TerminalError, TerminalErrorKind, TerminalResult};
-#[cfg(not(ghostty_vt_stub))]
-use crate::ffi::{self, GHOSTTY_SUCCESS};
-#[cfg(not(ghostty_vt_stub))]
-use crate::frame::rgb_to_argb;
+use crate::config::TerminalConfig;
 use crate::frame::{
-    CursorVisualStyle, TerminalCell, TerminalCursor, TerminalFrame, TerminalScrollbar,
+    rgb_to_argb, CursorVisualStyle, TerminalCell, TerminalCursor, TerminalFrame, TerminalScrollbar,
 };
 
-#[cfg(not(ghostty_vt_stub))]
-use crate::ffi::{
-    GhosttyBuffer, GhosttyColorRgb, GhosttyRenderState, GhosttyRenderStateColors,
-    GhosttyRenderStateCursorVisualStyle, GhosttyRenderStateData, GhosttyRenderStateDirty,
-    GhosttyRenderStateOption, GhosttyRenderStateRowCells, GhosttyRenderStateRowCellsData,
-    GhosttyRenderStateRowData, GhosttyRenderStateRowIterator, GhosttyRenderStateRowOption,
-    GhosttyStyle, GhosttyTerminal,
-};
+pub fn capture_frame<U: EventListener>(
+    term: &Crosswords<U>,
+    config: &TerminalConfig,
+) -> TerminalFrame {
+    let cols = term.grid.columns() as u16;
+    let rows = term.grid.screen_lines() as u16;
+    let default_fg = resolve_named(&term.colors, NamedColor::Foreground, config);
+    let default_bg = resolve_named(&term.colors, NamedColor::Background, config);
+    let cursor_color = resolve_named(&term.colors, NamedColor::Cursor, config);
 
-/// Snapshot the terminal through the official render-state path.
-#[cfg(not(ghostty_vt_stub))]
-pub fn capture_frame(
-    terminal: GhosttyTerminal,
-    render: GhosttyRenderState,
-    mut cols: u16,
-    mut rows: u16,
-) -> TerminalResult<TerminalFrame> {
-    // SAFETY: handles owned by TerminalEngine; live for this call.
-    let rc = unsafe { ffi::ghostty_render_state_update(render, terminal) };
-    if rc != GHOSTTY_SUCCESS {
-        return Err(TerminalError::new(
-            TerminalErrorKind::Format,
-            format!("ghostty_render_state_update failed ({rc:?})"),
-        ));
-    }
-
-    // Colors (palette for resolution is available but FG/BG_COLOR on cells
-    // already return resolved RGB).
-    // SAFETY: sized-struct init pattern from Ghostty docs.
-    let mut colors: GhosttyRenderStateColors = unsafe { std::mem::zeroed() };
-    colors.size = std::mem::size_of::<GhosttyRenderStateColors>();
-    let rc = unsafe { ffi::ghostty_render_state_colors_get(render, &mut colors) };
-    if rc != GHOSTTY_SUCCESS {
-        return Err(TerminalError::new(
-            TerminalErrorKind::Format,
-            format!("ghostty_render_state_colors_get failed ({rc:?})"),
-        ));
-    }
-    let default_fg = rgb_to_argb(
-        colors.foreground.r,
-        colors.foreground.g,
-        colors.foreground.b,
-    );
-    let default_bg = rgb_to_argb(
-        colors.background.r,
-        colors.background.g,
-        colors.background.b,
-    );
-
-    // Prefer live geometry from render-state (matches Ghostty viewport size).
-    let mut rs_cols = cols;
-    let mut rs_rows = rows;
-    unsafe {
-        let _ = ffi::ghostty_render_state_get(
-            render,
-            GhosttyRenderStateData::GHOSTTY_RENDER_STATE_DATA_COLS,
-            (&raw mut rs_cols).cast::<c_void>(),
-        );
-        let _ = ffi::ghostty_render_state_get(
-            render,
-            GhosttyRenderStateData::GHOSTTY_RENDER_STATE_DATA_ROWS,
-            (&raw mut rs_rows).cast::<c_void>(),
-        );
-    }
-    if rs_cols > 0 {
-        cols = rs_cols;
-    }
-    if rs_rows > 0 {
-        rows = rs_rows;
-    }
-
-    let cursor = read_cursor(render, default_fg);
-    let scrollbar = read_scrollbar(terminal, rows);
-
-    let mut row_iter: GhosttyRenderStateRowIterator = ptr::null_mut();
-    let rc = unsafe { ffi::ghostty_render_state_row_iterator_new(ptr::null(), &mut row_iter) };
-    if rc != GHOSTTY_SUCCESS || row_iter.is_null() {
-        return Err(TerminalError::new(
-            TerminalErrorKind::Format,
-            format!("row_iterator_new failed ({rc:?})"),
-        ));
-    }
-    // SAFETY: populate iterator from render state.
-    let rc = unsafe {
-        ffi::ghostty_render_state_get(
-            render,
-            GhosttyRenderStateData::GHOSTTY_RENDER_STATE_DATA_ROW_ITERATOR,
-            (&raw mut row_iter).cast::<c_void>(),
-        )
-    };
-    if rc != GHOSTTY_SUCCESS {
-        unsafe { ffi::ghostty_render_state_row_iterator_free(row_iter) };
-        return Err(TerminalError::new(
-            TerminalErrorKind::Format,
-            format!("ROW_ITERATOR get failed ({rc:?})"),
-        ));
-    }
-
-    let mut cells_handle: GhosttyRenderStateRowCells = ptr::null_mut();
-    let rc = unsafe { ffi::ghostty_render_state_row_cells_new(ptr::null(), &mut cells_handle) };
-    if rc != GHOSTTY_SUCCESS || cells_handle.is_null() {
-        unsafe { ffi::ghostty_render_state_row_iterator_free(row_iter) };
-        return Err(TerminalError::new(
-            TerminalErrorKind::Format,
-            format!("row_cells_new failed ({rc:?})"),
-        ));
-    }
-
-    let mut cells: Vec<TerminalCell> = Vec::with_capacity(cols as usize * rows as usize);
-    let mut row_i = 0u16;
-    // SAFETY: iterator/cells owned by us for this snapshot.
-    while unsafe { ffi::ghostty_render_state_row_iterator_next(row_iter) } {
-        if row_i >= rows {
-            break;
-        }
-        let rc = unsafe {
-            ffi::ghostty_render_state_row_get(
-                row_iter,
-                GhosttyRenderStateRowData::GHOSTTY_RENDER_STATE_ROW_DATA_CELLS,
-                (&raw mut cells_handle).cast::<c_void>(),
-            )
-        };
-        if rc != GHOSTTY_SUCCESS {
-            break;
-        }
-
-        let mut col_i = 0u16;
-        while unsafe { ffi::ghostty_render_state_row_cells_next(cells_handle) } {
-            if col_i >= cols {
-                break;
-            }
-            let cell = read_cell(cells_handle, default_fg, default_bg);
-            cells.push(cell);
-            col_i += 1;
-        }
-        // Pad short rows.
-        while col_i < cols {
-            cells.push(TerminalCell {
-                fg: default_fg,
-                bg: default_bg,
-                width: 1,
-                is_spacer: false,
-                ..TerminalCell::default()
-            });
-            col_i += 1;
-        }
-
-        // Clear per-row dirty (official example pattern).
-        let clean = false;
-        let _ = unsafe {
-            ffi::ghostty_render_state_row_set(
-                row_iter,
-                GhosttyRenderStateRowOption::GHOSTTY_RENDER_STATE_ROW_OPTION_DIRTY,
-                (&raw const clean).cast::<c_void>(),
-            )
-        };
-        row_i += 1;
-    }
-
-    // Pad missing rows.
-    while row_i < rows {
-        for _ in 0..cols {
-            cells.push(TerminalCell {
-                fg: default_fg,
-                bg: default_bg,
-                width: 1,
-                is_spacer: false,
-                ..TerminalCell::default()
-            });
-        }
-        row_i += 1;
-    }
-
-    // Reset global dirty.
-    let clean_state = GhosttyRenderStateDirty::GHOSTTY_RENDER_STATE_DIRTY_FALSE;
-    let _ = unsafe {
-        ffi::ghostty_render_state_set(
-            render,
-            GhosttyRenderStateOption::GHOSTTY_RENDER_STATE_OPTION_DIRTY,
-            (&raw const clean_state).cast::<c_void>(),
-        )
-    };
-
-    unsafe {
-        ffi::ghostty_render_state_row_cells_free(cells_handle);
-        ffi::ghostty_render_state_row_iterator_free(row_iter);
-    }
-
-    Ok(TerminalFrame {
-        cols,
-        rows,
-        default_fg,
-        default_bg,
-        cells,
-        cursor,
-        scrollbar,
-    })
-}
-
-#[cfg(not(ghostty_vt_stub))]
-fn read_scrollbar(terminal: GhosttyTerminal, viewport_rows: u16) -> TerminalScrollbar {
-    use crate::ffi::{ghostty_terminal_get, GhosttyTerminalData, GhosttyTerminalScrollbar};
-    let mut bar = GhosttyTerminalScrollbar {
-        total: viewport_rows as u64,
-        offset: 0,
-        len: viewport_rows as u64,
-    };
-    let mut active = true;
-    unsafe {
-        let _ = ghostty_terminal_get(
-            terminal,
-            GhosttyTerminalData::GHOSTTY_TERMINAL_DATA_SCROLLBAR,
-            (&raw mut bar).cast::<c_void>(),
-        );
-        let _ = ghostty_terminal_get(
-            terminal,
-            GhosttyTerminalData::GHOSTTY_TERMINAL_DATA_VIEWPORT_ACTIVE,
-            (&raw mut active).cast::<c_void>(),
-        );
-    }
-    TerminalScrollbar {
-        total: bar.total.max(1),
-        offset: bar.offset,
-        len: if bar.len == 0 {
-            viewport_rows as u64
-        } else {
-            bar.len
-        },
-        viewport_active: active,
-    }
-}
-
-#[cfg(not(ghostty_vt_stub))]
-fn read_cursor(render: GhosttyRenderState, default_fg: u32) -> TerminalCursor {
-    let mut visible = false;
-    let mut in_viewport = false;
-    let mut blinking = false;
-    let mut col: u16 = 0;
-    let mut row: u16 = 0;
-    let mut style =
-        GhosttyRenderStateCursorVisualStyle::GHOSTTY_RENDER_STATE_CURSOR_VISUAL_STYLE_BLOCK;
-    let mut cursor_color = GhosttyColorRgb { r: 0, g: 0, b: 0 };
-    let mut has_color = false;
-
-    // SAFETY: out pointers match documented types for each data key.
-    unsafe {
-        let _ = ffi::ghostty_render_state_get(
-            render,
-            GhosttyRenderStateData::GHOSTTY_RENDER_STATE_DATA_CURSOR_VISIBLE,
-            (&raw mut visible).cast::<c_void>(),
-        );
-        let _ = ffi::ghostty_render_state_get(
-            render,
-            GhosttyRenderStateData::GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_HAS_VALUE,
-            (&raw mut in_viewport).cast::<c_void>(),
-        );
-        let _ = ffi::ghostty_render_state_get(
-            render,
-            GhosttyRenderStateData::GHOSTTY_RENDER_STATE_DATA_CURSOR_BLINKING,
-            (&raw mut blinking).cast::<c_void>(),
-        );
-        if in_viewport {
-            let _ = ffi::ghostty_render_state_get(
-                render,
-                GhosttyRenderStateData::GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_X,
-                (&raw mut col).cast::<c_void>(),
-            );
-            let _ = ffi::ghostty_render_state_get(
-                render,
-                GhosttyRenderStateData::GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_Y,
-                (&raw mut row).cast::<c_void>(),
-            );
-        }
-        let _ = ffi::ghostty_render_state_get(
-            render,
-            GhosttyRenderStateData::GHOSTTY_RENDER_STATE_DATA_CURSOR_VISUAL_STYLE,
-            (&raw mut style).cast::<c_void>(),
-        );
-        let _ = ffi::ghostty_render_state_get(
-            render,
-            GhosttyRenderStateData::GHOSTTY_RENDER_STATE_DATA_COLOR_CURSOR_HAS_VALUE,
-            (&raw mut has_color).cast::<c_void>(),
-        );
-        if has_color {
-            let _ = ffi::ghostty_render_state_get(
-                render,
-                GhosttyRenderStateData::GHOSTTY_RENDER_STATE_DATA_COLOR_CURSOR,
-                (&raw mut cursor_color).cast::<c_void>(),
-            );
+    let visible = term.visible_rows();
+    let mut cells = Vec::with_capacity(cols as usize * rows as usize);
+    for row in visible.iter().take(rows as usize) {
+        for col in 0..cols as usize {
+            let square = row[Column(col)];
+            cells.push(read_cell(term, square, default_fg, default_bg, config));
         }
     }
-
-    let visual = match style {
-        GhosttyRenderStateCursorVisualStyle::GHOSTTY_RENDER_STATE_CURSOR_VISUAL_STYLE_BAR => {
-            CursorVisualStyle::Bar
-        }
-        GhosttyRenderStateCursorVisualStyle::GHOSTTY_RENDER_STATE_CURSOR_VISUAL_STYLE_UNDERLINE => {
-            CursorVisualStyle::Underline
-        }
-        GhosttyRenderStateCursorVisualStyle::GHOSTTY_RENDER_STATE_CURSOR_VISUAL_STYLE_BLOCK_HOLLOW => {
-            CursorVisualStyle::BlockHollow
-        }
-        _ => CursorVisualStyle::Block,
-    };
-
-    TerminalCursor {
-        col,
-        row,
-        visible: visible && in_viewport,
-        blinking,
-        style: visual,
-        color: if has_color {
-            Some(rgb_to_argb(cursor_color.r, cursor_color.g, cursor_color.b))
-        } else {
-            let _ = default_fg;
-            None
-        },
-    }
-}
-
-#[cfg(not(ghostty_vt_stub))]
-fn read_cell(cells: GhosttyRenderStateRowCells, default_fg: u32, default_bg: u32) -> TerminalCell {
-    use crate::ffi::{ghostty_cell_get, GhosttyCell, GhosttyCellData, GhosttyCellWide};
-
-    let mut style: GhosttyStyle = unsafe { std::mem::zeroed() };
-    style.size = std::mem::size_of::<GhosttyStyle>();
-    let mut selected = false;
-    let mut fg_rgb = GhosttyColorRgb { r: 0, g: 0, b: 0 };
-    let mut bg_rgb = GhosttyColorRgb { r: 0, g: 0, b: 0 };
-    let mut raw: GhosttyCell = 0;
-
-    // UTF-8 grapheme via GhosttyBuffer (base + combining). 64 bytes is
-    // enough for typical CJK / ZWJ emoji clusters in a single cell.
-    let mut utf8_storage = [0u8; 64];
-    let mut buf = GhosttyBuffer {
-        ptr: utf8_storage.as_mut_ptr(),
-        cap: utf8_storage.len(),
-        len: 0,
-    };
-
-    // SAFETY: cells positioned by row_cells_next; out types match headers.
-    let (has_fg, has_bg) = unsafe {
-        let _ = ffi::ghostty_render_state_row_cells_get(
-            cells,
-            GhosttyRenderStateRowCellsData::GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_RAW,
-            (&raw mut raw).cast::<c_void>(),
-        );
-        let _ = ffi::ghostty_render_state_row_cells_get(
-            cells,
-            GhosttyRenderStateRowCellsData::GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_STYLE,
-            (&raw mut style).cast::<c_void>(),
-        );
-        let _ = ffi::ghostty_render_state_row_cells_get(
-            cells,
-            GhosttyRenderStateRowCellsData::GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_SELECTED,
-            (&raw mut selected).cast::<c_void>(),
-        );
-        let rc_fg = ffi::ghostty_render_state_row_cells_get(
-            cells,
-            GhosttyRenderStateRowCellsData::GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_FG_COLOR,
-            (&raw mut fg_rgb).cast::<c_void>(),
-        );
-        let rc_bg = ffi::ghostty_render_state_row_cells_get(
-            cells,
-            GhosttyRenderStateRowCellsData::GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_BG_COLOR,
-            (&raw mut bg_rgb).cast::<c_void>(),
-        );
-        let _ = ffi::ghostty_render_state_row_cells_get(
-            cells,
-            GhosttyRenderStateRowCellsData::GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_UTF8,
-            (&raw mut buf).cast::<c_void>(),
-        );
-        (rc_fg == GHOSTTY_SUCCESS, rc_bg == GHOSTTY_SUCCESS)
-    };
-
-    // Ghostty stores one cell per grid column. Wide CJK occupies two columns:
-    // primary cell (WIDE) + spacer tail (do not paint). See GhosttyCellWide.
-    let mut wide = GhosttyCellWide::GHOSTTY_CELL_WIDE_NARROW;
-    unsafe {
-        let _ = ghostty_cell_get(
-            raw,
-            GhosttyCellData::GHOSTTY_CELL_DATA_WIDE,
-            (&raw mut wide).cast::<c_void>(),
-        );
-    }
-
-    let grapheme = if buf.len > 0 && buf.len <= utf8_storage.len() {
-        String::from_utf8_lossy(&utf8_storage[..buf.len]).into_owned()
-    } else {
-        String::new()
-    };
-
-    let (width, is_spacer) = match wide {
-        GhosttyCellWide::GHOSTTY_CELL_WIDE_WIDE => (2u8, false),
-        GhosttyCellWide::GHOSTTY_CELL_WIDE_SPACER_TAIL
-        | GhosttyCellWide::GHOSTTY_CELL_WIDE_SPACER_HEAD => (0u8, true),
-        _ => {
-            // Fallback: measure first codepoint when RAW wide is unavailable.
-            let w = grapheme
-                .chars()
-                .next()
-                .map(|c| {
-                    let w = unsafe { ffi::ghostty_unicode_codepoint_width(c as u32) };
-                    if w >= 2 {
-                        2
-                    } else if w == 0 && !grapheme.is_empty() {
-                        1
-                    } else {
-                        w.max(1)
-                    }
-                })
-                .unwrap_or(1);
-            (w, false)
-        }
-    };
-
-    let fg = if has_fg {
-        rgb_to_argb(fg_rgb.r, fg_rgb.g, fg_rgb.b)
-    } else {
-        default_fg
-    };
-    let bg = if has_bg {
-        rgb_to_argb(bg_rgb.r, bg_rgb.g, bg_rgb.b)
-    } else {
-        default_bg
-    };
-
-    TerminalCell {
-        // Spacers never paint text (even if Ghostty left a leftover).
-        grapheme: if is_spacer { String::new() } else { grapheme },
-        fg,
-        bg,
-        bold: style.bold,
-        italic: style.italic,
-        faint: style.faint,
-        underline: style.underline != 0,
-        strikethrough: style.strikethrough,
-        inverse: style.inverse,
-        selected,
-        width,
-        is_spacer,
-    }
-}
-
-/// Stub capture for host builds without libghostty-vt.
-#[cfg(ghostty_vt_stub)]
-pub fn capture_frame_stub(cols: u16, rows: u16, banner: &str) -> TerminalFrame {
-    let default_fg = 0xFFE2_E8F0;
-    let default_bg = 0xFF0B_1220;
-    let mut cells = vec![
-        TerminalCell {
+    while cells.len() < cols as usize * rows as usize {
+        cells.push(TerminalCell {
             fg: default_fg,
             bg: default_bg,
+            width: 1,
+            is_spacer: false,
             ..TerminalCell::default()
-        };
-        cols as usize * rows as usize
-    ];
-    // Paint first line; CJK takes two columns like Ghostty.
-    let mut col = 0usize;
-    for ch in banner.chars() {
-        if ch == '\n' || ch == '\r' || col >= cols as usize {
-            break;
-        }
-        let wide = crate::frame::east_asian_width(ch) >= 2;
-        let w = if wide { 2 } else { 1 };
-        if col + w > cols as usize {
-            break;
-        }
-        cells[col].grapheme = ch.to_string();
-        cells[col].width = w as u8;
-        cells[col].is_spacer = false;
-        if wide && col + 1 < cols as usize {
-            cells[col + 1].grapheme.clear();
-            cells[col + 1].width = 0;
-            cells[col + 1].is_spacer = true;
-        }
-        col += w;
+        });
     }
-    // Green "styles" marker so demos show color under stub.
-    if cols > 10 {
-        for (offset, ch) in "styles".chars().enumerate() {
-            let idx = 8 + offset;
-            if idx < cols as usize {
-                cells[idx].grapheme = ch.to_string();
-                cells[idx].fg = 0xFF0D_BC79;
-                cells[idx].bold = true;
-            }
-        }
-    }
+
+    let cursor_state = term.cursor();
+    let style = match cursor_state.content {
+        CursorShape::Beam => CursorVisualStyle::Bar,
+        CursorShape::Underline => CursorVisualStyle::Underline,
+        CursorShape::Hidden | CursorShape::Block => CursorVisualStyle::Block,
+    };
+    let col = cursor_state
+        .pos
+        .col
+        .0
+        .min(usize::from(cols.saturating_sub(1))) as u16;
+    let row = cursor_state.pos.row.0.max(0) as u16;
+    let visible = cursor_state.content != CursorShape::Hidden && term.display_offset() == 0;
+
+    let history = term.history_size() as u64;
+    let offset = term.display_offset() as u64;
     TerminalFrame {
         cols,
         rows,
@@ -514,18 +66,192 @@ pub fn capture_frame_stub(cols: u16, rows: u16, banner: &str) -> TerminalFrame {
         default_bg,
         cells,
         cursor: TerminalCursor {
-            col: 0,
-            row: 0,
-            visible: true,
-            blinking: false,
-            style: CursorVisualStyle::Block,
-            color: None,
+            col,
+            row: row.min(rows.saturating_sub(1)),
+            visible,
+            blinking: term.blinking_cursor,
+            style,
+            color: Some(cursor_color),
         },
         scrollbar: TerminalScrollbar {
-            total: rows as u64,
-            offset: 0,
+            total: history.saturating_add(rows as u64).max(1),
+            offset: history.saturating_sub(offset),
             len: rows as u64,
-            viewport_active: true,
+            viewport_active: offset == 0,
         },
+    }
+}
+
+fn read_cell<U: EventListener>(
+    term: &Crosswords<U>,
+    square: rio_vt::crosswords::square::Square,
+    default_fg: u32,
+    default_bg: u32,
+    config: &TerminalConfig,
+) -> TerminalCell {
+    let (width, is_spacer) = match square.wide() {
+        Wide::Wide => (2u8, false),
+        Wide::Spacer | Wide::LeadingSpacer => (0u8, true),
+        Wide::Narrow => (1, false),
+    };
+
+    if square.is_bg_only() || is_spacer {
+        let bg = match square.content_tag() {
+            ContentTag::BgPalette => {
+                resolve_indexed(&term.colors, square.bg_palette_index(), config)
+            }
+            ContentTag::BgRgb => {
+                let (r, g, b) = square.bg_rgb();
+                rgb_to_argb(r, g, b)
+            }
+            ContentTag::Codepoint => default_bg,
+        };
+        return TerminalCell {
+            grapheme: String::new(),
+            fg: default_fg,
+            bg,
+            width,
+            is_spacer,
+            ..TerminalCell::default()
+        };
+    }
+
+    let style = term.grid.style_of(&square);
+    let flags = style.flags;
+    let mut grapheme = String::new();
+    let ch = square.c();
+    if ch != '\0' {
+        grapheme.push(ch);
+    }
+    if square.has_grapheme() {
+        if let Some(extras) = square
+            .extras_id()
+            .and_then(|id| term.grid.extras_table.get(id))
+        {
+            grapheme.extend(extras.zerowidth.iter());
+        }
+    }
+    if flags.contains(StyleFlags::HIDDEN) {
+        grapheme.clear();
+    }
+
+    TerminalCell {
+        grapheme: if is_spacer { String::new() } else { grapheme },
+        fg: resolve_color(&term.colors, style.fg, config),
+        bg: resolve_color(&term.colors, style.bg, config),
+        bold: flags.contains(StyleFlags::BOLD),
+        italic: flags.contains(StyleFlags::ITALIC),
+        faint: flags.contains(StyleFlags::DIM),
+        underline: flags.intersects(StyleFlags::ALL_UNDERLINES),
+        underline_kind: underline_kind(flags),
+        strikethrough: flags.contains(StyleFlags::STRIKEOUT),
+        inverse: flags.contains(StyleFlags::INVERSE),
+        selected: false,
+        width,
+        is_spacer,
+    }
+}
+
+fn underline_kind(flags: StyleFlags) -> u8 {
+    if flags.contains(StyleFlags::DOUBLE_UNDERLINE) {
+        2
+    } else if flags.contains(StyleFlags::UNDERCURL) {
+        3
+    } else if flags.contains(StyleFlags::DOTTED_UNDERLINE) {
+        4
+    } else if flags.contains(StyleFlags::DASHED_UNDERLINE) {
+        5
+    } else if flags.contains(StyleFlags::UNDERLINE) {
+        1
+    } else {
+        0
+    }
+}
+
+fn resolve_color(colors: &TermColors, color: AnsiColor, config: &TerminalConfig) -> u32 {
+    match color {
+        AnsiColor::Spec(rgb) => rgb_to_argb(rgb.r, rgb.g, rgb.b),
+        AnsiColor::Named(name) => resolve_named(colors, name, config),
+        AnsiColor::Indexed(index) => resolve_indexed(colors, index, config),
+    }
+}
+
+fn resolve_named(colors: &TermColors, name: NamedColor, config: &TerminalConfig) -> u32 {
+    if let Some(arr) = colors[name] {
+        return arr_to_argb(arr);
+    }
+    match name {
+        NamedColor::Foreground => config
+            .foreground
+            .map(crate::config::Rgb::to_argb)
+            .unwrap_or(0xFFE2_E8F0),
+        NamedColor::Background => config
+            .background
+            .map(crate::config::Rgb::to_argb)
+            .unwrap_or(0xFF0B_1220),
+        NamedColor::Cursor => config
+            .cursor_color
+            .map(crate::config::Rgb::to_argb)
+            .unwrap_or(0xFFE2_E8F0),
+        other => {
+            let (r, g, b) = xterm_color(other as usize);
+            rgb_to_argb(r, g, b)
+        }
+    }
+}
+
+fn resolve_indexed(colors: &TermColors, index: u8, _config: &TerminalConfig) -> u32 {
+    if let Some(arr) = colors[index as usize] {
+        return arr_to_argb(arr);
+    }
+    let (r, g, b) = xterm_color(index as usize);
+    rgb_to_argb(r, g, b)
+}
+
+fn arr_to_argb(arr: [f32; 4]) -> u32 {
+    let byte = |channel: f32| (channel * 255.0).round().clamp(0.0, 255.0) as u8;
+    rgb_to_argb(byte(arr[0]), byte(arr[1]), byte(arr[2]))
+}
+
+/// Xterm 256-color cube plus the named/default slots used by color queries.
+pub(crate) fn xterm_color(index: usize) -> (u8, u8, u8) {
+    const ANSI: [(u8, u8, u8); 16] = [
+        (0, 0, 0),
+        (205, 0, 0),
+        (0, 205, 0),
+        (205, 205, 0),
+        (0, 0, 238),
+        (205, 0, 205),
+        (0, 205, 205),
+        (229, 229, 229),
+        (127, 127, 127),
+        (255, 0, 0),
+        (0, 255, 0),
+        (255, 255, 0),
+        (92, 92, 255),
+        (255, 0, 255),
+        (0, 255, 255),
+        (255, 255, 255),
+    ];
+    match index {
+        0..=15 => ANSI[index],
+        16..=231 => {
+            let n = index - 16;
+            let level = |v: usize| if v == 0 { 0 } else { (v * 40 + 55) as u8 };
+            (level(n / 36), level((n % 36) / 6), level(n % 6))
+        }
+        232..=255 => {
+            let gray = (8 + (index - 232) * 10) as u8;
+            (gray, gray, gray)
+        }
+        256 | 258 => (0xE2, 0xE8, 0xF0), // foreground / cursor
+        257 => (0x0B, 0x12, 0x20),       // background
+        _ => {
+            if index < ANSI.len() {
+                ANSI[index]
+            } else {
+                (0xE2, 0xE8, 0xF0)
+            }
+        }
     }
 }

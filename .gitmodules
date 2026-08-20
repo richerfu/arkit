@@ -1,3 +1,0 @@
-[submodule "crates/arkit_terminal/vendor/ghostty"]
-	path = crates/arkit_terminal/vendor/ghostty
-	url = https://github.com/ghostty-org/ghostty.git

@@ -1,13 +1,12 @@
-//! Embedder configuration mapped to `GHOSTTY_TERMINAL_OPT_*` and create options.
+//! Embedder configuration applied to the rio-vt grid.
 //!
-//! Covers the libghostty-vt configuration surface that arkit exposes today:
-//! geometry, scrollback, cell pixel size, default colors, default cursor
-//! style/blink, and optional protocol toggles. Effect callbacks (write_pty,
-//! bell, title, …) are registered separately via [`crate::effects`].
+//! Covers geometry, scrollback, cell pixel size, default colors, default
+//! cursor style/blink, and optional protocol toggles. Effect callbacks
+//! (write_pty, bell, title, …) come from rio-vt events.
 
 use crate::frame::CursorVisualStyle;
 
-/// RGB color (0–255 channels) used for Ghostty color options.
+/// RGB color (0–255 channels) used for terminal theme options.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Rgb {
     pub r: u8,
@@ -40,23 +39,23 @@ pub struct TerminalConfig {
     pub cols: u16,
     /// Grid rows (cells).
     pub rows: u16,
-    /// Maximum scrollback lines (`GhosttyTerminalOptions.max_scrollback`).
+    /// Maximum scrollback lines.
     pub scrollback: usize,
-    /// Cell width in pixels for `ghostty_terminal_resize` / size reports.
+    /// Cell width in pixels for resize / size reports.
     pub cell_width_px: u32,
     /// Cell height in pixels.
     pub cell_height_px: u32,
-    /// Default foreground (`GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND`).
+    /// Default foreground.
     pub foreground: Option<Rgb>,
-    /// Default background (`GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND`).
+    /// Default background.
     pub background: Option<Rgb>,
-    /// Default cursor color (`GHOSTTY_TERMINAL_OPT_COLOR_CURSOR`).
+    /// Default cursor color.
     pub cursor_color: Option<Rgb>,
     /// Optional full 256-color palette override.
     pub palette: Option<Box<[Rgb; 256]>>,
-    /// Default cursor visual style for DECSCUSR reset (`OPT_DEFAULT_CURSOR_STYLE`).
+    /// Default cursor visual style for DECSCUSR reset.
     pub default_cursor_style: CursorVisualStyle,
-    /// Default cursor blink for DECSCUSR reset (`OPT_DEFAULT_CURSOR_BLINK`).
+    /// Default cursor blink for DECSCUSR reset.
     pub default_cursor_blink: bool,
     /// Kitty graphics storage limit in bytes (`0` = disabled). `None` = leave default.
     pub kitty_image_storage_limit: Option<u64>,
@@ -116,7 +115,7 @@ impl TerminalConfig {
     }
 }
 
-/// Side-channel effect events produced during VT processing (libghostty effects).
+/// Side-channel effect events produced during VT processing.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TerminalEffects {
     /// Bytes the terminal wants written to the PTY (query responses).

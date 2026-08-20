@@ -29,7 +29,7 @@ Arkit 的 UI 只走 Dioxus 这一条路：业务写出组件树，运行时 diff
 | `arkit_lottie`                     | ThorVG worker、XComponent/NativeWindow Lottie 渲染                          |
 | `arkit_camera`                     | CameraKit 预览、拍照；可选 scan 解码                                        |
 | `arkit_barcode`                    | 独立条码/二维码生成（rxing），无相机依赖                                    |
-| `arkit_terminal`                   | libghostty-vt + GPU surface；会话 I/O 由应用托管                            |
+| `arkit_terminal`                   | rio-vt + GPU cell renderer；会话 I/O 由应用托管                             |
 | `arkit_shadcn`                     | 主题 tokens、业务组件和浮层组合                                             |
 
 领域 crate 不反向依赖 facade；facade 只是把它们拼起来对外。`arkit_prelude` 用来打断 shadcn / icon / animation 对 `arkit` 的环。

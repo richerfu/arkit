@@ -6,7 +6,7 @@
 //! `chart`, `code`, `i18n`, `icon`, `lottie`, `markdown`, `router`, `shadcn`,
 //! `terminal`, and `webview` features (or `full`). Barcode/QR generation is the
 //! `barcode` feature (no camera). Code highlighting uses `code`; Markdown
-//! fences need `markdown` + `code`. Terminal uses `terminal` (libghostty-vt).
+//! fences need `markdown` + `code`. Terminal uses `terminal` (rio-vt).
 //! `webview` enables the pluginized WebView capability (`ohos.webview` bridge
 //! plugin): the framework registers the plugin facade and injects its
 //! initialization automatically, so integrators only enable the feature and
@@ -201,7 +201,7 @@ pub use arkit_chart::{
     Series, SeriesOptions, Title, Tooltip, VisualStyle,
 };
 
-// --- Embedded terminal (libghostty-vt) ---
+// --- Embedded terminal (rio-vt) ---
 #[cfg(feature = "terminal")]
 pub use arkit_terminal as terminal;
 #[cfg(feature = "terminal")]
