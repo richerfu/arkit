@@ -8,7 +8,8 @@
 
 use std::cell::Cell;
 use std::rc::{Rc, Weak};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Arc;
 
 use arkit_prelude::EventHandler;
 use ohos_ime_binding::{AttachOptions, KeyboardStatus, IME};
@@ -23,6 +24,7 @@ pub(crate) struct TerminalImeSession {
     ime: IME,
     sink: Rc<HostInputSink>,
     keyboard_visible: Rc<Cell<bool>>,
+    visible_flag: Arc<AtomicBool>,
 }
 
 impl TerminalImeSession {
@@ -32,12 +34,26 @@ impl TerminalImeSession {
     ) -> Self {
         Self {
             id: next_session_id(),
-            ime: IME::new(AttachOptions::new(true)),
+            ime: IME::new(AttachOptions::new(false)),
             sink: Rc::new(HostInputSink {
                 controller,
                 on_input,
             }),
             keyboard_visible: Rc::new(Cell::new(false)),
+            visible_flag: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    pub(crate) fn visible_flag(&self) -> Arc<AtomicBool> {
+        self.visible_flag.clone()
+    }
+
+    pub(crate) fn hide_keyboard(&self) {
+        self.keyboard_visible.set(false);
+        self.visible_flag.store(false, Ordering::Release);
+        self.ime.hide_keyboard();
+        if ACTIVE_SESSION_ID.load(Ordering::Acquire) == self.id {
+            ACTIVE_SESSION_ID.store(0, Ordering::Release);
         }
     }
 
@@ -55,6 +71,8 @@ impl TerminalImeSession {
             self.ime.detach();
         }
         self.install_callbacks();
+        self.keyboard_visible.set(true);
+        self.visible_flag.store(true, Ordering::Release);
         self.ime.show_keyboard();
     }
 
@@ -64,6 +82,7 @@ impl TerminalImeSession {
             .is_ok()
         {
             self.keyboard_visible.set(false);
+            self.visible_flag.store(false, Ordering::Release);
             self.ime.detach();
         }
     }
@@ -86,12 +105,21 @@ impl TerminalImeSession {
         });
 
         let keyboard_visible = Rc::downgrade(&self.keyboard_visible);
+        let visible_flag = self.visible_flag.clone();
+        let ime = self.ime.clone();
         self.ime.on_status_change(move |status| {
             if ACTIVE_SESSION_ID.load(Ordering::Acquire) != session_id {
                 return;
             }
+            let visible = matches!(status, KeyboardStatus::Show);
             if let Some(keyboard_visible) = keyboard_visible.upgrade() {
-                keyboard_visible.set(matches!(status, KeyboardStatus::Show));
+                keyboard_visible.set(visible);
+            }
+            visible_flag.store(visible, Ordering::Release);
+            // Detach when dismissed so a later scroll/touch does not revive
+            // the already-attached input-method proxy.
+            if !visible {
+                ime.detach();
             }
         });
     }

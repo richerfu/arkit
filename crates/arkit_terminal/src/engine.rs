@@ -237,6 +237,10 @@ impl TerminalEngine {
         input::encode_focus(self.encode_state(), gained)
     }
 
+    pub(crate) fn encode_state_bits(&self) -> u32 {
+        self.encode_state().to_bits()
+    }
+
     fn encode_state(&self) -> EncodeState {
         use rio_vt::crosswords::Mode;
         let mode = self.term.mode();
