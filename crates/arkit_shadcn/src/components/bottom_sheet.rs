@@ -6,6 +6,7 @@
 //! indicator, rounded top corners, 60vp header, safe-area-aware body padding,
 //! and pan-down dismissal.
 
+use super::motion::{AnimatedModal, OVERLAY_ENTER_MS, OVERLAY_EXIT_MS, SHEET_DISTANCE};
 use super::ARKUI_BORDER_STYLE_SOLID;
 use crate::icon::icon_placeholder;
 use crate::theme::*;
@@ -45,13 +46,17 @@ fn bottom_sheet_portal(
         0x00000000
     };
     rsx! {
-        arkit_hooks::ModalPortal {
+        AnimatedModal {
             open,
             presentation: arkit_hooks::ModalPresentation::BottomDrawer,
             dismiss_on_backdrop: true,
             backdrop_color,
             viewport_inset: 0.0,
             on_dismiss,
+            preset: Some(arkit_animation::TransitionPreset::SlideUp),
+            duration_ms: Some(OVERLAY_ENTER_MS),
+            exit_duration_ms: Some(OVERLAY_EXIT_MS),
+            distance: Some(SHEET_DISTANCE),
             {panel}
         }
     }

@@ -6,10 +6,14 @@
 //! closes the others. All original entry variants/styles are preserved via
 //! [`crate::components::menu_common`].
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use crate::components::menu_common::{
     menu_closed_panel_height, menu_overlay_content, MenuEntry, MenuOverlayPassThroughRegion,
     MenuOverlayPlacement, MenuStyle,
 };
+use crate::components::motion::{OverlayPresence, FLOATING_ENTER_MS, FLOATING_EXIT_MS};
 use crate::theme::*;
 use arkit_prelude::*;
 
@@ -44,6 +48,7 @@ pub fn Menubar(
     on_active_change: Option<EventHandler<Option<usize>>>,
 ) -> Element {
     let theme = use_theme();
+    let viewport = arkit_hooks::use_overlay_viewport();
     let menubar_ref = arkit_hooks::use_native_element_ref();
     let menubar_frame = use_signal(arkit_hooks::LayoutFrame::default);
     arkit_hooks::use_layout_frame(menubar_ref.clone(), move |frame| {
@@ -53,7 +58,15 @@ pub fn Menubar(
     let mut internal_active = use_signal(|| default_active);
     let is_controlled = active.is_some();
     let current_active = active.unwrap_or_else(|| *internal_active.read());
-    let current_menubar_frame = *menubar_frame.read();
+    let trigger_frames = use_hook(|| Rc::new(RefCell::new(Vec::<arkit_hooks::LayoutFrame>::new())));
+    {
+        let mut frames = trigger_frames.borrow_mut();
+        if frames.len() != menus.len() {
+            frames.resize(menus.len(), arkit_hooks::LayoutFrame::default());
+        }
+    }
+    let mut frames_version = use_signal(|| 0_u64);
+    let _ = frames_version();
 
     let set_active = EventHandler::new(move |value: Option<usize>| {
         if !is_controlled {
@@ -63,6 +76,15 @@ pub fn Menubar(
             handler.call(value);
         }
     });
+    let recorded_frames = trigger_frames.clone();
+    let on_trigger_frame =
+        EventHandler::new(move |(index, frame): (usize, arkit_hooks::LayoutFrame)| {
+            let mut frames = recorded_frames.borrow_mut();
+            if frames.get(index).copied() != Some(frame) && index < frames.len() {
+                frames[index] = frame;
+                frames_version += 1;
+            }
+        });
 
     let style = MenuStyle {
         width: MENU_PANEL_WIDTH,
@@ -75,6 +97,35 @@ pub fn Menubar(
     let foreground = theme.colors.foreground;
     let border = theme.colors.border;
     let background = theme.colors.background;
+    let overlay_open = current_active.is_some();
+    let overlay_payload = current_active.and_then(|index| {
+        let items = menus.get(index)?.items.clone();
+        let frame = trigger_frames
+            .borrow()
+            .get(index)
+            .copied()
+            .unwrap_or_default();
+        let panel_height = menu_closed_panel_height(&items);
+        let placement = MenuOverlayPlacement::resolve(
+            frame,
+            viewport,
+            style.width,
+            panel_height,
+            style.side_offset_vp,
+        );
+        Some((items, placement))
+    });
+    let last_overlay = use_hook(|| {
+        Rc::new(RefCell::new(
+            None::<(Vec<MenubarEntry>, MenuOverlayPlacement)>,
+        ))
+    });
+    if let Some(payload) = overlay_payload.clone() {
+        *last_overlay.borrow_mut() = Some(payload);
+    }
+    let painted_overlay = overlay_payload.or_else(|| last_overlay.borrow().clone());
+    let pass_through_region =
+        MenuOverlayPassThroughRegion::from_frame(*menubar_frame.read(), viewport.frame);
 
     rsx! {
         row {
@@ -91,15 +142,34 @@ pub fn Menubar(
                 MenubarMenu {
                     index,
                     title: spec.title.clone(),
-                    items: spec.items.clone(),
                     active: current_active == Some(index),
-                    pass_through_frame: current_menubar_frame,
-                    style,
-                    theme,
                     trigger_radius: sm,
                     active_background: accent,
                     foreground,
                     on_active_change: set_active,
+                    on_trigger_frame,
+                }
+            }
+        }
+        OverlayPresence {
+            open: overlay_open,
+            preset: Some(arkit_animation::TransitionPreset::Fade),
+            duration_ms: Some(FLOATING_ENTER_MS),
+            exit_duration_ms: Some(FLOATING_EXIT_MS),
+            fill: Some(true),
+            layer: Some(arkit_hooks::OverlayLayer::Floating),
+            {
+                if let Some((items, placement)) = painted_overlay {
+                    menu_overlay_content(
+                        style,
+                        theme,
+                        EventHandler::new(move |_: ()| set_active.call(None)),
+                        items,
+                        placement,
+                        pass_through_region,
+                    )
+                } else {
+                    rsx! {}
                 }
             }
         }
@@ -110,34 +180,17 @@ pub fn Menubar(
 fn MenubarMenu(
     index: usize,
     title: String,
-    items: Vec<MenubarEntry>,
     active: bool,
-    pass_through_frame: arkit_hooks::LayoutFrame,
-    style: MenuStyle,
-    theme: Theme,
     trigger_radius: f32,
     active_background: u32,
     foreground: u32,
     on_active_change: EventHandler<Option<usize>>,
+    on_trigger_frame: EventHandler<(usize, arkit_hooks::LayoutFrame)>,
 ) -> Element {
-    let viewport = arkit_hooks::use_overlay_viewport();
     let trigger_ref = arkit_hooks::use_native_element_ref();
-    let trigger_frame = use_signal(arkit_hooks::LayoutFrame::default);
     arkit_hooks::use_layout_frame(trigger_ref.clone(), move |frame| {
-        let mut trigger_frame = trigger_frame;
-        trigger_frame.set(frame);
+        on_trigger_frame.call((index, frame));
     });
-    let dismiss = EventHandler::new(move |_: ()| on_active_change.call(None));
-    let panel_height = menu_closed_panel_height(&items);
-    let pass_through_region =
-        MenuOverlayPassThroughRegion::from_frame(pass_through_frame, viewport.frame);
-    let placement = MenuOverlayPlacement::resolve(
-        *trigger_frame.read(),
-        viewport,
-        style.width,
-        panel_height,
-        style.side_offset_vp,
-    );
 
     rsx! {
         row {
@@ -165,19 +218,6 @@ fn MenubarMenu(
                 font_color: foreground,
                 line_height: 20.0,
                 {title}
-            }
-        }
-        if active {
-            arkit_hooks::Portal {
-                layer: arkit_hooks::OverlayLayer::Floating,
-                {menu_overlay_content(
-                    style,
-                    theme,
-                    dismiss,
-                    items,
-                    placement,
-                    pass_through_region,
-                )}
             }
         }
     }
