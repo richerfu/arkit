@@ -3,6 +3,8 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 
+use ohos_vsync_binding::{OH_NativeVSync_ExpectedRateRange, Vsync};
+
 use crate::config::{TerminalConfig, TerminalEffects};
 use crate::engine::TerminalEngine;
 use crate::error::{TerminalError, TerminalErrorKind};
@@ -12,6 +14,15 @@ use crate::renderer::TerminalRenderer;
 use crate::surface::TerminalSurfaceMetrics;
 
 const BLINK_NS: u64 = 530_000_000;
+const VSYNC_MIN_FPS: i32 = 30;
+const VSYNC_MAX_FPS: i32 = 120;
+const VSYNC_EXPECTED_FPS: i32 = 120;
+
+struct WindowVsync {
+    handle: Vsync,
+    generation: u64,
+    requested: bool,
+}
 
 #[derive(Clone, Copy)]
 pub(crate) struct PaintSettings {
@@ -47,6 +58,7 @@ pub(crate) enum WorkerMessage {
     SurfaceAvailable(NativeSurface),
     SurfaceLost,
     VSync {
+        generation: u64,
         timestamp: u64,
     },
     Attach {
@@ -220,7 +232,6 @@ impl TerminalShared {
 pub(crate) struct WorkerHandle {
     sender: Sender<WorkerMessage>,
     shared: Arc<TerminalShared>,
-    vsync_pending: Arc<AtomicBool>,
     notices: Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<UiNotice>>>,
     thread: Option<JoinHandle<()>>,
 }
@@ -228,15 +239,14 @@ pub(crate) struct WorkerHandle {
 impl WorkerHandle {
     pub(crate) fn spawn(shared: Arc<TerminalShared>) -> std::io::Result<Self> {
         let (sender, receiver) = mpsc::channel();
-        let vsync_pending = Arc::new(AtomicBool::new(false));
         let (notice_tx, notice_rx) = tokio::sync::mpsc::unbounded_channel();
         let worker_shared = shared.clone();
-        let worker_pending = vsync_pending.clone();
+        let worker_sender = sender.clone();
         shared.set_control(Some(sender.clone()));
         let thread = thread::Builder::new()
             .name("arkit-terminal".into())
             .spawn(move || {
-                run_worker(receiver, worker_shared, worker_pending, notice_tx);
+                run_worker(receiver, worker_sender, worker_shared, notice_tx);
             })?;
         if shared.dirty.load(Ordering::Acquire) {
             shared.request_draw();
@@ -244,7 +254,6 @@ impl WorkerHandle {
         Ok(Self {
             sender,
             shared,
-            vsync_pending,
             notices: Mutex::new(Some(notice_rx)),
             thread: Some(thread),
         })
@@ -256,10 +265,6 @@ impl WorkerHandle {
 
     pub(crate) fn shared(&self) -> &Arc<TerminalShared> {
         &self.shared
-    }
-
-    pub(crate) fn vsync_pending(&self) -> Arc<AtomicBool> {
-        self.vsync_pending.clone()
     }
 
     pub(crate) fn take_notices(&self) -> Option<tokio::sync::mpsc::UnboundedReceiver<UiNotice>> {
@@ -283,32 +288,26 @@ impl Drop for WorkerHandle {
     }
 }
 
-pub(crate) fn schedule_vsync(
-    sender: &Sender<WorkerMessage>,
-    pending: &AtomicBool,
-    timestamp: u64,
-    _target_timestamp: u64,
-) {
-    if pending
-        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-        .is_ok()
-        && sender.send(WorkerMessage::VSync { timestamp }).is_err()
-    {
-        pending.store(false, Ordering::Release);
-    }
+fn schedule_vsync(sender: &Sender<WorkerMessage>, generation: u64, timestamp: u64) {
+    let _ = sender.send(WorkerMessage::VSync {
+        generation,
+        timestamp,
+    });
 }
 
 fn run_worker(
     receiver: Receiver<WorkerMessage>,
+    sender: Sender<WorkerMessage>,
     shared: Arc<TerminalShared>,
-    vsync_pending: Arc<AtomicBool>,
     notices: tokio::sync::mpsc::UnboundedSender<UiNotice>,
 ) {
     let mut state = WorkerState {
         engine: None,
         renderer: None,
+        vsync: None,
+        next_vsync_generation: 1,
+        sender,
         shared,
-        vsync_pending,
         notices,
         last_phase: true,
     };
@@ -330,9 +329,12 @@ fn run_worker(
                 return;
             }
         }
-        if vsync_ts.is_some() || present {
-            state.vsync_pending.store(false, Ordering::Release);
+        let received_vsync = vsync_ts.is_some();
+        if received_vsync || present {
             pump(&mut state, vsync_ts);
+            if received_vsync {
+                state.request_next_vsync();
+            }
         }
     }
 }
@@ -340,8 +342,10 @@ fn run_worker(
 struct WorkerState {
     engine: Option<TerminalEngine>,
     renderer: Option<TerminalRenderer>,
+    vsync: Option<WindowVsync>,
+    next_vsync_generation: u64,
+    sender: Sender<WorkerMessage>,
     shared: Arc<TerminalShared>,
-    vsync_pending: Arc<AtomicBool>,
     notices: tokio::sync::mpsc::UnboundedSender<UiNotice>,
     last_phase: bool,
 }
@@ -354,6 +358,7 @@ fn dispatch(
 ) -> bool {
     match message {
         WorkerMessage::SurfaceAvailable(window) => {
+            let surface_id = window.surface_id();
             let result = match state.renderer.as_mut() {
                 Some(renderer) => renderer.bind_surface(window),
                 None => TerminalRenderer::new(window).map(|created| {
@@ -367,8 +372,11 @@ fn dispatch(
                 if let Some(renderer) = state.renderer.as_mut() {
                     renderer.unbind_surface();
                 }
+                state.stop_vsync();
                 return true;
             }
+            state.bind_vsync(surface_id);
+            *vsync_ts = None;
             state.shared.mark_dirty();
             *present = true;
         }
@@ -376,11 +384,17 @@ fn dispatch(
             if let Some(renderer) = state.renderer.as_mut() {
                 renderer.unbind_surface();
             }
-            state.shared.vsync_live.store(false, Ordering::Release);
+            state.stop_vsync();
+            *vsync_ts = None;
         }
-        WorkerMessage::VSync { timestamp } => {
-            state.shared.vsync_live.store(true, Ordering::Release);
-            *vsync_ts = Some(timestamp);
+        WorkerMessage::VSync {
+            generation,
+            timestamp,
+        } => {
+            if state.accept_vsync(generation) {
+                state.shared.vsync_live.store(true, Ordering::Release);
+                *vsync_ts = Some(timestamp);
+            }
         }
         WorkerMessage::Attach { config, initial } => match TerminalEngine::with_config(config) {
             Ok(mut engine) => {
@@ -445,6 +459,79 @@ fn dispatch(
         WorkerMessage::Shutdown => return false,
     }
     true
+}
+
+impl WorkerState {
+    fn bind_vsync(&mut self, surface_id: Option<u64>) {
+        self.stop_vsync();
+        let Some(surface_id) = surface_id else {
+            return;
+        };
+        let Some(handle) = Vsync::try_new_for_associated_window(surface_id, "arkit-terminal")
+        else {
+            ohos_hilog_binding::error(format!(
+                "arkit_terminal: failed to create vsync for surface {surface_id}"
+            ));
+            return;
+        };
+        let rate_result = handle.set_expected_frame_rate_range(OH_NativeVSync_ExpectedRateRange {
+            min: VSYNC_MIN_FPS,
+            max: VSYNC_MAX_FPS,
+            expected: VSYNC_EXPECTED_FPS,
+        });
+        if rate_result != 0 {
+            ohos_hilog_binding::error(format!(
+                "arkit_terminal: failed to set vsync frame rate: {rate_result}"
+            ));
+        }
+        let generation = self.next_vsync_generation;
+        self.next_vsync_generation = generation.wrapping_add(1);
+        self.vsync = Some(WindowVsync {
+            handle,
+            generation,
+            requested: false,
+        });
+        self.request_next_vsync();
+    }
+
+    fn stop_vsync(&mut self) {
+        self.vsync.take();
+        self.shared.vsync_live.store(false, Ordering::Release);
+    }
+
+    fn accept_vsync(&mut self, generation: u64) -> bool {
+        let Some(vsync) = self.vsync.as_mut() else {
+            return false;
+        };
+        if generation != vsync.generation {
+            return false;
+        }
+        vsync.requested = false;
+        true
+    }
+
+    fn request_next_vsync(&mut self) {
+        let Some(vsync) = self.vsync.as_mut() else {
+            return;
+        };
+        if vsync.requested {
+            return;
+        }
+        let sender = self.sender.clone();
+        let generation = vsync.generation;
+        let result = vsync.handle.request_frame_once(move |timestamp| {
+            let timestamp = u64::try_from(timestamp).unwrap_or(0);
+            schedule_vsync(&sender, generation, timestamp);
+        });
+        if result != 0 {
+            ohos_hilog_binding::error(format!(
+                "arkit_terminal: failed to request vsync frame: {result}"
+            ));
+            self.stop_vsync();
+        } else if let Some(vsync) = self.vsync.as_mut() {
+            vsync.requested = true;
+        }
+    }
 }
 
 fn pump(state: &mut WorkerState, vsync_ts: Option<u64>) {
@@ -536,7 +623,7 @@ fn sync_encoder(shared: &TerminalShared, engine: &TerminalEngine) {
 fn cursor_phase(vsync_ts: Option<u64>, fallback: bool) -> bool {
     match vsync_ts {
         Some(0) | None => fallback,
-        Some(timestamp) => (timestamp / BLINK_NS) % 2 == 0,
+        Some(timestamp) => (timestamp / BLINK_NS).is_multiple_of(2),
     }
 }
 

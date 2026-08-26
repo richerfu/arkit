@@ -11,12 +11,12 @@
 //! | Host → paint | [`TerminalController::feed_vt`] (mailbox; parse is off the UI thread) |
 //! | Keyboard → host | [`TerminalProps::on_input`] + [`TerminalController::encode_key`] |
 //! | Terminal → host | [`TerminalProps::on_write_pty`] (DA/DSR/…) |
-//! | Paint | [`Terminal`] XComponent vsync → wgpu render worker |
+//! | Paint | [`Terminal`] window-associated vsync → wgpu render worker |
 //!
 //! ```text
 //!   UI / IME ──on_input──► your PTY | SSH | local shell
 //!   host output ──feed_vt──► byte mailbox (no parse on the UI thread)
-//!                 XComponent vsync ──► rio-vt on the render worker
+//!          window-associated vsync ──► rio-vt on the render worker
 //!                                   └──► GPU cell instances + glyph atlas
 //!                                        └──► wgpu GLES/EGL ──► XComponent
 //!   write_pty effect ──on_write_pty──► same host
@@ -28,7 +28,7 @@
 //! VT parsing stays on the CPU, but not on the ArkUI thread: ANSI state
 //! machines are sequential and run on `arkit-terminal`. Grid layout,
 //! decorations, cursor, and glyph sampling run in GPU shaders. Present is
-//! paced by `OH_NativeXComponent_RegisterOnFrameCallback`.
+//! paced by a window-associated [`ohos_vsync_binding::Vsync`].
 
 mod capture;
 mod component;

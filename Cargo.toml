@@ -161,12 +161,13 @@ ohos-native-drawing-sys = { version = "0.2", default-features = false, features 
 ohos-image-native-binding = { version = "0.0.5", default-features = false, features = ["api-20"] }
 ohos-display-binding = "0.1"
 ohos-hilog-binding = "0.2"
-ohos-ime-binding = "0.2"
+ohos-ime-binding = { git = "https://github.com/ohos-rs/ohos-native-bindings", branch = "feat/terminal-native-bindings", default-features = false, features = ["api-22"] }
 ohos-ability-access-control-binding = "0.1"
 ohos-camera-binding = { version = "0.1", default-features = false, features = ["api-20", "xcomponent"] }
 ohos-xcomponent-binding = { version = "0.3", default-features = false, features = ["callbacks", "multi_mode", "api-20"] }
 ohos-xcomponent-sys = { version = "0.1", default-features = false, features = ["api-20"] }
-ohos-native-window-binding = { version = "0.2", default-features = false, features = ["api-20"] }
+ohos-native-window-binding = { git = "https://github.com/ohos-rs/ohos-native-bindings", branch = "feat/terminal-native-bindings", default-features = false, features = ["api-20"] }
+ohos-vsync-binding = { git = "https://github.com/ohos-rs/ohos-native-bindings", branch = "feat/terminal-native-bindings", default-features = false, features = ["api-20"] }
 thorvg = { version = "0.5.0", default-features = false, features = ["vendored", "lottie", "png", "fonts", "threads"] }
 thorvg-sys = { version = "0.3.0", default-features = false }
 wgpu = { version = "30.0.0", default-features = false, features = ["std", "gles", "wgsl"] }

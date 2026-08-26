@@ -7,24 +7,20 @@
 //! forwards only committed input to the host.
 
 use std::cell::Cell;
-use std::rc::{Rc, Weak};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use arkit_prelude::EventHandler;
+use arkit_prelude::{dioxus_core, EventHandler};
 use ohos_ime_binding::{AttachOptions, KeyboardStatus, IME};
 
 use crate::component::TerminalController;
 
-static NEXT_SESSION_ID: AtomicU64 = AtomicU64::new(1);
-static ACTIVE_SESSION_ID: AtomicU64 = AtomicU64::new(0);
-
 pub(crate) struct TerminalImeSession {
-    id: u64,
     ime: IME,
-    sink: Rc<HostInputSink>,
-    keyboard_visible: Rc<Cell<bool>>,
-    visible_flag: Arc<AtomicBool>,
+    events: tokio::sync::mpsc::UnboundedSender<ImeEvent>,
+    active: Arc<AtomicBool>,
+    callbacks_installed: Cell<bool>,
 }
 
 impl TerminalImeSession {
@@ -32,97 +28,104 @@ impl TerminalImeSession {
         controller: TerminalController,
         on_input: Rc<Cell<Option<EventHandler<Vec<u8>>>>>,
     ) -> Self {
+        let sink = Rc::new(HostInputSink {
+            controller,
+            on_input,
+        });
+        let (events, mut event_rx) = tokio::sync::mpsc::unbounded_channel();
+        let event_sink = sink.clone();
+        dioxus_core::spawn(async move {
+            while let Some(event) = event_rx.recv().await {
+                event_sink.handle(event);
+            }
+        });
         Self {
-            id: next_session_id(),
             ime: IME::new(AttachOptions::new(false)),
-            sink: Rc::new(HostInputSink {
-                controller,
-                on_input,
-            }),
-            keyboard_visible: Rc::new(Cell::new(false)),
-            visible_flag: Arc::new(AtomicBool::new(false)),
+            events,
+            active: Arc::new(AtomicBool::new(false)),
+            callbacks_installed: Cell::new(false),
         }
     }
 
     pub(crate) fn visible_flag(&self) -> Arc<AtomicBool> {
-        self.visible_flag.clone()
+        self.active.clone()
     }
 
     pub(crate) fn hide_keyboard(&self) {
-        self.keyboard_visible.set(false);
-        self.visible_flag.store(false, Ordering::Release);
-        self.ime.hide_keyboard();
-        if ACTIVE_SESSION_ID.load(Ordering::Acquire) == self.id {
-            ACTIVE_SESSION_ID.store(0, Ordering::Release);
+        self.active.store(false, Ordering::Release);
+        if let Err(error) = self.ime.try_hide_keyboard() {
+            ohos_hilog_binding::error(format!("arkit_terminal: failed to hide IME: {error}"));
         }
     }
 
-    /// Activate this terminal and ask the already-attached IME to show.
-    ///
-    /// Calling this for every confirmed tap is intentional. OpenHarmony may
-    /// hide the keyboard without detaching the input-method proxy; a native
-    /// focus flag would remain unchanged, whereas `ShowKeyboard` is repeatable.
+    /// Activate this terminal and show its IME if it is not already visible.
     pub(crate) fn show_keyboard(&self) {
-        ACTIVE_SESSION_ID.store(self.id, Ordering::Release);
-        // A manual Back dismissal may leave the proxy attached even though a
-        // subsequent ShowKeyboard is rejected by the platform. Reattach only
-        // for that hidden state; taps while already visible remain flicker-free.
-        if !self.keyboard_visible.get() {
-            self.ime.detach();
+        if self
+            .active
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
+        {
+            return;
         }
         self.install_callbacks();
-        self.keyboard_visible.set(true);
-        self.visible_flag.store(true, Ordering::Release);
-        self.ime.show_keyboard();
+        if let Err(error) = self.ime.try_show_keyboard() {
+            self.active.store(false, Ordering::Release);
+            ohos_hilog_binding::error(format!("arkit_terminal: failed to show IME: {error}"));
+        }
+    }
+
+    pub(crate) fn mark_backgrounded(&self) {
+        self.active.store(false, Ordering::Release);
     }
 
     pub(crate) fn deactivate(&self) {
-        if ACTIVE_SESSION_ID
-            .compare_exchange(self.id, 0, Ordering::AcqRel, Ordering::Acquire)
-            .is_ok()
-        {
-            self.keyboard_visible.set(false);
-            self.visible_flag.store(false, Ordering::Release);
-            self.ime.detach();
-        }
+        self.active.store(false, Ordering::Release);
+        self.ime.detach();
     }
 
     fn install_callbacks(&self) {
-        let session_id = self.id;
-        let sink = Rc::downgrade(&self.sink);
+        if self.callbacks_installed.replace(true) {
+            return;
+        }
+        let active = self.active.clone();
+        let events = self.events.clone();
         self.ime.insert_text(move |text| {
-            with_active_sink(session_id, &sink, |sink| sink.insert_text(&text));
+            send_if_active(&active, &events, ImeEvent::Insert(text));
         });
 
-        let sink = Rc::downgrade(&self.sink);
+        let active = self.active.clone();
+        let events = self.events.clone();
         self.ime.on_delete(move |count| {
-            with_active_sink(session_id, &sink, |sink| sink.delete_backward(count));
+            send_if_active(&active, &events, ImeEvent::DeleteBackward(count));
         });
 
-        let sink = Rc::downgrade(&self.sink);
+        let active = self.active.clone();
+        let events = self.events.clone();
         self.ime.on_enter(move |_| {
-            with_active_sink(session_id, &sink, HostInputSink::enter);
+            send_if_active(&active, &events, ImeEvent::Enter);
         });
 
-        let keyboard_visible = Rc::downgrade(&self.keyboard_visible);
-        let visible_flag = self.visible_flag.clone();
-        let ime = self.ime.clone();
+        let active = self.active.clone();
         self.ime.on_status_change(move |status| {
-            if ACTIVE_SESSION_ID.load(Ordering::Acquire) != session_id {
-                return;
-            }
-            let visible = matches!(status, KeyboardStatus::Show);
-            if let Some(keyboard_visible) = keyboard_visible.upgrade() {
-                keyboard_visible.set(visible);
-            }
-            visible_flag.store(visible, Ordering::Release);
-            // Detach when dismissed so a later scroll/touch does not revive
-            // the already-attached input-method proxy.
-            if !visible {
-                ime.detach();
+            match status {
+                KeyboardStatus::Show => {
+                    active.store(true, Ordering::Release);
+                }
+                KeyboardStatus::Hide => {
+                    active.store(false, Ordering::Release);
+                }
+                // `None` is a transient status, not proof that the visible
+                // keyboard has been dismissed.
+                KeyboardStatus::None => {}
             }
         });
     }
+}
+
+enum ImeEvent {
+    Insert(String),
+    DeleteBackward(i32),
+    Enter,
 }
 
 impl Drop for TerminalImeSession {
@@ -137,6 +140,14 @@ struct HostInputSink {
 }
 
 impl HostInputSink {
+    fn handle(&self, event: ImeEvent) {
+        match event {
+            ImeEvent::Insert(text) => self.insert_text(&text),
+            ImeEvent::DeleteBackward(count) => self.delete_backward(count),
+            ImeEvent::Enter => self.enter(),
+        }
+    }
+
     fn insert_text(&self, text: &str) {
         self.emit(encode_committed_text(&self.controller, text));
     }
@@ -167,26 +178,15 @@ impl HostInputSink {
     }
 }
 
-fn with_active_sink(
-    session_id: u64,
-    sink: &Weak<HostInputSink>,
-    callback: impl FnOnce(&HostInputSink),
+fn send_if_active(
+    active: &AtomicBool,
+    events: &tokio::sync::mpsc::UnboundedSender<ImeEvent>,
+    event: ImeEvent,
 ) {
-    if ACTIVE_SESSION_ID.load(Ordering::Acquire) != session_id {
+    if !active.load(Ordering::Acquire) {
         return;
     }
-    if let Some(sink) = sink.upgrade() {
-        callback(&sink);
-    }
-}
-
-fn next_session_id() -> u64 {
-    loop {
-        let id = NEXT_SESSION_ID.fetch_add(1, Ordering::Relaxed);
-        if id != 0 {
-            return id;
-        }
-    }
+    let _ = events.send(event);
 }
 
 fn encode_committed_text(controller: &TerminalController, text: &str) -> Vec<u8> {

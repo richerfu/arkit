@@ -18,7 +18,7 @@ use std::rc::Rc;
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 
-use arkit_hooks::{use_mounted_node, use_native_element_ref};
+use arkit_hooks::{use_application_lifecycle_event, use_mounted_node, use_native_element_ref};
 use arkit_prelude::*;
 use dioxus_elements::event::PointerAction;
 
@@ -53,13 +53,6 @@ impl ComponentRuntime {
 
     fn sender(&self) -> Option<Sender<WorkerMessage>> {
         self.worker.borrow().as_ref().map(WorkerHandle::sender)
-    }
-
-    fn vsync_pending(&self) -> Option<Arc<std::sync::atomic::AtomicBool>> {
-        self.worker
-            .borrow()
-            .as_ref()
-            .map(WorkerHandle::vsync_pending)
     }
 
     fn take_notices(
@@ -177,7 +170,7 @@ impl TerminalInbox {
 ///
 /// Host output ([`Self::feed_vt`]) only appends to a shared mailbox. rio-vt
 /// parse, grid capture, and wgpu present run on the `arkit-terminal` worker
-/// and are paced by the XComponent vsync callback.
+/// and are paced by a VSync connection associated with the native window.
 #[derive(Clone)]
 pub struct TerminalController {
     shared: Arc<TerminalShared>,
@@ -279,7 +272,7 @@ impl TerminalController {
     /// Host → terminal (PTY/SSH output).
     ///
     /// Appends to a mailbox. Parsing and GPU present happen on the render
-    /// worker, aligned to XComponent vsync when the surface is live.
+    /// worker, aligned to the surface-associated VSync when the surface is live.
     pub fn feed_vt(&self, data: &[u8]) {
         self.write_bytes(data);
     }
@@ -313,9 +306,11 @@ impl TerminalController {
     }
 
     pub fn encode_mouse(&self, event: MouseInput) -> Vec<u8> {
-        let mut config = TerminalConfig::default();
-        config.cell_width_px = self.shared.cell_width_px();
-        config.cell_height_px = self.shared.cell_height_px();
+        let config = TerminalConfig {
+            cell_width_px: self.shared.cell_width_px(),
+            cell_height_px: self.shared.cell_height_px(),
+            ..TerminalConfig::default()
+        };
         input::encode_mouse(self.encode_state(), event, &config).unwrap_or_default()
     }
 
@@ -458,6 +453,14 @@ pub fn Terminal(props: TerminalProps) -> Element {
         let on_input = callbacks.on_input.clone();
         move || Rc::new(TerminalImeSession::new(controller, on_input))
     });
+    use_application_lifecycle_event({
+        let ime_session = ime_session.clone();
+        move |_, state| {
+            if !state.is_foreground() {
+                ime_session.mark_backgrounded();
+            }
+        }
+    });
     controller.bind_show_keyboard({
         let ime_session = ime_session.clone();
         Rc::new(move || ime_session.show_keyboard())
@@ -532,10 +535,7 @@ pub fn Terminal(props: TerminalProps) -> Element {
         let Some(sender) = registration_runtime.sender() else {
             return;
         };
-        let Some(vsync_pending) = registration_runtime.vsync_pending() else {
-            return;
-        };
-        let registration = SurfaceRegistration::attach(&node, sender, vsync_pending);
+        let registration = SurfaceRegistration::attach(&node, sender);
         match registration {
             Ok(registration) => {
                 registration_slot.borrow_mut().replace(registration);
