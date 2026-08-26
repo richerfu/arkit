@@ -6,7 +6,7 @@ import window from "@ohos.window";
 // moduleName 由 run.sh 按当前部署的 example 写入（对应 lib<crate>.so）。
 // NativeAbility 据此加载模块并管理 bridge session 与 render owner 生命周期。
 export default class EntryAbility extends NativeAbility {
-  public moduleName: string = "shadcn_showcase";
+  public moduleName: string = "terminal_example";
   public defaultPage: boolean = false;
 
   // ArkTS 侧能力插件。webview 的 Rust facade 由 arkit 在 init 阶段自动注册
