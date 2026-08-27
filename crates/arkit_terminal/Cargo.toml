@@ -28,6 +28,7 @@ ohos-hilog-binding.workspace = true
 ohos-ime-binding.workspace = true
 ohos-native-drawing-sys.workspace = true
 ohos-native-window-binding.workspace = true
+ohos-vsync-binding.workspace = true
 ohos-xcomponent-binding.workspace = true
 ohos-xcomponent-sys.workspace = true
 pollster.workspace = true

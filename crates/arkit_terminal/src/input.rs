@@ -101,6 +101,50 @@ pub(crate) struct EncodeState {
     pub focus_report: bool,
 }
 
+impl EncodeState {
+    pub(crate) fn to_bits(self) -> u32 {
+        let mut bits = 0u32;
+        if self.app_cursor {
+            bits |= 1 << 0;
+        }
+        if self.mouse_reporting {
+            bits |= 1 << 1;
+        }
+        if self.sgr_mouse {
+            bits |= 1 << 2;
+        }
+        if self.utf8_mouse {
+            bits |= 1 << 3;
+        }
+        if self.x10_mouse {
+            bits |= 1 << 4;
+        }
+        if self.mouse_drag {
+            bits |= 1 << 5;
+        }
+        if self.mouse_motion {
+            bits |= 1 << 6;
+        }
+        if self.focus_report {
+            bits |= 1 << 7;
+        }
+        bits
+    }
+
+    pub(crate) fn from_bits(bits: u32) -> Self {
+        Self {
+            app_cursor: bits & (1 << 0) != 0,
+            mouse_reporting: bits & (1 << 1) != 0,
+            sgr_mouse: bits & (1 << 2) != 0,
+            utf8_mouse: bits & (1 << 3) != 0,
+            x10_mouse: bits & (1 << 4) != 0,
+            mouse_drag: bits & (1 << 5) != 0,
+            mouse_motion: bits & (1 << 6) != 0,
+            focus_report: bits & (1 << 7) != 0,
+        }
+    }
+}
+
 pub fn encode_named_key(state: EncodeState, name: &str) -> TerminalResult<Vec<u8>> {
     encode_key_chord(state, KeyChord::named(name))
 }

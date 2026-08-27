@@ -210,8 +210,8 @@ pub use arkit_terminal as terminal;
 pub use arkit_terminal::{
     rgb_to_argb, CursorVisualStyle, KeyChord, KeyMods, MouseAction, MouseButton, MouseInput, Rgb,
     Terminal, TerminalCell, TerminalConfig, TerminalController, TerminalCursor, TerminalEffects,
-    TerminalEngine, TerminalError, TerminalErrorKind, TerminalFrame, TerminalProps, TerminalResult,
-    TerminalRun, TerminalScrollbar, TerminalSize,
+    TerminalEngine, TerminalError, TerminalErrorKind, TerminalFrame, TerminalInbox, TerminalProps,
+    TerminalResult, TerminalRun, TerminalScrollbar, TerminalSize,
 };
 
 // --- shadcn component library ---

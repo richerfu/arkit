@@ -79,7 +79,7 @@ impl TerminalSurfaceMetrics {
     }
 
     pub(crate) fn scroll_slop_vp(self) -> f32 {
-        (self.cell_height_vp as f32 * 0.4).max(6.0)
+        (self.cell_height_vp as f32 * 0.5).max(10.0)
     }
 
     pub(crate) fn content_position_px_from_vp(self, x: f32, y: f32) -> (f32, f32) {

@@ -8,24 +8,27 @@
 //!
 //! | Concern | API |
 //! |---------|-----|
-//! | Host → paint | [`TerminalController::feed_vt`] / [`TerminalEngine::write_bytes`] |
+//! | Host → paint | [`TerminalController::feed_vt`] (mailbox; parse is off the UI thread) |
 //! | Keyboard → host | [`TerminalProps::on_input`] + [`TerminalController::encode_key`] |
 //! | Terminal → host | [`TerminalProps::on_write_pty`] (DA/DSR/…) |
-//! | Paint | [`Terminal`] XComponent + wgpu render worker |
+//! | Paint | [`Terminal`] window-associated vsync → wgpu render worker |
 //!
 //! ```text
 //!   UI / IME ──on_input──► your PTY | SSH | local shell
-//!   host output ──feed_vt──► rio-vt (CPU sequential VT)
-//!                         └──► GPU cell instances + glyph atlas
-//!                              └──► wgpu GLES/EGL ──► XComponent
+//!   host output ──feed_vt──► byte mailbox (no parse on the UI thread)
+//!          window-associated vsync ──► rio-vt on the render worker
+//!                                   └──► GPU cell instances + glyph atlas
+//!                                        └──► wgpu GLES/EGL ──► XComponent
 //!   write_pty effect ──on_write_pty──► same host
 //! ```
 //!
 //! Do **not** feed typed keys into `feed_vt` — that injects bytes as if the
 //! remote produced them and breaks delete/echo.
 //!
-//! VT parsing stays on the CPU: ANSI state machines are sequential. Grid
-//! layout, decorations, cursor, and glyph sampling run in GPU shaders.
+//! VT parsing stays on the CPU, but not on the ArkUI thread: ANSI state
+//! machines are sequential and run on `arkit-terminal`. Grid layout,
+//! decorations, cursor, and glyph sampling run in GPU shaders. Present is
+//! paced by a window-associated [`ohos_vsync_binding::Vsync`].
 
 mod capture;
 mod component;
@@ -41,7 +44,7 @@ mod renderer;
 mod surface;
 mod worker;
 
-pub use component::{Terminal, TerminalController, TerminalProps};
+pub use component::{Terminal, TerminalController, TerminalInbox, TerminalProps};
 pub use config::{Rgb, TerminalConfig, TerminalEffects};
 pub use engine::{TerminalEngine, TerminalSize};
 pub use error::{TerminalError, TerminalErrorKind, TerminalResult};

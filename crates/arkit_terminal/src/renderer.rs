@@ -46,7 +46,6 @@ impl TerminalRenderer {
     pub(crate) fn new(surface: NativeSurface) -> Result<Self, String> {
         let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
         descriptor.backends = wgpu::Backends::GL;
-        #[cfg(target_env = "ohos")]
         descriptor.flags.remove(wgpu::InstanceFlags::DEBUG);
         let instance = wgpu::Instance::new(descriptor);
         let raw_surface = create_surface(&instance, &surface)?;
