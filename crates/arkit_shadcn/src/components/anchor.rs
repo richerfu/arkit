@@ -225,7 +225,7 @@ pub fn Anchor(props: AnchorProps) -> Element {
 
     let frames = use_hook(|| Rc::new(RefCell::new(Vec::new())));
     let revision = use_signal(|| 0u64);
-    let scroll_frame = use_signal(|| arkit_hooks::LayoutFrame::default());
+    let scroll_frame = use_signal(arkit_hooks::LayoutFrame::default);
     let position = use_signal(|| 0.0f32);
     let command = use_signal(|| None::<ScrollJump>);
     let threshold_vp = props.active_threshold;

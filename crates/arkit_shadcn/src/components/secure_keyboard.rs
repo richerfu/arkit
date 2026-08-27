@@ -444,7 +444,7 @@ impl DigitLayout {
         }
 
         let mut entropy = [0_u8; SHUFFLE_ENTROPY_BYTES];
-        if getrandom::getrandom(&mut entropy).is_err() {
+        if getrandom::fill(&mut entropy).is_err() {
             return Self::ordered();
         }
         Self::from_entropy(entropy)

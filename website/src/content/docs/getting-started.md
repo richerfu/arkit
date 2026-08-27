@@ -32,11 +32,11 @@ crate-type = ["cdylib"]
 
 [dependencies]
 arkit = { version = "*" }
-napi-ohos = "1.1"
-napi-derive-ohos = "1.1"
+napi-ohos = "1.2.0"
+napi-derive-ohos = "1.2.0"
 
 [build-dependencies]
-napi-build-ohos = "1.1"
+napi-build-ohos = "1.2.0"
 ```
 
 仓库里的 example 走 workspace 依赖；你在自己的项目里直接依赖发布版本即可。额外能力用 `arkit` 的 feature 打开：

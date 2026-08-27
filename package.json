@@ -16,8 +16,8 @@
     "website:typecheck": "pnpm --filter arkit-website run check"
   },
   "devDependencies": {
-    "oxfmt": "0.59.0",
-    "oxlint": "1.74.0"
+    "oxfmt": "0.65.0",
+    "oxlint": "1.80.0"
   },
-  "packageManager": "pnpm@10.24.0"
+  "packageManager": "pnpm@11.24.0"
 }

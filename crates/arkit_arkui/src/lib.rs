@@ -620,7 +620,7 @@ impl ArkUIRenderer {
                 Row::new().expect("arkit_arkui: button content Row").into();
             let content = Rc::new(RefCell::new(content_node));
             root.borrow_mut()
-                .insert_child(content.borrow().clone(), 0)
+                .insert_child(content.clone(), 0)
                 .unwrap_or_else(|error| {
                     panic!("arkit_arkui: failed to create button content projection: {error}")
                 });
@@ -968,7 +968,7 @@ impl ArkUIRenderer {
         let native_index = self.projected_native_len_before(parent, child);
         let insert_result = {
             let mut parent_mut = parent_native.borrow_mut();
-            parent_mut.insert_child(child_native.borrow().clone(), native_index)
+            parent_mut.insert_child(child_native.clone(), native_index)
         };
         let inserted = self
             .latch_structural("attach_native insert_child", insert_result)
@@ -979,13 +979,9 @@ impl ArkUIRenderer {
             return;
         }
 
-        // `insert_child` consumes the child and wraps it in a *new* `Rc` inside
-        // the parent's `children` — the wrapper we held (`child_native`) is NOT
-        // the one now mounted. Event callbacks (`on_event`) are stored on the
-        // wrapper's `event_handle` field, so we must rebind `hosts[child].native`
-        // to the actually-mounted wrapper, else event registration silently
-        // targets a detached wrapper and clicks never fire. (Doc §"Native
-        // wrapper 处理计划".)
+        // Keep renderer state synchronized with the parent's mounted wrapper.
+        // ohos-arkui-binding preserves this `Rc` identity across insertion, so
+        // listeners registered before or after mounting target the same node.
         let mounted = parent_native.borrow().children().get(native_index).cloned();
         if let Some(mounted) = mounted {
             let parent_attached = self.hosts[parent].native_attached;
@@ -1360,10 +1356,9 @@ impl ArkUIRenderer {
                     let Some(Some(removed)) = removed else {
                         return;
                     };
-                    let node = removed.borrow().clone();
-                    node
+                    removed
                 } else {
-                    child_native.borrow().clone()
+                    child_native.clone()
                 };
                 let result = {
                     let mut parent_mut = parent_native.borrow_mut();

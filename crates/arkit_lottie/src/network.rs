@@ -84,7 +84,22 @@ impl LottieSourceLoader {
 }
 
 fn build_http_client() -> LottieResult<Client> {
+    let roots: rustls::RootCertStore = webpki_roots::TLS_SERVER_ROOTS.iter().cloned().collect();
+    let tls_config = rustls::ClientConfig::builder_with_provider(Arc::new(
+        rustls::crypto::ring::default_provider(),
+    ))
+    .with_safe_default_protocol_versions()
+    .map_err(|error| {
+        LottieError::network(
+            "LottieSourceLoader::new",
+            format!("could not configure TLS protocol versions: {error}"),
+        )
+    })?
+    .with_root_certificates(roots)
+    .with_no_client_auth();
+
     Client::builder()
+        .use_preconfigured_tls(tls_config)
         .connect_timeout(CONNECT_TIMEOUT)
         .redirect(reqwest::redirect::Policy::limited(REDIRECT_LIMIT))
         .user_agent(concat!("arkit-lottie/", env!("CARGO_PKG_VERSION")))

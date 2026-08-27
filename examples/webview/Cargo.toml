@@ -14,7 +14,6 @@ workspace = true
 # The `webview` feature enables the ohos.webview bridge plugin; the framework
 # registers the plugin facade and injects its initialization automatically.
 arkit = { workspace = true, features = ["webview"] }
-futures-channel = "0.3"
-futures-util = "0.3"
+futures-channel.workspace = true
+futures-util.workspace = true
 tokio.workspace = true
-

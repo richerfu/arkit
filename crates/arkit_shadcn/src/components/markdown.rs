@@ -1008,16 +1008,6 @@ enum InlineAlignment {
     End,
 }
 
-impl InlineAlignment {
-    fn justify_content(self) -> &'static str {
-        match self {
-            Self::Start => "start",
-            Self::Center => "center",
-            Self::End => "end",
-        }
-    }
-}
-
 fn render_blocks(
     blocks: &[Block],
     style: &MarkdownStyle,

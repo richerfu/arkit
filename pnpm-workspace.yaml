@@ -1,2 +1,7 @@
 packages:
   - "website"
+allowBuilds:
+  esbuild: true
+minimumReleaseAgeExclude:
+  - "@types/node@26.4.0"
+  - astro@7.2.8

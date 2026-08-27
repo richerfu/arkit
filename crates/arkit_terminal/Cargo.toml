@@ -32,7 +32,7 @@ ohos-vsync-binding.workspace = true
 ohos-xcomponent-binding.workspace = true
 ohos-xcomponent-sys.workspace = true
 pollster.workspace = true
-rio-vt = { version = "0.5.25", default-features = false }
+rio-vt.workspace = true
 rustc-hash.workspace = true
 tokio.workspace = true
 wgpu.workspace = true

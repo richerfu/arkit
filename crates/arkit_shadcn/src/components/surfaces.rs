@@ -982,6 +982,15 @@ fn SonnerLayer(
         .collect::<Vec<(usize, ToastPresenceItem)>>();
     let has_notifications = !painted.is_empty() || !leaving_deck.is_empty();
     let has_minimals = !minimals.is_empty();
+    let render_context = SonnerRenderContext {
+        rich_colors,
+        style: style.toast,
+        theme,
+        on_dismiss,
+        on_presence_terminal,
+        swipe_direction,
+        is_top,
+    };
 
     rsx! {
         column {
@@ -1002,7 +1011,7 @@ fn SonnerLayer(
             // Minimal chips sit above notifications when bottom-anchored so the
             // compact toast is never buried under the stack.
             if is_top {
-                {render_minimal_row(minimals.clone(), horizontal, rich_colors, style.toast, theme, on_dismiss, on_presence_terminal, swipe_direction, is_top)}
+                {render_minimal_row(minimals.clone(), horizontal, render_context)}
                 if has_minimals && has_notifications {
                     row { height: spacing::SM, hit_test_behavior: "none" }
                 }
@@ -1025,25 +1034,21 @@ fn SonnerLayer(
                             {
                                 render_sonner_card(
                                     entry,
-                                    layouts
-                                        .get(index)
-                                        .copied()
-                                        .unwrap_or(SonnerCardLayout::front(notification_width)),
-                                    index,
-                                    is_expanded,
-                                    stackable,
-                                    rich_colors,
-                                    swipe_direction,
-                                    style.toast,
-                                    theme,
-                                    is_top,
-                                    on_dismiss,
-                                    on_presence_terminal,
-                                    if index == 0 {
-                                        Some(on_expand_change)
-                                    } else {
-                                        None
+                                    SonnerCardRender {
+                                        layout: layouts
+                                            .get(index)
+                                            .copied()
+                                            .unwrap_or(SonnerCardLayout::front(notification_width)),
+                                        index,
+                                        is_expanded,
+                                        stackable,
+                                        on_expand_change: if index == 0 {
+                                            Some(on_expand_change)
+                                        } else {
+                                            None
+                                        },
                                     },
+                                    render_context,
                                 )
                             }
                         }
@@ -1056,18 +1061,14 @@ fn SonnerLayer(
                                     .unwrap_or(SonnerCardLayout::front(notification_width));
                                 render_sonner_card(
                                     entry,
-                                    layout,
-                                    0,
-                                    is_expanded,
-                                    false,
-                                    rich_colors,
-                                    swipe_direction,
-                                    style.toast,
-                                    theme,
-                                    is_top,
-                                    on_dismiss,
-                                    on_presence_terminal,
-                                    None,
+                                    SonnerCardRender {
+                                        layout,
+                                        index: 0,
+                                        is_expanded,
+                                        stackable: false,
+                                        on_expand_change: None,
+                                    },
+                                    render_context,
                                 )
                             }
                         }
@@ -1081,7 +1082,7 @@ fn SonnerLayer(
                 if has_minimals && has_notifications {
                     row { height: spacing::SM, hit_test_behavior: "none" }
                 }
-                {render_minimal_row(minimals, horizontal, rich_colors, style.toast, theme, on_dismiss, on_presence_terminal, swipe_direction, is_top)}
+                {render_minimal_row(minimals, horizontal, render_context)}
             }
             if is_top {
                 row {
@@ -1384,21 +1385,46 @@ fn sonner_stack_layouts(
     (layouts, stack_height)
 }
 
-fn render_sonner_card(
-    entry: ToastPresenceItem,
+#[derive(Clone, Copy)]
+struct SonnerRenderContext {
+    rich_colors: bool,
+    style: ToastStyle,
+    theme: Theme,
+    on_dismiss: EventHandler<ToastIdentity>,
+    on_presence_terminal: EventHandler<(String, PresencePhase)>,
+    swipe_direction: ToastSwipeDirection,
+    is_top: bool,
+}
+
+struct SonnerCardRender {
     layout: SonnerCardLayout,
     index: usize,
     is_expanded: bool,
     stackable: bool,
-    rich_colors: bool,
-    swipe_direction: ToastSwipeDirection,
-    style: ToastStyle,
-    theme: Theme,
-    is_top: bool,
-    on_dismiss: EventHandler<ToastIdentity>,
-    on_presence_terminal: EventHandler<(String, PresencePhase)>,
     on_expand_change: Option<EventHandler<bool>>,
+}
+
+fn render_sonner_card(
+    entry: ToastPresenceItem,
+    card: SonnerCardRender,
+    context: SonnerRenderContext,
 ) -> Element {
+    let SonnerCardRender {
+        layout,
+        index,
+        is_expanded,
+        stackable,
+        on_expand_change,
+    } = card;
+    let SonnerRenderContext {
+        rich_colors,
+        style,
+        theme,
+        on_dismiss,
+        on_presence_terminal,
+        swipe_direction,
+        is_top,
+    } = context;
     let leaving = entry.phase == PresencePhase::Leaving;
     let is_front = index == 0 && !leaving;
     let entry_key = entry.key.clone();
@@ -1446,14 +1472,17 @@ fn render_sonner_card(
 fn render_minimal_row(
     minimals: Vec<ToastPresenceItem>,
     horizontal: HorizontalPosition,
-    rich_colors: bool,
-    style: ToastStyle,
-    theme: Theme,
-    on_dismiss: EventHandler<ToastIdentity>,
-    on_presence_terminal: EventHandler<(String, PresencePhase)>,
-    swipe_direction: ToastSwipeDirection,
-    is_top: bool,
+    context: SonnerRenderContext,
 ) -> Element {
+    let SonnerRenderContext {
+        rich_colors,
+        style,
+        theme,
+        on_dismiss,
+        on_presence_terminal,
+        swipe_direction,
+        is_top,
+    } = context;
     if minimals.is_empty() {
         return rsx! {};
     }

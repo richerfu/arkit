@@ -204,16 +204,16 @@ pub fn WebviewPage() -> Element {
     let status_display = (status.read()).clone();
     let url_display = (url.read()).clone();
 
-    // Per-handler clones (each `move` closure owns its own).
+    // Per-handler copies (each `move` closure owns its own signal handle).
     let mut url_onchange = url;
-    let mut url_rust = url.clone();
-    let mut url_docs = url.clone();
-    let commands_show = commands.clone();
-    let commands_rust = commands.clone();
-    let commands_docs = commands.clone();
-    let commands_reload = commands.clone();
-    let commands_eval = commands.clone();
-    let commands_hide = commands.clone();
+    let mut url_rust = url;
+    let mut url_docs = url;
+    let commands_show = commands;
+    let commands_rust = commands;
+    let commands_docs = commands;
+    let commands_reload = commands;
+    let commands_eval = commands;
+    let commands_hide = commands;
 
     rsx! {
         column {
@@ -322,7 +322,7 @@ pub fn WebviewPage() -> Element {
             // style, so the plugin surface lands exactly on this rectangle.
             WebviewArea {
                 runtime: runtime.clone(),
-                created: created.clone(),
+                created,
             }
         }
     }
