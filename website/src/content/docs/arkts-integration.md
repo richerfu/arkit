@@ -10,7 +10,7 @@ Rust 编出来的 `.so` 通过 `@ohos-rs/ability` 挂进 ArkTS。业务侧一般
 ## 安装 Ability 包
 
 ```sh
-ohpm install @ohos-rs/ability
+ohpm install @ohos-rs/ability@1.0.0-beta.2
 ```
 
 也可以在 `oh-package.json5` 声明：
@@ -18,7 +18,7 @@ ohpm install @ohos-rs/ability
 ```json5
 {
   dependencies: {
-    "@ohos-rs/ability": "^0.1.0",
+    "@ohos-rs/ability": "1.0.0-beta.2",
   },
 }
 ```
@@ -52,19 +52,13 @@ export default class EntryAbility extends NativeAbility {
 
 ```ts
 import { NativeAbility } from "@ohos-rs/ability";
-import { AbilityConstant, Want } from "@kit.AbilityKit";
 import window from "@ohos.window";
 
 export default class EntryAbility extends NativeAbility {
   public moduleName: string = "counter";
   public defaultPage: boolean = false;
 
-  async onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): Promise<void> {
-    super.onCreate(want, launchParam);
-  }
-
-  async onWindowStageCreate(windowStage: window.WindowStage): Promise<void> {
-    super.onWindowStageCreate(windowStage);
+  protected async loadWindowStageContent(windowStage: window.WindowStage): Promise<void> {
     await windowStage.loadContent("pages/Index");
   }
 }
@@ -106,7 +100,7 @@ export default class EntryAbility extends NativeAbility {
 }
 ```
 
-页面中的每个 `DefaultXComponent` 仍指定单个模块名。每个 Arkit root 拥有独立 VirtualDom、renderer、窗口 context 和动画 host。
+页面中的每个 `DefaultXComponent` 仍指定单个模块名。同一 native 模块同一时刻只能归一个 `DefaultXComponent` 所有；并行的多个 Arkit root 必须使用不同模块，各自拥有独立 VirtualDom、renderer、窗口 context 和动画 host。
 
 ## 加载模式
 
@@ -126,16 +120,15 @@ public loadMode: 'async' | 'sync' = 'sync'
 
 ## 生命周期规则
 
-覆盖 `NativeAbility` 生命周期时必须调用 `super`：
+`NativeAbility` 会把异步初始化、WindowStage 和销毁操作串行化。自定义页面应覆盖内容加载 hook，不要另起一个脱离该队列的异步 `onWindowStageCreate`：
 
 ```ts
-async onWindowStageCreate(windowStage: window.WindowStage): Promise<void> {
-  super.onWindowStageCreate(windowStage)
+protected async loadWindowStageContent(windowStage: window.WindowStage): Promise<void> {
   await windowStage.loadContent('pages/Index')
 }
 ```
 
-`super` 负责 helper、window callbacks、avoid area、keyboard、back press 和 native module 生命周期。漏掉它会导致页面能加载但安全区、异步唤醒或销毁不完整。
+确实需要覆盖平台生命周期时仍必须同步调用 `super`；它负责 bridge session、window callbacks、avoid area、keyboard、back press 和 native module 生命周期。
 
 ## 接口对照
 

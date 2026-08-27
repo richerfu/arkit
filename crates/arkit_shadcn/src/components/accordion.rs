@@ -6,6 +6,7 @@
 //! closes it when `collapsible` is true. The legacy native transform-based
 //! chevron rotation is approximated by swapping `chevron-down`/`chevron-up`.
 
+use super::motion::ExpandPresence;
 use crate::theme::*;
 use arkit_prelude::*;
 
@@ -121,26 +122,13 @@ pub fn Accordion(
                                     {crate::icon::icon_placeholder(chevron_icon, ACCORDION_ICON_SIZE, colors.muted_foreground)}
                                 }
                             }
-                            if is_open {
-                                // Content-sized only — `fill: true` would stretch the open
-                                // panel to the parent height and push later items off-screen.
-                                arkit_animation::MountTransition {
-                                    preset: Some(arkit_animation::TransitionPreset::SlideUp),
-                                    duration_ms: Some(140),
-                                    fill: Some(false),
-                                    column {
-                                        width: "100%",
-                                        align_items: "start",
-                                        padding_bottom: spacing::LG,
-                                        {content}
-                                    }
-                                }
-                            } else {
+                            ExpandPresence {
+                                open: is_open,
                                 column {
                                     width: "100%",
-                                    height: 0.0,
-                                    opacity: 0.0f32,
-                                    hit_test_behavior: "transparent",
+                                    align_items: "start",
+                                    padding_bottom: spacing::LG,
+                                    {content}
                                 }
                             }
                             row {

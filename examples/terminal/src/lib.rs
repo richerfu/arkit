@@ -6,11 +6,11 @@
 //!   Terminal.on_write_pty ──►  same host write
 //! ```
 
+mod demos;
 mod local_shell;
 mod ssh_host;
 
 use std::cell::RefCell;
-use std::fmt::Write as _;
 use std::rc::Rc;
 
 use arkit::prelude::*;
@@ -188,24 +188,60 @@ pub fn TerminalPage() -> Element {
         }
     };
 
-    let write_long = {
+    let demo_hello = {
+        let controller = controller.clone();
+        let host = host.clone();
+        let mut status = status;
+        move |()| {
+            let vt = host.borrow_mut().write_input(demos::HELLO_COMMAND);
+            if !vt.is_empty() {
+                controller.feed_vt(&vt);
+            }
+            status.set("demo · hello".into());
+        }
+    };
+
+    let demo_colors = {
+        let controller = controller.clone();
+        let host = host.clone();
+        let mut status = status;
+        move |()| {
+            controller.feed_vt(b"\r\n");
+            controller.feed_vt(demos::COLORS.as_bytes());
+            controller.feed_vt(&host.borrow().local.prompt());
+            status.set("demo · colors".into());
+        }
+    };
+
+    let demo_clear = {
+        let controller = controller.clone();
+        let host = host.clone();
+        let mut status = status;
+        move |()| {
+            host.borrow_mut().local.reset();
+            controller.feed_vt(b"\x1b[2J\x1b[H\x1b[?25h");
+            controller.feed_vt(&host.borrow().local.banner());
+            status.set("demo · clear".into());
+        }
+    };
+
+    let demo_stress = {
+        let controller = controller.clone();
+        let host = host.clone();
+        let mut status = status;
+        move |()| {
+            controller.feed_vt(demos::stress_transcript(1_200).as_bytes());
+            controller.feed_vt(&host.borrow().local.prompt());
+            status.set("demo · stress × 1200".into());
+        }
+    };
+
+    let demo_keyboard = {
         let controller = controller.clone();
         let mut status = status;
         move |()| {
-            // One large host write produces enough wrapped history to expose
-            // scroll-path performance without measuring hundreds of
-            // artificial per-line controller captures.
-            let mut payload = String::with_capacity(96 * 160);
-            for index in 0..160 {
-                let _ = write!(
-                    payload,
-                    "\x1b[36mASCII {index:03}>\x1b[0m 0123456789|0123456789|0123456789|0123456789|0123456789|0123456789|END\r\n\
-                     \x1b[35mCJK {index:03}>\x1b[0m 鸿蒙终端网格对齐测试·中文全角字符·0123456789·鸿蒙终端网格对齐测试·END\r\n\
-                     \x1b[1;31mSTYLE {index:03}>\x1b[0m red-bold--\x1b[4;32mgreen-underline--\x1b[0mplain--abcdefghijklmnopqrstuvwxyz--END\r\n"
-                );
-            }
-            controller.feed_vt(payload.as_bytes());
-            status.set("vt · long × 160".into());
+            controller.show_keyboard();
+            status.set("ime · keyboard".into());
         }
     };
 
@@ -288,18 +324,34 @@ pub fn TerminalPage() -> Element {
             padding_left: 16.0,
             background_color: "#FF0F172A",
 
-            text {
-                content: "Terminal".to_string(),
-                font_size: 28.0,
-                font_weight: 700_i32,
-                font_color: "#FFF8FAFC",
+            row {
+                width: "100%",
+                column {
+                    layout_weight: 1.0,
+                    text {
+                        content: "Terminal demo · tap to type".to_string(),
+                        font_size: 18.0,
+                        font_weight: 600_i32,
+                        font_color: "#FFF8FAFC",
+                    }
+                }
+                { chip("Keyboard", demo_keyboard) }
             }
             text {
                 content: format!("title: {} · bell: {} · {}", title(), bell_n(), status()),
                 font_size: 12.0,
                 font_color: "#FF94A3B8",
-                margin_top: 6.0,
+                margin_top: 4.0,
                 margin_bottom: 8.0,
+            }
+
+            row {
+                width: "100%",
+                margin_bottom: 6.0,
+                { chip("Hello", demo_hello) }
+                { chip("Colors", demo_colors) }
+                { chip("Clear", demo_clear) }
+                { chip("Stress", demo_stress) }
             }
 
             // SSH form — host wiring owned by the example app.
@@ -379,13 +431,9 @@ pub fn TerminalPage() -> Element {
             row {
                 width: "100%",
                 margin_bottom: 6.0,
-                { chip("styles", write_vt("styles",
-                    "\x1b[1mBold\x1b[0m \x1b[3mItalic\x1b[0m \x1b[4mUnder\x1b[0m \x1b[31mred\x1b[0m \x1b[38;2;255;128;0morange\x1b[0m\r\n")) }
                 { chip("bar", write_vt("bar", "\x1b[5 q")) }
                 { chip("block", write_vt("block", "\x1b[1 q")) }
                 { chip("uline", write_vt("uline", "\x1b[3 q")) }
-                { chip("long", write_long) }
-                { chip("clear", write_vt("clear", "\x1b[2J\x1b[H")) }
             }
             row {
                 width: "100%",
@@ -398,13 +446,16 @@ pub fn TerminalPage() -> Element {
                 { chip("bs", key_host("backspace", "backspace")) }
             }
 
-            Terminal {
+            column {
+                width: "100%",
+                layout_weight: 1.0,
+                Terminal {
                 config: Some(config),
                 controller: Some(controller.clone()),
                 // No initial VT in component — example feeds host banner after mount.
                 initial: None,
                 width: "100%".to_string(),
-                height: "420".to_string(),
+                height: "100%".to_string(),
                 cursor_blink: true,
                 capture_input: true,
                 on_title: move |t| {
@@ -434,10 +485,11 @@ pub fn TerminalPage() -> Element {
                         host.borrow_mut().write_pty_reply(&bytes);
                     }
                 },
+                }
             }
 
             text {
-                content: "Tap grid = keyboard · drag = scrollback · long lines wrap (DECAWM)".to_string(),
+                content: "Tap grid = keyboard · drag = scrollback · Hello/Colors/Clear/Stress match @ohos-rs/terminal".to_string(),
                 font_size: 11.0,
                 font_color: "#FF64748B",
                 margin_top: 10.0,

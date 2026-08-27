@@ -22,13 +22,14 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Once};
 use std::task::{Context, Poll, Wake, Waker};
+use std::time::{Duration, Instant};
 
 use arkit_arkui::{ArkUIRenderer, EventSink, NativeElementDelivery};
 use dioxus_core::{ElementId, Runtime as DioxusRuntime};
 use napi_ohos::{Error, Result};
 use ohos_arkui_binding::common::handle::ArkUIHandle;
 use ohos_arkui_binding::common::node::ArkUINode;
-use openharmony_ability::{Event as AbilityEvent, OpenHarmonyApp, OpenHarmonyWaker};
+use openharmony_ability::{BridgePlugin, Event as AbilityEvent, OpenHarmonyApp, OpenHarmonyWaker};
 
 mod lifecycle;
 mod session;
@@ -104,6 +105,26 @@ pub fn inject_plugins(app: &OpenHarmonyApp) {
     let _ = app;
 }
 
+/// Registers one application-owned bridge plugin on the shared ability.
+///
+/// Called by the `#[entry(plugins = [...])]` generated `init`, after the
+/// framework-owned plugins ([`inject_plugins`]) and before any ArkTS plugin
+/// event is delivered. Failures are logged (hilog) and swallowed: a broken
+/// plugin must not take down ability initialization. Late registration is
+/// safe — the registry replays the bounded lifecycle history to plugins whose
+/// `REQUIRED_CONTEXTS` are already satisfied.
+pub fn register_user_plugin<P>(app: &OpenHarmonyApp, plugin: P)
+where
+    P: BridgePlugin,
+{
+    if let Err(error) = app.register_plugin(plugin) {
+        ohos_hilog_binding::error(format!(
+            "arkit_runtime: user bridge plugin '{}' registration failed: {error}",
+            P::ID
+        ));
+    }
+}
+
 fn run_ui_loop_effects(handle: &RuntimeHandle, runtime: &Rc<DioxusRuntime>) {
     for effect in handle.run_ui_effects() {
         // Effects are component-authored closures (e.g. `queue_ui` callbacks)
@@ -154,6 +175,7 @@ fn log_window_metrics(metrics: WindowMetrics) {
 struct RuntimeInner {
     dom: VirtualDom,
     renderer: ArkUIRenderer,
+    retired_disposal_deadline: Option<Instant>,
 }
 
 struct EmbeddedRuntimeInner {
@@ -183,7 +205,7 @@ impl Wake for DioxusUiWaker {
 fn render_dom(inner: &Rc<RefCell<RuntimeInner>>) {
     let fault = {
         let mut borrowed = inner.borrow_mut();
-        let RuntimeInner { dom, renderer } = &mut *borrowed;
+        let RuntimeInner { dom, renderer, .. } = &mut *borrowed;
         dom.render_immediate(renderer);
         renderer.finish_mutation_batch();
         renderer.take_fault()
@@ -257,6 +279,58 @@ fn pump_embedded_runtimes(handle: &RuntimeHandle) {
         sink.dispatch_pending(&runtime);
         render_ready_embedded_work(&inner, &task_waker);
     }
+}
+
+fn dispose_retired_embedded_subtrees(handle: &RuntimeHandle) {
+    for inner in handle.embedded_runtimes() {
+        inner.borrow_mut().renderer.dispose_retired_subtrees();
+    }
+}
+
+fn has_retired_embedded_subtrees(handle: &RuntimeHandle) -> bool {
+    handle
+        .embedded_runtimes()
+        .into_iter()
+        .any(|inner| inner.borrow().renderer.has_retired_subtrees())
+}
+
+const RETIRED_SUBTREE_GRACE_PERIOD: Duration = Duration::from_millis(50);
+
+fn dispose_retired_subtrees_if_ready(inner: &Rc<RefCell<RuntimeInner>>, handle: &RuntimeHandle) {
+    let ready = inner
+        .borrow()
+        .retired_disposal_deadline
+        .is_some_and(|deadline| Instant::now() >= deadline);
+    if !ready {
+        return;
+    }
+
+    {
+        let mut borrowed = inner.borrow_mut();
+        borrowed.retired_disposal_deadline = None;
+        borrowed.renderer.dispose_retired_subtrees();
+    }
+    dispose_retired_embedded_subtrees(handle);
+}
+
+fn schedule_retired_subtree_disposal(
+    inner: &Rc<RefCell<RuntimeInner>>,
+    handle: &RuntimeHandle,
+    waker: &OpenHarmonyWaker,
+) {
+    let has_pending =
+        inner.borrow().renderer.has_retired_subtrees() || has_retired_embedded_subtrees(handle);
+    if !has_pending || inner.borrow().retired_disposal_deadline.is_some() {
+        return;
+    }
+
+    inner.borrow_mut().retired_disposal_deadline =
+        Some(Instant::now() + RETIRED_SUBTREE_GRACE_PERIOD);
+    let waker = waker.clone();
+    handle.tokio().spawn(async move {
+        tokio::time::sleep(RETIRED_SUBTREE_GRACE_PERIOD).await;
+        waker.wake();
+    });
 }
 
 /// Owns the dioxus VirtualDom and ArkUI renderer for one entry point.
@@ -531,7 +605,11 @@ impl ArkRuntime {
         renderer.finish_mutation_batch();
 
         let weak_runtime = Rc::downgrade(&dom.runtime());
-        let inner = Rc::new(RefCell::new(RuntimeInner { dom, renderer }));
+        let inner = Rc::new(RefCell::new(RuntimeInner {
+            dom,
+            renderer,
+            retired_disposal_deadline: None,
+        }));
 
         // One-shot EventOnAppear replays route back into the renderer so
         // declarative attrs are reapplied after ArkUI control skins settle,
@@ -572,6 +650,7 @@ impl ArkRuntime {
         let loop_metrics = window_metrics.downgrade();
         let loop_lifecycle = application_lifecycle.downgrade();
         let loop_runtime = runtime_handle.downgrade();
+        let loop_waker = waker.clone();
         let metrics_app = app.clone();
         let mut keyboard_height_px = None;
         app.run_loop(move |event| {
@@ -620,6 +699,7 @@ impl ArkRuntime {
                         if is_user_event {
                             if let Some(handle) = loop_runtime.upgrade() {
                                 let handle = RuntimeHandle::from_inner(handle);
+                                dispose_retired_subtrees_if_ready(&inner, &handle);
                                 if let Some(runtime) = weak_runtime.upgrade() {
                                     run_ui_loop_effects(&handle, &runtime);
                                     if let Some(sink) = loop_sink.upgrade() {
@@ -631,7 +711,9 @@ impl ArkRuntime {
                         }
                         render_ready_work(&inner, &loop_task_waker);
                         if let Some(handle) = loop_runtime.upgrade() {
-                            pump_embedded_runtimes(&RuntimeHandle::from_inner(handle));
+                            let handle = RuntimeHandle::from_inner(handle);
+                            pump_embedded_runtimes(&handle);
+                            schedule_retired_subtree_disposal(&inner, &handle, &loop_waker);
                         }
                     }
                 })) {

@@ -1,0 +1,5 @@
+error: expected `plugins = [plugin, ...]`
+ --> tests/ui/plugins_not_array.rs:1:33
+  |
+1 | #[arkit_derive::entry(plugins = UrlBridgePlugin)]
+  |                                 ^^^^^^^^^^^^^^^

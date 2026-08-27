@@ -6,6 +6,9 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::Stagger;
 
+/// Shared key for [`crate::use_presence_visibility`] boolean gates.
+pub(crate) const OVERLAY_PRESENCE_KEY: &str = "arkit-visible";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PresenceMode {
     Sync,

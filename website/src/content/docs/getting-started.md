@@ -101,14 +101,48 @@ fn app() -> Element {
 }
 ```
 
-`#[entry]` 函数不能带参数，也不能是 `async`，返回值是 `Element`。宏会帮你生成这些导出：
+`#[entry]` 函数不能是 `async`，返回值是 `Element`；函数本身不带参数，或者带一个 `OpenHarmonyApp` 句柄参数（见下文"自定义桥接插件"）。宏会帮你生成这些导出：
 
-- `init`：安装 Ability init context 与 resource manager。
-- `render`：保存 ArkTS helper/main-thread env，并把一个 `VirtualDom` 挂到 `NodeContent`。
-- `destroy`：卸载 renderer，释放 runtime 和 native tree。
-- `on_back_press_intercept`：把系统返回键转交当前 handler stack。
+- `init`：安装 Ability-session bridge 与 init context，并返回 Rust 插件声明。
+- `render`：按 render-owner token 把 native XComponent 和 `VirtualDom` 挂到 `NodeContent`。
+- `disposeRender` / `disposeAllRenders`：卸载 renderer 与 native tree。
+- `disposeBridge`：只释放匹配 owner 的 Ability-session transport。
+- `onBackPressIntercept`：把系统返回键转交当前 handler stack。
 
 框架 root 会自动装好 `RuntimeHandle`、窗口度量和安全区；开了 animation 还会挂上 AnimationHost。Portal 由 renderer 原生投影，业务入口里不用安装额外 host/provider。
+
+## 自定义桥接插件
+
+应用可以注册自己的 openharmony-ability `BridgePlugin` facade（与框架内置的 `ohos.webview` 同一机制），有**两种可组合的写法**：
+
+1. **声明式列表** —— `#[entry(plugins = [MyPlugin, UrlBridgePlugin])]`。宏在生成的 `init` 里、框架插件之后逐个注册（此时尚未投递任何 ArkTS 插件事件）。每一项是表达式，在模块作用域解析，单元类型或构造调用都行；注册失败只记 hilog，不会中断初始化。
+2. **App 句柄参数** —— entry 函数接收一个 `OpenHarmonyApp` 克隆，在 render（Ability-session bridge 安装之后）传入，函数体内任意 `handle.register_plugin(...)`。晚注册是安全的：注册器会对 `REQUIRED_CONTEXTS` 已就绪的插件重放有界生命周期历史。
+
+```rust
+use arkit::prelude::*;
+use openharmony_ability::{AsyncBridge, BridgePlugin, OpenHarmonyApp, PluginLifecycleEvent};
+
+struct MyPlugin;
+
+impl BridgePlugin for MyPlugin {
+    type Mode = AsyncBridge;
+    const ID: &'static str = "myapp.config";
+
+    fn on_lifecycle(&self, event: &PluginLifecycleEvent) -> napi_ohos::Result<()> {
+        // 可选：Ability 创建 / UI 上下文就绪等生命周期
+        Ok(())
+    }
+}
+
+#[entry(plugins = [MyPlugin])]
+fn app(handle: OpenHarmonyApp) -> Element {
+    // 第二种方式：entry 函数体内手动注册
+    // let _ = handle.register_plugin(MyPlugin);
+    rsx! { text { "hello" } }
+}
+```
+
+需要 ArkTS 侧实现的插件（如 `@ohos-rs/ability-plugin-url` 的 `UrlPlugin`），要把它的实例加进宿主 ability 的 `bridgePlugins` 数组（`app/entry/src/main/ets/entryability/EntryAbility.ets`）——这一侧需要手工维护，`#[entry]` 是 Rust 侧 proc-macro，无法触碰 ArkTS 源码。
 
 ## 安全区策略
 

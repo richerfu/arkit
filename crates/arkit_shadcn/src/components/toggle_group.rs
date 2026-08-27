@@ -35,6 +35,9 @@ pub struct ToggleGroupProps {
     /// available width evenly, which is useful for mobile mode selectors.
     #[props(default)]
     pub width: Option<String>,
+    /// Optional exact item height override for compact toolbars.
+    #[props(default)]
+    pub height: Option<f32>,
     /// Override the outline group's default small elevation.
     #[props(default)]
     pub shadow: Option<bool>,
@@ -60,11 +63,14 @@ pub fn ToggleGroup(props: ToggleGroupProps) -> Element {
     let stretched = props.width.is_some();
     let group_shadow = props.shadow.unwrap_or(true);
     let on_change = props.on_change;
-    let size_style = if icons {
+    let mut size_style = if icons {
         toggle_icon_size()
     } else {
         toggle_default_size()
     };
+    if let Some(height) = props.height {
+        size_style.height = height;
+    }
 
     let mut items: Vec<Element> = Vec::with_capacity(total.saturating_mul(2).saturating_sub(1));
     for (index, option) in props.options.iter().enumerate() {

@@ -10,7 +10,9 @@
 
 use super::dialog::DialogHeader;
 use super::floating_layer::{side_alignment, side_from_name, OVERLAY_BACKDROP};
+use super::motion::{slide_in_from, OVERLAY_ENTER_MS, OVERLAY_EXIT_MS, SHEET_DISTANCE};
 use crate::theme::*;
+use arkit_animation::{use_presence_visibility, PresenceTransition};
 use arkit_prelude::*;
 use dioxus_core_macro::component;
 
@@ -45,7 +47,8 @@ pub fn Drawer(
         }
     });
 
-    if !current {
+    let visibility = use_presence_visibility(current);
+    if !visibility.mounted {
         return rsx! {};
     }
 
@@ -56,6 +59,13 @@ pub fn Drawer(
             background_color: OVERLAY_BACKDROP,
             alignment: alignment,
             onclick: move |_| close.call(()),
+            PresenceTransition {
+                phase: visibility.phase,
+                on_terminal: visibility.on_terminal,
+                preset: Some(slide_in_from(side)),
+                duration_ms: Some(OVERLAY_ENTER_MS),
+                exit_duration_ms: Some(OVERLAY_EXIT_MS),
+                distance: Some(SHEET_DISTANCE),
             stack {
                 onclick: move |evt| { evt.stop_propagation(); },
                 width: "100%",
@@ -100,6 +110,7 @@ pub fn Drawer(
                     }
                 }
             }
+        }
         }
     }
 }

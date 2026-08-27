@@ -8,6 +8,9 @@
 use crate::components::menu_common::{
     menu_closed_panel_height, menu_overlay_content, MenuEntry, MenuOverlayPlacement, MenuStyle,
 };
+use crate::components::motion::{
+    OverlayPresence, FLOATING_DISTANCE, FLOATING_ENTER_MS, FLOATING_EXIT_MS,
+};
 use crate::theme::*;
 use arkit_prelude::*;
 
@@ -73,11 +76,15 @@ pub fn DropdownMenu(
             onclick: move |_| set_open.call(!current_open),
             {children}
         }
-        if current_open {
-            arkit_hooks::Portal {
-                layer: arkit_hooks::OverlayLayer::Floating,
-                {menu_overlay_content(style, theme, dismiss, items, placement, None)}
-            }
+        OverlayPresence {
+            open: current_open,
+            preset: Some(arkit_animation::TransitionPreset::SlideUp),
+            duration_ms: Some(FLOATING_ENTER_MS),
+            exit_duration_ms: Some(FLOATING_EXIT_MS),
+            distance: Some(FLOATING_DISTANCE),
+            fill: Some(true),
+            layer: Some(arkit_hooks::OverlayLayer::Floating),
+            {menu_overlay_content(style, theme, dismiss, items, placement, None)}
         }
     }
 }

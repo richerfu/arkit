@@ -82,12 +82,7 @@ pub fn Home() -> Element {
 }
 
 #[component]
-fn DemoRow(
-    spec: DemoSpec,
-    first: bool,
-    last: bool,
-    on_select: EventHandler<String>,
-) -> Element {
+fn DemoRow(spec: DemoSpec, first: bool, last: bool, on_select: EventHandler<String>) -> Element {
     let radius = 12.0;
     let top_radius = if first { radius } else { 0.0 };
     let bottom_radius = if last { radius } else { 0.0 };

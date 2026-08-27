@@ -14,6 +14,7 @@ use crate::theme::*;
 use arkit_prelude::*;
 
 use super::floating_layer::FLOATING_CAPTURE_COLOR;
+use super::motion::ExpandPresence;
 
 pub(crate) const TRANSPARENT: u32 = 0x00000000;
 const MENU_PANEL_HORIZONTAL_PADDING: f32 = spacing::XXS * 2.0;
@@ -509,15 +510,11 @@ pub(crate) fn menu_content(
     entries: &[MenuEntry],
 ) -> Element {
     rsx! {
-        arkit_animation::MountTransition {
-            preset: Some(arkit_animation::TransitionPreset::SlideUp),
-            duration_ms: Some(140),
-            MenuContentPanel {
-                style,
-                theme: *theme,
-                on_dismiss,
-                entries: entries.to_vec(),
-            }
+        MenuContentPanel {
+            style,
+            theme: *theme,
+            on_dismiss,
+            entries: entries.to_vec(),
         }
     }
 }
@@ -589,8 +586,8 @@ pub(crate) fn menu_overlay_content(
 ) -> Element {
     let top = placement.y.max(0.0);
     let left = placement.x.max(0.0);
-    let pass_through_region = pass_through_region
-        .filter(|region| region.width > 0.0 && region.height > 0.0 && region.bottom() <= top);
+    let pass_through_region =
+        pass_through_region.filter(|region| region.width > 0.0 && region.height > 0.0);
     let reserved_above_panel = pass_through_region
         .map(|region| region.bottom())
         .unwrap_or(0.0)
@@ -843,10 +840,8 @@ fn render_submenu_entry(
                     {crate::icon::icon_placeholder(chevron, 18.0, colors.foreground)}
                 }
             }
-            if submenu_open {
-                arkit_animation::MountTransition {
-                    preset: Some(arkit_animation::TransitionPreset::SlideUp),
-                    duration_ms: Some(120),
+            ExpandPresence {
+                open: submenu_open,
                     column {
                         width: submenu_min_width.max(min_width),
                         align_self: "start",
@@ -877,7 +872,6 @@ fn render_submenu_entry(
                             }
                         }
                     }
-                }
             }
         }
     }

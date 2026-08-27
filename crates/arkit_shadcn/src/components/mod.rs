@@ -12,6 +12,7 @@ pub use arkit_prelude::{Col, ColProps, Row, RowProps};
 mod accordion;
 mod alert;
 mod alert_dialog;
+mod anchor;
 mod aspect_ratio;
 mod avatar;
 mod badge;
@@ -52,6 +53,7 @@ mod label;
 mod markdown;
 mod menu_common;
 mod menubar;
+mod motion;
 mod navigation_menu;
 mod pagination;
 mod popover;
@@ -86,6 +88,10 @@ pub use alert::{
     AlertTitle, AlertTitleProps, AlertVariant,
 };
 pub use alert_dialog::{AlertDialog, AlertDialogAction, AlertDialogActionProps, AlertDialogProps};
+pub use anchor::{
+    use_anchor, Anchor, AnchorContext, AnchorItem, AnchorItemProps, AnchorProps, AnchorSection,
+    AnchorSectionProps,
+};
 pub use aspect_ratio::{AspectRatio, AspectRatioProps};
 pub use avatar::{Avatar, AvatarFallback, AvatarFallbackProps, AvatarProps};
 pub use badge::{Badge, BadgeProps, BadgeVariant};

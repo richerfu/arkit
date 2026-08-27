@@ -6,12 +6,14 @@
 //! `chart`, `code`, `i18n`, `icon`, `lottie`, `markdown`, `router`, `shadcn`,
 //! `terminal`, and `webview` features (or `full`). Barcode/QR generation is the
 //! `barcode` feature (no camera). Code highlighting uses `code`; Markdown
-//! fences need `markdown` + `code`. Terminal uses `terminal` (libghostty-vt).
+//! fences need `markdown` + `code`. Terminal uses `terminal` (rio-vt).
 //! `webview` enables the pluginized WebView capability (`ohos.webview` bridge
 //! plugin): the framework registers the plugin facade and injects its
 //! initialization automatically, so integrators only enable the feature and
 //! use [`RuntimeHandle::webview`]. The `#[entry]` macro mounts a
-//! `fn() -> Element` root component into a NodeContent slot.
+//! `fn() -> Element` root component (or a one-argument form that receives an
+//! [`openharmony_ability::OpenHarmonyApp`] handle for registering application
+//! `BridgePlugin`s) into a NodeContent slot.
 
 // --- Entry macro ---
 pub use arkit_derive::entry;
@@ -94,30 +96,32 @@ pub use arkit_animation::WindowMetrics as AnimationWindowMetrics;
 pub use arkit_animation::{
     stagger, use_animatable, use_animatable_with_defaults, use_animate_presence, use_animation,
     use_animation_host_provider, use_animation_layout, use_animation_scope, use_animation_snapshot,
-    use_animation_target, use_draggable, use_layout_snapshot, use_scoped_animation,
-    use_scroll_observer, Angle, Animatable, AnimatableDefaults, AnimatableValue, AnimatePresence,
-    Animation, AnimationAdapterError, AnimationBackend, AnimationBuildError, AnimationControls,
-    AnimationFinished, AnimationHostError, AnimationInstanceSnapshot, AnimationOutcome,
-    AnimationPerformanceCounters, AnimationScope, AnimationScopeDefaults, AnimationSelector,
-    AnimationSubscription, AnimationTarget, AnimationValue, AutoScroll, BackendRejection,
-    BuiltinEase, CallPolicy, CapabilityRequirements, Composition, DiscreteValue, DragAxis,
-    DragConstraints, DragMapping, DragPhase, DragSnap, DragUpdate, Draggable, DraggableCallbacks,
-    DraggableConfig, DraggableHandle, EaseDirection, Easing, EasingError, ExecutionPolicy,
-    ExitCancelPolicy, InvalidationClass, IrregularEase, IterationCount, JumpMode, LabelName,
-    LayoutAnimation, LayoutAnimationMode, LayoutChangeKind, LayoutDelta, LayoutEngine, LayoutId,
-    LayoutMountState, LayoutNode, LayoutNodeId, LayoutSnapshot, Length, LengthUnit, LinearPoint,
-    LinearRgba, LoweringReport, Modifier, MountTransition, NativeCapability, NativeLoweringError,
-    PlaybackDirection, PlaybackRate, PlaybackSettings, PlaybackState, PresenceEntry,
-    PresenceHandle, PresenceKey, PresenceMode, PresencePhase, Property, PropertyKeyframe,
+    use_animation_target, use_draggable, use_layout_snapshot, use_presence_visibility,
+    use_scoped_animation, use_scroll_observer, Angle, Animatable, AnimatableDefaults,
+    AnimatableValue, AnimatePresence, Animation, AnimationAdapterError, AnimationBackend,
+    AnimationBuildError, AnimationControls, AnimationFinished, AnimationHostError,
+    AnimationInstanceSnapshot, AnimationOutcome, AnimationPerformanceCounters, AnimationScope,
+    AnimationScopeDefaults, AnimationSelector, AnimationSubscription, AnimationTarget,
+    AnimationValue, AutoScroll, BackendRejection, BuiltinEase, CallPolicy, CapabilityRequirements,
+    Composition, DiscreteValue, DragAxis, DragConstraints, DragMapping, DragPhase, DragSnap,
+    DragUpdate, Draggable, DraggableCallbacks, DraggableConfig, DraggableHandle, EaseDirection,
+    Easing, EasingError, ExecutionPolicy, ExitCancelPolicy, InvalidationClass, IrregularEase,
+    IterationCount, JumpMode, LabelName, LayoutAnimation, LayoutAnimationMode, LayoutChangeKind,
+    LayoutDelta, LayoutEngine, LayoutId, LayoutMountState, LayoutNode, LayoutNodeId,
+    LayoutSnapshot, Length, LengthUnit, LinearPoint, LinearRgba, LoweringReport, Modifier,
+    MountTransition, NativeCapability, NativeLoweringError, PlaybackDirection, PlaybackRate,
+    PlaybackSettings, PlaybackState, PresenceEntry, PresenceHandle, PresenceKey, PresenceMode,
+    PresencePhase, PresenceTransition, PresenceVisibility, Property, PropertyKeyframe,
     PropertyName, ScopeCleanupPolicy, ScopeMethodName, ScrollAxis, ScrollCallbacks,
     ScrollDirection, ScrollObserver, ScrollRange, ScrollSample, ScrollSync, ScrollThreshold,
     ShadowValue, SharedElementProjection, SpringSpec, Stagger, StaggerAxis, StaggerDirection,
     StaggerFrom, StaggerGrid, TargetName, TimeError, TimeOffset, TimePoint, TimeSpan, Timeline,
     TimelinePosition, TransformValue, TransitionPreset, UnsupportedFeature, ValueError, ValueKind,
-    Vec2, Vec3, VelocityTracker, WindowCondition, ASPECT_RATIO, BACKGROUND_COLOR, BLUR,
-    BORDER_COLOR, BORDER_RADIUS, BORDER_WIDTH, BRIGHTNESS, CONTRAST, FONT_COLOR, FONT_SIZE,
-    FOREGROUND_COLOR, GRAYSCALE, HEIGHT, INVERT, LETTER_SPACING, LINE_HEIGHT, OPACITY, POSITION_X,
-    POSITION_Y, ROTATION, SATURATION, SCALE_X, SCALE_Y, SEPIA, TRANSLATE_X, TRANSLATE_Y, WIDTH,
+    Vec2, Vec3, VelocityTracker, VisibleTransition, WindowCondition, ASPECT_RATIO,
+    BACKGROUND_COLOR, BLUR, BORDER_COLOR, BORDER_RADIUS, BORDER_WIDTH, BRIGHTNESS, CONTRAST,
+    FONT_COLOR, FONT_SIZE, FOREGROUND_COLOR, GRAYSCALE, HEIGHT, INVERT, LETTER_SPACING,
+    LINE_HEIGHT, OPACITY, POSITION_X, POSITION_Y, ROTATION, SATURATION, SCALE_X, SCALE_Y, SEPIA,
+    TRANSLATE_X, TRANSLATE_Y, WIDTH,
 };
 
 // --- Barcode / QR generation ---
@@ -199,15 +203,15 @@ pub use arkit_chart::{
     Series, SeriesOptions, Title, Tooltip, VisualStyle,
 };
 
-// --- Embedded terminal (libghostty-vt) ---
+// --- Embedded terminal (rio-vt) ---
 #[cfg(feature = "terminal")]
 pub use arkit_terminal as terminal;
 #[cfg(feature = "terminal")]
 pub use arkit_terminal::{
     rgb_to_argb, CursorVisualStyle, KeyChord, KeyMods, MouseAction, MouseButton, MouseInput, Rgb,
     Terminal, TerminalCell, TerminalConfig, TerminalController, TerminalCursor, TerminalEffects,
-    TerminalEngine, TerminalError, TerminalErrorKind, TerminalFrame, TerminalProps, TerminalResult,
-    TerminalRun, TerminalScrollbar, TerminalSize,
+    TerminalEngine, TerminalError, TerminalErrorKind, TerminalFrame, TerminalInbox, TerminalProps,
+    TerminalResult, TerminalRun, TerminalScrollbar, TerminalSize,
 };
 
 // --- shadcn component library ---
@@ -401,31 +405,33 @@ pub mod prelude {
     pub use crate::{
         stagger, use_animatable, use_animatable_with_defaults, use_animate_presence, use_animation,
         use_animation_layout, use_animation_scope, use_animation_snapshot, use_animation_target,
-        use_draggable, use_layout_snapshot, use_scoped_animation, use_scroll_observer, Angle,
-        Animatable, AnimatableDefaults, AnimatableValue, AnimatePresence, Animation,
-        AnimationAdapterError, AnimationBackend, AnimationBuildError, AnimationControls,
-        AnimationFinished, AnimationHostError, AnimationInstanceSnapshot, AnimationOutcome,
-        AnimationPerformanceCounters, AnimationScope, AnimationScopeDefaults, AnimationSelector,
-        AnimationSubscription, AnimationTarget, AnimationValue, AnimationWindowMetrics, AutoScroll,
-        BackendRejection, BuiltinEase, CallPolicy, CapabilityRequirements, Composition,
-        DiscreteValue, DragAxis, DragConstraints, DragMapping, DragPhase, DragSnap, DragUpdate,
-        Draggable, DraggableCallbacks, DraggableConfig, DraggableHandle, EaseDirection, Easing,
-        EasingError, ExecutionPolicy, ExitCancelPolicy, InvalidationClass, IrregularEase,
-        IterationCount, JumpMode, LabelName, LayoutAnimation, LayoutAnimationMode,
-        LayoutChangeKind, LayoutDelta, LayoutEngine, LayoutId, LayoutMountState, LayoutNode,
-        LayoutNodeId, LayoutSnapshot, Length, LengthUnit, LinearPoint, LinearRgba, LoweringReport,
-        Modifier, MountTransition, NativeCapability, NativeLoweringError, PlaybackDirection,
-        PlaybackRate, PlaybackSettings, PlaybackState, PresenceEntry, PresenceHandle, PresenceKey,
-        PresenceMode, PresencePhase, Property, PropertyKeyframe, PropertyName, ScopeCleanupPolicy,
-        ScopeMethodName, ScrollAxis, ScrollCallbacks, ScrollDirection, ScrollObserver, ScrollRange,
-        ScrollSample, ScrollSync, ScrollThreshold, ShadowValue, SharedElementProjection,
-        SpringSpec, Stagger, StaggerAxis, StaggerDirection, StaggerFrom, StaggerGrid, TargetName,
-        TimeError, TimeOffset, TimePoint, TimeSpan, Timeline, TimelinePosition, TransformValue,
-        TransitionPreset, UnsupportedFeature, ValueError, ValueKind, Vec2, Vec3, VelocityTracker,
-        WindowCondition, ASPECT_RATIO, BACKGROUND_COLOR, BLUR, BORDER_COLOR, BORDER_RADIUS,
-        BORDER_WIDTH, BRIGHTNESS, CONTRAST, FONT_COLOR, FONT_SIZE, FOREGROUND_COLOR, GRAYSCALE,
-        HEIGHT, INVERT, LETTER_SPACING, LINE_HEIGHT, OPACITY, POSITION_X, POSITION_Y, ROTATION,
-        SATURATION, SCALE_X, SCALE_Y, SEPIA, TRANSLATE_X, TRANSLATE_Y, WIDTH,
+        use_draggable, use_layout_snapshot, use_presence_visibility, use_scoped_animation,
+        use_scroll_observer, Angle, Animatable, AnimatableDefaults, AnimatableValue,
+        AnimatePresence, Animation, AnimationAdapterError, AnimationBackend, AnimationBuildError,
+        AnimationControls, AnimationFinished, AnimationHostError, AnimationInstanceSnapshot,
+        AnimationOutcome, AnimationPerformanceCounters, AnimationScope, AnimationScopeDefaults,
+        AnimationSelector, AnimationSubscription, AnimationTarget, AnimationValue,
+        AnimationWindowMetrics, AutoScroll, BackendRejection, BuiltinEase, CallPolicy,
+        CapabilityRequirements, Composition, DiscreteValue, DragAxis, DragConstraints, DragMapping,
+        DragPhase, DragSnap, DragUpdate, Draggable, DraggableCallbacks, DraggableConfig,
+        DraggableHandle, EaseDirection, Easing, EasingError, ExecutionPolicy, ExitCancelPolicy,
+        InvalidationClass, IrregularEase, IterationCount, JumpMode, LabelName, LayoutAnimation,
+        LayoutAnimationMode, LayoutChangeKind, LayoutDelta, LayoutEngine, LayoutId,
+        LayoutMountState, LayoutNode, LayoutNodeId, LayoutSnapshot, Length, LengthUnit,
+        LinearPoint, LinearRgba, LoweringReport, Modifier, MountTransition, NativeCapability,
+        NativeLoweringError, PlaybackDirection, PlaybackRate, PlaybackSettings, PlaybackState,
+        PresenceEntry, PresenceHandle, PresenceKey, PresenceMode, PresencePhase,
+        PresenceTransition, PresenceVisibility, Property, PropertyKeyframe, PropertyName,
+        ScopeCleanupPolicy, ScopeMethodName, ScrollAxis, ScrollCallbacks, ScrollDirection,
+        ScrollObserver, ScrollRange, ScrollSample, ScrollSync, ScrollThreshold, ShadowValue,
+        SharedElementProjection, SpringSpec, Stagger, StaggerAxis, StaggerDirection, StaggerFrom,
+        StaggerGrid, TargetName, TimeError, TimeOffset, TimePoint, TimeSpan, Timeline,
+        TimelinePosition, TransformValue, TransitionPreset, UnsupportedFeature, ValueError,
+        ValueKind, Vec2, Vec3, VelocityTracker, VisibleTransition, WindowCondition, ASPECT_RATIO,
+        BACKGROUND_COLOR, BLUR, BORDER_COLOR, BORDER_RADIUS, BORDER_WIDTH, BRIGHTNESS, CONTRAST,
+        FONT_COLOR, FONT_SIZE, FOREGROUND_COLOR, GRAYSCALE, HEIGHT, INVERT, LETTER_SPACING,
+        LINE_HEIGHT, OPACITY, POSITION_X, POSITION_Y, ROTATION, SATURATION, SCALE_X, SCALE_Y,
+        SEPIA, TRANSLATE_X, TRANSLATE_Y, WIDTH,
     };
 
     #[cfg(feature = "chart")]

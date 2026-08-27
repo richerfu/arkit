@@ -1,7 +1,7 @@
 //! Terminal surface geometry.
 //!
 //! ArkUI layout attributes and pointer-local coordinates are expressed in vp,
-//! while `onarea` and Ghostty cell metrics are physical pixels. Keeping both
+//! while `onarea` and cell metrics are physical pixels. Keeping both
 //! units in one value prevents scroll/mouse hit testing and VT size reports
 //! from drifting away from the painted grid.
 
@@ -79,7 +79,7 @@ impl TerminalSurfaceMetrics {
     }
 
     pub(crate) fn scroll_slop_vp(self) -> f32 {
-        (self.cell_height_vp as f32 * 0.4).max(6.0)
+        (self.cell_height_vp as f32 * 0.5).max(10.0)
     }
 
     pub(crate) fn content_position_px_from_vp(self, x: f32, y: f32) -> (f32, f32) {

@@ -8,38 +8,36 @@
 //!
 //! ```text
 //!   on_input / encode_*  ──►  your host (SSH, PTY, …)
-//!   host output          ──►  feed_vt
+//!   host output          ──►  feed_vt (mailbox)
 //!   on_write_pty         ──►  your host
-//!   capture + paint      ──►  this component
+//!   vsync + GPU paint    ──►  this component
 //! ```
 
 use std::cell::{Cell, RefCell};
-use std::collections::VecDeque;
 use std::rc::Rc;
+use std::sync::mpsc::Sender;
+use std::sync::Arc;
 
-use arkit_hooks::{use_mounted_node, use_native_element_ref};
+use arkit_hooks::{use_application_lifecycle_event, use_mounted_node, use_native_element_ref};
 use arkit_prelude::*;
 use dioxus_elements::event::PointerAction;
 
-use crate::config::{Rgb, TerminalConfig, TerminalEffects};
-use crate::engine::TerminalEngine;
+use crate::config::{Rgb, TerminalConfig};
 use crate::error::TerminalError;
 use crate::frame::{CursorVisualStyle, TerminalFrame};
 use crate::ime::TerminalImeSession;
-use crate::input::{KeyChord, KeyMods, MouseAction, MouseButton, MouseInput};
+use crate::input::{self, EncodeState, KeyChord, KeyMods, MouseAction, MouseButton, MouseInput};
 use crate::native_surface::SurfaceRegistration;
 use crate::surface::TerminalSurfaceMetrics;
-use crate::worker::{RenderPacket, WorkerHandle};
-
-const BLINK_MS: u64 = 530;
+use crate::worker::{PaintSettings, TerminalShared, WorkerHandle, WorkerMessage};
 
 struct ComponentRuntime {
     worker: RefCell<Option<WorkerHandle>>,
 }
 
 impl ComponentRuntime {
-    fn new() -> Self {
-        let worker = match WorkerHandle::spawn() {
+    fn new(shared: Arc<TerminalShared>) -> Self {
+        let worker = match WorkerHandle::spawn(shared) {
             Ok(worker) => Some(worker),
             Err(error) => {
                 ohos_hilog_binding::error(format!(
@@ -53,19 +51,29 @@ impl ComponentRuntime {
         }
     }
 
-    fn sender(&self) -> Option<std::sync::mpsc::Sender<crate::worker::WorkerMessage>> {
+    fn sender(&self) -> Option<Sender<WorkerMessage>> {
         self.worker.borrow().as_ref().map(WorkerHandle::sender)
     }
 
-    fn publish(&self, frame: TerminalFrame, settings: PaintSettings) {
+    fn take_notices(
+        &self,
+    ) -> Option<tokio::sync::mpsc::UnboundedReceiver<crate::worker::UiNotice>> {
+        self.worker
+            .borrow()
+            .as_ref()
+            .and_then(WorkerHandle::take_notices)
+    }
+
+    fn update_paint(&self, settings: PaintSettings) {
         if let Some(worker) = self.worker.borrow().as_ref() {
-            worker.publish(RenderPacket {
-                frame,
-                metrics: settings.metrics,
-                cursor_phase: settings.cursor_phase,
-                cursor_blink: settings.cursor_blink,
-                background_color: settings.background_color,
-            });
+            worker.shared().set_paint(settings);
+            worker.request_draw();
+        }
+    }
+
+    fn send(&self, message: WorkerMessage) {
+        if let Some(worker) = self.worker.borrow().as_ref() {
+            worker.shared().send(message);
         }
     }
 
@@ -74,18 +82,10 @@ impl ComponentRuntime {
     }
 }
 
-#[derive(Clone, Copy)]
-struct PaintSettings {
-    metrics: TerminalSurfaceMetrics,
-    cursor_phase: bool,
-    cursor_blink: bool,
-    background_color: u32,
-}
-
 /// Props for [`Terminal`].
 #[derive(Props, Clone, PartialEq)]
 pub struct TerminalProps {
-    /// Full Ghostty-aligned configuration (colors, cursor, metrics, …).
+    /// Colors, cursor, cell metrics, and grid size.
     #[props(default)]
     pub config: Option<TerminalConfig>,
     /// Initial VT written once on mount (host→terminal path).
@@ -154,29 +154,52 @@ impl TerminalCallbackSlots {
     }
 }
 
-/// Cloneable handle for imperative control of a mounted terminal.
-#[derive(Clone, Default)]
-pub struct TerminalController {
-    inner: Rc<RefCell<Option<TerminalEngine>>>,
-    frame: Rc<RefCell<TerminalFrame>>,
-    generation: Rc<Cell<u64>>,
-    on_change: Rc<RefCell<Option<Box<TerminalChangeCallback>>>>,
-    pending_updates: Rc<RefCell<VecDeque<TerminalUpdate>>>,
-    publishing: Rc<Cell<bool>>,
-    callback_epoch: Rc<Cell<u64>>,
+/// Thread-safe host→VT byte sink. SSH/PTY writers can push without the UI.
+#[derive(Clone)]
+pub struct TerminalInbox {
+    shared: Arc<TerminalShared>,
 }
 
-type TerminalChangeCallback = dyn FnMut(TerminalFrame, TerminalEffects, Option<TerminalError>);
+impl TerminalInbox {
+    pub fn push(&self, bytes: &[u8]) {
+        self.shared.push_bytes(bytes);
+    }
+}
 
-struct TerminalUpdate {
-    frame: TerminalFrame,
-    effects: TerminalEffects,
-    error: Option<TerminalError>,
+/// Cloneable handle for imperative control of a mounted terminal.
+///
+/// Host output ([`Self::feed_vt`]) only appends to a shared mailbox. rio-vt
+/// parse, grid capture, and wgpu present run on the `arkit-terminal` worker
+/// and are paced by a VSync connection associated with the native window.
+#[derive(Clone)]
+pub struct TerminalController {
+    shared: Arc<TerminalShared>,
+    control: Rc<RefCell<Option<Sender<WorkerMessage>>>>,
+    show_keyboard: Rc<RefCell<Option<ShowKeyboardFn>>>,
+    hide_keyboard: Rc<RefCell<Option<HideKeyboardFn>>>,
+    ime_visible: Rc<RefCell<Arc<std::sync::atomic::AtomicBool>>>,
+}
+
+type ShowKeyboardFn = Rc<dyn Fn()>;
+type HideKeyboardFn = Rc<dyn Fn()>;
+
+impl Default for TerminalController {
+    fn default() -> Self {
+        Self {
+            shared: Arc::new(TerminalShared::new()),
+            control: Rc::new(RefCell::new(None)),
+            show_keyboard: Rc::new(RefCell::new(None)),
+            hide_keyboard: Rc::new(RefCell::new(None)),
+            ime_visible: Rc::new(RefCell::new(Arc::new(std::sync::atomic::AtomicBool::new(
+                false,
+            )))),
+        }
+    }
 }
 
 impl PartialEq for TerminalController {
     fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.inner, &other.inner)
+        Arc::ptr_eq(&self.shared, &other.shared)
     }
 }
 
@@ -185,7 +208,71 @@ impl TerminalController {
         Self::default()
     }
 
-    /// Host → terminal (PTY/SSH output). Preferred name for the Ghostty model.
+    /// Open the native IME, matching `@ohos-rs/terminal` `showKeyboard()`.
+    pub fn show_keyboard(&self) {
+        if let Some(show) = self.show_keyboard.borrow().clone() {
+            show();
+        }
+    }
+
+    pub fn hide_keyboard(&self) {
+        if let Some(hide) = self.hide_keyboard.borrow().clone() {
+            hide();
+        }
+    }
+
+    pub fn hide_keyboard_if_visible(&self) -> bool {
+        if !self
+            .ime_visible
+            .borrow()
+            .load(std::sync::atomic::Ordering::Acquire)
+        {
+            return false;
+        }
+        self.hide_keyboard();
+        true
+    }
+
+    pub(crate) fn bind_show_keyboard(&self, show: ShowKeyboardFn) {
+        *self.show_keyboard.borrow_mut() = Some(show);
+    }
+
+    pub(crate) fn bind_hide_keyboard(
+        &self,
+        hide: HideKeyboardFn,
+        visible: Arc<std::sync::atomic::AtomicBool>,
+    ) {
+        *self.hide_keyboard.borrow_mut() = Some(hide);
+        *self.ime_visible.borrow_mut() = visible;
+    }
+
+    pub(crate) fn shared(&self) -> Arc<TerminalShared> {
+        self.shared.clone()
+    }
+
+    pub fn inbox(&self) -> TerminalInbox {
+        TerminalInbox {
+            shared: self.shared.clone(),
+        }
+    }
+
+    fn bind_control(&self, sender: Sender<WorkerMessage>) {
+        *self.control.borrow_mut() = Some(sender.clone());
+        self.shared.set_control(Some(sender));
+    }
+
+    fn send_control(&self, message: WorkerMessage) {
+        self.shared.send(message);
+    }
+
+    fn request_draw(&self) {
+        self.shared.request_draw();
+    }
+
+    /// Host → terminal (PTY/SSH output).
+    ///
+    /// Appends to a mailbox. Parsing and GPU present happen on the render
+    /// worker, aligned to the surface-associated VSync when the surface is live.
     pub fn feed_vt(&self, data: &[u8]) {
         self.write_bytes(data);
     }
@@ -195,32 +282,22 @@ impl TerminalController {
     }
 
     pub fn write_bytes(&self, data: &[u8]) {
-        self.update_engine(|engine| {
-            engine.write_bytes(data);
-            Ok(())
-        });
+        self.shared.push_bytes(data);
     }
 
     /// Encode a named key → host-bound bytes (does not paint / does not feed VT).
     pub fn encode_key(&self, name: &str) -> Vec<u8> {
-        let guard = self.inner.borrow();
-        guard
-            .as_ref()
-            .and_then(|e| e.encode_key(name).ok())
-            .unwrap_or_else(|| fallback_key_bytes(name))
+        input::encode_named_key(self.encode_state(), name)
+            .unwrap_or_else(|_| fallback_key_bytes(name))
     }
 
     pub fn encode_key_chord(&self, chord: KeyChord) -> Vec<u8> {
-        let guard = self.inner.borrow();
-        guard
-            .as_ref()
-            .and_then(|e| e.encode_key_chord(chord.clone()).ok())
-            .unwrap_or_else(|| {
-                chord
-                    .utf8
-                    .map(|s| s.into_bytes())
-                    .unwrap_or_else(|| fallback_key_bytes(&chord.name))
-            })
+        input::encode_key_chord(self.encode_state(), chord.clone()).unwrap_or_else(|_| {
+            chord
+                .utf8
+                .map(|s| s.into_bytes())
+                .unwrap_or_else(|| fallback_key_bytes(&chord.name))
+        })
     }
 
     /// UTF-8 text as host-bound bytes (typed characters).
@@ -229,170 +306,70 @@ impl TerminalController {
     }
 
     pub fn encode_mouse(&self, event: MouseInput) -> Vec<u8> {
-        let guard = self.inner.borrow();
-        guard
-            .as_ref()
-            .and_then(|e| e.encode_mouse(event).ok())
-            .unwrap_or_default()
+        let config = TerminalConfig {
+            cell_width_px: self.shared.cell_width_px(),
+            cell_height_px: self.shared.cell_height_px(),
+            ..TerminalConfig::default()
+        };
+        input::encode_mouse(self.encode_state(), event, &config).unwrap_or_default()
     }
 
     pub fn encode_focus(&self, gained: bool) -> Vec<u8> {
-        let guard = self.inner.borrow();
-        guard
-            .as_ref()
-            .and_then(|e| e.encode_focus(gained).ok())
-            .unwrap_or_default()
+        input::encode_focus(self.encode_state(), gained).unwrap_or_default()
     }
 
     pub fn reconfigure(&self, config: TerminalConfig) {
-        self.update_engine(|engine| engine.reconfigure(config));
+        self.shared
+            .set_cell_metrics(config.cell_width_px, config.cell_height_px);
+        self.send_control(WorkerMessage::Reconfigure(config));
     }
 
     /// Pin viewport to live bottom (after host output / user “jump to end”).
     pub fn scroll_to_bottom(&self) {
-        self.update_engine(|engine| {
-            engine.scroll_to_bottom();
-            Ok(())
-        });
+        self.send_control(WorkerMessage::ScrollToBottom);
     }
 
     /// Jump to the top of scrollback history.
     pub fn scroll_to_top(&self) {
-        self.update_engine(|engine| {
-            engine.scroll_to_top();
-            Ok(())
-        });
+        self.send_control(WorkerMessage::ScrollToTop);
     }
 
     /// Scroll history by signed rows (negative = up into scrollback).
     ///
-    /// This is Ghostty `ghostty_terminal_scroll_viewport` DELTA — not UI layout
-    /// scrolling of a tall bitmap. The paint surface always shows one viewport.
+    /// Signed row delta — not UI layout scrolling of a tall bitmap. The paint
+    /// surface always shows one viewport.
     pub fn scroll_by(&self, delta_rows: i64) {
         if delta_rows == 0 {
             return;
         }
-        self.update_engine(|engine| {
-            engine.scroll_by(delta_rows);
-            Ok(())
-        });
+        self.shared.add_scroll_delta(delta_rows);
+        self.request_draw();
     }
 
     /// Absolute history row as the first visible line.
     pub fn scroll_to_row(&self, row: u64) {
-        self.update_engine(|engine| {
-            engine.scroll_to_row(row);
-            Ok(())
-        });
+        self.send_control(WorkerMessage::ScrollToRow(row));
     }
 
     pub fn snapshot(&self) -> String {
-        self.frame.borrow().plain()
+        self.shared.last_frame().plain()
     }
 
     pub fn frame(&self) -> TerminalFrame {
-        self.frame.borrow().clone()
+        self.shared.last_frame()
     }
 
     pub fn generation(&self) -> u64 {
-        self.generation.get()
+        self.shared.generation()
     }
 
-    fn capture_update(
-        &self,
-        engine: &mut TerminalEngine,
-        mut error: Option<TerminalError>,
-    ) -> TerminalUpdate {
-        let effects = engine.take_effects();
-        let frame = match engine.capture() {
-            Ok(frame) => {
-                *self.frame.borrow_mut() = frame.clone();
-                self.generation.set(self.generation.get().wrapping_add(1));
-                frame
-            }
-            Err(capture_error) => {
-                if error.is_none() {
-                    error = Some(capture_error);
-                }
-                self.frame.borrow().clone()
-            }
-        };
-        TerminalUpdate {
-            frame,
-            effects,
-            error,
-        }
-    }
-
-    fn publish(&self, update: TerminalUpdate) {
-        self.pending_updates.borrow_mut().push_back(update);
-        if self.publishing.replace(true) {
-            return;
-        }
-        let _publishing = PublishingGuard(&self.publishing);
-
-        loop {
-            let Some(update) = self.pending_updates.borrow_mut().pop_front() else {
-                break;
-            };
-            let epoch = self.callback_epoch.get();
-            let Some(mut callback) = self.on_change.borrow_mut().take() else {
-                continue;
-            };
-            callback(update.frame, update.effects, update.error);
-
-            // A callback may synchronously drive the controller again. Those
-            // updates are queued above. It may also replace/remove itself; do
-            // not resurrect the old callback in that case.
-            if self.callback_epoch.get() == epoch && self.on_change.borrow().is_none() {
-                *self.on_change.borrow_mut() = Some(callback);
-            }
-        }
-    }
-
-    /// Mutate/capture under the engine borrow, then release it before invoking
-    /// user callbacks. `on_frame` may legitimately call this controller again.
-    fn update_engine(&self, update: impl FnOnce(&mut TerminalEngine) -> Result<(), TerminalError>) {
-        let captured = {
-            let mut guard = self.inner.borrow_mut();
-            let Some(engine) = guard.as_mut() else {
-                return;
-            };
-            let error = update(engine).err();
-            self.capture_update(engine, error)
-        };
-        self.publish(captured);
+    fn encode_state(&self) -> EncodeState {
+        EncodeState::from_bits(self.shared.encode_bits())
     }
 
     fn detach(&self) {
-        self.callback_epoch
-            .set(self.callback_epoch.get().wrapping_add(1));
-        self.on_change.borrow_mut().take();
-        self.pending_updates.borrow_mut().clear();
-        self.inner.borrow_mut().take();
-    }
-
-    fn attach(&self, mut engine: TerminalEngine) {
-        let update = self.capture_update(&mut engine, None);
-        *self.inner.borrow_mut() = Some(engine);
-        self.publish(update);
-    }
-
-    fn set_on_change(
-        &self,
-        cb: Box<dyn FnMut(TerminalFrame, TerminalEffects, Option<TerminalError>)>,
-    ) {
-        self.callback_epoch
-            .set(self.callback_epoch.get().wrapping_add(1));
-        *self.on_change.borrow_mut() = Some(cb);
-    }
-}
-
-struct PublishingGuard<'a>(&'a Cell<bool>);
-
-impl Drop for PublishingGuard<'_> {
-    fn drop(&mut self) {
-        self.0.set(false);
+        self.shared.clear_pending();
+        self.control.borrow_mut().take();
     }
 }
 
@@ -416,22 +393,28 @@ fn fallback_key_bytes(name: &str) -> Vec<u8> {
     }
 }
 
-/// Terminal surface aligned with Ghostty:
+/// Terminal surface:
 /// - fixed cols×rows VT geometry (keyboard height must not reflow cols)
 /// - paint cells **scale to fit** the surface so nothing is center-clipped
 /// - DECAWM wrap for long lines
-/// - scrollback via Ghostty `scroll_viewport` (finger-follows-content)
+/// - scrollback via viewport pin (finger-follows-content)
 /// - direct native IME activation only after a gesture resolves to a tap
 #[component]
 pub fn Terminal(props: TerminalProps) -> Element {
     let controller = props.controller.clone().unwrap_or_default();
     let node_ref = use_native_element_ref();
-    let runtime = use_hook(|| Rc::new(ComponentRuntime::new()));
+    let runtime = use_hook({
+        let shared = controller.shared();
+        move || Rc::new(ComponentRuntime::new(shared))
+    });
+    if let Some(sender) = runtime.sender() {
+        controller.bind_control(sender);
+    }
     let surface_registration = use_hook(|| Rc::new(RefCell::new(None::<SurfaceRegistration>)));
     let registered_node = use_hook(|| Rc::new(Cell::new(None::<u64>)));
     // Pointer tracking is transient interaction state, not paint state. A
     // reactive Signal here rerendered the entire terminal on every move and
-    // again for every Ghostty row update, which made touch scrolling stutter.
+    // again for every VT row update, which made touch scrolling stutter.
     let gesture = use_hook(|| Rc::new(RefCell::new(TouchGesture::default())));
     let surface_metrics =
         use_hook(|| Rc::new(Cell::new(TerminalSurfaceMetrics::fallback(window_scale()))));
@@ -442,16 +425,22 @@ pub fn Terminal(props: TerminalProps) -> Element {
         move || {
             Rc::new(Cell::new(PaintSettings {
                 metrics,
-                cursor_phase: true,
                 cursor_blink,
                 background_color,
             }))
         }
     });
-    let mut current_settings = paint_settings.get();
-    current_settings.cursor_blink = props.cursor_blink;
-    current_settings.background_color = props.background_color;
-    paint_settings.set(current_settings);
+    {
+        let mut current_settings = paint_settings.get();
+        if current_settings.cursor_blink != props.cursor_blink
+            || current_settings.background_color != props.background_color
+        {
+            current_settings.cursor_blink = props.cursor_blink;
+            current_settings.background_color = props.background_color;
+            paint_settings.set(current_settings);
+            runtime.update_paint(current_settings);
+        }
+    }
 
     let callbacks = use_hook(TerminalCallbackSlots::default);
     callbacks.update(&props);
@@ -464,6 +453,25 @@ pub fn Terminal(props: TerminalProps) -> Element {
         let on_input = callbacks.on_input.clone();
         move || Rc::new(TerminalImeSession::new(controller, on_input))
     });
+    use_application_lifecycle_event({
+        let ime_session = ime_session.clone();
+        move |_, state| {
+            if !state.is_foreground() {
+                ime_session.mark_backgrounded();
+            }
+        }
+    });
+    controller.bind_show_keyboard({
+        let ime_session = ime_session.clone();
+        Rc::new(move || ime_session.show_keyboard())
+    });
+    controller.bind_hide_keyboard(
+        {
+            let ime_session = ime_session.clone();
+            Rc::new(move || ime_session.hide_keyboard())
+        },
+        ime_session.visible_flag(),
+    );
 
     let config = props.config.clone().unwrap_or_else(|| {
         let metrics = surface_metrics.get();
@@ -484,90 +492,28 @@ pub fn Terminal(props: TerminalProps) -> Element {
     let vt_cols = config.cols.max(1);
     let vt_rows = config.rows.max(1);
     let base_config = config.clone();
-    let async_runtime = arkit_runtime::use_runtime_handle().tokio();
 
     use_hook({
+        let callbacks = callbacks.clone();
         let runtime = runtime.clone();
         let controller = controller.clone();
-        let settings = paint_settings.clone();
-        let handle = async_runtime.clone();
         move || {
-            dioxus_core::spawn(async move {
-                loop {
-                    let sleeper = handle.spawn(async {
-                        tokio::time::sleep(std::time::Duration::from_millis(BLINK_MS)).await;
-                    });
-                    let _ = sleeper.await;
-                    let mut next = settings.get();
-                    next.cursor_phase = !next.cursor_phase;
-                    settings.set(next);
-                    let frame = controller.frame();
-                    if next.cursor_blink && frame.cursor.visible && frame.cursor.blinking {
-                        runtime.publish(frame, next);
+            if let Some(mut rx) = runtime.take_notices() {
+                dioxus_core::spawn(async move {
+                    while let Some(notice) = rx.recv().await {
+                        dispatch_notice(&callbacks, &controller, notice);
                     }
-                }
-            });
+                });
+            }
         }
     });
 
     use_hook({
-        let controller = controller.clone();
-        let callbacks = callbacks.clone();
         let runtime = runtime.clone();
-        let settings = paint_settings.clone();
-        move || {
-            controller.set_on_change(Box::new(move |frame, effects, error| {
-                if let Some(error) = error {
-                    if let Some(handler) = callbacks.on_error.get() {
-                        handler.call(error);
-                    }
-                }
-                if !effects.write_pty.is_empty() {
-                    if let Some(h) = callbacks.on_write_pty.get() {
-                        h.call(effects.write_pty.clone());
-                    }
-                }
-                if effects.bell {
-                    if let Some(h) = callbacks.on_bell.get() {
-                        h.call(());
-                    }
-                }
-                if let Some(title) = effects.title.clone() {
-                    if let Some(h) = callbacks.on_title.get() {
-                        h.call(title);
-                    }
-                }
-                if let Some(pwd) = effects.pwd.clone() {
-                    if let Some(h) = callbacks.on_pwd.get() {
-                        h.call(pwd);
-                    }
-                }
-                if let Some(h) = callbacks.on_frame.get() {
-                    h.call(frame.clone());
-                }
-                runtime.publish(frame, settings.get());
-            }));
-        }
-    });
-
-    use_hook({
-        let controller = controller.clone();
-        let callbacks = callbacks.clone();
         let initial = props.initial.clone();
         let config = config.clone();
-        move || match TerminalEngine::with_config(config) {
-            Ok(mut engine) => {
-                if let Some(banner) = initial {
-                    engine.write_str(&banner);
-                }
-                engine.write_str("\x1b[?25h");
-                controller.attach(engine);
-            }
-            Err(error) => {
-                if let Some(handler) = callbacks.on_error.get() {
-                    handler.call(error);
-                }
-            }
+        move || {
+            runtime.send(WorkerMessage::Attach { config, initial });
         }
     });
 
@@ -670,8 +616,8 @@ pub fn Terminal(props: TerminalProps) -> Element {
                 settings.metrics = next;
                 fit_settings.set(settings);
 
-                // Ghostty and the native renderer share the same physical cell
-                // box while VT columns/rows remain stable across IME resize.
+                // The engine and the native renderer share the same physical
+                // cell box while VT columns/rows remain stable across IME resize.
                 let native_width = next.native_cell_width_px();
                 let native_height = next.native_cell_height_px();
                 if native_width != fit_config.cell_width_px
@@ -683,9 +629,8 @@ pub fn Terminal(props: TerminalProps) -> Element {
                     cfg.cols = vt_cols;
                     cfg.rows = vt_rows;
                     c_fit.reconfigure(cfg);
-                } else {
-                    fit_runtime.publish(c_fit.frame(), settings);
                 }
+                fit_runtime.update_paint(settings);
             },
             ontouch: move |evt| {
                 if !capture_input {
@@ -699,32 +644,28 @@ pub fn Terminal(props: TerminalProps) -> Element {
                         *gesture_touch.borrow_mut() = TouchGesture::default();
                     }
                     PointerAction::Down => {
-                        *gesture_touch.borrow_mut() = TouchGesture::begin(p.x, p.y);
+                        let (x, y) = pointer_pos(&p);
+                        *gesture_touch.borrow_mut() = TouchGesture::begin(x, y);
                     }
                     PointerAction::Move | PointerAction::Unknown => {
                         let metrics = touch_metrics.get();
                         let scroll_slop = metrics.scroll_slop_vp();
                         let row_vp = metrics.cell_height_vp.max(1.0) as f32;
+                        let (x, y) = pointer_pos(&p);
                         let rows = {
                             let mut g = gesture_touch.borrow_mut();
                             if !g.active {
                                 return;
                             }
-                            if !g.is_scroll {
-                                let dy = (p.y - g.origin_y).abs();
-                                let dx = (p.x - g.origin_x).abs();
-                                if dy > scroll_slop && dy >= dx {
-                                    g.is_scroll = true;
-                                }
-                            }
+                            g.note_move(x, y, scroll_slop);
                             if !g.is_scroll {
                                 0
                             } else {
-                                // Pointer coordinates are vp. Ghostty DELTA:
-                                // negative = into history. Finger down makes
-                                // older rows follow the content downward.
-                                let step = p.y - g.last_y;
-                                g.last_y = p.y;
+                                // Pointer coordinates are vp. Negative delta
+                                // is into history. Finger down makes older
+                                // rows follow the content downward.
+                                let step = y - g.last_y;
+                                g.last_y = y;
                                 g.pixel_acc += step;
                                 let rows = (g.pixel_acc / row_vp) as i64;
                                 g.pixel_acc -= rows as f32 * row_vp;
@@ -732,43 +673,46 @@ pub fn Terminal(props: TerminalProps) -> Element {
                             }
                         };
                         if rows != 0 {
-                            // Ghostty moves its cheap viewport pin immediately.
-                            // The render worker independently replaces stale
-                            // snapshots, matching Ghostty's queueRender model.
+                            // Move the viewport pin immediately. The render
+                            // worker independently replaces stale snapshots.
                             c_touch.scroll_by(-rows);
                         }
                     }
                     PointerAction::Up => {
-                        let g = std::mem::take(&mut *gesture_touch.borrow_mut());
-                        if g.is_scroll {
-                            return;
-                        }
                         let metrics = touch_metrics.get();
                         let scroll_slop = metrics.scroll_slop_vp();
-                        let dx = (p.x - g.origin_x).abs();
-                        let dy = (p.y - g.origin_y).abs();
-                        if g.active && dx <= scroll_slop && dy <= scroll_slop {
-                            // Repeatable even when the user manually dismissed
-                            // a still-attached software keyboard.
-                            ime_touch.show_keyboard();
-                            let (x, y) =
-                                metrics.content_position_px_from_vp(g.origin_x, g.origin_y);
-                            let mut host = c_touch.encode_mouse(MouseInput {
-                                action: MouseAction::Press,
-                                button: MouseButton::Left,
-                                x,
-                                y,
-                                mods: KeyMods::default(),
-                            });
-                            host.extend(c_touch.encode_mouse(MouseInput {
-                                action: MouseAction::Release,
-                                button: MouseButton::Left,
-                                x,
-                                y,
-                                mods: KeyMods::default(),
-                            }));
-                            emit_host(&input_touch, host);
+                        let (x, y) = pointer_pos(&p);
+                        let g = {
+                            let mut g = std::mem::take(&mut *gesture_touch.borrow_mut());
+                            if g.active {
+                                g.note_move(x, y, scroll_slop);
+                            }
+                            g
+                        };
+                        // Any drag suppresses IME, even if the finger lifts
+                        // near the origin. HarmonyOS sometimes reports Up at
+                        // the Down coordinate after a coalesced Move stream.
+                        if !g.active || g.is_drag(scroll_slop) {
+                            return;
                         }
+                        ime_touch.show_keyboard();
+                        let (x, y) =
+                            metrics.content_position_px_from_vp(g.origin_x, g.origin_y);
+                        let mut host = c_touch.encode_mouse(MouseInput {
+                            action: MouseAction::Press,
+                            button: MouseButton::Left,
+                            x,
+                            y,
+                            mods: KeyMods::default(),
+                        });
+                        host.extend(c_touch.encode_mouse(MouseInput {
+                            action: MouseAction::Release,
+                            button: MouseButton::Left,
+                            x,
+                            y,
+                            mods: KeyMods::default(),
+                        }));
+                        emit_host(&input_touch, host);
                     }
                 }
             },
@@ -793,6 +737,8 @@ struct TouchGesture {
     /// Sub-row pixel accumulator for smooth scroll_by.
     pixel_acc: f32,
     is_scroll: bool,
+    max_abs_dx: f32,
+    max_abs_dy: f32,
 }
 
 impl Default for TouchGesture {
@@ -804,6 +750,8 @@ impl Default for TouchGesture {
             last_y: 0.0,
             pixel_acc: 0.0,
             is_scroll: false,
+            max_abs_dx: 0.0,
+            max_abs_dy: 0.0,
         }
     }
 }
@@ -817,7 +765,31 @@ impl TouchGesture {
             last_y: y,
             pixel_acc: 0.0,
             is_scroll: false,
+            max_abs_dx: 0.0,
+            max_abs_dy: 0.0,
         }
+    }
+
+    fn note_move(&mut self, x: f32, y: f32, scroll_slop: f32) {
+        let dx = (x - self.origin_x).abs();
+        let dy = (y - self.origin_y).abs();
+        self.max_abs_dx = self.max_abs_dx.max(dx);
+        self.max_abs_dy = self.max_abs_dy.max(dy);
+        if !self.is_scroll && self.max_abs_dy > scroll_slop && self.max_abs_dy >= self.max_abs_dx {
+            self.is_scroll = true;
+        }
+    }
+
+    fn is_drag(self, scroll_slop: f32) -> bool {
+        self.is_scroll || self.max_abs_dx > scroll_slop || self.max_abs_dy > scroll_slop
+    }
+}
+
+fn pointer_pos(pointer: &dioxus_elements::event::PointerPayload) -> (f32, f32) {
+    if pointer.has_window_position() {
+        (pointer.window_x, pointer.window_y)
+    } else {
+        (pointer.x, pointer.y)
     }
 }
 
@@ -827,5 +799,41 @@ fn emit_host(on_input: &Cell<Option<EventHandler<Vec<u8>>>>, bytes: Vec<u8>) {
     }
     if let Some(h) = on_input.get() {
         h.call(bytes);
+    }
+}
+
+fn dispatch_notice(
+    callbacks: &TerminalCallbackSlots,
+    controller: &TerminalController,
+    notice: crate::worker::UiNotice,
+) {
+    if let Some(error) = notice.error {
+        if let Some(handler) = callbacks.on_error.get() {
+            handler.call(error);
+        }
+    }
+    let effects = notice.effects;
+    if !effects.write_pty.is_empty() {
+        if let Some(handler) = callbacks.on_write_pty.get() {
+            handler.call(effects.write_pty);
+        }
+    }
+    if effects.bell {
+        if let Some(handler) = callbacks.on_bell.get() {
+            handler.call(());
+        }
+    }
+    if let Some(title) = effects.title {
+        if let Some(handler) = callbacks.on_title.get() {
+            handler.call(title);
+        }
+    }
+    if let Some(pwd) = effects.pwd {
+        if let Some(handler) = callbacks.on_pwd.get() {
+            handler.call(pwd);
+        }
+    }
+    if let Some(handler) = callbacks.on_frame.get() {
+        handler.call(controller.frame());
     }
 }

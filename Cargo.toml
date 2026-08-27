@@ -32,6 +32,7 @@ members = [
     "examples/complex_cases",
     "examples/i18n",
     "examples/lottie",
+    "examples/plugins",
     "examples/router",
     "examples/shadcn_showcase",
     "examples/terminal",
@@ -43,7 +44,7 @@ exclude = ["app"]
 resolver = "2"
 
 [workspace.package]
-version = "0.0.1-beta.0"
+version = "1.0.0-beta.0"
 edition = "2021"
 # The resolved N-API 1.2 toolchain crates require Rust 1.88. Keep the declared
 # MSRV aligned with the actual graph instead of advertising an unbuildable 1.85.
@@ -144,9 +145,10 @@ tree-sitter-c = "0.23"
 
 
 # Pluginized mainline with the normalized node surface (#70) and transparent
-# native XComponent background (#73). Keep both packages on the same revision.
-openharmony-ability = { git = "https://github.com/harmony-contrib/openharmony-activity.git", rev = "77548ad83570101d85085ab55ddd9b5d549c8705" }
-openharmony-ability-plugin-webview = { git = "https://github.com/harmony-contrib/openharmony-activity.git", rev = "77548ad83570101d85085ab55ddd9b5d549c8705" }
+# native XComponent background (#73). Published on crates.io since 1.0.0-beta.0.
+# Keep both packages on the same version.
+openharmony-ability = "1.0.0-beta.1"
+openharmony-ability-plugin-webview = "1.0.0-beta.1"
 
 # Published on crates.io. The wrapper user_data ownership fixes previously
 # pinned to fix/arkui-wrapper-lifecycle-023 are integrated upstream; declare
@@ -160,12 +162,13 @@ ohos-native-drawing-sys = { version = "0.2", default-features = false, features 
 ohos-image-native-binding = { version = "0.0.5", default-features = false, features = ["api-20"] }
 ohos-display-binding = "0.1"
 ohos-hilog-binding = "0.2"
-ohos-ime-binding = "0.2"
+ohos-ime-binding = { git = "https://github.com/ohos-rs/ohos-native-bindings", branch = "feat/terminal-native-bindings", default-features = false, features = ["api-22"] }
 ohos-ability-access-control-binding = "0.1"
 ohos-camera-binding = { version = "0.1", default-features = false, features = ["api-20", "xcomponent"] }
 ohos-xcomponent-binding = { version = "0.3", default-features = false, features = ["callbacks", "multi_mode", "api-20"] }
 ohos-xcomponent-sys = { version = "0.1", default-features = false, features = ["api-20"] }
-ohos-native-window-binding = { version = "0.2", default-features = false, features = ["api-20"] }
+ohos-native-window-binding = { git = "https://github.com/ohos-rs/ohos-native-bindings", branch = "feat/terminal-native-bindings", default-features = false, features = ["api-20"] }
+ohos-vsync-binding = { git = "https://github.com/ohos-rs/ohos-native-bindings", branch = "feat/terminal-native-bindings", default-features = false, features = ["api-20"] }
 thorvg = { version = "0.5.0", default-features = false, features = ["vendored", "lottie", "png", "fonts", "threads"] }
 thorvg-sys = { version = "0.3.0", default-features = false }
 wgpu = { version = "30.0.0", default-features = false, features = ["std", "gles", "wgsl"] }

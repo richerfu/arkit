@@ -1439,15 +1439,9 @@ fn render_inlines(
                     title,
                     alt,
                     link,
-                } => render_image_span(
-                    source,
-                    title,
-                    alt,
-                    link,
-                    markdown_style,
-                    on_link_click,
-                    key,
-                ),
+                } => {
+                    render_image_span(source, title, alt, link, markdown_style, on_link_click, key)
+                }
             }
         })
         .collect::<Vec<_>>();
@@ -1540,8 +1534,8 @@ fn render_text_run(
             Some(prev) => {
                 if *prev != dest {
                     *prev = None; // mixed: clear sole-link
-                    // keep as "mixed" by using a sentinel — represented as Some(None) after clear
-                    // but we also need to know it was mixed vs never linked. Use link_dests.
+                                  // keep as "mixed" by using a sentinel — represented as Some(None) after clear
+                                  // but we also need to know it was mixed vs never linked. Use link_dests.
                 }
             }
         }
@@ -1565,11 +1559,7 @@ fn render_text_run(
     // (all_same_link stayed Some(Some(..))).
     let whole_is_link = matches!(all_same_link, Some(Some(ref d)) if sole_link.as_ref() == Some(d));
 
-    let font_weight = if any_strong {
-        700
-    } else {
-        metrics.font_weight
-    };
+    let font_weight = if any_strong { 700 } else { metrics.font_weight };
     let font_style = i32::from(any_emphasis);
     let text_decoration = if any_strike {
         TEXT_DECORATION_LINE_THROUGH

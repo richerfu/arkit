@@ -1,7 +1,6 @@
 import { LazyPlugin, NativeAbility } from "@ohos-rs/ability";
 import { WebviewPlugin } from "@ohos-rs/ability-plugin-webview";
-import Want from "@ohos.app.ability.Want";
-import { AbilityConstant, abilityAccessCtrl, Permissions } from "@kit.AbilityKit";
+import { abilityAccessCtrl, Permissions } from "@kit.AbilityKit";
 import window from "@ohos.window";
 
 // 整合后的单一 native 模块:所有 example 编译进同一个 libdemos.so,
@@ -16,13 +15,8 @@ export default class EntryAbility extends NativeAbility {
   // bridge 调用时被使用；未启用 feature 的应用不受影响。
   public bridgePlugins = [new LazyPlugin(() => new WebviewPlugin())];
 
-  async onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): Promise<void> {
-    super.onCreate(want, launchParam);
-  }
-
-  async onWindowStageCreate(windowStage: window.WindowStage): Promise<void> {
+  protected async loadWindowStageContent(windowStage: window.WindowStage): Promise<void> {
     try {
-      super.onWindowStageCreate(windowStage);
       // 整合 app 内含 camera 示例,统一在启动时申请相机权限。
       const cameraPermission: Permissions = "ohos.permission.CAMERA";
       await abilityAccessCtrl.createAtManager()

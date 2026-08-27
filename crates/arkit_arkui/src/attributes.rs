@@ -616,6 +616,27 @@ mod tests {
     }
 
     #[test]
+    fn scroll_direction_maps_to_native_axis() {
+        let vertical = encode_attr(
+            "scroll",
+            "scroll_direction",
+            &AttributeValue::Text("vertical".into()),
+        )
+        .expect("vertical");
+        let horizontal = encode_attr(
+            "scroll",
+            "scroll_direction",
+            &AttributeValue::Text("horizontal".into()),
+        )
+        .expect("horizontal");
+
+        assert_eq!(vertical.ty, ArkUINodeAttributeType::ScrollScrollDirection);
+        assert_eq!(vertical.value, EncodedAttrValue::I32(0));
+        assert_eq!(horizontal.ty, ArkUINodeAttributeType::ScrollScrollDirection);
+        assert_eq!(horizontal.value, EncodedAttrValue::I32(1));
+    }
+
+    #[test]
     fn scroll_offset_preserves_float_offsets_and_integer_options() {
         assert_eq!(
             parse_scroll_offset("12.5, 24.25, 0, 3"),
@@ -1265,6 +1286,11 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
                 EncodedAttrValue::I32(scroll_bar_display_mode(value)?),
             )
         }
+        "scroll_direction" if tag == "scroll" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::ScrollScrollDirection,
+            EncodedAttrValue::I32(i32_or_keyword(value, css_value::scroll_direction_keyword)?),
+        ),
         "scroll_enabled" if tag == "scroll" => EncodedAttr::new(
             name,
             ArkUINodeAttributeType::ScrollEnableScrollInteraction,

@@ -1,42 +1,34 @@
-//! Embedded terminal for arkit, powered by **libghostty-vt**.
+//! Embedded terminal for arkit, powered by **rio-vt** and a wgpu cell renderer.
 //!
-//! ## Responsibility split (Ghostty model)
+//! ## Responsibility split
 //!
-//! libghostty-vt is a VT parser + render-state snapshot. **Host I/O is yours.**
+//! rio-vt is a VT parser + grid. **Host I/O is yours.** This crate paints the
+//! grid on the GPU: a vertex shader walks the cell buffer, a fragment shader
+//! samples the glyph atlas and draws decorations.
 //!
 //! | Concern | API |
 //! |---------|-----|
-//! | Host → paint | [`TerminalController::feed_vt`] / [`TerminalEngine::write_bytes`] |
+//! | Host → paint | [`TerminalController::feed_vt`] (mailbox; parse is off the UI thread) |
 //! | Keyboard → host | [`TerminalProps::on_input`] + [`TerminalController::encode_key`] |
 //! | Terminal → host | [`TerminalProps::on_write_pty`] (DA/DSR/…) |
-//! | Paint | [`Terminal`] XComponent + wgpu render worker |
+//! | Paint | [`Terminal`] window-associated vsync → wgpu render worker |
 //!
 //! ```text
 //!   UI / IME ──on_input──► your PTY | SSH | local shell
-//!   host output ──feed_vt──► libghostty-vt ──► latest snapshot
-//!                                           └─► wgpu ──► XComponent surface
+//!   host output ──feed_vt──► byte mailbox (no parse on the UI thread)
+//!          window-associated vsync ──► rio-vt on the render worker
+//!                                   └──► GPU cell instances + glyph atlas
+//!                                        └──► wgpu GLES/EGL ──► XComponent
 //!   write_pty effect ──on_write_pty──► same host
 //! ```
 //!
 //! Do **not** feed typed keys into `feed_vt` — that injects bytes as if the
 //! remote produced them and breaks delete/echo.
 //!
-//! ## Capability map
-//!
-//! | Concern | Ghostty API | arkit_terminal |
-//! |---------|-------------|----------------|
-//! | Create / scrollback | `GhosttyTerminalOptions` | [`TerminalConfig`] / [`TerminalEngine`] |
-//! | Resize + cell px | `ghostty_terminal_resize` | [`TerminalConfig::cell_width_px`] |
-//! | Colors | `OPT_COLOR_*` | theme fields on [`TerminalConfig`] |
-//! | VT write | `ghostty_terminal_vt_write` | [`feed_vt`](TerminalController::feed_vt) |
-//! | Scrollback | `ghostty_terminal_scroll_viewport` | [`scroll_by`](TerminalController::scroll_by) / pan |
-//! | Effects | `OPT_WRITE_PTY` / bell / title | [`TerminalEffects`] + props |
-//! | Paint | `ghostty_render_state_*` (viewport only) | [`TerminalFrame`] |
-//! | Keys / mouse / focus | encoders | `encode_*` → host bytes |
-//!
-//! ## Building
-//!
-//! Submodule `vendor/ghostty` + Zig (or `GHOSTTY_VT_LIB_DIR` prebuilt).
+//! VT parsing stays on the CPU, but not on the ArkUI thread: ANSI state
+//! machines are sequential and run on `arkit-terminal`. Grid layout,
+//! decorations, cursor, and glyph sampling run in GPU shaders. Present is
+//! paced by a window-associated [`ohos_vsync_binding::Vsync`].
 
 mod capture;
 mod component;
@@ -44,7 +36,6 @@ mod config;
 mod effects;
 mod engine;
 mod error;
-mod ffi;
 mod frame;
 mod ime;
 mod input;
@@ -53,7 +44,7 @@ mod renderer;
 mod surface;
 mod worker;
 
-pub use component::{Terminal, TerminalController, TerminalProps};
+pub use component::{Terminal, TerminalController, TerminalInbox, TerminalProps};
 pub use config::{Rgb, TerminalConfig, TerminalEffects};
 pub use engine::{TerminalEngine, TerminalSize};
 pub use error::{TerminalError, TerminalErrorKind, TerminalResult};

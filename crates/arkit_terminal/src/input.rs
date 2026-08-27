@@ -1,22 +1,12 @@
-//! Key / mouse / focus encoding aligned with libghostty-vt encoders.
+//! Key / mouse / focus encoding.
 //!
 //! Encoders produce **host-bound** bytes. The embedder must write them to the
-//! PTY/SSH/local host (`host_write`), never into `ghostty_terminal_vt_write`.
-
-#[cfg(not(ghostty_vt_stub))]
-use std::os::raw::c_char;
-#[cfg(not(ghostty_vt_stub))]
-use std::ptr;
+//! PTY/SSH/local host, never into [`crate::TerminalEngine::feed_vt`].
 
 use crate::config::TerminalConfig;
 use crate::error::TerminalResult;
-#[cfg(not(ghostty_vt_stub))]
-use crate::error::{TerminalError, TerminalErrorKind};
-use crate::ffi::GhosttyTerminal;
-#[cfg(not(ghostty_vt_stub))]
-use crate::ffi::GHOSTTY_SUCCESS;
 
-/// Modifier bitmask matching Ghostty `GHOSTTY_MODS_*`.
+/// Modifier bitmask (shift/ctrl/alt/super).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct KeyMods {
     pub shift: bool,
@@ -98,276 +88,265 @@ pub enum MouseButton {
     Middle,
 }
 
-/// Encode a named key → host bytes (never feeds VT).
-pub fn encode_named_key(terminal: GhosttyTerminal, name: &str) -> TerminalResult<Vec<u8>> {
-    encode_key_chord(terminal, KeyChord::named(name))
+/// Terminal modes the encoder needs and the embedder must not track itself.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct EncodeState {
+    pub app_cursor: bool,
+    pub mouse_reporting: bool,
+    pub sgr_mouse: bool,
+    pub utf8_mouse: bool,
+    pub x10_mouse: bool,
+    pub mouse_drag: bool,
+    pub mouse_motion: bool,
+    pub focus_report: bool,
 }
 
-/// Encode a key chord → host bytes.
-pub fn encode_key_chord(terminal: GhosttyTerminal, chord: KeyChord) -> TerminalResult<Vec<u8>> {
-    #[cfg(ghostty_vt_stub)]
-    {
-        let _ = terminal;
-        if let Some(ref utf8) = chord.utf8 {
-            if !utf8.is_empty() {
-                return Ok(utf8.as_bytes().to_vec());
-            }
+impl EncodeState {
+    pub(crate) fn to_bits(self) -> u32 {
+        let mut bits = 0u32;
+        if self.app_cursor {
+            bits |= 1 << 0;
         }
-        Ok(legacy_bytes(&chord.name).to_vec())
+        if self.mouse_reporting {
+            bits |= 1 << 1;
+        }
+        if self.sgr_mouse {
+            bits |= 1 << 2;
+        }
+        if self.utf8_mouse {
+            bits |= 1 << 3;
+        }
+        if self.x10_mouse {
+            bits |= 1 << 4;
+        }
+        if self.mouse_drag {
+            bits |= 1 << 5;
+        }
+        if self.mouse_motion {
+            bits |= 1 << 6;
+        }
+        if self.focus_report {
+            bits |= 1 << 7;
+        }
+        bits
     }
-    #[cfg(not(ghostty_vt_stub))]
-    {
-        encode_key_chord_native(terminal, chord)
+
+    pub(crate) fn from_bits(bits: u32) -> Self {
+        Self {
+            app_cursor: bits & (1 << 0) != 0,
+            mouse_reporting: bits & (1 << 1) != 0,
+            sgr_mouse: bits & (1 << 2) != 0,
+            utf8_mouse: bits & (1 << 3) != 0,
+            x10_mouse: bits & (1 << 4) != 0,
+            mouse_drag: bits & (1 << 5) != 0,
+            mouse_motion: bits & (1 << 6) != 0,
+            focus_report: bits & (1 << 7) != 0,
+        }
     }
 }
 
-/// Encode mouse → host bytes (empty when tracking off).
+pub fn encode_named_key(state: EncodeState, name: &str) -> TerminalResult<Vec<u8>> {
+    encode_key_chord(state, KeyChord::named(name))
+}
+
+pub fn encode_key_chord(state: EncodeState, chord: KeyChord) -> TerminalResult<Vec<u8>> {
+    if let Some(ref utf8) = chord.utf8 {
+        if !utf8.is_empty() && chord.mods.bits() == 0 && !is_named_key(&chord.name) {
+            return Ok(utf8.as_bytes().to_vec());
+        }
+    }
+    if let Some(bytes) = encode_named(&chord.name, chord.mods, state.app_cursor) {
+        return Ok(bytes);
+    }
+    if let Some(ref utf8) = chord.utf8 {
+        return Ok(utf8.as_bytes().to_vec());
+    }
+    Ok(Vec::new())
+}
+
 pub fn encode_mouse(
-    terminal: GhosttyTerminal,
+    state: EncodeState,
     event: MouseInput,
     config: &TerminalConfig,
 ) -> TerminalResult<Vec<u8>> {
-    #[cfg(ghostty_vt_stub)]
-    {
-        let _ = (terminal, event, config);
-        Ok(Vec::new())
+    if !state.mouse_reporting && !state.x10_mouse {
+        return Ok(Vec::new());
     }
-    #[cfg(not(ghostty_vt_stub))]
-    {
-        encode_mouse_native(terminal, event, config)
+    if event.mods.shift {
+        return Ok(Vec::new());
     }
+    let button: u8 = match event.button {
+        MouseButton::Left => 0,
+        MouseButton::Middle => 1,
+        MouseButton::Right => 2,
+        MouseButton::Unknown => 3,
+    };
+    match event.action {
+        MouseAction::Motion => {
+            if button >= 3 && !state.mouse_motion {
+                return Ok(Vec::new());
+            }
+            if button < 3 && !state.mouse_drag && !state.mouse_motion {
+                return Ok(Vec::new());
+            }
+        }
+        MouseAction::Press | MouseAction::Release => {
+            if state.x10_mouse && (event.action != MouseAction::Press || button > 2) {
+                return Ok(Vec::new());
+            }
+        }
+    }
+    let cell_w = config.cell_width_px.max(1) as f32;
+    let cell_h = config.cell_height_px.max(1) as f32;
+    let col = (event.x / cell_w).floor().max(0.0) as u16;
+    let row = (event.y / cell_h).floor().max(0.0) as u16;
+    let mut encoded = match event.action {
+        MouseAction::Motion => button.saturating_add(32),
+        _ => button,
+    };
+    if !state.x10_mouse {
+        if event.mods.alt {
+            encoded += 8;
+        }
+        if event.mods.ctrl {
+            encoded += 16;
+        }
+    }
+    let pressed = event.action != MouseAction::Release;
+    Ok(mouse_report(
+        encoded,
+        col,
+        row,
+        pressed,
+        state.sgr_mouse,
+        state.utf8_mouse,
+    ))
 }
 
-/// Encode focus report → host bytes (empty when mode 1004 off).
-pub fn encode_focus(terminal: GhosttyTerminal, gained: bool) -> TerminalResult<Vec<u8>> {
-    #[cfg(ghostty_vt_stub)]
-    {
-        let _ = (terminal, gained);
-        Ok(Vec::new())
+pub fn encode_focus(state: EncodeState, gained: bool) -> TerminalResult<Vec<u8>> {
+    if !state.focus_report {
+        return Ok(Vec::new());
     }
-    #[cfg(not(ghostty_vt_stub))]
-    {
-        encode_focus_native(terminal, gained)
-    }
+    Ok(if gained {
+        b"\x1b[I".to_vec()
+    } else {
+        b"\x1b[O".to_vec()
+    })
 }
 
-fn legacy_bytes(name: &str) -> &'static [u8] {
-    match name {
-        "enter" | "return" => b"\r",
-        "backspace" => b"\x7f",
-        "tab" => b"\t",
-        "escape" | "esc" => b"\x1b",
-        "arrow_up" | "up" => b"\x1b[A",
-        "arrow_down" | "down" => b"\x1b[B",
-        "arrow_right" | "right" => b"\x1b[C",
-        "arrow_left" | "left" => b"\x1b[D",
-        "home" => b"\x1b[H",
-        "end" => b"\x1b[F",
-        "page_up" => b"\x1b[5~",
-        "page_down" => b"\x1b[6~",
-        "delete" => b"\x1b[3~",
-        "space" => b" ",
-        _ => b"",
-    }
+fn is_named_key(name: &str) -> bool {
+    matches!(
+        name,
+        "enter"
+            | "return"
+            | "backspace"
+            | "tab"
+            | "escape"
+            | "esc"
+            | "arrow_up"
+            | "up"
+            | "arrow_down"
+            | "down"
+            | "arrow_right"
+            | "right"
+            | "arrow_left"
+            | "left"
+            | "home"
+            | "end"
+            | "page_up"
+            | "page_down"
+            | "delete"
+            | "space"
+    )
 }
 
-#[cfg(not(ghostty_vt_stub))]
-fn map_key(name: &str) -> Option<crate::ffi::GhosttyKey> {
-    use crate::ffi::GhosttyKey::*;
+fn encode_named(name: &str, mods: KeyMods, app_cursor: bool) -> Option<Vec<u8>> {
+    let param = {
+        let mut value = 1u8;
+        if mods.shift {
+            value += 1;
+        }
+        if mods.alt {
+            value += 2;
+        }
+        if mods.ctrl {
+            value += 4;
+        }
+        if mods.super_key {
+            value += 8;
+        }
+        value
+    };
+    let modified = param != 1;
+    let csi = |final_byte: u8, ss3: bool| -> Vec<u8> {
+        if modified {
+            format!("\x1b[1;{param}{}", final_byte as char).into_bytes()
+        } else if ss3 {
+            vec![0x1b, b'O', final_byte]
+        } else {
+            vec![0x1b, b'[', final_byte]
+        }
+    };
     Some(match name {
-        "enter" | "return" => GHOSTTY_KEY_ENTER,
-        "backspace" => GHOSTTY_KEY_BACKSPACE,
-        "tab" => GHOSTTY_KEY_TAB,
-        "escape" | "esc" => GHOSTTY_KEY_ESCAPE,
-        "arrow_up" | "up" => GHOSTTY_KEY_ARROW_UP,
-        "arrow_down" | "down" => GHOSTTY_KEY_ARROW_DOWN,
-        "arrow_left" | "left" => GHOSTTY_KEY_ARROW_LEFT,
-        "arrow_right" | "right" => GHOSTTY_KEY_ARROW_RIGHT,
-        "home" => GHOSTTY_KEY_HOME,
-        "end" => GHOSTTY_KEY_END,
-        "page_up" => GHOSTTY_KEY_PAGE_UP,
-        "page_down" => GHOSTTY_KEY_PAGE_DOWN,
-        "delete" => GHOSTTY_KEY_DELETE,
-        "space" => GHOSTTY_KEY_SPACE,
-        "a" | "A" => GHOSTTY_KEY_A,
-        "c" | "C" => GHOSTTY_KEY_C,
+        "enter" | "return" => b"\r".to_vec(),
+        "backspace" => b"\x7f".to_vec(),
+        "tab" => {
+            if mods.shift {
+                b"\x1b[Z".to_vec()
+            } else {
+                b"\t".to_vec()
+            }
+        }
+        "escape" | "esc" => b"\x1b".to_vec(),
+        "space" => b" ".to_vec(),
+        "arrow_up" | "up" => csi(b'A', app_cursor),
+        "arrow_down" | "down" => csi(b'B', app_cursor),
+        "arrow_right" | "right" => csi(b'C', app_cursor),
+        "arrow_left" | "left" => csi(b'D', app_cursor),
+        "home" => csi(b'H', app_cursor),
+        "end" => csi(b'F', app_cursor),
+        "page_up" => {
+            if modified {
+                format!("\x1b[5;{param}~").into_bytes()
+            } else {
+                b"\x1b[5~".to_vec()
+            }
+        }
+        "page_down" => {
+            if modified {
+                format!("\x1b[6;{param}~").into_bytes()
+            } else {
+                b"\x1b[6~".to_vec()
+            }
+        }
+        "delete" => {
+            if modified {
+                format!("\x1b[3;{param}~").into_bytes()
+            } else {
+                b"\x1b[3~".to_vec()
+            }
+        }
         _ => return None,
     })
 }
 
-#[cfg(not(ghostty_vt_stub))]
-fn encode_key_chord_native(terminal: GhosttyTerminal, chord: KeyChord) -> TerminalResult<Vec<u8>> {
-    use crate::ffi::{
-        ghostty_key_encoder_encode, ghostty_key_encoder_free, ghostty_key_encoder_new,
-        ghostty_key_encoder_setopt_from_terminal, ghostty_key_event_free, ghostty_key_event_new,
-        ghostty_key_event_set_action, ghostty_key_event_set_key, ghostty_key_event_set_mods,
-        ghostty_key_event_set_utf8, GhosttyKeyAction, GhosttyKeyEncoder, GhosttyKeyEvent,
-    };
-
-    // Prefer platform text for printable input (IME commits).
-    if let Some(ref utf8) = chord.utf8 {
-        if !utf8.is_empty() && chord.mods.bits() == 0 && map_key(&chord.name).is_none() {
-            return Ok(utf8.as_bytes().to_vec());
+fn mouse_report(button: u8, col: u16, row: u16, pressed: bool, sgr: bool, utf8: bool) -> Vec<u8> {
+    let x = col.saturating_add(1);
+    let y = row.saturating_add(1);
+    if sgr {
+        let end = if pressed { 'M' } else { 'm' };
+        return format!("\x1b[<{button};{x};{y}{end}").into_bytes();
+    }
+    let encoded = if pressed { button } else { button | 3 };
+    let mut out = vec![0x1b, b'[', b'M', 32u8.saturating_add(encoded)];
+    for value in [x, y] {
+        if utf8 && value >= 95 {
+            let encoded = char::from_u32(32 + u32::from(value)).unwrap_or('\u{20}');
+            let mut buffer = [0u8; 4];
+            out.extend_from_slice(encoded.encode_utf8(&mut buffer).as_bytes());
+        } else {
+            out.push(32u8.saturating_add(value.min(223) as u8));
         }
     }
-
-    let Some(key) = map_key(&chord.name) else {
-        if let Some(ref utf8) = chord.utf8 {
-            return Ok(utf8.as_bytes().to_vec());
-        }
-        let legacy = legacy_bytes(&chord.name);
-        return Ok(legacy.to_vec());
-    };
-
-    let mut encoder: GhosttyKeyEncoder = ptr::null_mut();
-    let rc = unsafe { ghostty_key_encoder_new(ptr::null(), &mut encoder) };
-    if rc != GHOSTTY_SUCCESS || encoder.is_null() {
-        return Err(TerminalError::new(
-            TerminalErrorKind::Engine,
-            format!("key_encoder_new failed ({rc:?})"),
-        ));
-    }
-    unsafe {
-        ghostty_key_encoder_setopt_from_terminal(encoder, terminal);
-    }
-
-    let mut event: GhosttyKeyEvent = ptr::null_mut();
-    let rc = unsafe { ghostty_key_event_new(ptr::null(), &mut event) };
-    if rc != GHOSTTY_SUCCESS || event.is_null() {
-        unsafe { ghostty_key_encoder_free(encoder) };
-        return Err(TerminalError::new(
-            TerminalErrorKind::Engine,
-            format!("key_event_new failed ({rc:?})"),
-        ));
-    }
-
-    unsafe {
-        ghostty_key_event_set_action(event, GhosttyKeyAction::GHOSTTY_KEY_ACTION_PRESS);
-        ghostty_key_event_set_key(event, key);
-        ghostty_key_event_set_mods(event, chord.mods.bits());
-        if let Some(ref utf8) = chord.utf8 {
-            ghostty_key_event_set_utf8(event, utf8.as_ptr().cast::<c_char>(), utf8.len());
-        }
-    }
-
-    let mut buf = [0 as c_char; 128];
-    let mut written: usize = 0;
-    let rc = unsafe {
-        ghostty_key_encoder_encode(encoder, event, buf.as_mut_ptr(), buf.len(), &mut written)
-    };
-    unsafe {
-        ghostty_key_event_free(event);
-        ghostty_key_encoder_free(encoder);
-    }
-
-    if rc != GHOSTTY_SUCCESS || written == 0 {
-        let legacy = legacy_bytes(&chord.name);
-        if !legacy.is_empty() {
-            return Ok(legacy.to_vec());
-        }
-        if let Some(ref utf8) = chord.utf8 {
-            return Ok(utf8.as_bytes().to_vec());
-        }
-        return Ok(Vec::new());
-    }
-
-    let bytes = unsafe { std::slice::from_raw_parts(buf.as_ptr().cast::<u8>(), written) };
-    Ok(bytes.to_vec())
-}
-
-#[cfg(not(ghostty_vt_stub))]
-fn encode_mouse_native(
-    terminal: GhosttyTerminal,
-    event: MouseInput,
-    config: &TerminalConfig,
-) -> TerminalResult<Vec<u8>> {
-    use crate::ffi::{
-        ghostty_mouse_encoder_encode, ghostty_mouse_encoder_free, ghostty_mouse_encoder_new,
-        ghostty_mouse_encoder_setopt_from_terminal, ghostty_mouse_event_free,
-        ghostty_mouse_event_new, ghostty_mouse_event_set_action, ghostty_mouse_event_set_button,
-        ghostty_mouse_event_set_mods, ghostty_mouse_event_set_position, GhosttyMouseAction,
-        GhosttyMouseButton, GhosttyMouseEncoder, GhosttyMouseEvent, GhosttyMousePosition,
-    };
-
-    let mut encoder: GhosttyMouseEncoder = ptr::null_mut();
-    let rc = unsafe { ghostty_mouse_encoder_new(ptr::null(), &mut encoder) };
-    if rc != GHOSTTY_SUCCESS || encoder.is_null() {
-        return Err(TerminalError::new(
-            TerminalErrorKind::Engine,
-            format!("mouse_encoder_new failed ({rc:?})"),
-        ));
-    }
-    unsafe {
-        ghostty_mouse_encoder_setopt_from_terminal(encoder, terminal);
-    }
-
-    let mut me: GhosttyMouseEvent = ptr::null_mut();
-    let rc = unsafe { ghostty_mouse_event_new(ptr::null(), &mut me) };
-    if rc != GHOSTTY_SUCCESS || me.is_null() {
-        unsafe { ghostty_mouse_encoder_free(encoder) };
-        return Err(TerminalError::new(
-            TerminalErrorKind::Engine,
-            format!("mouse_event_new failed ({rc:?})"),
-        ));
-    }
-
-    let action = match event.action {
-        MouseAction::Press => GhosttyMouseAction::GHOSTTY_MOUSE_ACTION_PRESS,
-        MouseAction::Release => GhosttyMouseAction::GHOSTTY_MOUSE_ACTION_RELEASE,
-        MouseAction::Motion => GhosttyMouseAction::GHOSTTY_MOUSE_ACTION_MOTION,
-    };
-    let button = match event.button {
-        MouseButton::Left => GhosttyMouseButton::GHOSTTY_MOUSE_BUTTON_LEFT,
-        MouseButton::Right => GhosttyMouseButton::GHOSTTY_MOUSE_BUTTON_RIGHT,
-        MouseButton::Middle => GhosttyMouseButton::GHOSTTY_MOUSE_BUTTON_MIDDLE,
-        MouseButton::Unknown => GhosttyMouseButton::GHOSTTY_MOUSE_BUTTON_UNKNOWN,
-    };
-    let pos = GhosttyMousePosition {
-        x: event.x,
-        y: event.y,
-    };
-
-    unsafe {
-        ghostty_mouse_event_set_action(me, action);
-        ghostty_mouse_event_set_button(me, button);
-        ghostty_mouse_event_set_mods(me, event.mods.bits());
-        ghostty_mouse_event_set_position(me, pos);
-        let _ = config;
-    }
-
-    let mut buf = [0 as c_char; 128];
-    let mut written: usize = 0;
-    let rc = unsafe {
-        ghostty_mouse_encoder_encode(encoder, me, buf.as_mut_ptr(), buf.len(), &mut written)
-    };
-    unsafe {
-        ghostty_mouse_event_free(me);
-        ghostty_mouse_encoder_free(encoder);
-    }
-
-    if rc != GHOSTTY_SUCCESS || written == 0 {
-        return Ok(Vec::new());
-    }
-    let bytes = unsafe { std::slice::from_raw_parts(buf.as_ptr().cast::<u8>(), written) };
-    Ok(bytes.to_vec())
-}
-
-#[cfg(not(ghostty_vt_stub))]
-fn encode_focus_native(terminal: GhosttyTerminal, gained: bool) -> TerminalResult<Vec<u8>> {
-    use crate::ffi::{ghostty_focus_encode, GhosttyFocusEvent};
-    let _ = terminal;
-
-    let event = if gained {
-        GhosttyFocusEvent::GHOSTTY_FOCUS_GAINED
-    } else {
-        GhosttyFocusEvent::GHOSTTY_FOCUS_LOST
-    };
-    let mut buf = [0 as c_char; 16];
-    let mut written: usize = 0;
-    let rc = unsafe { ghostty_focus_encode(event, buf.as_mut_ptr(), buf.len(), &mut written) };
-    if rc != GHOSTTY_SUCCESS || written == 0 {
-        return Ok(Vec::new());
-    }
-    let bytes = unsafe { std::slice::from_raw_parts(buf.as_ptr().cast::<u8>(), written) };
-    Ok(bytes.to_vec())
+    out
 }

@@ -146,7 +146,9 @@ impl MountedNodeLease {
         if state.epoch != self.epoch {
             return false;
         }
-        state.animated_attrs.extend(attrs.iter().map(|name| name.to_string()));
+        state
+            .animated_attrs
+            .extend(attrs.iter().map(|name| name.to_string()));
         true
     }
 

@@ -17,15 +17,23 @@ use crate::{TerminalError, TerminalErrorKind, TerminalResult};
 pub(crate) struct NativeSurface {
     _window: NativeWindow,
     raw_window: NonNull<c_void>,
+    surface_id: Option<u64>,
     width: i32,
     height: i32,
 }
 
 impl NativeSurface {
-    fn new(window: NativeWindow, raw_window: *mut c_void, width: i32, height: i32) -> Self {
+    fn new(
+        window: NativeWindow,
+        raw_window: *mut c_void,
+        surface_id: Option<u64>,
+        width: i32,
+        height: i32,
+    ) -> Self {
         Self {
             _window: window,
             raw_window: NonNull::new(raw_window).expect("XComponent window was checked above"),
+            surface_id,
             width,
             height,
         }
@@ -33,6 +41,10 @@ impl NativeSurface {
 
     pub(crate) fn raw_window(&self) -> *mut c_void {
         self.raw_window.as_ptr()
+    }
+
+    pub(crate) fn surface_id(&self) -> Option<u64> {
+        self.surface_id
     }
 
     pub(crate) fn width(&self) -> i32 {
@@ -141,13 +153,22 @@ fn send_surface(sender: &Sender<WorkerMessage>, component: XComponentRaw, window
     }
 
     let native_window = NativeWindow::clone_from_ptr(window.0);
+    let surface_id = match native_window.surface_id() {
+        Ok(surface_id) => Some(surface_id),
+        Err(error) => {
+            ohos_hilog_binding::error(format!(
+                "arkit_terminal: failed to query native surface id: {error}"
+            ));
+            None
+        }
+    };
     if let Err(error) = native_window.set_buffer_geometry(width, height) {
         ohos_hilog_binding::error(format!(
             "arkit_terminal: failed to set native window geometry: {error:?}"
         ));
         return;
     }
-    let surface = NativeSurface::new(native_window, window.0, width, height);
+    let surface = NativeSurface::new(native_window, window.0, surface_id, width, height);
     let _ = sender.send(WorkerMessage::SurfaceAvailable(surface));
 }
 
