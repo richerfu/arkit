@@ -3,6 +3,7 @@
 use std::{rc::Rc, time::Duration};
 
 use arkit::dioxus_core::{AttributeValue, EventHandler, VNode};
+use arkit::dioxus_hooks::use_callback;
 use arkit::dioxus_signals::WritableExt;
 use arkit::prelude::*;
 // The Routable derive emits `::dioxus_router` paths.
@@ -14,7 +15,9 @@ use arkit::shadcn::components::{
     AlertDialogAction, AlertList, AlertTitle, AlertVariant, Anchor, AnchorItem, AnchorSection,
     AspectRatio, Avatar, AvatarFallback, Badge, BadgeVariant, BottomNavigation,
     BottomNavigationItem, BottomSheet, BottomSheetTextInput, Button, ButtonSize, ButtonVariant,
-    Calendar, CalendarYearRange, Card, CardContent, CardFooter, CardHeader, Carousel,
+    Calendar, CalendarDayContext, CalendarDayDecoration, CalendarDayEvent, CalendarDayEventKind,
+    CalendarDayEventResponse, CalendarDayStyle, CalendarPlugin, CalendarPluginLayout,
+    CalendarYearRange, Card, CardContent, CardFooter, CardHeader, Carousel,
     CarouselControlsPlacement, CarouselIndicatorVariant, CarouselStyle, Checkbox, Code,
     Collapsible, ContextMenu, DatePicker, Dialog, DialogFooter, DialogHeader, DropdownMenu, Field,
     FieldContent, FieldDescription, FieldError, FieldGroup, FieldOrientation, FieldSeparator,
@@ -1189,6 +1192,63 @@ fn demo_canvas_policy(slug: &str) -> DemoCanvasPolicy {
 #[component]
 fn ComponentDemo(slug: &'static str) -> Element {
     let lunar_calendar_plugin = use_chinese_lunar_plugin(ChineseLunarOptions::default());
+    let calendar_memos = use_signal(Vec::<String>::new);
+    let calendar_plugin_status =
+        use_signal(|| "Long-press a date to add or remove a memo marker.".to_string());
+    let memo_dates_for_render = calendar_memos;
+    let memo_renderer = use_callback(move |context: CalendarDayContext| {
+        let date = context.date.to_string();
+        let has_memo = memo_dates_for_render
+            .read()
+            .iter()
+            .any(|memo_date| memo_date == &date);
+        let mut decoration = CalendarDayDecoration::new().with_style(CalendarDayStyle {
+            border_color: has_memo.then_some(0xFFF59E0Bu32),
+            border_width: has_memo.then_some(1.5),
+            ..CalendarDayStyle::default()
+        });
+        if has_memo {
+            decoration = decoration.with_overlay(rsx! {
+                column {
+                    width: "100%",
+                    height: "100%",
+                    align_items: "end",
+                    justify_content: "start",
+                    hit_test_behavior: "none",
+                    row {
+                        width: 6.0,
+                        height: 6.0,
+                        border_radius: 3.0,
+                        background_color: 0xFFF59E0Bu32,
+                        hit_test_behavior: "none",
+                    }
+                }
+            });
+        }
+        decoration
+    });
+    let mut memo_dates_for_event = calendar_memos;
+    let mut memo_status_for_event = calendar_plugin_status;
+    let memo_event = use_callback(move |event: CalendarDayEvent| {
+        if event.kind != CalendarDayEventKind::LongPress {
+            return CalendarDayEventResponse::continue_default();
+        }
+        let date = event.context.date.to_string();
+        let mut dates = memo_dates_for_event();
+        if let Some(index) = dates.iter().position(|memo_date| memo_date == &date) {
+            dates.remove(index);
+            memo_status_for_event.set(format!("Removed memo marker from {date}"));
+        } else {
+            dates.push(date.clone());
+            dates.sort();
+            memo_status_for_event.set(format!("Added memo marker to {date}"));
+        }
+        memo_dates_for_event.set(dates);
+        CalendarDayEventResponse::prevent_default()
+    });
+    let memo_calendar_plugin = CalendarPlugin::decorator(memo_renderer)
+        .with_day_event(memo_event)
+        .with_layout(CalendarPluginLayout::default());
     let mut page = use_signal(|| 1_i32);
     let mut dialog_open = use_signal(|| false);
     let mut dialog_name = use_signal(|| "Pedro Duarte".to_string());
@@ -1775,8 +1835,15 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 Calendar {
                     selected: calendar_selected(),
                     year_range: CalendarYearRange::new(1900, 2100),
-                    day_plugin: lunar_calendar_plugin,
+                    plugins: vec![lunar_calendar_plugin, memo_calendar_plugin],
                     on_day_press: move |date| calendar_selected.set(Some(date)),
+                }
+                v_gap { height: spacing::SM }
+                text {
+                    content: calendar_plugin_status(),
+                    font_size: typography::XS,
+                    font_color: theme.colors.muted_foreground,
+                    line_height: 16.0,
                 }
                 v_gap { height: spacing::XXL }
                 Calendar {
@@ -2196,7 +2263,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     selected: date_picker_selected(),
                     open: Some(date_picker_open()),
                     calendar_year_range: CalendarYearRange::new(1900, 2100),
-                    calendar_day_plugin: lunar_calendar_plugin,
+                    calendar_plugins: vec![lunar_calendar_plugin],
                     on_change: move |date| date_picker_selected.set(date),
                     on_open_change: move |open| date_picker_open.set(open),
                 }
@@ -2209,7 +2276,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     selected: date_picker_uc_selected(),
                     default_open: false,
                     calendar_year_range: CalendarYearRange::new(1900, 2100),
-                    calendar_day_plugin: lunar_calendar_plugin,
+                    calendar_plugins: vec![lunar_calendar_plugin],
                     on_change: move |date: Option<String>| {
                         date_picker_uc_selected.set(date.clone());
                         date_picker_uc_note.set(format!("on_change = {:?}", date));

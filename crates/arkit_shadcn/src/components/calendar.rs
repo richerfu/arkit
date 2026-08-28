@@ -4,8 +4,10 @@
 //! compact date input. This implementation renders the same month-view shape
 //! directly with ArkUI primitives: month/year quick navigation, weekday
 //! headings, six stable week rows, outside-month days, today highlighting,
-//! controlled single or multiple selections, and optional day plugins.
+//! controlled single or multiple selections, and composable presentation and
+//! interaction plugins.
 
+use std::rc::Rc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::i18n::use_component_i18n;
@@ -13,6 +15,7 @@ use crate::icon::icon_placeholder;
 use crate::theme::{spacing, typography, use_theme, Theme, ThemeMode};
 use arkit_prelude::*;
 
+use super::calendar_plugin::*;
 use super::ARKUI_BORDER_STYLE_SOLID;
 
 const TRANSPARENT: u32 = 0x00000000;
@@ -21,8 +24,6 @@ const DARK_SELECTION: u32 = 0xFF0EA5E9;
 const CALENDAR_PADDING: f32 = 12.0;
 const DAY_SIZE: f32 = 36.0;
 const WEEK_ROW_HEIGHT: f32 = 40.0;
-const DAY_SIZE_WITH_PLUGIN: f32 = 40.0;
-const WEEK_ROW_HEIGHT_WITH_PLUGIN: f32 = 48.0;
 const PICKER_COLUMN_COUNT: usize = 3;
 const PICKER_ROW_COUNT: usize = 4;
 const PICKER_BACK_ROW_HEIGHT: f32 = 44.0;
@@ -157,36 +158,6 @@ impl std::fmt::Display for CalendarDate {
     }
 }
 
-/// Stable input supplied to a calendar day plugin.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CalendarDayContext {
-    pub date: CalendarDate,
-    pub selected: bool,
-    pub today: bool,
-    pub outside_month: bool,
-    /// Color resolved by the core calendar for supporting content.
-    pub supporting_color: u32,
-}
-
-/// Optional supporting-content renderer for each Gregorian day cell.
-///
-/// The core calendar continues to own selection, navigation, hit testing, and
-/// the primary day number. Plugins render only the compact second line.
-#[derive(Clone, Copy, PartialEq)]
-pub struct CalendarDayPlugin {
-    renderer: dioxus_core::Callback<CalendarDayContext, Element>,
-}
-
-impl CalendarDayPlugin {
-    pub const fn new(renderer: dioxus_core::Callback<CalendarDayContext, Element>) -> Self {
-        Self { renderer }
-    }
-
-    fn render(self, context: CalendarDayContext) -> Element {
-        self.renderer.call(context)
-    }
-}
-
 /// User-visible calendar copy.
 ///
 /// `month_title_template` replaces `{month}` with the matching entry from
@@ -291,9 +262,12 @@ pub struct CalendarProps {
     /// calendar is embedded in another surface such as a bottom sheet.
     #[props(default)]
     pub embedded: bool,
-    /// Optional supporting-content plugin rendered below every day number.
+    /// Ordered presentation and interaction plugins.
+    ///
+    /// Supporting and overlay content is additive. Style and replacement
+    /// conflicts resolve in declaration order, with later plugins winning.
     #[props(default)]
-    pub day_plugin: Option<CalendarDayPlugin>,
+    pub plugins: Vec<CalendarPlugin>,
     /// Called with a `YYYY-MM-DD` date for every enabled day press.
     #[props(default)]
     pub on_day_press: EventHandler<String>,
@@ -340,13 +314,8 @@ pub fn Calendar(props: CalendarProps) -> Element {
     let selected_dates = props.selected_dates.clone();
     let on_day_press = props.on_day_press;
     let on_month_change = props.on_month_change;
-    let day_plugin = props.day_plugin;
-    let has_day_plugin = day_plugin.is_some();
-    let week_row_height = if has_day_plugin {
-        WEEK_ROW_HEIGHT_WITH_PLUGIN
-    } else {
-        WEEK_ROW_HEIGHT
-    };
+    let plugins: Rc<[CalendarPlugin]> = props.plugins.into();
+    let (day_size, week_row_height) = resolve_plugin_layout(&plugins);
     let picker_height = 28.0 + week_row_height * 6.0;
     let picker_grid_height = picker_height - PICKER_BACK_ROW_HEIGHT;
     let labels = props
@@ -403,7 +372,7 @@ pub fn Calendar(props: CalendarProps) -> Element {
             year_page.set((year_page() + YEAR_PAGE_SIZE).min(last_year_page));
         }
     });
-    let header_title = match current_view {
+    let default_header_title = match current_view {
         CalendarView::Days => labels.month_title(month.year, month.month),
         CalendarView::Months => picker_year().to_string(),
         CalendarView::Years => {
@@ -411,6 +380,11 @@ pub fn Calendar(props: CalendarProps) -> Element {
             let end = (start + YEAR_PAGE_SIZE - 1).min(year_range.end);
             format!("{start}–{end}")
         }
+    };
+    let (header_title, month_supporting_content) = if current_view == CalendarView::Days {
+        resolve_month_plugins(month, default_header_title, &plugins)
+    } else {
+        (default_header_title, Vec::new())
     };
     let toggle_picker = EventHandler::new(move |_: ()| match current_view {
         CalendarView::Days => {
@@ -478,6 +452,14 @@ pub fn Calendar(props: CalendarProps) -> Element {
                     onclick: move |_| navigate_next.call(()),
                 }
             }
+            for (plugin_index, content) in month_supporting_content.into_iter().enumerate() {
+                row {
+                    key: "month-plugin-{plugin_index}",
+                    width: "100%",
+                    hit_test_behavior: "transparent",
+                    {content}
+                }
+            }
             row { height: 4.0 }
             if current_view == CalendarView::Days {
                 row {
@@ -508,7 +490,9 @@ pub fn Calendar(props: CalendarProps) -> Element {
                     selected_dates,
                     selection_color,
                     today_color,
-                    day_plugin,
+                    day_size,
+                    week_row_height,
+                    plugins: plugins.clone(),
                     on_visible_month: move |next| set_month.call(next),
                     on_day_press: move |date| on_day_press.call(date),
                 }
@@ -545,6 +529,50 @@ pub fn Calendar(props: CalendarProps) -> Element {
             }
         }
     }
+}
+
+fn resolve_plugin_layout(plugins: &[CalendarPlugin]) -> (f32, f32) {
+    plugins.iter().fold(
+        (DAY_SIZE, WEEK_ROW_HEIGHT),
+        |(day_size, row_height), plugin| {
+            let layout = plugin.layout();
+            (
+                layout.minimum_day_size.unwrap_or(day_size).max(day_size),
+                layout
+                    .minimum_week_row_height
+                    .unwrap_or(row_height)
+                    .max(row_height),
+            )
+        },
+    )
+}
+
+fn resolve_month_plugins(
+    month: CalendarMonth,
+    title: String,
+    plugins: &[CalendarPlugin],
+) -> (String, Vec<Element>) {
+    let dates = month.grid_dates();
+    let mut resolved_title = title;
+    let mut supporting_content = Vec::new();
+
+    for plugin in plugins {
+        let decoration = plugin.decorate_month(CalendarMonthContext {
+            year: month.year,
+            month: month.month,
+            first_visible_date: dates[0],
+            last_visible_date: dates[dates.len() - 1],
+            title: resolved_title.clone(),
+        });
+        if let Some(title) = decoration.title {
+            resolved_title = title;
+        }
+        if let Some(content) = decoration.supporting {
+            supporting_content.push(content);
+        }
+    }
+
+    (resolved_title, supporting_content)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -678,22 +706,14 @@ fn CalendarDays(
     selected_dates: Vec<String>,
     selection_color: u32,
     today_color: u32,
-    day_plugin: Option<CalendarDayPlugin>,
+    day_size: f32,
+    week_row_height: f32,
+    plugins: Rc<[CalendarPlugin]>,
     on_visible_month: EventHandler<CalendarMonth>,
     on_day_press: EventHandler<String>,
 ) -> Element {
     let theme = use_theme();
-    let has_day_plugin = day_plugin.is_some();
-    let day_size = if has_day_plugin {
-        DAY_SIZE_WITH_PLUGIN
-    } else {
-        DAY_SIZE
-    };
-    let week_row_height = if has_day_plugin {
-        WEEK_ROW_HEIGHT_WITH_PLUGIN
-    } else {
-        WEEK_ROW_HEIGHT
-    };
+    let extended_layout = day_size > DAY_SIZE || week_row_height > WEEK_ROW_HEIGHT;
     let selected_text = match theme.mode {
         ThemeMode::Light => 0xFFFFFFFF,
         ThemeMode::Dark => 0xFF000000,
@@ -723,16 +743,56 @@ fn CalendarDays(
             } else {
                 theme.colors.muted_foreground
             };
-            let supporting_content = day_plugin.map(|plugin| {
-                plugin.render(CalendarDayContext {
+            let decoration = resolve_plugins_for_day(
+                CalendarDayContext {
                     date,
                     selected: is_selected,
                     today: is_today,
                     outside_month: is_outside,
+                    enabled,
+                    primary_color: text_color,
+                    background_color: background,
                     supporting_color,
-                })
-            });
+                },
+                &plugins,
+            );
+            let context = decoration.context;
+            let enabled = context.enabled;
+            let border_color = decoration.style.border_color.unwrap_or(TRANSPARENT);
+            let border_width = decoration.style.border_width.unwrap_or(0.0).max(0.0);
+            let border_radius = decoration
+                .style
+                .border_radius
+                .unwrap_or(theme.radii.full)
+                .max(0.0);
+            let default_opacity = if !enabled {
+                0.36
+            } else if is_outside {
+                0.62
+            } else {
+                1.0
+            };
+            let mut opacity = decoration
+                .style
+                .opacity
+                .unwrap_or(default_opacity)
+                .clamp(0.0, 1.0);
+            if !enabled {
+                opacity = opacity.min(0.36);
+            }
+            let primary_font_weight = decoration.style.primary_font_weight.unwrap_or(
+                if is_selected || is_today {
+                    600_i32
+                } else {
+                    400_i32
+                },
+            );
+            let supporting_content = decoration.supporting;
+            let overlay_content = decoration.overlays;
+            let replacement_content = decoration.replacement;
             let pressed_date = date_string.clone();
+            let press_plugins = plugins.clone();
+            let long_press_plugins = plugins.clone();
 
             rsx! {
                 row {
@@ -753,38 +813,95 @@ fn CalendarDays(
                         padding_bottom: 0.0,
                         padding_left: 0.0,
                         alignment: "center",
-                        background_color: background,
+                        background_color: context.background_color,
                         border_style: ARKUI_BORDER_STYLE_SOLID,
-                        border_width: 0.0,
-                        border_color: TRANSPARENT,
-                        border_radius: theme.radii.full,
-                        opacity: if !enabled {
-                            0.36
-                        } else if is_outside {
-                            0.62
-                        } else {
-                            1.0
-                        },
+                        border_width,
+                        border_color,
+                        border_radius,
+                        opacity,
                         onclick: move |_| {
                             if enabled {
-                                if is_outside {
-                                    on_visible_month.call(date.calendar_month());
+                                let response = dispatch_plugins_for_day(
+                                    &press_plugins,
+                                    CalendarDayEvent {
+                                        context,
+                                        kind: CalendarDayEventKind::Press,
+                                    },
+                                );
+                                if !response.prevent_default {
+                                    if is_outside {
+                                        on_visible_month.call(date.calendar_month());
+                                    }
+                                    on_day_press.call(pressed_date.clone());
                                 }
-                                on_day_press.call(pressed_date.clone());
                             }
                         },
-                        column {
-                            align_items: "center",
-                            justify_content: "center",
-                            text {
-                                content: date.day().to_string(),
-                                font_size: typography::SM,
-                                font_weight: if is_selected || is_today { 600_i32 } else { 400_i32 },
-                                font_color: text_color,
-                                line_height: if has_day_plugin { 18.0 } else { 20.0 },
+                        onlongpress: move |_| {
+                            if enabled {
+                                dispatch_plugins_for_day(
+                                    &long_press_plugins,
+                                    CalendarDayEvent {
+                                        context,
+                                        kind: CalendarDayEventKind::LongPress,
+                                    },
+                                );
                             }
-                            if let Some(content) = supporting_content {
-                                {content}
+                        },
+                        stack {
+                            width: "100%",
+                            height: "100%",
+                            hit_test_behavior: "none",
+                            if let Some(content) = replacement_content {
+                                row {
+                                    width: "100%",
+                                    height: "100%",
+                                    align_items: "center",
+                                    justify_content: "center",
+                                    hit_test_behavior: "none",
+                                    {content}
+                                }
+                            } else {
+                                column {
+                                    width: "100%",
+                                    height: "100%",
+                                    align_items: "center",
+                                    justify_content: "center",
+                                    hit_test_behavior: "none",
+                                    text {
+                                        content: date.day().to_string(),
+                                        font_size: typography::SM,
+                                        font_weight: primary_font_weight,
+                                        font_color: context.primary_color,
+                                        line_height: if extended_layout { 18.0 } else { 20.0 },
+                                    }
+                                    if !supporting_content.is_empty() {
+                                        row {
+                                            align_items: "center",
+                                            justify_content: "center",
+                                            hit_test_behavior: "none",
+                                            for (plugin_index, content) in supporting_content.into_iter().enumerate() {
+                                                row {
+                                                    key: "day-supporting-{plugin_index}",
+                                                    align_items: "center",
+                                                    justify_content: "center",
+                                                    hit_test_behavior: "none",
+                                                    {content}
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            for (plugin_index, content) in overlay_content.into_iter().enumerate() {
+                                row {
+                                    key: "day-overlay-{plugin_index}",
+                                    width: "100%",
+                                    height: "100%",
+                                    align_items: "center",
+                                    justify_content: "center",
+                                    hit_test_behavior: "none",
+                                    {content}
+                                }
                             }
                         }
                     }
@@ -803,6 +920,66 @@ fn CalendarDays(
     });
 
     rsx! { {weeks} }
+}
+
+struct ResolvedCalendarDay {
+    context: CalendarDayContext,
+    style: CalendarDayStyle,
+    supporting: Vec<Element>,
+    overlays: Vec<Element>,
+    replacement: Option<Element>,
+}
+
+fn resolve_plugins_for_day(
+    mut context: CalendarDayContext,
+    plugins: &[CalendarPlugin],
+) -> ResolvedCalendarDay {
+    let mut style = CalendarDayStyle::default();
+    let mut supporting = Vec::new();
+    let mut overlays = Vec::new();
+    let mut replacement = None;
+
+    for plugin in plugins {
+        let decoration = plugin.decorate_day(context);
+        style.merge(decoration.style);
+        if let Some(color) = decoration.style.primary_color {
+            context.primary_color = color;
+        }
+        if let Some(color) = decoration.style.background_color {
+            context.background_color = color;
+        }
+        if decoration.disabled {
+            context.enabled = false;
+        }
+        if let Some(content) = decoration.supporting {
+            supporting.push(content);
+        }
+        if let Some(content) = decoration.overlay {
+            overlays.push(content);
+        }
+        if decoration.replacement.is_some() {
+            replacement = decoration.replacement;
+        }
+    }
+
+    ResolvedCalendarDay {
+        context,
+        style,
+        supporting,
+        overlays,
+        replacement,
+    }
+}
+
+fn dispatch_plugins_for_day(
+    plugins: &[CalendarPlugin],
+    event: CalendarDayEvent,
+) -> CalendarDayEventResponse {
+    let prevent_default = plugins
+        .iter()
+        .map(|plugin| plugin.dispatch_day_event(event).prevent_default)
+        .fold(false, |prevented, next| prevented | next);
+    CalendarDayEventResponse { prevent_default }
 }
 
 #[component]
@@ -1094,7 +1271,108 @@ fn civil_from_days(days: i64) -> CalendarDate {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::{Cell, RefCell};
+
+    use dioxus_core::{NoOpMutations, VNode, VirtualDom};
+    use dioxus_hooks::use_callback;
+
     use super::*;
+
+    thread_local! {
+        static PLUGIN_RESULT: RefCell<Option<(CalendarDayContext, CalendarDayStyle, usize, bool)>> =
+            const { RefCell::new(None) };
+        static MONTH_PLUGIN_RESULT: RefCell<Option<(String, usize)>> = const { RefCell::new(None) };
+        static PLUGIN_EVENT_CALLS: Cell<usize> = const { Cell::new(0) };
+        static PLUGIN_EVENT_PREVENTED: Cell<bool> = const { Cell::new(false) };
+    }
+
+    fn plugin_pipeline_test_app() -> Element {
+        let first_renderer = use_callback(|_: CalendarDayContext| {
+            CalendarDayDecoration::new()
+                .with_style(CalendarDayStyle {
+                    primary_color: Some(0xFF111111),
+                    background_color: Some(0xFFEEEEEE),
+                    ..CalendarDayStyle::default()
+                })
+                .with_supporting(VNode::empty())
+                .with_disabled(true)
+        });
+        let second_renderer = use_callback(|_: CalendarDayContext| {
+            CalendarDayDecoration::new()
+                .with_style(CalendarDayStyle {
+                    primary_color: Some(0xFF222222),
+                    border_width: Some(2.0),
+                    ..CalendarDayStyle::default()
+                })
+                .with_supporting(VNode::empty())
+                .with_replacement(VNode::empty())
+        });
+        let first_event = use_callback(|_: CalendarDayEvent| {
+            PLUGIN_EVENT_CALLS.with(|calls| calls.set(calls.get() + 1));
+            CalendarDayEventResponse::continue_default()
+        });
+        let second_event = use_callback(|_: CalendarDayEvent| {
+            PLUGIN_EVENT_CALLS.with(|calls| calls.set(calls.get() + 1));
+            CalendarDayEventResponse::prevent_default()
+        });
+        let first_month = use_callback(|_: CalendarMonthContext| {
+            CalendarMonthDecoration::new()
+                .with_title("Reiwa 8")
+                .with_supporting(VNode::empty())
+        });
+        let second_month = use_callback(|context: CalendarMonthContext| {
+            CalendarMonthDecoration::new().with_title(format!("{} · 3 memos", context.title))
+        });
+        let plugins = [
+            CalendarPlugin::decorator(first_renderer)
+                .with_day_event(first_event)
+                .with_month_renderer(first_month),
+            CalendarPlugin::decorator(second_renderer)
+                .with_day_event(second_event)
+                .with_month_renderer(second_month),
+        ];
+
+        use_hook(move || {
+            let context = CalendarDayContext {
+                date: CalendarDate::new(2026, 8, 28).expect("valid test date"),
+                selected: false,
+                today: false,
+                outside_month: false,
+                enabled: true,
+                primary_color: 0xFF000000,
+                background_color: TRANSPARENT,
+                supporting_color: 0xFF777777,
+            };
+            let resolved = resolve_plugins_for_day(context, &plugins);
+            let response = dispatch_plugins_for_day(
+                &plugins,
+                CalendarDayEvent {
+                    context: resolved.context,
+                    kind: CalendarDayEventKind::Press,
+                },
+            );
+            PLUGIN_RESULT.with(|result| {
+                result.replace(Some((
+                    resolved.context,
+                    resolved.style,
+                    resolved.supporting.len(),
+                    resolved.replacement.is_some(),
+                )))
+            });
+            PLUGIN_EVENT_PREVENTED.with(|prevented| prevented.set(response.prevent_default));
+            let month = resolve_month_plugins(
+                CalendarMonth {
+                    year: 2026,
+                    month: 8,
+                },
+                "August 2026".to_string(),
+                &plugins,
+            );
+            MONTH_PLUGIN_RESULT.with(|result| result.replace(Some((month.0, month.1.len()))));
+        });
+
+        VNode::empty()
+    }
 
     #[test]
     fn formats_month_title_from_external_labels() {
@@ -1163,5 +1441,49 @@ mod tests {
         assert_eq!(dates.len(), 42);
         assert_eq!(dates[0].to_string(), "2024-01-28");
         assert_eq!(dates[41].to_string(), "2024-03-09");
+    }
+
+    #[test]
+    fn plugin_pipeline_merges_content_styles_disable_and_events_in_order() {
+        PLUGIN_RESULT.with(|result| result.borrow_mut().take());
+        PLUGIN_EVENT_CALLS.with(|calls| calls.set(0));
+        PLUGIN_EVENT_PREVENTED.with(|prevented| prevented.set(false));
+        MONTH_PLUGIN_RESULT.with(|result| result.borrow_mut().take());
+
+        let mut dom = VirtualDom::new(plugin_pipeline_test_app);
+        let mut mutations = NoOpMutations;
+        dom.rebuild(&mut mutations);
+
+        let (context, style, supporting_count, has_replacement) = PLUGIN_RESULT
+            .with(|result| result.borrow_mut().take())
+            .expect("plugin pipeline should resolve during render");
+        assert!(!context.enabled, "disabled contributions must be monotonic");
+        assert_eq!(context.primary_color, 0xFF222222);
+        assert_eq!(context.background_color, 0xFFEEEEEE);
+        assert_eq!(style.border_width, Some(2.0));
+        assert_eq!(supporting_count, 2, "supporting slots must append");
+        assert!(has_replacement, "last replacement must be retained");
+        assert_eq!(PLUGIN_EVENT_CALLS.with(Cell::get), 2);
+        assert!(PLUGIN_EVENT_PREVENTED.with(Cell::get));
+        assert_eq!(
+            MONTH_PLUGIN_RESULT.with(|result| result.borrow_mut().take()),
+            Some(("Reiwa 8 · 3 memos".to_string(), 1)),
+        );
+    }
+
+    #[test]
+    fn plugin_layout_uses_the_largest_declared_footprint() {
+        let plugins = [
+            CalendarPlugin::empty().with_layout(CalendarPluginLayout {
+                minimum_day_size: Some(42.0),
+                minimum_week_row_height: Some(50.0),
+            }),
+            CalendarPlugin::empty().with_layout(CalendarPluginLayout {
+                minimum_day_size: Some(38.0),
+                minimum_week_row_height: Some(64.0),
+            }),
+        ];
+
+        assert_eq!(resolve_plugin_layout(&plugins), (42.0, 64.0));
     }
 }
