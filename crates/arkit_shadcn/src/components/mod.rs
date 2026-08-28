@@ -78,6 +78,7 @@ mod tabs;
 mod text;
 mod textarea;
 mod time_picker;
+mod timeline;
 mod toggle;
 mod toggle_group;
 mod tooltip;
@@ -204,6 +205,12 @@ pub use tabs::{
 pub use text::{Text, TextProps, TextVariant};
 pub use textarea::{Textarea, TextareaProps};
 pub use time_picker::{TimePicker, TimePickerFormat, TimePickerLabels, TimePickerProps, TimeValue};
+pub use timeline::{
+    Timeline, TimelineAlign, TimelineContent, TimelineContentProps, TimelineDate,
+    TimelineDateProps, TimelineHeader, TimelineHeaderProps, TimelineIndicator,
+    TimelineIndicatorProps, TimelineItem, TimelineItemProps, TimelineOrientation, TimelineProps,
+    TimelineSeparator, TimelineSeparatorProps, TimelineTitle, TimelineTitleProps,
+};
 pub use toggle::{Toggle, ToggleProps, ToggleVariant};
 pub use toggle_group::{ToggleGroup, ToggleGroupProps};
 pub use tooltip::{Tooltip, TooltipProps};
