@@ -27,9 +27,10 @@ use arkit::shadcn::components::{
     Popover, Progress, PullToRefresh, RadioGroup, RangeSlider, SecureKeyboardMode,
     SecureKeyboardSheet, Select, Separator, Skeleton, Slider, SliderOrientation, SliderStyle,
     Sonner, SonnerPosition, SonnerToast, Spinner, Switch, Table, Tabs, Text, TextVariant, Textarea,
-    TimePicker, TimePickerFormat, TimeValue, ToastAppearance, Toggle, ToggleGroup, ToggleVariant,
-    Tooltip, Watermark, WatermarkBlendMode, WatermarkFontStyle, WatermarkShadow, WatermarkSource,
-    WatermarkStroke, WatermarkStyle,
+    TimePicker, TimePickerFormat, TimeValue, Timeline, TimelineAlign, TimelineItem,
+    TimelineOrientation, ToastAppearance, Toggle, ToggleGroup, ToggleVariant, Tooltip, Watermark,
+    WatermarkBlendMode, WatermarkFontStyle, WatermarkShadow, WatermarkSource, WatermarkStroke,
+    WatermarkStyle,
 };
 use arkit::shadcn::icon::icon_placeholder;
 use arkit::shadcn::theme::{
@@ -244,6 +245,10 @@ const COMPONENTS: &[ComponentSpec] = &[
     ComponentSpec {
         slug: "time-picker",
         name: "Time Picker",
+    },
+    ComponentSpec {
+        slug: "timeline",
+        name: "Timeline",
     },
     ComponentSpec {
         slug: "dialog",
@@ -1084,7 +1089,7 @@ fn demo_canvas_policy(slug: &str) -> DemoCanvasPolicy {
             fill_height: true,
             padding: [0.0, spacing::LG, 0.0, spacing::LG],
         },
-        "accordion" => DemoCanvasPolicy {
+        "accordion" | "timeline" => DemoCanvasPolicy {
             center_x: true,
             center_y: false,
             fill_height: false,
@@ -1268,6 +1273,10 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let mut date_picker_open = use_signal(|| false);
     let mut time_picker_selected = use_signal(|| TimeValue::new(9, 30));
     let mut time_picker_open = use_signal(|| false);
+    let mut timeline_step = use_signal(|| 3_i32);
+    let mut timeline_uc_note = use_signal(|| "default_value = 2".to_string());
+    let mut timeline_orientation = use_signal(|| TimelineOrientation::Vertical);
+    let mut timeline_align = use_signal(|| TimelineAlign::Right);
     let mut popover_open = use_signal(|| false);
     let mut hover_open = use_signal(|| false);
     let mut tooltip_open = use_signal(|| false);
@@ -2324,6 +2333,177 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 }
             }
         },
+        "timeline" => {
+            let orientation = timeline_orientation();
+            let align = timeline_align();
+            let orientation_label = match orientation {
+                TimelineOrientation::Vertical => "Vertical",
+                TimelineOrientation::Horizontal => "Horizontal",
+            };
+            let align_label = match align {
+                TimelineAlign::Right => "Right",
+                TimelineAlign::Left => "Left",
+                TimelineAlign::Alternate => "Alternate",
+            };
+            let item_min_width = match orientation {
+                TimelineOrientation::Horizontal => Some(148.0),
+                TimelineOrientation::Vertical => None,
+            };
+            rsx! {
+                fixed_width {
+                    width: 360.0,
+                    column {
+                        width: "100%",
+                        align_items: "start",
+                        demo_mode_label {
+                            title: "Orientation".to_string(),
+                            detail: Some(format!("orientation = {orientation_label}")),
+                        }
+                        ToggleGroup {
+                            options: vec!["Vertical".to_string(), "Horizontal".to_string()],
+                            selected: Some(vec![orientation_label.to_string()]),
+                            width: Some("100%".to_string()),
+                            on_change: move |values: Vec<String>| {
+                                let horizontal = values.iter().any(|value| value == "Horizontal");
+                                timeline_orientation.set(if horizontal {
+                                    TimelineOrientation::Horizontal
+                                } else {
+                                    TimelineOrientation::Vertical
+                                });
+                            },
+                        }
+                        v_gap { height: spacing::LG }
+                        demo_mode_label {
+                            title: "Align".to_string(),
+                            detail: Some(format!("align = {align_label}")),
+                        }
+                        ToggleGroup {
+                            options: vec![
+                                "Right".to_string(),
+                                "Left".to_string(),
+                                "Alternate".to_string(),
+                            ],
+                            selected: Some(vec![align_label.to_string()]),
+                            width: Some("100%".to_string()),
+                            on_change: move |values: Vec<String>| {
+                                let next = if values.iter().any(|value| value == "Left") {
+                                    TimelineAlign::Left
+                                } else if values.iter().any(|value| value == "Alternate") {
+                                    TimelineAlign::Alternate
+                                } else {
+                                    TimelineAlign::Right
+                                };
+                                timeline_align.set(next);
+                            },
+                        }
+                        {demo_mode_divider()}
+                        demo_mode_label {
+                            title: "Controlled".to_string(),
+                            detail: Some(format!("value = {}", timeline_step())),
+                        }
+                        row {
+                            width: "100%",
+                            align_items: "center",
+                            justify_content: "start",
+                            for step in 0..=4 {
+                                {
+                                    let selected = timeline_step() == step;
+                                    rsx! {
+                                        row {
+                                            margin_right: spacing::SM,
+                                            Button {
+                                                variant: if selected {
+                                                    ButtonVariant::Default
+                                                } else {
+                                                    ButtonVariant::Outline
+                                                },
+                                                size: ButtonSize::Sm,
+                                                onclick: move |_| timeline_step.set(step),
+                                                "{step}"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        v_gap { height: spacing::LG }
+                        Timeline {
+                            value: Some(timeline_step()),
+                            orientation,
+                            align,
+                            item_min_width,
+                            interactive: true,
+                            on_value_change: move |step| timeline_step.set(step),
+                            TimelineItem {
+                                step: 1,
+                                date: Some("Mar 15, 2024".to_string()),
+                                title: Some("Project Kickoff".to_string()),
+                                description: Some("Initial team meeting and project scope definition.".to_string()),
+                            }
+                            TimelineItem {
+                                step: 2,
+                                date: Some("Mar 22, 2024".to_string()),
+                                title: Some("Design Phase".to_string()),
+                                description: Some("Wireframes, mockups, and stakeholder review.".to_string()),
+                            }
+                            TimelineItem {
+                                step: 3,
+                                date: Some("Apr 5, 2024".to_string()),
+                                title: Some("Development Sprint".to_string()),
+                                description: Some("API implementation and frontend components.".to_string()),
+                            }
+                            TimelineItem {
+                                step: 4,
+                                last: true,
+                                date: Some("Apr 19, 2024".to_string()),
+                                title: Some("Testing & Deployment".to_string()),
+                                description: Some("QA, performance passes, and production rollout.".to_string()),
+                            }
+                        }
+                        {demo_mode_divider()}
+                        demo_mode_label {
+                            title: "Uncontrolled · icons".to_string(),
+                            detail: Some(timeline_uc_note()),
+                        }
+                        Timeline {
+                            default_value: Some(2),
+                            orientation,
+                            align,
+                            item_min_width,
+                            interactive: true,
+                            on_value_change: move |step| {
+                                timeline_uc_note.set(format!("on_value_change = {step}"));
+                            },
+                            TimelineItem {
+                                step: 1,
+                                icon: Some("rocket".to_string()),
+                                title: Some("Repository created".to_string()),
+                                description: Some("Scaffolded the app and CI pipeline.".to_string()),
+                            }
+                            TimelineItem {
+                                step: 2,
+                                icon: Some("palette".to_string()),
+                                title: Some("Design system".to_string()),
+                                description: Some("Tokens, radii, and component primitives.".to_string()),
+                            }
+                            TimelineItem {
+                                step: 3,
+                                icon: Some("code".to_string()),
+                                title: Some("Feature work".to_string()),
+                                description: Some("Timeline rail, indicators, and orientations.".to_string()),
+                            }
+                            TimelineItem {
+                                step: 4,
+                                last: true,
+                                icon: Some("circle-check".to_string()),
+                                title: Some("Shipped".to_string()),
+                                description: Some("Released in the shadcn crate.".to_string()),
+                            }
+                        }
+                    }
+                }
+            }
+        }
         "dialog" => rsx! {
             column {
                 align_items: "start",

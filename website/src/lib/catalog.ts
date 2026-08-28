@@ -115,6 +115,7 @@ const componentGroups: readonly NavGroup[] = [
       "resizable",
       "scroll-area",
       "table",
+      "timeline",
       "chart",
     ],
   },
