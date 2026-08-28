@@ -70,14 +70,17 @@ impl NodeBuilder {
 
     /// Append a child node.
     pub fn child(mut self, child: OwnedNativeNode) -> ArkUIResult<Self> {
-        self.node
+        let child = child.into_shared();
+        if let Err(error) = self
+            .node
             .as_mut()
             .expect("NodeBuilder owns a node until build")
             .as_raw_mut()
-            .add_child(child.as_raw().clone())?;
-        // ArkUI now owns the native subtree. Dropping the raw Rust wrapper does
-        // not dispose it; the parent owns disposal from this point onward.
-        drop(child.into_raw());
+            .add_child(child.clone())
+        {
+            let _ = child.borrow_mut().dispose();
+            return Err(error);
+        }
         Ok(self)
     }
 

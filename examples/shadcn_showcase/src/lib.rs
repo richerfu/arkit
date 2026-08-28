@@ -4,11 +4,10 @@ use std::{rc::Rc, time::Duration};
 
 use arkit::dioxus_core::{AttributeValue, EventHandler, VNode};
 use arkit::dioxus_signals::WritableExt;
-use arkit::entry;
 use arkit::prelude::*;
 // The Routable derive emits `::dioxus_router` paths.
 use arkit::router::dioxus_router;
-use arkit::router::{use_navigator, Outlet, Routable, RouteProvider, Router};
+use arkit::router::{use_navigator, MemoryRouter, Outlet, Routable, RouteProvider};
 use arkit::shadcn as arkit_shadcn;
 use arkit::shadcn::components::{
     use_anchor, Accordion, AccordionItemSpec, Alert, AlertDescription, AlertDialog,
@@ -396,8 +395,8 @@ struct ShowcaseState {
     query: Signal<String>,
 }
 
-#[entry]
-fn app() -> Element {
+#[component]
+pub fn ShadcnShowcasePage() -> Element {
     let _i18n = use_i18n_provider(&tr::CATALOG, tr::FALLBACK_LOCALE.id());
     let state = ShowcaseState {
         mode: use_signal(|| ThemeMode::Light),
@@ -414,7 +413,7 @@ fn app() -> Element {
     rsx! {
         ThemeProvider {
             theme,
-            Router::<Route> {}
+            MemoryRouter::<Route> {}
         }
     }
 }

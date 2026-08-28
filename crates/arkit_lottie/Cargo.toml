@@ -12,7 +12,7 @@ workspace = true
 [features]
 default = []
 expressions = ["thorvg/expressions"]
-network = ["dep:reqwest"]
+network = ["dep:reqwest", "dep:rustls", "dep:webpki-roots"]
 
 [dependencies]
 arkit_arkui.workspace = true
@@ -24,7 +24,9 @@ ohos-hilog-binding.workspace = true
 ohos-xcomponent-binding.workspace = true
 ohos-xcomponent-sys.workspace = true
 reqwest = { workspace = true, optional = true }
+rustls = { workspace = true, optional = true }
 tokio.workspace = true
+webpki-roots = { workspace = true, optional = true }
 
 ohos-native-window-binding.workspace = true
 thorvg.workspace = true

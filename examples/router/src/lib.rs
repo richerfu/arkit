@@ -3,13 +3,12 @@
 //! clickable text, not a button or HTML anchor).
 
 use arkit::dioxus_core::VNode;
-use arkit::entry;
 use arkit::prelude::*;
 // The upstream derive emits `::dioxus_router` paths. Bind that name through
 // Arkit's supported router namespace instead of adding an internal crate edge.
 use arkit::router::dioxus_router;
 use arkit::router::{
-    use_back_handler, Link, Outlet, Routable, RouteProvider, RouteTransition, Router,
+    use_back_handler, Link, MemoryRouter, Outlet, Routable, RouteProvider, RouteTransition,
 };
 
 #[derive(Routable, Clone, PartialEq, Debug)]
@@ -23,10 +22,10 @@ enum Route {
     Users { id: u32 },
 }
 
-#[entry]
-fn app() -> Element {
+#[component]
+pub fn RouterPage() -> Element {
     rsx! {
-        Router::<Route> {}
+        MemoryRouter::<Route> {}
     }
 }
 

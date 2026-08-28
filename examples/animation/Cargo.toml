@@ -10,13 +10,6 @@ license.workspace = true
 [lints]
 workspace = true
 
-[lib]
-crate-type = ["cdylib"]
-
 [dependencies]
 arkit = { workspace = true, features = ["animation"] }
-napi-ohos.workspace = true
-napi-derive-ohos.workspace = true
 
-[build-dependencies]
-napi-build-ohos.workspace = true

@@ -10,18 +10,10 @@ license.workspace = true
 [lints]
 workspace = true
 
-[lib]
-crate-type = ["cdylib"]
-
 [dependencies]
 # The `webview` feature enables the ohos.webview bridge plugin; the framework
 # registers the plugin facade and injects its initialization automatically.
 arkit = { workspace = true, features = ["webview"] }
-futures-channel = "0.3"
-futures-util = "0.3"
-napi-ohos.workspace = true
-napi-derive-ohos.workspace = true
+futures-channel.workspace = true
+futures-util.workspace = true
 tokio.workspace = true
-
-[build-dependencies]
-napi-build-ohos.workspace = true

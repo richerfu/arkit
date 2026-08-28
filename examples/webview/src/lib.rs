@@ -16,11 +16,10 @@
 //! thread), so awaiting a call re-enters the UI loop and signals can be
 //! written directly.
 
-use arkit::entry;
+use arkit::napi_ohos::Either;
 use arkit::prelude::*;
 use futures_channel::mpsc::UnboundedReceiver;
 use futures_util::StreamExt;
-use napi_ohos::Either;
 
 const RUST_URL: &str = "https://www.rust-lang.org";
 const DOCS_URL: &str = "https://docs.rs";
@@ -70,7 +69,7 @@ async fn create_webview_with_retry(
     loop {
         match create_webview(runtime, style.clone()).await {
             Ok(()) => return Ok(()),
-            Err(error) if attempt < 10 => {
+            Err(_error) if attempt < 10 => {
                 attempt += 1;
                 // Sleep on the framework tokio runtime; the JoinHandle itself
                 // is polled here on the dioxus local executor.
@@ -99,9 +98,24 @@ fn style_from_frame(frame: LayoutFrame, scale: f32) -> WebviewStyle {
     }
 }
 
-#[entry]
-fn app() -> Element {
+#[component]
+pub fn WebviewPage() -> Element {
     let runtime = use_runtime_handle();
+    let cleanup_runtime = runtime.clone();
+    use_drop(move || {
+        // The WebView FrameNode lives in the ArkTS session tree rather than
+        // the Dioxus tree. Route unmount therefore must remove it explicitly.
+        // Run in the root scope so teardown survives this component's drop.
+        arkit::dioxus_core::spawn_forever(async move {
+            let Ok(handle) = resolve_handle(&cleanup_runtime) else {
+                return;
+            };
+            // Hide first so a delayed bridge round trip cannot leave a stale
+            // surface visible over the newly-mounted route.
+            let _ = handle.set_visible(false).await;
+            let _ = handle.remove().await;
+        });
+    });
 
     let url = use_signal(|| RUST_URL.to_string());
     let mut title = use_signal(|| String::from("loading..."));
@@ -205,16 +219,16 @@ fn app() -> Element {
     let status_display = (status.read()).clone();
     let url_display = (url.read()).clone();
 
-    // Per-handler clones (each `move` closure owns its own).
+    // Per-handler copies (each `move` closure owns its own signal handle).
     let mut url_onchange = url;
-    let mut url_rust = url.clone();
-    let mut url_docs = url.clone();
-    let commands_show = commands.clone();
-    let commands_rust = commands.clone();
-    let commands_docs = commands.clone();
-    let commands_reload = commands.clone();
-    let commands_eval = commands.clone();
-    let commands_hide = commands.clone();
+    let mut url_rust = url;
+    let mut url_docs = url;
+    let commands_show = commands;
+    let commands_rust = commands;
+    let commands_docs = commands;
+    let commands_reload = commands;
+    let commands_eval = commands;
+    let commands_hide = commands;
 
     rsx! {
         column {
@@ -323,7 +337,7 @@ fn app() -> Element {
             // style, so the plugin surface lands exactly on this rectangle.
             WebviewArea {
                 runtime: runtime.clone(),
-                created: created.clone(),
+                created,
             }
         }
     }

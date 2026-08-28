@@ -13,7 +13,6 @@ mod ssh_host;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use arkit::entry;
 use arkit::prelude::*;
 use tokio::sync::mpsc;
 
@@ -88,8 +87,8 @@ impl HostState {
     }
 }
 
-#[entry]
-fn app() -> Element {
+#[component]
+pub fn TerminalPage() -> Element {
     let async_runtime = use_runtime_handle().tokio();
     let controller = use_hook(TerminalController::new);
     let host = use_hook(|| Rc::new(RefCell::new(HostState::new())));

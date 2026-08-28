@@ -10,16 +10,8 @@ license.workspace = true
 [lints]
 workspace = true
 
-[lib]
-crate-type = ["cdylib"]
-
 [dependencies]
 arkit = { workspace = true, features = ["terminal"] }
-napi-ohos.workspace = true
-napi-derive-ohos.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "sync", "time", "net", "macros"] }
 # SSH host lives in the example, not in arkit_terminal.
 russh.workspace = true
-
-[build-dependencies]
-napi-build-ohos.workspace = true

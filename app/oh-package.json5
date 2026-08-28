@@ -3,6 +3,6 @@
   "description": "arkit example app shell (dioxus + ArkUI).",
   "dependencies": {},
   "devDependencies": {
-    "@ohos/hypium": "1.0.19"
+    "@ohos/hypium": "1.0.28"
   }
 }

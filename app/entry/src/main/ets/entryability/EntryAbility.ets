@@ -3,10 +3,11 @@ import { WebviewPlugin } from "@ohos-rs/ability-plugin-webview";
 import { abilityAccessCtrl, Permissions } from "@kit.AbilityKit";
 import window from "@ohos.window";
 
-// moduleName 由 run.sh 按当前部署的 example 写入（对应 lib<crate>.so）。
-// NativeAbility 据此加载模块并管理 bridge session 与 render owner 生命周期。
+// 整合后的单一 native 模块:所有 example 编译进同一个 libdemos.so,
+// 页面分发在 Rust 侧由路由完成(首页 → /demo/:slug)。
+// NativeAbility 据此 Loadable.load 加载并调 init/render/destroy。
 export default class EntryAbility extends NativeAbility {
-  public moduleName: string = "terminal_example";
+  public moduleName: string = "demos";
   public defaultPage: boolean = false;
 
   // ArkTS 侧能力插件。webview 的 Rust facade 由 arkit 在 init 阶段自动注册
@@ -16,11 +17,10 @@ export default class EntryAbility extends NativeAbility {
 
   protected async loadWindowStageContent(windowStage: window.WindowStage): Promise<void> {
     try {
-      if (this.moduleName === "camera_example") {
-        const cameraPermission: Permissions = "ohos.permission.CAMERA";
-        await abilityAccessCtrl.createAtManager()
-          .requestPermissionsFromUser(this.context, [cameraPermission]);
-      }
+      // 整合 app 内含 camera 示例,统一在启动时申请相机权限。
+      const cameraPermission: Permissions = "ohos.permission.CAMERA";
+      await abilityAccessCtrl.createAtManager()
+        .requestPermissionsFromUser(this.context, [cameraPermission]);
       await windowStage.loadContent("pages/Index");
     } catch (error) {
       const message = `arkit failed to create the main window stage: ${JSON.stringify(error)}`;

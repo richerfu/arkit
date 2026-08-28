@@ -1,10 +1,9 @@
 //! Counter example — dioxus `rsx!` + `use_signal` driven by an ArkUI renderer.
 
-use arkit::entry;
 use arkit::prelude::*;
 
-#[entry]
-fn app() -> Element {
+#[component]
+pub fn CounterPage() -> Element {
     let mut count = use_signal(|| 0);
 
     rsx! {

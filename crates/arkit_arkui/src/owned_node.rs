@@ -1,5 +1,8 @@
 //! Explicit ownership for imperatively-created ArkUI nodes.
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use ohos_arkui_binding::common::node::ArkUINode;
 
 /// Unique owner of an unattached native node.
@@ -31,6 +34,10 @@ impl OwnedNativeNode {
         self.node
             .take()
             .expect("owned native node was already transferred")
+    }
+
+    pub(crate) fn into_shared(self) -> Rc<RefCell<ArkUINode>> {
+        Rc::new(RefCell::new(self.into_raw()))
     }
 }
 
