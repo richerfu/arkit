@@ -312,9 +312,12 @@ define_element! {
     /// List container (ArkUI `List`).
     ///
     /// `scroll_bar`: same modes as [`scroll`] — `false`/`"off"`/`0`, `"auto"`/`1`, `true`/`"on"`/`2`.
+    ///
+    /// `scroll_to_index` is a one-shot `"index[,smooth,align]"` jump command.
+    /// It is consumed after native attachment and is not declarative state.
     list => "List" {
         virtual_source,
-        scroll_bar, list_cached_count, list_sticky, background_color, padding, margin, margin_top,
+        scroll_bar, list_cached_count, list_sticky, scroll_to_index, background_color, padding, margin, margin_top,
         margin_bottom, margin_left, margin_right, margin_x, margin_y, margin_horizontal, margin_vertical,
         width, height, layout_weight, opacity, border_radius, border_width,
         border_color, visibility, enabled, clip, hit_test_behavior, aspect_ratio,

@@ -47,6 +47,7 @@ mod floating_layer;
 mod form;
 mod guide;
 mod hover_card;
+mod index;
 mod input;
 mod input_otp;
 mod label;
@@ -151,6 +152,10 @@ pub use guide::{
     Guide, GuideLabels, GuideProps, GuideSide, GuideStep, GuideStyle, GuideTarget, GuideTargetProps,
 };
 pub use hover_card::{HoverCard, HoverCardProps};
+pub use index::{
+    classify_index_key, default_index_keys, normalize_index_key, Index, IndexBar, IndexBarProps,
+    IndexBarSlot, IndexHeaderContext, IndexItemContext, IndexItemSpec, IndexProps, INDEX_SYMBOL,
+};
 pub use input::{Input, InputMode, InputProps};
 pub use input_otp::{InputOtp, InputOtpMode, InputOtpProps, InputOtpSeparator, InputOtpStyle};
 pub use label::{Label, LabelProps};

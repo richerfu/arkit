@@ -123,6 +123,7 @@ const componentGroups: readonly NavGroup[] = [
     title: "导航组件",
     sections: [
       "anchor",
+      "index",
       "breadcrumb",
       "pagination",
       "navigation-menu",

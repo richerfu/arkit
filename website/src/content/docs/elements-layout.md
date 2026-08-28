@@ -119,6 +119,7 @@ column {
 | `scroll_edge_effect`                       | `spring`/`bounce` · `fade` · `none`                              |
 | `scroll_enabled`                           | bool / `"on"`/`"off"`                                            |
 | `list_sticky`                              | `none` · `header` · `footer` · `both`                            |
+| `scroll_to_index`（list，一次性命令）      | `"12"` 或 `"12,0,0"`（index[,smooth,align]），不写入声明式状态   |
 | `input_type`                               | `text` · `number` · `phone` · `email` · `password` · `decimal` … |
 | `show_password_icon`（textinput）          | bool；显示密码显隐图标                                           |
 | `progress_type`                            | `linear`/`bar` · `ring` · `eclipse` · `scale-ring` · `capsule`   |

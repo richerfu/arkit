@@ -22,15 +22,15 @@ use arkit::shadcn::components::{
     Collapsible, ContextMenu, DatePicker, Dialog, DialogFooter, DialogHeader, DropdownMenu, Field,
     FieldContent, FieldDescription, FieldError, FieldGroup, FieldOrientation, FieldSeparator,
     FieldSet, FieldTitle, Form, FormItem, Guide, GuideSide, GuideStep, GuideTarget, HoverCard,
-    InfiniteScroll, Input, InputMode, InputOtp, InputOtpMode, InputOtpSeparator, Label,
-    LoadMoreIndicator, LoadMoreState, Markdown, MenuEntry, Menubar, MenubarMenuSpec, MultiSlider,
-    Popover, Progress, PullToRefresh, RadioGroup, RangeSlider, SecureKeyboardMode,
-    SecureKeyboardSheet, Select, Separator, Skeleton, Slider, SliderOrientation, SliderStyle,
-    Sonner, SonnerPosition, SonnerToast, Spinner, Switch, Table, Tabs, Text, TextVariant, Textarea,
-    TimePicker, TimePickerFormat, TimeValue, Timeline, TimelineAlign, TimelineItem,
-    TimelineOrientation, ToastAppearance, Toggle, ToggleGroup, ToggleVariant, Tooltip, Watermark,
-    WatermarkBlendMode, WatermarkFontStyle, WatermarkShadow, WatermarkSource, WatermarkStroke,
-    WatermarkStyle,
+    Index, IndexBarSlot, IndexHeaderContext, IndexItemContext, IndexItemSpec, InfiniteScroll,
+    Input, InputMode, InputOtp, InputOtpMode, InputOtpSeparator, Label, LoadMoreIndicator,
+    LoadMoreState, Markdown, MenuEntry, Menubar, MenubarMenuSpec, MultiSlider, Popover, Progress,
+    PullToRefresh, RadioGroup, RangeSlider, SecureKeyboardMode, SecureKeyboardSheet, Select,
+    Separator, Skeleton, Slider, SliderOrientation, SliderStyle, Sonner, SonnerPosition,
+    SonnerToast, Spinner, Switch, Table, Tabs, Text, TextVariant, Textarea, TimePicker,
+    TimePickerFormat, TimeValue, Timeline, TimelineAlign, TimelineItem, TimelineOrientation,
+    ToastAppearance, Toggle, ToggleGroup, ToggleVariant, Tooltip, Watermark, WatermarkBlendMode,
+    WatermarkFontStyle, WatermarkShadow, WatermarkSource, WatermarkStroke, WatermarkStyle,
 };
 use arkit::shadcn::icon::icon_placeholder;
 use arkit::shadcn::theme::{
@@ -249,6 +249,10 @@ const COMPONENTS: &[ComponentSpec] = &[
     ComponentSpec {
         slug: "timeline",
         name: "Timeline",
+    },
+    ComponentSpec {
+        slug: "index",
+        name: "Index",
     },
     ComponentSpec {
         slug: "dialog",
@@ -1155,6 +1159,12 @@ fn demo_canvas_policy(slug: &str) -> DemoCanvasPolicy {
             fill_height: false,
             padding: [spacing::LG, spacing::LG, spacing::XXL, spacing::LG],
         },
+        "index" => DemoCanvasPolicy {
+            center_x: false,
+            center_y: false,
+            fill_height: true,
+            padding: [spacing::LG, spacing::LG, spacing::LG, spacing::LG],
+        },
         "refresh-load-more" => DemoCanvasPolicy {
             center_x: false,
             center_y: false,
@@ -1277,6 +1287,15 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let mut timeline_uc_note = use_signal(|| "default_value = 2".to_string());
     let mut timeline_orientation = use_signal(|| TimelineOrientation::Vertical);
     let mut timeline_align = use_signal(|| TimelineAlign::Right);
+    let mut index_large = use_signal(|| false);
+    let mut index_show_empty = use_signal(|| false);
+    let mut index_custom = use_signal(|| false);
+    let mut index_note = use_signal(|| "cities · hide empty · default UI".to_string());
+    let index_render_item =
+        use_callback(move |ctx: IndexItemContext| rsx! { IndexCustomItem { ctx } });
+    let index_render_header =
+        use_callback(move |ctx: IndexHeaderContext| rsx! { IndexCustomHeader { ctx } });
+    let index_render_bar = use_callback(move |slot: IndexBarSlot| rsx! { IndexCustomBar { slot } });
     let mut popover_open = use_signal(|| false);
     let mut hover_open = use_signal(|| false);
     let mut tooltip_open = use_signal(|| false);
@@ -2499,6 +2518,94 @@ fn ComponentDemo(slug: &'static str) -> Element {
                                 title: Some("Shipped".to_string()),
                                 description: Some("Released in the shadcn crate.".to_string()),
                             }
+                        }
+                    }
+                }
+            }
+        }
+        "index" => {
+            let large = index_large();
+            let show_empty = index_show_empty();
+            let custom = index_custom();
+            let items = if large {
+                index_contact_items(800)
+            } else {
+                index_city_items()
+            };
+            let count = items.len();
+            rsx! {
+                column {
+                    width: "100%",
+                    height: "100%",
+                    align_items: "start",
+                    demo_mode_label {
+                        title: "Index".to_string(),
+                        detail: Some(index_note()),
+                    }
+                    ToggleGroup {
+                        options: vec!["Cities".to_string(), "800 contacts".to_string()],
+                        selected: Some(vec![if large {
+                            "800 contacts".to_string()
+                        } else {
+                            "Cities".to_string()
+                        }]),
+                        width: Some("100%".to_string()),
+                        on_change: move |values: Vec<String>| {
+                            let next_large = values.iter().any(|value| value == "800 contacts");
+                            index_large.set(next_large);
+                            index_note.set(index_demo_note(next_large, index_show_empty(), index_custom()));
+                        },
+                    }
+                    v_gap { height: spacing::SM }
+                    ToggleGroup {
+                        options: vec!["Hide empty".to_string(), "Show empty".to_string()],
+                        selected: Some(vec![if show_empty {
+                            "Show empty".to_string()
+                        } else {
+                            "Hide empty".to_string()
+                        }]),
+                        width: Some("100%".to_string()),
+                        on_change: move |values: Vec<String>| {
+                            let next = values.iter().any(|value| value == "Show empty");
+                            index_show_empty.set(next);
+                            index_note.set(index_demo_note(index_large(), next, index_custom()));
+                        },
+                    }
+                    v_gap { height: spacing::SM }
+                    ToggleGroup {
+                        options: vec!["Default UI".to_string(), "Custom UI".to_string()],
+                        selected: Some(vec![if custom {
+                            "Custom UI".to_string()
+                        } else {
+                            "Default UI".to_string()
+                        }]),
+                        width: Some("100%".to_string()),
+                        on_change: move |values: Vec<String>| {
+                            let next = values.iter().any(|value| value == "Custom UI");
+                            index_custom.set(next);
+                            index_note.set(index_demo_note(index_large(), index_show_empty(), next));
+                        },
+                    }
+                    v_gap { height: spacing::SM }
+                    column {
+                        width: "100%",
+                        layout_weight: 1.0,
+                        border_width: 1.0,
+                        border_color: theme.colors.border,
+                        border_radius: theme.radii.md,
+                        clip: true,
+                        Index {
+                            items,
+                            show_empty_indexes: show_empty,
+                            render_item: custom.then_some(index_render_item),
+                            render_header: custom.then_some(index_render_header),
+                            render_bar: custom.then_some(index_render_bar),
+                            on_select: move |item_index| {
+                                index_note.set(format!("on_select = {item_index} / {count}"));
+                            },
+                            on_index_change: move |letter| {
+                                index_note.set(format!("index = {letter}"));
+                            },
                         }
                     }
                 }
@@ -5416,6 +5523,205 @@ fn refresh_demo_row(index: u32, theme: Theme) -> Element {
             }
         }
     }
+}
+
+fn index_demo_note(large: bool, show_empty: bool, custom: bool) -> String {
+    let data = if large { "800 contacts" } else { "cities" };
+    let empty = if show_empty {
+        "show empty"
+    } else {
+        "hide empty"
+    };
+    let ui = if custom { "custom UI" } else { "default UI" };
+    format!("{data} · {empty} · {ui}")
+}
+
+#[component]
+fn IndexCustomItem(ctx: IndexItemContext) -> Element {
+    let theme = arkit_shadcn::theme::use_theme();
+    let mark = ctx
+        .item
+        .title
+        .chars()
+        .next()
+        .map(|ch| ch.to_string())
+        .unwrap_or_else(|| ctx.index.clone());
+    rsx! {
+        row {
+            width: "100%",
+            height: 56.0,
+            padding_left: spacing::MD,
+            padding_right: spacing::XXL,
+            align_items: "center",
+            column {
+                width: 32.0,
+                height: 32.0,
+                border_radius: theme.radii.full,
+                background_color: theme.colors.secondary,
+                align_items: "center",
+                justify_content: "center",
+                text {
+                    content: mark,
+                    font_size: typography::XS,
+                    font_weight: 600,
+                    font_color: theme.colors.secondary_foreground,
+                }
+            }
+            column {
+                layout_weight: 1.0,
+                margin_left: spacing::MD,
+                align_items: "start",
+                text {
+                    content: ctx.item.title.clone(),
+                    width: "100%",
+                    font_size: typography::SM,
+                    font_weight: 500,
+                    font_color: theme.colors.foreground,
+                    text_align: "start",
+                    max_lines: 1,
+                    text_overflow: "ellipsis",
+                }
+                if let Some(description) = ctx.item.description.clone() {
+                    text {
+                        content: description,
+                        width: "100%",
+                        font_size: typography::XS,
+                        font_color: theme.colors.muted_foreground,
+                        text_align: "start",
+                        max_lines: 1,
+                        text_overflow: "ellipsis",
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn IndexCustomHeader(ctx: IndexHeaderContext) -> Element {
+    let theme = arkit_shadcn::theme::use_theme();
+    rsx! {
+        row {
+            width: "100%",
+            height: 32.0,
+            padding_left: spacing::MD,
+            align_items: "center",
+            background_color: theme.colors.accent,
+            text {
+                content: ctx.index,
+                font_size: typography::XS,
+                font_weight: 700,
+                font_color: theme.colors.accent_foreground,
+            }
+        }
+    }
+}
+
+#[component]
+fn IndexCustomBar(slot: IndexBarSlot) -> Element {
+    let theme = arkit_shadcn::theme::use_theme();
+    let color = if slot.empty {
+        theme.colors.border
+    } else if slot.active {
+        theme.colors.primary_foreground
+    } else {
+        theme.colors.muted_foreground
+    };
+    rsx! {
+        column {
+            width: if slot.active { 18.0 } else { 14.0 },
+            height: 18.0,
+            border_radius: theme.radii.full,
+            background_color: if slot.active {
+                theme.colors.primary
+            } else {
+                0x0000_0000
+            },
+            align_items: "center",
+            justify_content: "center",
+            hit_test_behavior: "none",
+            text {
+                content: slot.index,
+                font_size: 9.0,
+                font_weight: if slot.active { 700 } else { 500 },
+                font_color: color,
+                hit_test_behavior: "none",
+            }
+        }
+    }
+}
+
+fn index_city_items() -> Vec<IndexItemSpec> {
+    [
+        ("#", "*客服", "symbol"),
+        ("#", "@通知", "mention"),
+        ("", "12306", "rail"),
+        ("", "10086", "mobile"),
+        ("B", "北京", "Jing"),
+        ("C", "成都", "Chuan"),
+        ("C", "重庆", "Yu"),
+        ("C", "长沙", "Xiang"),
+        ("C", "长春", "Ji"),
+        ("D", "大连", "Liao"),
+        ("F", "福州", "Min"),
+        ("G", "广州", "Yue"),
+        ("H", "杭州", "Zhe"),
+        ("H", "合肥", "Wan"),
+        ("H", "哈尔滨", "Hei"),
+        ("H", "呼和浩特", "Meng"),
+        ("H", "海口", "Qiong"),
+        ("J", "济南", "Lu"),
+        ("K", "昆明", "Dian"),
+        ("L", "拉萨", "Zang"),
+        ("N", "南京", "Su"),
+        ("N", "宁波", "Zhe"),
+        ("N", "南宁", "Gui"),
+        ("Q", "青岛", "Lu"),
+        ("S", "上海", "Hu"),
+        ("S", "深圳", "Yue"),
+        ("S", "苏州", "Su"),
+        ("S", "沈阳", "Liao"),
+        ("T", "天津", "Jin"),
+        ("W", "武汉", "E"),
+        ("W", "乌鲁木齐", "Xin"),
+        ("X", "西安", "Shaan"),
+        ("X", "厦门", "Min"),
+        ("X", "西宁", "Qing"),
+        ("Y", "银川", "Ning"),
+        ("Z", "郑州", "Yu"),
+    ]
+    .into_iter()
+    .map(|(index, title, description)| {
+        IndexItemSpec::new(index, title).with_description(description)
+    })
+    .collect()
+}
+
+fn index_contact_items(count: usize) -> Vec<IndexItemSpec> {
+    const LETTERS: &[char] = &[
+        'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R',
+        'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+    ];
+    let mut items = Vec::with_capacity(count);
+    items.push(IndexItemSpec::new("#", "*Starred").with_description("favorites"));
+    items.push(IndexItemSpec::new("", "@support").with_description("symbol"));
+    items.push(IndexItemSpec::new("", "10086").with_description("hotline"));
+    items.push(IndexItemSpec::new("", "12306").with_description("rail"));
+    let remaining = count.saturating_sub(items.len());
+    let per = (remaining / LETTERS.len()).max(1);
+    for (letter_index, letter) in LETTERS.iter().enumerate() {
+        for n in 0..per {
+            if items.len() >= count {
+                break;
+            }
+            let serial = letter_index * per + n;
+            items.push(
+                IndexItemSpec::new(letter.to_string(), format!("{letter}lex {serial:03}"))
+                    .with_description(format!("+86 138 {serial:04}")),
+            );
+        }
+    }
+    items
 }
 
 #[component]

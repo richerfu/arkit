@@ -139,6 +139,37 @@ impl ScrollOffsetCommand {
     }
 }
 
+/// Imperative List jump carried through Dioxus attributes.
+///
+/// ArkUI `NODE_LIST_SCROLL_TO_INDEX` is a scroll-to operation. It must not
+/// enter [`DesiredAttrs`], or attach/style replay would yank the list back.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct ListScrollToIndexCommand {
+    index: i32,
+    smooth: i32,
+    align: i32,
+}
+
+impl ListScrollToIndexCommand {
+    pub(crate) fn from_attribute(value: &dioxus_core::AttributeValue) -> Option<Self> {
+        let (index, smooth, align) = parse_scroll_to_index(value)?;
+        Some(Self {
+            index,
+            smooth,
+            align,
+        })
+    }
+
+    pub(crate) fn apply(&self, node: &mut ArkUINode) -> ArkUIResult<()> {
+        EncodedAttr::new(
+            "scroll_to_index",
+            ArkUINodeAttributeType::ListScrollToIndex,
+            EncodedAttrValue::VecI32(vec![self.index, self.smooth, self.align]),
+        )
+        .apply(node, "list")
+    }
+}
+
 #[derive(Default, Clone, Debug)]
 pub(crate) struct DesiredAttrs {
     attrs: Vec<EncodedAttr>,
@@ -489,8 +520,8 @@ mod tests {
     use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
 
     use super::{
-        encode_attr, parse_scroll_offset, AttrMutation, DesiredAttrs, EncodedAttrValue,
-        ScrollOffsetCommand,
+        encode_attr, parse_scroll_offset, parse_scroll_to_index, AttrMutation, DesiredAttrs,
+        EncodedAttrValue, ListScrollToIndexCommand, ScrollOffsetCommand,
     };
 
     #[test]
@@ -662,6 +693,39 @@ mod tests {
             AttrMutation::Unchanged
         ));
         assert!(attrs.get("scroll_offset").is_none());
+    }
+
+    #[test]
+    fn scroll_to_index_accepts_int_or_index_smooth_align_text() {
+        assert_eq!(
+            parse_scroll_to_index(&AttributeValue::Int(12)),
+            Some((12, 0, 0))
+        );
+        assert_eq!(
+            parse_scroll_to_index(&AttributeValue::Text("18,1,0".into())),
+            Some((18, 1, 0))
+        );
+        assert_eq!(
+            parse_scroll_to_index(&AttributeValue::Text("x".into())),
+            None
+        );
+        assert_eq!(
+            parse_scroll_to_index(&AttributeValue::Text("1,0,0,1".into())),
+            None
+        );
+    }
+
+    #[test]
+    fn scroll_to_index_is_a_command_not_declarative_state() {
+        let value = AttributeValue::Text("4,0,0".into());
+        assert!(ListScrollToIndexCommand::from_attribute(&value).is_some());
+
+        let mut attrs = DesiredAttrs::default();
+        assert!(matches!(
+            attrs.set("list", "scroll_to_index", &value),
+            AttrMutation::Unchanged
+        ));
+        assert!(attrs.get("scroll_to_index").is_none());
     }
 
     #[test]
@@ -1528,6 +1592,30 @@ fn parse_f32_list(value: &str) -> Option<Vec<f32>> {
         None
     } else {
         Some(values)
+    }
+}
+
+fn parse_scroll_to_index(value: &dioxus_core::AttributeValue) -> Option<(i32, i32, i32)> {
+    match value {
+        dioxus_core::AttributeValue::Int(index) => Some((*index as i32, 0, 0)),
+        dioxus_core::AttributeValue::Float(index) => Some((*index as i32, 0, 0)),
+        dioxus_core::AttributeValue::Text(text) => {
+            let mut fields = text.split(',').map(str::trim);
+            let index = fields.next()?.parse().ok()?;
+            let smooth = match fields.next() {
+                Some(field) => field.parse().ok()?,
+                None => 0,
+            };
+            let align = match fields.next() {
+                Some(field) => field.parse().ok()?,
+                None => 0,
+            };
+            if fields.next().is_some() {
+                return None;
+            }
+            Some((index, smooth, align))
+        }
+        _ => None,
     }
 }
 
