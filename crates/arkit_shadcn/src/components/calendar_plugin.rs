@@ -253,9 +253,7 @@ pub struct CalendarPlugin {
 
 impl CalendarPlugin {
     /// Create a compact supporting-content plugin.
-    ///
-    /// This retains the original `CalendarDayPlugin` constructor contract.
-    pub const fn new(renderer: dioxus_core::Callback<CalendarDayContext, Element>) -> Self {
+    pub const fn supporting(renderer: dioxus_core::Callback<CalendarDayContext, Element>) -> Self {
         Self {
             day_renderer: Some(CalendarDayRenderer::Supporting(renderer)),
             month_renderer: None,
@@ -344,6 +342,3 @@ impl Default for CalendarPlugin {
         Self::empty()
     }
 }
-
-/// Compatibility name for the original supporting-content plugin API.
-pub type CalendarDayPlugin = CalendarPlugin;

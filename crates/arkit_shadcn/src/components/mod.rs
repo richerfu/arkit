@@ -105,8 +105,8 @@ pub use button::{Button, ButtonProps, ButtonSize, ButtonVariant};
 pub use calendar::{Calendar, CalendarDate, CalendarLabels, CalendarProps, CalendarYearRange};
 pub use calendar_plugin::{
     CalendarDayContext, CalendarDayDecoration, CalendarDayEvent, CalendarDayEventKind,
-    CalendarDayEventResponse, CalendarDayPlugin, CalendarDayStyle, CalendarMonthContext,
-    CalendarMonthDecoration, CalendarPlugin, CalendarPluginLayout,
+    CalendarDayEventResponse, CalendarDayStyle, CalendarMonthContext, CalendarMonthDecoration,
+    CalendarPlugin, CalendarPluginLayout,
 };
 pub use card::{
     Card, CardContent, CardContentProps, CardDescription, CardDescriptionProps, CardFooter,

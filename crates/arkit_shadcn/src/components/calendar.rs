@@ -262,11 +262,6 @@ pub struct CalendarProps {
     /// calendar is embedded in another surface such as a bottom sheet.
     #[props(default)]
     pub embedded: bool,
-    /// Optional supporting-content plugin rendered below every day number.
-    /// Kept as a shorthand for callers that only need one plugin; it runs
-    /// before entries in `plugins`.
-    #[props(default)]
-    pub day_plugin: Option<CalendarDayPlugin>,
     /// Ordered presentation and interaction plugins.
     ///
     /// Supporting and overlay content is additive. Style and replacement
@@ -319,13 +314,7 @@ pub fn Calendar(props: CalendarProps) -> Element {
     let selected_dates = props.selected_dates.clone();
     let on_day_press = props.on_day_press;
     let on_month_change = props.on_month_change;
-    let mut plugin_entries =
-        Vec::with_capacity(props.plugins.len() + usize::from(props.day_plugin.is_some()));
-    if let Some(plugin) = props.day_plugin {
-        plugin_entries.push(plugin);
-    }
-    plugin_entries.extend(props.plugins);
-    let plugins: Rc<[CalendarPlugin]> = plugin_entries.into();
+    let plugins: Rc<[CalendarPlugin]> = props.plugins.into();
     let (day_size, week_row_height) = resolve_plugin_layout(&plugins);
     let picker_height = 28.0 + week_row_height * 6.0;
     let picker_grid_height = picker_height - PICKER_BACK_ROW_HEIGHT;
@@ -754,7 +743,7 @@ fn CalendarDays(
             } else {
                 theme.colors.muted_foreground
             };
-            let decoration = resolve_day_plugins(
+            let decoration = resolve_plugins_for_day(
                 CalendarDayContext {
                     date,
                     selected: is_selected,
@@ -832,7 +821,7 @@ fn CalendarDays(
                         opacity,
                         onclick: move |_| {
                             if enabled {
-                                let response = dispatch_day_plugins(
+                                let response = dispatch_plugins_for_day(
                                     &press_plugins,
                                     CalendarDayEvent {
                                         context,
@@ -849,7 +838,7 @@ fn CalendarDays(
                         },
                         onlongpress: move |_| {
                             if enabled {
-                                dispatch_day_plugins(
+                                dispatch_plugins_for_day(
                                     &long_press_plugins,
                                     CalendarDayEvent {
                                         context,
@@ -941,7 +930,7 @@ struct ResolvedCalendarDay {
     replacement: Option<Element>,
 }
 
-fn resolve_day_plugins(
+fn resolve_plugins_for_day(
     mut context: CalendarDayContext,
     plugins: &[CalendarPlugin],
 ) -> ResolvedCalendarDay {
@@ -982,7 +971,7 @@ fn resolve_day_plugins(
     }
 }
 
-fn dispatch_day_plugins(
+fn dispatch_plugins_for_day(
     plugins: &[CalendarPlugin],
     event: CalendarDayEvent,
 ) -> CalendarDayEventResponse {
@@ -1354,8 +1343,8 @@ mod tests {
                 background_color: TRANSPARENT,
                 supporting_color: 0xFF777777,
             };
-            let resolved = resolve_day_plugins(context, &plugins);
-            let response = dispatch_day_plugins(
+            let resolved = resolve_plugins_for_day(context, &plugins);
+            let response = dispatch_plugins_for_day(
                 &plugins,
                 CalendarDayEvent {
                     context: resolved.context,

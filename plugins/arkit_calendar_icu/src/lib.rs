@@ -5,7 +5,7 @@
 
 use arkit_i18n::{translate, I18nContext, TypedMessage};
 use arkit_prelude::*;
-use arkit_shadcn::components::{CalendarDate, CalendarDayContext, CalendarDayPlugin};
+use arkit_shadcn::components::{CalendarDate, CalendarDayContext, CalendarPlugin};
 use dioxus_hooks::use_callback;
 use icu_calendar::{cal::ChineseTraditional, Date};
 
@@ -74,7 +74,7 @@ pub fn chinese_lunar_date(
 
 /// Create a Calendar supporting-content plugin that renders Chinese lunar
 /// month/day labels. Call this hook once in the component that owns Calendar.
-pub fn use_chinese_lunar_plugin(options: ChineseLunarOptions) -> CalendarDayPlugin {
+pub fn use_chinese_lunar_plugin(options: ChineseLunarOptions) -> CalendarPlugin {
     let i18n = LunarI18n::current();
     let renderer = use_callback(move |context: CalendarDayContext| {
         let label = chinese_lunar_label(context.date, options.accuracy, i18n);
@@ -93,7 +93,7 @@ pub fn use_chinese_lunar_plugin(options: ChineseLunarOptions) -> CalendarDayPlug
             }
         }
     });
-    CalendarDayPlugin::new(renderer)
+    CalendarPlugin::supporting(renderer)
 }
 
 #[derive(Clone, Copy)]
