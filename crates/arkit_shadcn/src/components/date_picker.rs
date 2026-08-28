@@ -8,7 +8,7 @@
 
 use super::{
     BottomSheet, Button, ButtonSize, ButtonVariant, Calendar, CalendarDate, CalendarDayPlugin,
-    CalendarLabels, CalendarYearRange,
+    CalendarLabels, CalendarPlugin, CalendarYearRange,
 };
 use crate::i18n::use_component_i18n;
 use crate::icon::icon_placeholder;
@@ -44,6 +44,9 @@ pub struct DatePickerProps {
     /// Optional supporting-content plugin, such as the ICU4X lunar plugin.
     #[props(default)]
     pub calendar_day_plugin: Option<CalendarDayPlugin>,
+    /// Ordered calendar plugins forwarded to the embedded [`Calendar`].
+    #[props(default)]
+    pub calendar_plugins: Vec<CalendarPlugin>,
     /// Controlled sheet state.
     pub open: Option<bool>,
     #[props(default)]
@@ -87,6 +90,7 @@ pub fn DatePicker(props: DatePickerProps) -> Element {
     let calendar_year_range = props.calendar_year_range;
     let calendar_today = props.calendar_today;
     let calendar_day_plugin = props.calendar_day_plugin;
+    let calendar_plugins = props.calendar_plugins;
     let on_calendar_month_change = props.on_calendar_month_change;
     let label = selected.clone().unwrap_or(placeholder);
     let initial_month = selected
@@ -157,6 +161,7 @@ pub fn DatePicker(props: DatePickerProps) -> Element {
                     labels: calendar_labels,
                     embedded: true,
                     day_plugin: calendar_day_plugin,
+                    plugins: calendar_plugins,
                     on_month_change: move |month| on_calendar_month_change.call(month),
                     on_day_press: move |date| select_date.call(date),
                 }
