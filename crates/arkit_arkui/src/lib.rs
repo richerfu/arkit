@@ -72,7 +72,7 @@ pub mod node_builder;
 pub use node_builder::{NativeNodeEvent, NodeBuilder, NodeEventType, PreDragStatus};
 
 mod attributes;
-use attributes::{AttrMutation, DesiredAttrs, ScrollOffsetCommand};
+use attributes::{AttrMutation, DesiredAttrs, ListScrollToIndexCommand, ScrollOffsetCommand};
 
 fn log_arkui_result<T, E: ToString>(context: &str, result: Result<T, E>) -> Option<T> {
     match result {
@@ -214,6 +214,9 @@ struct NativeHostState {
     /// Pending one-shot scroll operation. Unlike `desired_attrs`, this is
     /// consumed after native attachment and is never replayed.
     pending_scroll_offset: Option<ScrollOffsetCommand>,
+    /// Pending one-shot List `scrollToIndex`. Same lifetime as
+    /// [`Self::pending_scroll_offset`].
+    pending_scroll_to_index: Option<ListScrollToIndexCommand>,
     /// Declarative image source carried through Dioxus `AttributeValue::Any`.
     ///
     /// Native image resources are not normal scalar attrs: applying the same
@@ -698,6 +701,19 @@ impl ArkUIRenderer {
         let _ = command.apply(&mut native.borrow_mut());
     }
 
+    fn apply_pending_scroll_to_index(&mut self, host: HostId) {
+        if !self.hosts[host].native_attached {
+            return;
+        }
+        let Some(command) = self.hosts[host].pending_scroll_to_index.take() else {
+            return;
+        };
+        let Some(native) = self.hosts[host].native.clone() else {
+            return;
+        };
+        let _ = command.apply(&mut native.borrow_mut());
+    }
+
     fn set_host_image_source(&mut self, host: HostId, source: ArkImageSource) {
         if self.hosts[host].image_source.as_ref() == Some(&source) {
             return;
@@ -764,6 +780,7 @@ impl ArkUIRenderer {
         self.replay_event_listeners(host);
         if replay_after_attach {
             self.apply_pending_scroll_offset(host);
+            self.apply_pending_scroll_to_index(host);
         }
         let Some(container) = self.native_child_container(host) else {
             return;
@@ -1438,6 +1455,7 @@ impl ArkUIRenderer {
         self.hosts[host].routed_node_events.clear();
         self.hosts[host].registered_gesture_listeners.clear();
         self.hosts[host].pending_scroll_offset = None;
+        self.hosts[host].pending_scroll_to_index = None;
         self.hosts[host].children.clear();
         self.hosts[host].parent = None;
         self.clear_host_image_source(host);
@@ -1519,6 +1537,7 @@ impl ArkUIRenderer {
         self.hosts[host].routed_node_events.clear();
         self.hosts[host].registered_gesture_listeners.clear();
         self.hosts[host].pending_scroll_offset = None;
+        self.hosts[host].pending_scroll_to_index = None;
         self.hosts[host].children.clear();
         self.hosts[host].parent = None;
         self.clear_host_image_source(host);
@@ -2020,6 +2039,17 @@ impl WriteMutations for ArkUIRenderer {
             return;
         }
 
+        if name == "scroll_to_index" && tag == "list" {
+            if matches!(value, dioxus_core::AttributeValue::None) {
+                self.hosts[host].pending_scroll_to_index = None;
+                return;
+            }
+            self.hosts[host].pending_scroll_to_index =
+                ListScrollToIndexCommand::from_attribute(value);
+            self.apply_pending_scroll_to_index(host);
+            return;
+        }
+
         // Store in desired_attrs (the source of truth for replay).
         let mutation = self.hosts[host]
             .desired_attrs
@@ -2448,17 +2478,11 @@ fn extract_payload(
             ArkEventPayload::Int(event.i32_value(0).unwrap_or(0))
         }
         // List scroll index: first/last/center at i32(0/1/2).
-        ListOnScrollIndex => ArkEventPayload::ScrollIndex(ScrollIndexPayload {
-            first: event.i32_value(0).unwrap_or(0),
-            last: event.i32_value(1).unwrap_or(0),
-            center: event.i32_value(2).unwrap_or(0),
-        }),
+        ListOnScrollIndex => ArkEventPayload::ScrollIndex(scroll_index_from_event(event, true)),
         // Water-flow scroll index: start/end at i32(0/1).
-        WaterFlowOnScrollIndex => ArkEventPayload::ScrollIndex(ScrollIndexPayload {
-            first: event.i32_value(0).unwrap_or(0),
-            last: event.i32_value(1).unwrap_or(0),
-            center: 0,
-        }),
+        WaterFlowOnScrollIndex => {
+            ArkEventPayload::ScrollIndex(scroll_index_from_event(event, false))
+        }
         ScrollEventOnDidScroll => ArkEventPayload::ScrollOffset(ScrollOffsetPayload {
             x: component_event_f32(event, 0).unwrap_or_default(),
             y: component_event_f32(event, 1).unwrap_or_default(),
@@ -2501,6 +2525,19 @@ fn extract_payload(
 /// contains the documented per-frame offsets. The pointer is owned by ArkUI
 /// and remains valid only for the duration of the callback.
 fn component_event_f32(event: &ArkNativeEvent, index: usize) -> Option<f32> {
+    component_event_number(event, index).map(|value| unsafe { value.f32_ })
+}
+
+/// Same `GetNumberValue` hole as [`component_event_f32`], for List/WaterFlow
+/// visible-index callbacks (`data[n].i32`).
+fn component_event_i32(event: &ArkNativeEvent, index: usize) -> Option<i32> {
+    component_event_number(event, index).map(|value| unsafe { value.i32_ })
+}
+
+fn component_event_number(
+    event: &ArkNativeEvent,
+    index: usize,
+) -> Option<ohos_arkui_sys::ArkUI_NumberValue> {
     if index >= 12 {
         return None;
     }
@@ -2510,7 +2547,25 @@ fn component_event_f32(event: &ArkNativeEvent, index: usize) -> Option<f32> {
     // SAFETY: ArkUI returned this pointer for the active synchronous callback.
     // `ArkUI_NodeComponentEvent` has a fixed 12-element `data` array, and the
     // index is checked above.
-    Some(unsafe { component.as_ref().data[index].f32_ })
+    Some(unsafe { component.as_ref().data[index] })
+}
+
+fn scroll_index_from_event(event: &ArkNativeEvent, include_center: bool) -> ScrollIndexPayload {
+    ScrollIndexPayload {
+        first: component_event_i32(event, 0)
+            .or_else(|| event.i32_value(0))
+            .unwrap_or(0),
+        last: component_event_i32(event, 1)
+            .or_else(|| event.i32_value(1))
+            .unwrap_or(0),
+        center: if include_center {
+            component_event_i32(event, 2)
+                .or_else(|| event.i32_value(2))
+                .unwrap_or(0)
+        } else {
+            0
+        },
+    }
 }
 
 fn extract_pointer_payload(event: &ArkNativeEvent) -> Option<PointerPayload> {
@@ -2667,6 +2722,14 @@ mod event_tests {
         assert_eq!(
             event_type_for_name("scroll", "scroll"),
             Some(NodeEventType::ScrollEventOnDidScroll)
+        );
+        assert_eq!(
+            event_type_for_name("scroll", "list"),
+            Some(NodeEventType::ListOnScrollIndex)
+        );
+        assert_eq!(
+            event_type_for_name("scroll", "waterflow"),
+            Some(NodeEventType::WaterFlowOnScrollIndex)
         );
         assert_eq!(event_type_for_name("scroll", "grid"), None);
         assert_eq!(
