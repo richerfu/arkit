@@ -7,7 +7,7 @@ use arkit::dioxus_signals::WritableExt;
 use arkit::prelude::*;
 // The Routable derive emits `::dioxus_router` paths.
 use arkit::router::dioxus_router;
-use arkit::router::{use_navigator, Outlet, Routable, RouteProvider, Router};
+use arkit::router::{use_navigator, MemoryRouter, Outlet, Routable, RouteProvider};
 use arkit::shadcn as arkit_shadcn;
 use arkit::shadcn::components::{
     use_anchor, Accordion, AccordionItemSpec, Alert, AlertDescription, AlertDialog,
@@ -413,7 +413,7 @@ pub fn ShadcnShowcasePage() -> Element {
     rsx! {
         ThemeProvider {
             theme,
-            Router::<Route> {}
+            MemoryRouter::<Route> {}
         }
     }
 }

@@ -33,7 +33,7 @@ pub use arkit_animation::TransitionPreset;
 use arkit_prelude::*;
 use dioxus_core::Element;
 use dioxus_core_macro::{component, rsx, Props};
-pub use provider::{Router, RouterProps};
+pub use provider::{MemoryRouter, Router, RouterProps};
 pub use scroll::{RouteProvider, RouteProviderProps};
 
 /// Register the OHOS back-button handler to navigate the dioxus-router history
@@ -223,18 +223,19 @@ pub fn Link<R: Clone + PartialEq + 'static + std::fmt::Debug + dioxus_router::Ro
 
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
+    use std::cell::{Cell, RefCell};
     use std::rc::Rc;
 
     use arkit_prelude::dioxus_core::VNode;
     use arkit_prelude::*;
     use dioxus_core::NoOpMutations;
 
-    use super::{dioxus_router, use_back_handler, Routable, Router};
+    use super::{dioxus_router, use_back_handler, MemoryRouter, Routable, Router};
 
     thread_local! {
         static INSTALLED_BACK_HANDLER: RefCell<Option<Rc<dyn Fn() -> bool>>> =
             const { RefCell::new(None) };
+        static NESTED_CHILD_RENDERED: Cell<bool> = const { Cell::new(false) };
     }
 
     #[derive(Routable, Clone, Debug, PartialEq)]
@@ -276,6 +277,46 @@ mod tests {
         rsx! { "other" }
     }
 
+    #[derive(Routable, Clone, Debug, PartialEq)]
+    enum ParentRoute {
+        #[route("/")]
+        NestedParentHome {},
+        #[route("/nested")]
+        NestedParentPage {},
+    }
+
+    #[derive(Routable, Clone, Debug, PartialEq)]
+    enum ChildRoute {
+        #[route("/")]
+        NestedChildHome {},
+    }
+
+    fn nested_test_app() -> Element {
+        rsx! { Router::<ParentRoute> {} }
+    }
+
+    #[component]
+    fn NestedParentHome() -> Element {
+        let navigator = dioxus_router::navigator();
+        use_effect(move || {
+            navigator.push(ParentRoute::NestedParentPage {});
+        });
+        VNode::empty()
+    }
+
+    #[component]
+    fn NestedParentPage() -> Element {
+        rsx! { MemoryRouter::<ChildRoute> {} }
+    }
+
+    #[component]
+    fn NestedChildHome() -> Element {
+        use_hook(|| {
+            NESTED_CHILD_RENDERED.with(|rendered| rendered.set(true));
+        });
+        VNode::empty()
+    }
+
     #[test]
     fn back_handler_reenters_the_installing_dioxus_scope() {
         let mut dom = dioxus_core::VirtualDom::new(test_app);
@@ -294,5 +335,20 @@ mod tests {
         assert!(!handler(), "the root route should pass system back through");
 
         INSTALLED_BACK_HANDLER.with(|slot| slot.borrow_mut().take());
+    }
+
+    #[test]
+    fn memory_router_does_not_parse_the_parent_path() {
+        NESTED_CHILD_RENDERED.with(|rendered| rendered.set(false));
+
+        let mut dom = dioxus_core::VirtualDom::new(nested_test_app);
+        let mut mutations = NoOpMutations;
+        dom.rebuild(&mut mutations);
+        dom.render_immediate(&mut mutations);
+
+        assert!(
+            NESTED_CHILD_RENDERED.with(Cell::get),
+            "the child router must start at its own root instead of parsing /nested",
+        );
     }
 }

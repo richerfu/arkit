@@ -73,6 +73,32 @@ where
     }
 }
 
+/// ArkUI router backed by an instance-local in-memory history.
+///
+/// Use this for a router embedded below another [`Router`]. Dioxus otherwise
+/// resolves both routers against the renderer's root history, so the child
+/// attempts to parse the parent's current path. Each `MemoryRouter` starts at
+/// `/` and keeps its push/back stack independent from every ancestor router.
+#[allow(non_snake_case)]
+pub fn MemoryRouter<R>(props: RouterProps<R>) -> Element
+where
+    R: dioxus_router::Routable + Clone,
+{
+    let history = use_hook(|| {
+        Rc::new(dioxus_history::MemoryHistory::default()) as Rc<dyn dioxus_history::History>
+    });
+    let config = props.config;
+
+    rsx! {
+        dioxus_router::components::HistoryProvider {
+            history: move |_| history.clone(),
+            Router::<R> {
+                config: move |_| config.call(()),
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

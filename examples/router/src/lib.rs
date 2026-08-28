@@ -8,7 +8,7 @@ use arkit::prelude::*;
 // Arkit's supported router namespace instead of adding an internal crate edge.
 use arkit::router::dioxus_router;
 use arkit::router::{
-    use_back_handler, Link, Outlet, Routable, RouteProvider, RouteTransition, Router,
+    use_back_handler, Link, MemoryRouter, Outlet, Routable, RouteProvider, RouteTransition,
 };
 
 #[derive(Routable, Clone, PartialEq, Debug)]
@@ -25,7 +25,7 @@ enum Route {
 #[component]
 pub fn RouterPage() -> Element {
     rsx! {
-        Router::<Route> {}
+        MemoryRouter::<Route> {}
     }
 }
 

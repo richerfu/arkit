@@ -101,6 +101,21 @@ fn style_from_frame(frame: LayoutFrame, scale: f32) -> WebviewStyle {
 #[component]
 pub fn WebviewPage() -> Element {
     let runtime = use_runtime_handle();
+    let cleanup_runtime = runtime.clone();
+    use_drop(move || {
+        // The WebView FrameNode lives in the ArkTS session tree rather than
+        // the Dioxus tree. Route unmount therefore must remove it explicitly.
+        // Run in the root scope so teardown survives this component's drop.
+        arkit::dioxus_core::spawn_forever(async move {
+            let Ok(handle) = resolve_handle(&cleanup_runtime) else {
+                return;
+            };
+            // Hide first so a delayed bridge round trip cannot leave a stale
+            // surface visible over the newly-mounted route.
+            let _ = handle.set_visible(false).await;
+            let _ = handle.remove().await;
+        });
+    });
 
     let url = use_signal(|| RUST_URL.to_string());
     let mut title = use_signal(|| String::from("loading..."));
