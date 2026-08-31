@@ -26,6 +26,12 @@ use rustc_hash::FxHashMap;
 
 use crate::{element_ref::SharedNativeNode, OwnedNativeNode};
 
+// ArkUI removes items that leave its cached window and immediately requests
+// replacements for newly visible indices. RSX-backed items can observe an
+// index change, so recycle a bounded number of detached wrappers instead of
+// rebuilding an entire native/Dioxus subtree for every scroll step.
+const MAX_RECYCLED_MOUNTED_ITEMS: usize = 64;
+
 /// Kind of virtual container — selects which `*NodeAdapter` attribute to set
 /// on the host node and which item-wrapper to use.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -158,10 +164,24 @@ struct MountedItem {
 }
 
 impl MountedItem {
+    fn is_recyclable(&self) -> bool {
+        self.mount
+            .as_ref()
+            .and_then(VirtualItemMount::index_updater)
+            .is_some()
+    }
+
     fn prepare_index_update(&mut self, index: u32) -> Option<UpdateItemIndex> {
         if self.index == index {
             return None;
         }
+        self.index = index;
+        self.mount
+            .as_ref()
+            .and_then(VirtualItemMount::index_updater)
+    }
+
+    fn prepare_recycle(&mut self, index: u32) -> Option<UpdateItemIndex> {
         self.index = index;
         self.mount
             .as_ref()
@@ -194,6 +214,7 @@ struct AdapterState {
     /// index. Keying by index would overwrite and then dispose the replacement
     /// when the old removal arrives.
     mounted: FxHashMap<usize, MountedItem>,
+    recycled: Vec<MountedItem>,
     adapter: Option<NodeAdapter>,
     attached_host: Option<Weak<RefCell<ArkUINode>>>,
 }
@@ -229,6 +250,7 @@ impl VirtualSource {
                 total_count,
                 renderer: ItemRenderer::Content(render_item),
                 mounted: FxHashMap::default(),
+                recycled: Vec::new(),
                 adapter: None,
                 attached_host: None,
             })),
@@ -246,6 +268,7 @@ impl VirtualSource {
                 total_count,
                 renderer: ItemRenderer::Mounted(mount_item),
                 mounted: FxHashMap::default(),
+                recycled: Vec::new(),
                 adapter: None,
                 attached_host: None,
             })),
@@ -365,7 +388,13 @@ impl VirtualSource {
         // only genuine leftovers; on a failed reset the host may already be
         // invalid, so issuing native operations through copied handles would
         // risk a use-after-free.
-        let mounted = std::mem::take(&mut self.state.borrow_mut().mounted);
+        let (mounted, recycled) = {
+            let mut state = self.state.borrow_mut();
+            (
+                std::mem::take(&mut state.mounted),
+                std::mem::take(&mut state.recycled),
+            )
+        };
         if reset_result.is_ok() {
             for (_, item) in mounted {
                 item.dispose();
@@ -374,6 +403,9 @@ impl VirtualSource {
             for (_, item) in mounted {
                 item.abandon();
             }
+        }
+        for item in recycled {
+            item.dispose();
         }
         reset_result
     }
@@ -398,9 +430,18 @@ impl VirtualSource {
         if let Some(adapter) = adapter {
             adapter.dispose();
         }
-        let mounted = std::mem::take(&mut self.state.borrow_mut().mounted);
+        let (mounted, recycled) = {
+            let mut state = self.state.borrow_mut();
+            (
+                std::mem::take(&mut state.mounted),
+                std::mem::take(&mut state.recycled),
+            )
+        };
         for (_, item) in mounted {
             item.abandon();
+        }
+        for item in recycled {
+            item.dispose();
         }
     }
 
@@ -593,9 +634,18 @@ impl Drop for VirtualSource {
                 // handles instead of issuing another native dispose.
                 adapter.dispose();
             }
-            let mounted = std::mem::take(&mut self.state.borrow_mut().mounted);
+            let (mounted, recycled) = {
+                let mut state = self.state.borrow_mut();
+                (
+                    std::mem::take(&mut state.mounted),
+                    std::mem::take(&mut state.recycled),
+                )
+            };
             for (_, item) in mounted {
                 item.abandon();
+            }
+            for item in recycled {
+                item.dispose();
             }
         }
     }
@@ -612,17 +662,33 @@ fn handle_adapter_event(state: &Weak<RefCell<AdapterState>>, event: &mut NodeAda
         }
         NodeAdapterEventType::OnAddNodeToAdapter => {
             let index = event.item_index();
-            let (kind, renderer) = {
-                let s = state.borrow();
+            let (kind, renderer, recycled) = {
+                let mut s = state.borrow_mut();
                 let renderer = match &s.renderer {
                     ItemRenderer::Content(render_item) => {
                         ItemRenderer::Content(render_item.clone())
                     }
                     ItemRenderer::Mounted(mount_item) => ItemRenderer::Mounted(mount_item.clone()),
                 };
-                (s.kind, renderer)
+                let recycled = if matches!(&renderer, ItemRenderer::Mounted(_)) {
+                    s.recycled.pop()
+                } else {
+                    None
+                };
+                (s.kind, renderer, recycled)
             };
-            match build_item(kind, index, &renderer) {
+            let item = if let Some(mut item) = recycled {
+                // A reload may recycle a wrapper back into the same logical
+                // index with changed backing data. Always invalidate its
+                // embedded subtree, even when the numeric index is unchanged.
+                if let Some(update) = item.prepare_recycle(index) {
+                    update(index);
+                }
+                Ok(item)
+            } else {
+                build_item(kind, index, &renderer)
+            };
+            match item {
                 Ok(item) => {
                     let set_item_result = {
                         let node = item.node.borrow();
@@ -636,7 +702,8 @@ fn handle_adapter_event(state: &Weak<RefCell<AdapterState>>, event: &mut NodeAda
                         return;
                     }
                     let node_key = item.node.borrow().raw_handle() as usize;
-                    if let Some(replaced) = state.borrow_mut().mounted.insert(node_key, item) {
+                    let replaced = state.borrow_mut().mounted.insert(node_key, item);
+                    if let Some(replaced) = replaced {
                         replaced.dispose();
                     }
                 }
@@ -655,7 +722,19 @@ fn handle_adapter_event(state: &Weak<RefCell<AdapterState>>, event: &mut NodeAda
                 return;
             };
             let node_key = removed.raw_handle() as usize;
-            if let Some(item) = state.borrow_mut().mounted.remove(&node_key) {
+            let dispose = {
+                let mut state = state.borrow_mut();
+                let mut dispose = None;
+                if let Some(item) = state.mounted.remove(&node_key) {
+                    if item.is_recyclable() && state.recycled.len() < MAX_RECYCLED_MOUNTED_ITEMS {
+                        state.recycled.push(item);
+                    } else {
+                        dispose = Some(item);
+                    }
+                }
+                dispose
+            };
+            if let Some(item) = dispose {
                 item.dispose();
             }
         }
@@ -849,6 +928,23 @@ mod tests {
 
         mount.index_updater().unwrap()(7);
         assert_eq!(index.get(), 7);
+    }
+
+    #[test]
+    fn indexed_mount_can_be_invalidated_at_the_same_index() {
+        let updates = Rc::new(Cell::new(0));
+        let count_updates = updates.clone();
+        let mount = VirtualItemMount::retain_indexed_with_abandon(
+            (),
+            move |_, _| count_updates.set(count_updates.get() + 1),
+            |_| {},
+        );
+        let update = mount.index_updater().unwrap();
+
+        update(4);
+        update(4);
+
+        assert_eq!(updates.get(), 2);
     }
 
     #[test]
