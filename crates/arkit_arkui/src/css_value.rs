@@ -332,15 +332,6 @@ pub fn list_sticky_keyword(s: &str) -> Option<i32> {
     }
 }
 
-pub fn button_type_keyword(s: &str) -> Option<i32> {
-    match enum_token(s).as_str() {
-        "normal" | "default" | "rectangle" | "rect" => Some(0),
-        "capsule" | "pill" | "rounded" => Some(1),
-        "circle" | "round" => Some(2),
-        _ => None,
-    }
-}
-
 pub fn animation_curve_keyword(s: &str) -> Option<i32> {
     match enum_token(s).as_str() {
         "linear" => Some(0),

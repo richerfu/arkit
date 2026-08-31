@@ -229,6 +229,62 @@ struct NativeHostState {
     virtual_source: Option<VirtualSource>,
 }
 
+#[derive(Default)]
+struct RetiredSubtreeQueue {
+    pending: Vec<HostId>,
+    fenced: Vec<HostId>,
+    prepared_nodes: Vec<NodeRef>,
+    prepared: bool,
+}
+
+impl RetiredSubtreeQueue {
+    fn push(&mut self, host: HostId) {
+        debug_assert!(
+            !self.pending.contains(&host) && !self.fenced.contains(&host),
+            "a subtree can only be retired once"
+        );
+        self.pending.push(host);
+    }
+
+    fn begin_batch(&mut self) -> bool {
+        if !self.fenced.is_empty() {
+            return true;
+        }
+        if self.pending.is_empty() {
+            return false;
+        }
+        self.fenced = std::mem::take(&mut self.pending);
+        self.prepared = false;
+        true
+    }
+
+    fn fenced(&self) -> &[HostId] {
+        &self.fenced
+    }
+
+    fn replace_fenced_with_prepared(&mut self, fenced: Vec<HostId>, nodes: Vec<NodeRef>) {
+        self.fenced = fenced;
+        self.prepared_nodes = nodes;
+        self.prepared = true;
+    }
+
+    fn take_prepared(&mut self) -> (Vec<HostId>, Vec<NodeRef>) {
+        self.prepared = false;
+        (
+            std::mem::take(&mut self.fenced),
+            std::mem::take(&mut self.prepared_nodes),
+        )
+    }
+
+    fn take_pending(&mut self) -> Vec<HostId> {
+        std::mem::take(&mut self.pending)
+    }
+
+    fn has_retired(&self) -> bool {
+        !self.pending.is_empty() || !self.fenced.is_empty()
+    }
+}
+
 /// The attribute a host element's text children merge into, if any.
 fn text_content_attr(tag: &str) -> Option<ArkUINodeAttributeType> {
     match tag {
@@ -258,19 +314,11 @@ pub struct ArkUIRenderer {
     /// batch. Local host mutations never invalidate the renderer root directly;
     /// only active portal membership/order changes do.
     projection: ProjectionState,
-    /// Detached subtrees are disposed only after Dioxus finishes the current
-    /// mutation batch. ArkUI can retain transient references during a native
-    /// child-list patch, so destroying a removed `FrameNode` in the middle of
-    /// reconciliation is unsafe.
-    pending_subtree_disposals: Vec<HostId>,
-    /// Detached native subtrees isolated from the mounted projection.
-    ///
-    /// Some platform builds keep `FrameNode` and layout references beyond the
-    /// removal callback, while `disposeNode` invalidates the opaque handle
-    /// immediately. Keeping the detached root alive avoids a later-vsync use
-    /// after free. High-frequency UI branches should remain mounted and switch
-    /// visibility so this exceptional retirement list stays small.
-    retired_native_subtrees: Vec<NodeRef>,
+    /// Detached subtrees wait here while their internal native edges are
+    /// removed and ArkUI drains the resulting layout work in one full frame.
+    /// Destroying a removed `FrameNode` while reconciliation or layout still
+    /// references it is unsafe.
+    retired_subtrees: RetiredSubtreeQueue,
     /// First structural native failure. Once set, projection is no longer
     /// trustworthy and the owning runtime must stop after the mutation batch.
     fault: Option<RendererFault>,
@@ -449,20 +497,11 @@ impl ArkUIRenderer {
             .percent_width(1.0)?
             .percent_height(1.0)?
             .build();
-        if let Err(error) = root_node.mount(root_ark.as_raw().clone()) {
-            // `RootNode::mount` retains a clone before calling native APIs.
-            // If rollback succeeds it has already disposed the shared native
-            // handle, so relinquish our wrapper without disposing it again.
-            // If rollback fails, our unique owner remains responsible.
-            if root_node.unmount().is_ok() {
-                drop(root_ark.into_raw());
-            } else {
-                drop(root_ark);
-            }
+        let root = root_ark.into_shared();
+        if let Err(error) = root_node.mount_node(root.clone()) {
+            let _ = root.borrow_mut().dispose();
             return Err(error);
         }
-        let root_ark = root_ark.into_raw();
-        let root = Rc::new(RefCell::new(root_ark));
         Ok(Self::from_root(
             root,
             RendererRootMount::NodeContent(root_node),
@@ -493,8 +532,7 @@ impl ArkUIRenderer {
             root_mount,
             sink: None,
             projection: ProjectionState::default(),
-            pending_subtree_disposals: Vec::new(),
-            retired_native_subtrees: Vec::new(),
+            retired_subtrees: RetiredSubtreeQueue::default(),
             fault: None,
             inert: false,
             appear_replay_handler: None,
@@ -719,13 +757,28 @@ impl ArkUIRenderer {
             return;
         }
         self.hosts[host].image_source = Some(source);
-        self.hosts[host].retained_image_src = None;
         if self.hosts[host].native_attached {
             self.apply_host_image_source(host);
         }
     }
 
-    fn clear_host_image_source(&mut self, host: HostId) {
+    /// Reset a native drawable-backed image while its node is still live, then
+    /// release the external descriptor and PixelMap retained by the host.
+    fn reset_host_image_source(&mut self, host: HostId) -> ArkUIResult<()> {
+        if self.hosts[host].retained_image_src.is_some() {
+            if let Some(native) = self.hosts[host].native.as_ref() {
+                native
+                    .borrow()
+                    .reset_attribute(ArkUINodeAttributeType::ImageSrc)?;
+            }
+        }
+        self.abandon_host_image_source(host);
+        Ok(())
+    }
+
+    /// Drop only renderer-side image state after the native attribute has
+    /// already been replaced or reset.
+    fn abandon_host_image_source(&mut self, host: HostId) {
         self.hosts[host].image_source = None;
         self.hosts[host].retained_image_src = None;
     }
@@ -1399,15 +1452,15 @@ impl ArkUIRenderer {
 
     /// Tear down every integration that still needs a live native node.
     ///
-    /// ArkUI recursively destroys descendants when an ancestor is disposed.
     /// Walk children first so item adapters, surfaces, web views, callbacks,
-    /// and exact-node leases all release their native resources while their
+    /// external image resources, and exact-node leases all release while their
     /// corresponding nodes are still valid.
-    fn prepare_subtree_native_dispose(&mut self, host: HostId) {
+    fn prepare_subtree_native_dispose(&mut self, host: HostId) -> ArkUIResult<()> {
         let children = self.hosts[host].children.clone();
         for child in children {
-            self.prepare_subtree_native_dispose(child);
+            self.prepare_subtree_native_dispose(child)?;
         }
+        self.reset_host_image_source(host)?;
         self.hosts[host].registered_gesture_listeners.clear();
         self.hosts[host].registered_event_listeners.clear();
         self.hosts[host].routed_node_events.clear();
@@ -1421,14 +1474,15 @@ impl ArkUIRenderer {
                 }
             }
         }
+        Ok(())
     }
 
-    /// Clear renderer-owned state for a subtree whose native roots are already
-    /// retained by an isolated ancestor.
+    /// Clear renderer-owned state for a subtree whose native projection has
+    /// already been disposed.
     fn clear_subtree_state(&mut self, host: HostId) {
         let children = self.hosts[host].children.clone();
-        for c in children {
-            self.clear_subtree_state(c);
+        for child in children {
+            self.clear_subtree_state(child);
         }
         debug_assert!(
             self.hosts[host]
@@ -1458,11 +1512,18 @@ impl ArkUIRenderer {
         self.hosts[host].pending_scroll_to_index = None;
         self.hosts[host].children.clear();
         self.hosts[host].parent = None;
-        self.clear_host_image_source(host);
+        debug_assert!(
+            self.hosts[host].retained_image_src.is_none(),
+            "native image resource remained attached after pre-dispose teardown"
+        );
+        self.abandon_host_image_source(host);
         self.release_host(host);
     }
 
-    /// Retire a host subtree and clear renderer state.
+    /// Dispose a host subtree and clear renderer state.
+    ///
+    /// Integrations are stopped while handles are live, then the binding owns
+    /// the documented recursive child-before-parent release sequence.
     fn dispose_subtree(&mut self, host: HostId) {
         let removed_active_portal = self.deactivate_portals_in_subtree(host);
         let portal_branches = self.detach_portal_branches(host);
@@ -1474,12 +1535,20 @@ impl ArkUIRenderer {
         for portal in portal_branches {
             self.dispose_subtree(portal);
         }
-        self.prepare_subtree_native_dispose(host);
-        self.dispose_prepared_subtree(host);
+        let integration_result = self.prepare_subtree_native_dispose(host);
+        if self
+            .latch_structural("dispose_subtree integrations", integration_result)
+            .is_none()
+        {
+            return;
+        }
+        let mut roots = Vec::new();
+        self.collect_owned_native_roots(host, &mut roots);
+        self.finish_owned_roots(vec![host], roots);
     }
 
     /// Queue a subtree that has already been detached from the logical and
-    /// native parent trees for disposal at the mutation-batch boundary.
+    /// native parent trees for disposal after an ArkUI frame boundary.
     ///
     /// ArkUI may keep transient references to removed FrameNodes while a
     /// child-list patch is in progress. Releasing those nodes synchronously
@@ -1490,58 +1559,174 @@ impl ArkUIRenderer {
             self.hosts[host].parent.is_none(),
             "only detached subtrees can be retired"
         );
-        debug_assert!(
-            !self.pending_subtree_disposals.contains(&host),
-            "a subtree can only be retired once"
-        );
-        self.pending_subtree_disposals.push(host);
+        self.retired_subtrees.push(host);
     }
 
-    /// Finalize subtrees retired by a completed mutation batch.
+    /// Freeze and prepare the current pending retirements for one frame batch.
     ///
-    /// The runtime calls this from a later OpenHarmony event-loop turn. ArkUI
-    /// can retain transient FrameNode references until the native callback
-    /// that triggered reconciliation has returned, so disposal must not run
-    /// from [`Self::finish_mutation_batch`].
+    /// If a previous registration attempt failed, its already-fenced batch is
+    /// retained and returned for retry without admitting newer retirements.
+    pub fn begin_retired_subtree_disposal_batch(&mut self) -> ArkUIResult<bool> {
+        if !self.retired_subtrees.begin_batch() {
+            return Ok(false);
+        }
+        if self.retired_subtrees.prepared {
+            return Ok(true);
+        }
+
+        let host_roots = self.retired_subtrees.fenced().to_vec();
+        let mut prepared = Vec::with_capacity(host_roots.len());
+        let mut native_nodes = Vec::new();
+        for root in host_roots {
+            self.prepare_retired_subtree(root, &mut prepared, &mut native_nodes)?;
+        }
+        self.retired_subtrees
+            .replace_fenced_with_prepared(prepared, native_nodes);
+        Ok(true)
+    }
+
+    /// Finalize a prepared batch after ArkUI has flushed one complete frame.
+    ///
+    /// Every internal native edge was removed before the frame barrier, so the
+    /// frame's layout pass drains the dirty-node tasks generated by
+    /// `removeChild`. The runtime calls this from a later OpenHarmony event
+    /// loop task, never from inside `OH_ArkUI_PostFrameCallback`, and this
+    /// phase performs only `disposeNode` calls.
     pub fn dispose_retired_subtrees(&mut self) {
-        let pending = std::mem::take(&mut self.pending_subtree_disposals);
-        for host in pending {
+        let (hosts, nodes) = self.retired_subtrees.take_prepared();
+        self.finish_prepared_nodes(hosts, nodes);
+    }
+
+    fn dispose_all_retired_subtrees(&mut self) {
+        let (hosts, nodes) = self.retired_subtrees.take_prepared();
+        self.finish_prepared_nodes(hosts, nodes);
+        for host in self.retired_subtrees.take_pending() {
             self.dispose_subtree(host);
         }
     }
 
     /// Whether a later event-loop turn must finish native subtree disposal.
     pub fn has_retired_subtrees(&self) -> bool {
-        !self.pending_subtree_disposals.is_empty()
+        self.retired_subtrees.has_retired()
     }
 
-    /// Isolate a subtree after [`Self::prepare_subtree_native_dispose`] has
-    /// released every native-dependent integration.
-    fn dispose_prepared_subtree(&mut self, host: HostId) {
-        if let Some(native) = self.hosts[host].native.take() {
-            self.retired_native_subtrees.push(native);
-            let children = self.hosts[host].children.clone();
-            for child in children {
-                self.clear_subtree_state(child);
+    /// Register the native frame barrier used before retired disposal.
+    pub fn post_retired_subtree_frame_callback<T>(&self, callback: T) -> ArkUIResult<()>
+    where
+        T: Fn(u64, u32) + 'static,
+    {
+        let root = self.hosts[self.hosts.root()]
+            .native
+            .as_ref()
+            .expect("renderer root must retain its native node")
+            .clone();
+        let result = root.borrow().post_frame_callback(callback);
+        result
+    }
+
+    fn prepare_retired_subtree(
+        &mut self,
+        host: HostId,
+        prepared: &mut Vec<HostId>,
+        nodes: &mut Vec<NodeRef>,
+    ) -> ArkUIResult<()> {
+        let removed_active_portal = self.deactivate_portals_in_subtree(host);
+        let portal_branches = self.detach_portal_branches(host);
+        if removed_active_portal {
+            self.flush_root_projection();
+        }
+        for portal in portal_branches {
+            self.prepare_retired_subtree(portal, prepared, nodes)?;
+        }
+
+        self.prepare_subtree_native_dispose(host)?;
+        self.prepare_owned_native_subtrees(host, nodes)?;
+        prepared.push(host);
+        Ok(())
+    }
+
+    fn collect_owned_native_roots(&self, host: HostId, roots: &mut Vec<NodeRef>) {
+        if let Some(native) = self.hosts[host].native.clone() {
+            if native.borrow().is_owned() {
+                roots.push(native);
             }
-        } else {
-            let children = self.hosts[host].children.clone();
-            for child in children {
-                self.dispose_prepared_subtree(child);
+            return;
+        }
+        let children = self.hosts[host].children.clone();
+        for child in children {
+            self.collect_owned_native_roots(child, roots);
+        }
+    }
+
+    fn prepare_owned_native_subtrees(
+        &self,
+        host: HostId,
+        nodes: &mut Vec<NodeRef>,
+    ) -> ArkUIResult<()> {
+        if let Some(native) = self.hosts[host].native.clone() {
+            return Self::dismantle_native_subtree(native, nodes);
+        }
+        let children = self.hosts[host].children.clone();
+        for child in children {
+            self.prepare_owned_native_subtrees(child, nodes)?;
+        }
+        Ok(())
+    }
+
+    fn dismantle_native_subtree(root: NodeRef, nodes: &mut Vec<NodeRef>) -> ArkUIResult<()> {
+        loop {
+            let child_count = root.borrow().children().len();
+            if child_count == 0 {
+                break;
+            }
+            let child = root
+                .borrow_mut()
+                .remove_child(child_count - 1)?
+                .expect("wrapper child disappeared during native subtree dismantling");
+            if child.borrow().is_owned() {
+                Self::dismantle_native_subtree(child, nodes)?;
             }
         }
-        self.hosts[host].content_native = None;
-        self.hosts[host].native_attached = false;
-        self.hosts[host].event_listeners.clear();
-        self.hosts[host].registered_event_listeners.clear();
-        self.hosts[host].routed_node_events.clear();
-        self.hosts[host].registered_gesture_listeners.clear();
-        self.hosts[host].pending_scroll_offset = None;
-        self.hosts[host].pending_scroll_to_index = None;
-        self.hosts[host].children.clear();
-        self.hosts[host].parent = None;
-        self.clear_host_image_source(host);
-        self.release_host(host);
+        if root.borrow().is_owned() {
+            nodes.push(root);
+        }
+        Ok(())
+    }
+
+    fn finish_owned_roots(&mut self, hosts: Vec<HostId>, roots: Vec<NodeRef>) {
+        for root in roots {
+            let result = root.borrow_mut().dispose();
+            if self
+                .latch_structural("dispose_subtree dispose", result)
+                .is_none()
+            {
+                return;
+            }
+        }
+        for host in hosts {
+            self.clear_subtree_state(host);
+        }
+    }
+
+    fn finish_prepared_nodes(&mut self, hosts: Vec<HostId>, nodes: Vec<NodeRef>) {
+        let mut unique_handles = FxHashSet::default();
+        for node in nodes {
+            let raw = node.borrow().raw_handle() as usize;
+            assert!(
+                unique_handles.insert(raw),
+                "retired disposal contains duplicate ArkUI handle 0x{raw:x}"
+            );
+            let result = node.borrow_mut().dispose();
+            if self
+                .latch_structural("dispose_subtree dispose", result)
+                .is_none()
+            {
+                return;
+            }
+        }
+        for host in hosts {
+            self.clear_subtree_state(host);
+        }
     }
 
     fn detach_portal_branches(&mut self, host: HostId) -> Vec<HostId> {
@@ -2026,7 +2211,11 @@ impl WriteMutations for ArkUIRenderer {
                     return;
                 }
                 dioxus_core::AttributeValue::None => {
-                    self.clear_host_image_source(host);
+                    if let Err(error) = self.reset_host_image_source(host) {
+                        ohos_hilog_binding::warn(format!(
+                            "arkit_arkui: image src reset failed: {error}"
+                        ));
+                    }
                     return;
                 }
                 _ => {}
@@ -2075,7 +2264,9 @@ impl WriteMutations for ArkUIRenderer {
             }
         }
         if name == "src" {
-            self.clear_host_image_source(host);
+            // A scalar/string source has already replaced the native drawable
+            // above, so the old external descriptor can now be released.
+            self.abandon_host_image_source(host);
         }
         self.replay_composite_content(host);
         if tag == "button" {
@@ -2270,17 +2461,16 @@ impl ArkUIRenderer {
             self.hosts = HostTree::new(NativeHostState::default());
             self.templates.clear();
             self.projection = ProjectionState::default();
-            self.pending_subtree_disposals.clear();
-            self.retired_native_subtrees.clear();
+            self.retired_subtrees = RetiredSubtreeQueue::default();
             self.fault = None;
             return Ok(());
         }
-        self.dispose_retired_subtrees();
+        self.dispose_all_retired_subtrees();
         // Every native-dependent integration must stop before RootNode
         // destroys the native subtree (or before an embedded root's caller
         // disposes it). This pass is idempotent, so explicit unmount followed
         // by Drop is safe.
-        self.prepare_subtree_native_dispose(self.hosts.root());
+        self.prepare_subtree_native_dispose(self.hosts.root())?;
         match &mut self.root_mount {
             RendererRootMount::NodeContent(root_node) => root_node.unmount(),
             RendererRootMount::Embedded => Ok(()),
@@ -2698,7 +2888,7 @@ fn event_type_for_name(name: &str, tag: &str) -> Option<NodeEventType> {
 mod event_tests {
     use super::{
         event_type_for_name, latch_renderer_fault, DirtyHostQueue, HostId, NodeEventType,
-        ProjectionState,
+        ProjectionState, RetiredSubtreeQueue,
     };
 
     #[test]
@@ -2749,6 +2939,27 @@ mod event_tests {
             event_type_for_name("_blur", "textinput"),
             Some(NodeEventType::OnBlur)
         );
+    }
+
+    #[test]
+    fn retired_subtree_batches_do_not_admit_younger_nodes() {
+        let first = HostId::new(7);
+        let second = HostId::new(8);
+        let mut queue = RetiredSubtreeQueue::default();
+
+        queue.push(first);
+        assert!(queue.begin_batch());
+        queue.push(second);
+
+        let fenced = queue.fenced().to_vec();
+        queue.replace_fenced_with_prepared(fenced, Vec::new());
+        assert_eq!(queue.take_prepared().0, vec![first]);
+        assert!(queue.has_retired());
+        assert!(queue.begin_batch());
+        let fenced = queue.fenced().to_vec();
+        queue.replace_fenced_with_prepared(fenced, Vec::new());
+        assert_eq!(queue.take_prepared().0, vec![second]);
+        assert!(!queue.has_retired());
     }
 
     #[test]

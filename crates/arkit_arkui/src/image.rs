@@ -197,13 +197,13 @@ impl ArkImagePixels {
 }
 
 /// A decoded native image resource. Holds the PixelMap (keeps the decoding
-/// alive) and the DrawableDescriptor (the ArkUI-usable handle). `Drop` is a
-/// no-op — the `Rc` refcount controls lifetime. When the last `Rc` drops
-/// (renderer disposes the host node), the PixelMap and DrawableDescriptor are
-/// freed.
+/// alive) and the DrawableDescriptor (the ArkUI-usable handle). When the last
+/// `Rc` drops, both owning binding wrappers release their native resources.
 pub struct RetainedImage {
-    pixel_map: PixelMap,
+    // Declaration order is drop order: release the descriptor before its
+    // backing PixelMap.
     drawable: DrawableDescriptor,
+    pixel_map: PixelMap,
 }
 
 impl std::fmt::Debug for RetainedImage {
@@ -227,8 +227,8 @@ impl RetainedImage {
         let pixel_map = source.create_pixelmap(&mut options).map_err(image_error)?;
         let drawable = DrawableDescriptor::from_pixel_map(pixel_map.handle())?;
         Ok(Self {
-            pixel_map,
             drawable,
+            pixel_map,
         })
     }
 
