@@ -14,7 +14,7 @@
 //! 4. `unmount` detaches the renderer root from the slot.
 
 use std::any::Any;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
 use std::future::Future;
 use std::panic::{self, AssertUnwindSafe};
@@ -22,7 +22,6 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Once};
 use std::task::{Context, Poll, Wake, Waker};
-use std::time::{Duration, Instant};
 
 use arkit_arkui::{ArkUIRenderer, EventSink, NativeElementDelivery};
 use dioxus_core::{ElementId, Runtime as DioxusRuntime};
@@ -175,7 +174,70 @@ fn log_window_metrics(metrics: WindowMetrics) {
 struct RuntimeInner {
     dom: VirtualDom,
     renderer: ArkUIRenderer,
-    retired_disposal_deadline: Option<Instant>,
+    retired_disposal: RetiredSubtreeDisposalGate,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum RetiredSubtreeDisposalPhase {
+    #[default]
+    Quiescent,
+    FrameScheduled,
+    Ready,
+}
+
+struct RetiredSubtreeFrameSignal {
+    phase: Rc<Cell<RetiredSubtreeDisposalPhase>>,
+    scheduled: RetiredSubtreeDisposalPhase,
+    completed: RetiredSubtreeDisposalPhase,
+}
+
+impl RetiredSubtreeFrameSignal {
+    fn complete(&self) {
+        if self.phase.get() == self.scheduled {
+            self.phase.set(self.completed);
+        }
+    }
+}
+
+#[derive(Default)]
+struct RetiredSubtreeDisposalGate {
+    phase: Rc<Cell<RetiredSubtreeDisposalPhase>>,
+}
+
+impl RetiredSubtreeDisposalGate {
+    fn arm_frame_callback(&mut self) -> Option<RetiredSubtreeFrameSignal> {
+        let (scheduled, completed) = match self.phase.get() {
+            RetiredSubtreeDisposalPhase::Quiescent => (
+                RetiredSubtreeDisposalPhase::FrameScheduled,
+                RetiredSubtreeDisposalPhase::Ready,
+            ),
+            RetiredSubtreeDisposalPhase::FrameScheduled | RetiredSubtreeDisposalPhase::Ready => {
+                return None
+            }
+        };
+        self.phase.set(scheduled);
+        Some(RetiredSubtreeFrameSignal {
+            phase: self.phase.clone(),
+            scheduled,
+            completed,
+        })
+    }
+
+    fn cancel_frame_callback(&mut self) {
+        let restored = match self.phase.get() {
+            RetiredSubtreeDisposalPhase::FrameScheduled => RetiredSubtreeDisposalPhase::Quiescent,
+            RetiredSubtreeDisposalPhase::Quiescent | RetiredSubtreeDisposalPhase::Ready => return,
+        };
+        self.phase.set(restored);
+    }
+
+    fn take_ready(&mut self) -> bool {
+        if self.phase.get() != RetiredSubtreeDisposalPhase::Ready {
+            return false;
+        }
+        self.phase.set(RetiredSubtreeDisposalPhase::Quiescent);
+        true
+    }
 }
 
 struct EmbeddedRuntimeInner {
@@ -283,8 +345,32 @@ fn pump_embedded_runtimes(handle: &RuntimeHandle) {
 
 fn dispose_retired_embedded_subtrees(handle: &RuntimeHandle) {
     for inner in handle.embedded_runtimes() {
-        inner.borrow_mut().renderer.dispose_retired_subtrees();
+        let fault = {
+            let mut inner = inner.borrow_mut();
+            inner.renderer.dispose_retired_subtrees();
+            inner.renderer.take_fault()
+        };
+        if let Some(fault) = fault {
+            panic!("arkit_runtime: embedded retired subtree disposal failed: {fault}");
+        }
     }
+}
+
+fn begin_retired_subtree_disposal_batch(
+    inner: &Rc<RefCell<RuntimeInner>>,
+    handle: &RuntimeHandle,
+) -> ohos_arkui_binding::common::error::ArkUIResult<bool> {
+    let mut started = inner
+        .borrow_mut()
+        .renderer
+        .begin_retired_subtree_disposal_batch()?;
+    for inner in handle.embedded_runtimes() {
+        started |= inner
+            .borrow_mut()
+            .renderer
+            .begin_retired_subtree_disposal_batch()?;
+    }
+    Ok(started)
 }
 
 fn has_retired_embedded_subtrees(handle: &RuntimeHandle) -> bool {
@@ -294,21 +380,19 @@ fn has_retired_embedded_subtrees(handle: &RuntimeHandle) -> bool {
         .any(|inner| inner.borrow().renderer.has_retired_subtrees())
 }
 
-const RETIRED_SUBTREE_GRACE_PERIOD: Duration = Duration::from_millis(50);
-
 fn dispose_retired_subtrees_if_ready(inner: &Rc<RefCell<RuntimeInner>>, handle: &RuntimeHandle) {
-    let ready = inner
-        .borrow()
-        .retired_disposal_deadline
-        .is_some_and(|deadline| Instant::now() >= deadline);
+    let ready = inner.borrow_mut().retired_disposal.take_ready();
     if !ready {
         return;
     }
 
-    {
+    let fault = {
         let mut borrowed = inner.borrow_mut();
-        borrowed.retired_disposal_deadline = None;
         borrowed.renderer.dispose_retired_subtrees();
+        borrowed.renderer.take_fault()
+    };
+    if let Some(fault) = fault {
+        panic!("arkit_runtime: retired subtree disposal failed: {fault}");
     }
     dispose_retired_embedded_subtrees(handle);
 }
@@ -320,17 +404,37 @@ fn schedule_retired_subtree_disposal(
 ) {
     let has_pending =
         inner.borrow().renderer.has_retired_subtrees() || has_retired_embedded_subtrees(handle);
-    if !has_pending || inner.borrow().retired_disposal_deadline.is_some() {
+    if !has_pending {
         return;
     }
 
-    inner.borrow_mut().retired_disposal_deadline =
-        Some(Instant::now() + RETIRED_SUBTREE_GRACE_PERIOD);
-    let waker = waker.clone();
-    handle.tokio().spawn(async move {
-        tokio::time::sleep(RETIRED_SUBTREE_GRACE_PERIOD).await;
-        waker.wake();
-    });
+    let Some(frame) = inner.borrow_mut().retired_disposal.arm_frame_callback() else {
+        return;
+    };
+    match begin_retired_subtree_disposal_batch(inner, handle) {
+        Ok(true) => {}
+        Ok(false) => {
+            inner.borrow_mut().retired_disposal.cancel_frame_callback();
+            return;
+        }
+        Err(error) => {
+            panic!("arkit_runtime: retired subtree preparation failed: {error}");
+        }
+    }
+    let frame_waker = waker.clone();
+    let result = inner
+        .borrow()
+        .renderer
+        .post_retired_subtree_frame_callback(move |_, _| {
+            frame.complete();
+            frame_waker.wake();
+        });
+    if let Err(error) = result {
+        inner.borrow_mut().retired_disposal.cancel_frame_callback();
+        ohos_hilog_binding::warn(format!(
+            "arkit_runtime: retired subtree frame barrier registration failed: {error}"
+        ));
+    }
 }
 
 /// Owns the dioxus VirtualDom and ArkUI renderer for one entry point.
@@ -608,7 +712,7 @@ impl ArkRuntime {
         let inner = Rc::new(RefCell::new(RuntimeInner {
             dom,
             renderer,
-            retired_disposal_deadline: None,
+            retired_disposal: RetiredSubtreeDisposalGate::default(),
         }));
 
         // One-shot EventOnAppear replays route back into the renderer so
@@ -852,6 +956,47 @@ fn map_arkui_error<E: ToString>(error: E) -> Error {
 mod tests {
     use super::*;
     use std::cell::Cell;
+
+    #[test]
+    fn retired_subtree_disposal_gate_requires_one_frame_callback() {
+        let mut gate = RetiredSubtreeDisposalGate::default();
+        let first = gate
+            .arm_frame_callback()
+            .expect("first retirement schedules a frame callback");
+
+        assert!(
+            gate.arm_frame_callback().is_none(),
+            "only one frame callback can be scheduled at a time"
+        );
+        assert!(
+            !gate.take_ready(),
+            "disposal must wait for the frame callback"
+        );
+
+        first.complete();
+        assert!(gate.take_ready(), "the frame callback releases retirement");
+        assert!(
+            !gate.take_ready(),
+            "a completed barrier is consumed exactly once"
+        );
+        assert!(
+            gate.arm_frame_callback().is_some(),
+            "later retirements schedule a new frame callback"
+        );
+    }
+
+    #[test]
+    fn failed_frame_barrier_registration_can_be_retried() {
+        let mut gate = RetiredSubtreeDisposalGate::default();
+        let _ = gate.arm_frame_callback().expect("initial frame callback");
+
+        gate.cancel_frame_callback();
+
+        let retry = gate.arm_frame_callback().expect("retry frame callback");
+        retry.complete();
+
+        assert!(gate.take_ready());
+    }
 
     fn test_runtime_handle() -> (tokio::runtime::Runtime, RuntimeHandle) {
         let runtime = tokio::runtime::Builder::new_current_thread()

@@ -607,13 +607,15 @@ mod tests {
         )
         .expect("progress_type");
         assert_eq!(pt.value, EncodedAttrValue::I32(1));
-        let bt = encode_attr(
-            "button",
-            "button_type",
-            &AttributeValue::Text("capsule".into()),
-        )
-        .expect("button_type");
-        assert_eq!(bt.value, EncodedAttrValue::I32(1));
+        assert!(
+            encode_attr(
+                "button",
+                "button_type",
+                &AttributeValue::Text("capsule".into()),
+            )
+            .is_none(),
+            "semantic buttons are native Stacks and must not receive Button-only attributes"
+        );
         let op = encode_attr("column", "opacity", &AttributeValue::Text("50%".into()))
             .expect("opacity percent");
         assert_eq!(op.value, EncodedAttrValue::F32(0.5));
@@ -1337,11 +1339,12 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
                 EncodedAttrValue::FlexOptionPart(4, v),
             )
         }
-        "button_type" if tag == "button" => EncodedAttr::new(
-            name,
-            ArkUINodeAttributeType::ButtonType,
-            EncodedAttrValue::I32(i32_or_keyword(value, css_value::button_type_keyword)?),
-        ),
+        // A semantic Dioxus button is projected onto a native Stack so it can
+        // contain arbitrary child nodes. NODE_BUTTON_TYPE is valid only for a
+        // native Button; applying it to the Stack violates the ArkUI node
+        // attribute contract. The renderer owns the semantic button shape via
+        // common Stack attributes instead.
+        "button_type" if tag == "button" => return None,
         // ArkUI ScrollBarDisplayMode: Off=0, Auto=1, On=2.
         "scroll_bar" if matches!(tag, "scroll" | "list" | "grid" | "waterflow") => {
             EncodedAttr::new(
