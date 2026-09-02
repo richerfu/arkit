@@ -81,8 +81,21 @@ pub struct InputProps {
     /// Pair with `on_click` to use the field as a custom-keyboard trigger.
     #[props(default)]
     pub read_only: bool,
+    /// Requires an explicit click to focus instead of grabbing focus on any
+    /// touch-down. Intended for long scrolling forms: a drag that starts on
+    /// the field scrolls the parent `Scroll` instead of focusing the input
+    /// and popping the IME. Focus is requested programmatically on click, so
+    /// editing still works. Defaults to `false` (ArkUI's touch-down focus).
+    #[props(default)]
+    pub click_to_focus: bool,
     pub on_change: Option<EventHandler<String>>,
     pub on_click: Option<EventHandler<()>>,
+}
+
+/// Focus-on-touch is ArkUI's default; `click_to_focus` (and `read_only`)
+/// suppress it so the field no longer steals drags from a parent `Scroll`.
+fn resolves_focus_on_touch(read_only: bool, click_to_focus: bool) -> bool {
+    !read_only && !click_to_focus
 }
 
 /// A single-line text input.
@@ -97,11 +110,15 @@ pub fn Input(props: InputProps) -> Element {
         invalid,
         disabled,
         read_only,
+        click_to_focus,
         on_change,
         on_click,
     } = props;
     let theme = use_theme();
     let mut password_visible = use_signal(|| false);
+    // One-shot focus request consumed by `on_focus`: the `focused` attribute
+    // only encodes `NODE_FOCUS_STATUS = 1` while this signal is true.
+    let mut focus_request = use_signal(|| false);
     let is_password = mode == InputMode::Password;
     let password_is_visible = is_password && password_visible();
     let value = value.map(|value| mode.sanitize(value));
@@ -140,7 +157,8 @@ pub fn Input(props: InputProps) -> Element {
             opacity: if disabled { 0.5 } else { 1.0 },
             enabled: !disabled,
             focusable: !read_only,
-            focus_on_touch: !read_only,
+            focus_on_touch: resolves_focus_on_touch(read_only, click_to_focus),
+            focused: focus_request(),
             padding_top: spacing::XXS,
             padding_right: if is_password {
                 PASSWORD_TRAILING_PADDING
@@ -159,11 +177,15 @@ pub fn Input(props: InputProps) -> Element {
             },
             onclick: move |_| {
                 if !disabled {
+                    if click_to_focus && !read_only {
+                        focus_request.set(true);
+                    }
                     if let Some(handler) = on_click {
                         handler.call(());
                     }
                 }
             },
+            on_focus: move |_| focus_request.set(false),
         }
     };
 

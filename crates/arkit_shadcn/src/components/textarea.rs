@@ -24,7 +24,11 @@ pub struct TextareaProps {
     /// Prevents editing while preserving the field's dimensions.
     #[props(default)]
     pub disabled: bool,
+    /// Requires an explicit click to focus instead of grabbing focus on touch-down.
+    #[props(default)]
+    pub click_to_focus: bool,
     pub on_change: Option<EventHandler<String>>,
+    pub on_click: Option<EventHandler<()>>,
 }
 
 /// A multi-line text input.
@@ -32,6 +36,10 @@ pub struct TextareaProps {
 pub fn Textarea(props: TextareaProps) -> Element {
     let theme = use_theme();
     let on_change = props.on_change;
+    let on_click = props.on_click;
+    let disabled = props.disabled;
+    let click_to_focus = props.click_to_focus;
+    let mut focus_request = use_signal(|| false);
 
     rsx! {
         textarea {
@@ -48,20 +56,34 @@ pub fn Textarea(props: TextareaProps) -> Element {
             border_color: if props.invalid { theme.colors.destructive } else { theme.colors.input },
             border_radius: theme.radii.md,
             background_color: "#00000000",
-            opacity: if props.disabled { 0.5 } else { 1.0 },
-            enabled: !props.disabled,
+            opacity: if disabled { 0.5 } else { 1.0 },
+            enabled: !disabled,
+            focusable: true,
+            focus_on_touch: !click_to_focus,
+            focused: focus_request(),
             padding_top: spacing::SM,
             padding_right: spacing::MD,
             padding_bottom: spacing::SM,
             padding_left: spacing::MD,
             width: if let Some(w) = props.width { w },
             on_change: move |evt| {
-                if !props.disabled {
+                if !disabled {
                     if let Some(handler) = on_change {
                         handler.call(evt.data().string_value.clone());
                     }
                 }
             },
+            onclick: move |_| {
+                if !disabled {
+                    if click_to_focus {
+                        focus_request.set(true);
+                    }
+                    if let Some(handler) = on_click {
+                        handler.call(());
+                    }
+                }
+            },
+            on_focus: move |_| focus_request.set(false),
         }
     }
 }
