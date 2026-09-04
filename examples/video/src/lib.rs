@@ -37,7 +37,6 @@ pub fn VideoPage() -> Element {
         auto_hide: Some(Duration::from_secs(4)),
         style: VideoControlsStyle {
             accent_color: 0xFF22D3EE,
-            button_color: 0x5538BDF8,
             ..VideoControlsStyle::default()
         },
         ..VideoControls::default()

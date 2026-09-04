@@ -167,6 +167,9 @@ pub struct SliderProps {
     pub style: SliderStyle,
     #[props(default)]
     pub on_change: Option<EventHandler<f32>>,
+    /// Called once when a pointer gesture commits its final value.
+    #[props(default)]
+    pub on_change_end: Option<EventHandler<f32>>,
 }
 
 /// Props for the two-thumb [`RangeSlider`].
@@ -232,6 +235,7 @@ pub struct MultiSliderProps {
 pub fn Slider(props: SliderProps) -> Element {
     let values = normalize_slider_values(&[props.value], props.min, props.max, props.step);
     let on_change = props.on_change;
+    let on_change_end = props.on_change_end;
 
     rsx! {
         SliderTrack {
@@ -245,6 +249,11 @@ pub fn Slider(props: SliderProps) -> Element {
             style: props.style,
             on_change: move |values: Vec<f32>| {
                 if let (Some(handler), Some(value)) = (on_change, values.first()) {
+                    handler.call(*value);
+                }
+            },
+            on_change_end: move |values: Vec<f32>| {
+                if let (Some(handler), Some(value)) = (on_change_end, values.first()) {
                     handler.call(*value);
                 }
             },
@@ -273,6 +282,7 @@ pub fn RangeSlider(props: RangeSliderProps) -> Element {
                     handler.call([*lower, *upper]);
                 }
             },
+            on_change_end: None,
         }
     }
 }
@@ -298,6 +308,7 @@ pub fn MultiSlider(props: MultiSliderProps) -> Element {
                     handler.call(values);
                 }
             },
+            on_change_end: None,
         }
     }
 }
@@ -319,6 +330,7 @@ struct SliderTrackProps {
     height: Option<f32>,
     style: SliderStyle,
     on_change: EventHandler<Vec<f32>>,
+    on_change_end: Option<EventHandler<Vec<f32>>>,
 }
 
 #[component]
@@ -387,6 +399,7 @@ fn SliderTrack(props: SliderTrackProps) -> Element {
     let reversed = props.reversed;
     let disabled = props.disabled;
     let on_change = props.on_change;
+    let on_change_end = props.on_change_end;
     let density = display_vp_ratio();
 
     rsx! {
@@ -494,6 +507,7 @@ fn SliderTrack(props: SliderTrackProps) -> Element {
                         if drag.pointer_id != pointer.pointer_id {
                             return;
                         }
+                        let mut committed = live_values.peek().clone();
                         if let Some(value) = pointer_value(
                             pointer,
                             orientation,
@@ -513,10 +527,14 @@ fn SliderTrack(props: SliderTrackProps) -> Element {
                             );
                             if next != current {
                                 live_values.set(next.clone());
-                                on_change.call(next);
+                                on_change.call(next.clone());
                             }
+                            committed = next;
                         }
                         active_drag.set(None);
+                        if let Some(handler) = on_change_end {
+                            handler.call(committed);
+                        }
                     }
                     dioxus_elements::event::PointerAction::Cancel => {
                         if active_drag

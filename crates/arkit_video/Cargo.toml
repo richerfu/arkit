@@ -14,7 +14,9 @@ arkit_arkui = { workspace = true, features = ["xcomponent-native"] }
 arkit_hooks.workspace = true
 arkit_prelude.workspace = true
 arkit_runtime.workspace = true
+arkit_shadcn.workspace = true
 ohos-avplayer-binding.workspace = true
+ohos-display-binding.workspace = true
 ohos-hilog-binding.workspace = true
 ohos-native-window-binding.workspace = true
 ohos-xcomponent-binding.workspace = true

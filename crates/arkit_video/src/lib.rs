@@ -16,7 +16,7 @@ mod worker;
 
 pub use component::{VideoPlayer, VideoPlayerProps};
 pub use controller::VideoController;
-pub use controls::{VideoControlLabels, VideoControls, VideoControlsStyle};
+pub use controls::{VideoControlIcons, VideoControlLabels, VideoControls, VideoControlsStyle};
 pub use error::{VideoError, VideoErrorKind, VideoResult};
 pub use model::{
     VideoBuffering, VideoFileSource, VideoMetadata, VideoNetworkSource, VideoProgress,

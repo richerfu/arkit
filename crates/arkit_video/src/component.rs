@@ -13,8 +13,8 @@ use crate::surface::SurfaceRegistration;
 use crate::worker::{PlayerConfiguration, UiEvent, WorkerHandle, WorkerMessage};
 use crate::{
     controls::BuiltInVideoControls, VideoBuffering, VideoController, VideoControls, VideoError,
-    VideoMetadata, VideoProgress, VideoResizeMode, VideoSnapshot, VideoSource, VideoStatus,
-    VideoSubtitleCue, VideoSubtitleSource, VideoTrack,
+    VideoMetadata, VideoProgress, VideoResizeMode, VideoSize, VideoSnapshot, VideoSource,
+    VideoStatus, VideoSubtitleCue, VideoSubtitleSource, VideoTrack,
 };
 
 struct ComponentRuntime {
@@ -167,6 +167,9 @@ pub fn VideoPlayer(props: VideoPlayerProps) -> Element {
     let mut fullscreen = use_signal(|| false);
     let mut controls_visible = use_signal(|| true);
     let mut last_controls_interaction = use_signal(Instant::now);
+    let mut controls_seeking = use_signal(|| false);
+    let seek_revision = use_signal(|| 0_u64);
+    let mut measured_frame = use_signal(|| (0.0_f32, 0.0_f32));
     let auto_hide = use_hook(|| Rc::new(Cell::new(None::<Duration>)));
     auto_hide.set(
         props
@@ -249,6 +252,8 @@ pub fn VideoPlayer(props: VideoPlayerProps) -> Element {
     let event_fullscreen = fullscreen_handler.clone();
     let event_end = end_handler.clone();
     let event_error = error_handler.clone();
+    let mut event_controls_seeking = controls_seeking;
+    let mut event_seek_revision = seek_revision;
     let _event_task = use_future(move || {
         let receiver = receiver_slot.borrow_mut().take();
         let event_controller = event_controller.clone();
@@ -316,6 +321,11 @@ pub fn VideoPlayer(props: VideoPlayerProps) -> Element {
                         }
                     }
                     UiEvent::SeekCompleted(position) => {
+                        view_snapshot.with_mut(|snapshot| {
+                            snapshot.progress.position = position;
+                        });
+                        event_controls_seeking.set(false);
+                        event_seek_revision += 1;
                         if let Some(handler) = event_seek.get() {
                             handler.call(position);
                         }
@@ -363,6 +373,8 @@ pub fn VideoPlayer(props: VideoPlayerProps) -> Element {
                     UiEvent::ControlTick => {
                         if event_auto_hide.get().is_some_and(|delay| {
                             view_snapshot.peek().status.is_playing()
+                                && !*event_controls_seeking.peek()
+                                && !matches!(view_snapshot.peek().status, VideoStatus::Buffering)
                                 && Instant::now()
                                     .saturating_duration_since(*last_controls_interaction.peek())
                                     >= delay
@@ -384,6 +396,7 @@ pub fn VideoPlayer(props: VideoPlayerProps) -> Element {
                         }
                     }
                     UiEvent::Error(error) => {
+                        event_controls_seeking.set(false);
                         if let Some(handler) = event_error.get() {
                             handler.call(error);
                         }
@@ -499,20 +512,49 @@ pub fn VideoPlayer(props: VideoPlayerProps) -> Element {
         props.height.clone().unwrap_or_else(|| "240".into())
     };
     let controls = props.controls.clone();
-    let show_controls = controls.is_some() && controls_visible();
+    let show_controls = controls.is_some() && (controls_visible() || controls_seeking());
     let controls_enabled = controls.is_some();
     let control_configuration = controls;
     let control_controller = active_controller.clone();
     let snapshot = view_snapshot();
-    let safe_bottom = if is_fullscreen { safe_area.bottom } else { 0.0 };
+    let measured_size = measured_frame();
+    let overlay_size = control_overlay_size(measured_size, snapshot.size, props.resize_mode);
+    let overlay_width = if overlay_size.0 > 0.0 {
+        format!("{}", overlay_size.0)
+    } else {
+        "100%".to_string()
+    };
+    let overlay_height = if overlay_size.1 > 0.0 {
+        format!("{}", overlay_size.1)
+    } else {
+        "100%".to_string()
+    };
+    let overlay_reaches_frame_bottom = (overlay_size.1 - measured_size.1).abs() < 0.5;
+    let safe_bottom = if is_fullscreen && overlay_reaches_frame_bottom {
+        safe_area.bottom
+    } else {
+        0.0
+    };
+    let density = display_vp_ratio();
     let frame = rsx! {
         stack {
             width: frame_width,
             height: frame_height,
-            alignment: "bottom-start",
+            alignment: "center",
             clip: true,
             hit_test_behavior: "default",
             background_color: props.background_color,
+            on_layout: move |event| {
+                let bounds = event.data().frame;
+                if !bounds.is_measured() {
+                    return;
+                }
+                let next = (bounds.width / density, bounds.height / density);
+                let current = *measured_frame.peek();
+                if (next.0 - current.0).abs() > 0.25 || (next.1 - current.1).abs() > 0.25 {
+                    measured_frame.set(next);
+                }
+            },
             onclick: move |_| {
                 if controls_enabled {
                     controls_visible.set(true);
@@ -526,15 +568,28 @@ pub fn VideoPlayer(props: VideoPlayerProps) -> Element {
                 background_color: props.background_color,
             }
             if show_controls {
-                BuiltInVideoControls {
-                    controller: control_controller,
-                    snapshot,
-                    configuration: control_configuration.expect("controls checked above"),
-                    safe_bottom,
-                    on_interaction: move |_| {
-                        controls_visible.set(true);
-                        last_controls_interaction.set(Instant::now());
-                    },
+                stack {
+                    width: overlay_width,
+                    height: overlay_height,
+                    alignment: "bottom-start",
+                    BuiltInVideoControls {
+                        controller: control_controller,
+                        snapshot,
+                        configuration: control_configuration.expect("controls checked above"),
+                        safe_bottom,
+                        seek_revision: seek_revision(),
+                        on_interaction: move |_| {
+                            controls_visible.set(true);
+                            last_controls_interaction.set(Instant::now());
+                        },
+                        on_seeking_change: move |seeking| {
+                            controls_seeking.set(seeking);
+                            if seeking {
+                                controls_visible.set(true);
+                                last_controls_interaction.set(Instant::now());
+                            }
+                        },
+                    }
                 }
             }
         }
@@ -548,5 +603,67 @@ pub fn VideoPlayer(props: VideoPlayerProps) -> Element {
         }
     } else {
         frame
+    }
+}
+
+fn control_overlay_size(
+    container: (f32, f32),
+    media: VideoSize,
+    resize_mode: VideoResizeMode,
+) -> (f32, f32) {
+    let (width, height) = container;
+    if !width.is_finite()
+        || !height.is_finite()
+        || width <= 0.0
+        || height <= 0.0
+        || media.is_empty()
+        || resize_mode != VideoResizeMode::Contain
+    {
+        return container;
+    }
+
+    let media_aspect = media.width as f32 / media.height as f32;
+    let container_aspect = width / height;
+    if media_aspect >= container_aspect {
+        (width, width / media_aspect)
+    } else {
+        (height * media_aspect, height)
+    }
+}
+
+fn display_vp_ratio() -> f32 {
+    let ratio = ohos_display_binding::default_display_virtual_pixel_ratio();
+    if ratio.is_finite() && ratio > 0.0 {
+        ratio
+    } else {
+        1.0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn contain_overlay_matches_the_visible_landscape_frame() {
+        let size = control_overlay_size(
+            (360.0, 240.0),
+            VideoSize::new(1920, 1080),
+            VideoResizeMode::Contain,
+        );
+        assert_eq!(size.0, 360.0);
+        assert!((size.1 - 202.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn non_contain_overlay_uses_the_complete_surface() {
+        assert_eq!(
+            control_overlay_size(
+                (360.0, 240.0),
+                VideoSize::new(1920, 1080),
+                VideoResizeMode::Cover,
+            ),
+            (360.0, 240.0)
+        );
     }
 }

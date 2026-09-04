@@ -193,11 +193,11 @@ pub use arkit_lottie::{
 pub use arkit_video as video;
 #[cfg(feature = "video")]
 pub use arkit_video::{
-    VideoBuffering, VideoControlLabels, VideoController, VideoControls, VideoControlsStyle,
-    VideoError, VideoErrorKind, VideoFileSource, VideoMetadata, VideoNetworkSource, VideoPlayer,
-    VideoPlayerProps, VideoProgress, VideoResizeMode, VideoResult, VideoSeekMode, VideoSize,
-    VideoSnapshot, VideoSource, VideoStatus, VideoSubtitleCue, VideoSubtitleSource, VideoTrack,
-    VideoTrackType,
+    VideoBuffering, VideoControlIcons, VideoControlLabels, VideoController, VideoControls,
+    VideoControlsStyle, VideoError, VideoErrorKind, VideoFileSource, VideoMetadata,
+    VideoNetworkSource, VideoPlayer, VideoPlayerProps, VideoProgress, VideoResizeMode, VideoResult,
+    VideoSeekMode, VideoSize, VideoSnapshot, VideoSource, VideoStatus, VideoSubtitleCue,
+    VideoSubtitleSource, VideoTrack, VideoTrackType,
 };
 
 // --- Native ECharts-compatible charts ---
@@ -409,11 +409,11 @@ pub mod prelude {
 
     #[cfg(feature = "video")]
     pub use crate::{
-        video, VideoBuffering, VideoControlLabels, VideoController, VideoControls,
-        VideoControlsStyle, VideoError, VideoErrorKind, VideoFileSource, VideoMetadata,
-        VideoNetworkSource, VideoPlayer, VideoPlayerProps, VideoProgress, VideoResizeMode,
-        VideoResult, VideoSeekMode, VideoSize, VideoSnapshot, VideoSource, VideoStatus,
-        VideoSubtitleCue, VideoSubtitleSource, VideoTrack, VideoTrackType,
+        video, VideoBuffering, VideoControlIcons, VideoControlLabels, VideoController,
+        VideoControls, VideoControlsStyle, VideoError, VideoErrorKind, VideoFileSource,
+        VideoMetadata, VideoNetworkSource, VideoPlayer, VideoPlayerProps, VideoProgress,
+        VideoResizeMode, VideoResult, VideoSeekMode, VideoSize, VideoSnapshot, VideoSource,
+        VideoStatus, VideoSubtitleCue, VideoSubtitleSource, VideoTrack, VideoTrackType,
     };
 
     #[cfg(feature = "router")]

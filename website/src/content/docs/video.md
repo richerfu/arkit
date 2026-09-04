@@ -73,7 +73,9 @@ source 相等性只比较 key，避免每次 props 比较触碰资源本体。�
 
 ## 内置控制层与自定义 UI
 
-`controls: Some(VideoControls::default())` 开启标准叠加控制层，默认提供进度拖动、当前/总时长、播放/暂停、前后跳转、静音、倍速和全屏。播放时控制层自动隐藏，点按视频重新显示。全屏通过 root portal 填满应用窗口，退出按钮和系统返回键都能退出；Surface 重建时保持播放位置和播放意图。`on_fullscreen_change` 可同步业务状态，宿主需要锁横屏或切换 system bar 时也从这里处理。
+`controls: Some(VideoControls::default())` 开启标准叠加控制层。控制层与加载状态都是 Surface `Stack` 的上层节点，不占用视频之外的布局空间；`Contain` 模式还会按媒体宽高比对齐实际可见画面，不会把控制器留在 letterbox 黑边底部。画面底部只叠加半透明 zinc 蒙层。默认是 shadcn zinc dark 视觉：32vp 紧凑 `Button`、无按钮底色、3vp `Slider` 轨道与 Lucide 图标；倍速与时间保留必要文字。
+
+默认提供进度拖动、当前/总时长、播放/暂停、前后跳转、静音、倍速和全屏。拖动中进度由本地手势状态驱动，松手后在 AVPlayer 回报 seek completed 前持续显示目标位置和原生 `Spinner`，不会短暂跳回旧进度。播放时控制层自动隐藏，点按视频重新显示。全屏通过 root portal 填满应用窗口，退出按钮和系统返回键都能退出；Surface 重建时保持播放位置和播放意图。`on_fullscreen_change` 可同步业务状态。
 
 每项功能和视觉 token 均可配置：
 
@@ -88,8 +90,10 @@ let controls = use_hook(|| {
     controls.playback_rates = vec![0.75, 1.0, 1.25, 1.5, 2.0];
     controls.auto_hide = Some(Duration::from_secs(4)); // None = 始终显示
     controls.style.accent_color = 0xFF22D3EE;
-    controls.style.overlay_color = 0xC0000000;
-    controls.labels.fullscreen = "展开".into();
+    controls.style.overlay_color = 0x7009090B;
+    controls.style.icon_size = 20.0;
+    controls.icons.fullscreen = "maximize".into(); // 任意内置 Lucide 名称
+    controls.labels.fullscreen = "展开".into(); // prefer_icons = false 时使用
     controls
 });
 
@@ -100,6 +104,8 @@ rsx! {
     }
 }
 ```
+
+`prefer_icons` 默认为 `true`；设为 `false` 可整体切回 `VideoControlLabels` 文字按钮。`VideoControlIcons` 可分别替换 play/pause/rewind/forward/stop/mute/loop/fullscreen 的 Lucide 名称。`VideoControlsStyle` 可调整蒙层与按钮颜色、图标/加载指示器/进度拇指尺寸、轨道粗细、控件尺寸、圆角和间距；默认 `button_color` 为透明，需要有底色的业务再显式设置。
 
 完全自定义结构时保持 `controls: None`，传入 `VideoController` 后用任意 ArkUI markup 调用 `play`、`seek`、`set_playback_rate`、`enter_fullscreen`、`exit_fullscreen` 等方法；进度、播放状态和全屏状态从 `snapshot()` 或对应事件读取。内置控制层和自定义控制层使用同一套 controller 能力，不存在两套播放实现。
 
