@@ -58,6 +58,7 @@ arkit = {
 | `camera` / `camera-scan`         | 预览拍照 / 扫码              |
 | `barcode`                        | 无相机的码生成               |
 | `lottie` / `lottie-network`      | Lottie 渲染 / 网络源         |
+| `video`                          | AVPlayer 原生视频播放        |
 | `terminal`                       | GPU 终端组件                 |
 | `full`                           | 打开全部领域能力             |
 

@@ -38,6 +38,11 @@ pub const DEMO_GROUPS: &[DemoGroup] = &[
                 description: "高性能 Lottie 渲染,本地与网络资源",
             },
             DemoSpec {
+                slug: "video",
+                name: "视频播放器",
+                description: "原生 AVPlayer、进度控制、轨道与字幕",
+            },
+            DemoSpec {
                 slug: "animation",
                 name: "动画引擎",
                 description: "缓动、时间线、交互与生命周期动画实验室",

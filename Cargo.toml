@@ -14,6 +14,7 @@ members = [
     "crates/arkit_i18n",
     "crates/arkit_i18n_macros",
     "crates/arkit_lottie",
+    "crates/arkit_video",
     "crates/arkit_animation",
     "crates/arkit_animation_core",
     "crates/arkit_canvas",
@@ -32,6 +33,7 @@ members = [
     "examples/complex_cases",
     "examples/i18n",
     "examples/lottie",
+    "examples/video",
     "examples/plugins",
     "examples/router",
     "examples/shadcn_showcase",
@@ -78,6 +80,7 @@ arkit_icon = { path = "crates/arkit_icon" }
 arkit_i18n = { path = "crates/arkit_i18n" }
 arkit_i18n_macros = { path = "crates/arkit_i18n_macros" }
 arkit_lottie = { path = "crates/arkit_lottie" }
+arkit_video = { path = "crates/arkit_video" }
 arkit_router = { path = "crates/arkit_router" }
 arkit_runtime = { path = "crates/arkit_runtime" }
 arkit_shadcn = { path = "crates/arkit_shadcn" }
@@ -170,10 +173,26 @@ ohos-hilog-binding = "0.2.3"
 ohos-ime-binding = { version = "0.3.0", default-features = false, features = ["api-22"] }
 ohos-ability-access-control-binding = "0.1.3"
 ohos-camera-binding = { version = "0.1.3", default-features = false, features = ["api-20", "xcomponent"] }
-ohos-xcomponent-binding = { version = "0.4.0", default-features = false, features = ["callbacks", "multi_mode", "api-20"] }
+ohos-xcomponent-binding = { version = "0.4.1", default-features = false, features = ["callbacks", "multi_mode", "api-20"] }
 ohos-xcomponent-sys = { version = "0.1.3", default-features = false, features = ["api-20"] }
-ohos-native-window-binding = { version = "0.3.0", default-features = false, features = ["api-20"] }
+ohos-native-window-binding = { version = "0.3.0", path = "../ohos-native-bindings/crates/native_window", default-features = false, features = ["api-20"] }
+ohos-avplayer-binding = { version = "0.1.0", path = "../ohos-native-bindings/crates/avplayer", default-features = false, features = ["api-23"] }
 ohos-vsync-binding = { version = "0.3.0", default-features = false, features = ["api-20"] }
 thorvg = { version = "0.5.1", default-features = false, features = ["vendored", "lottie", "png", "fonts", "threads"] }
 thorvg-sys = { version = "0.3.2", default-features = false }
 wgpu = { version = "30.0.1", default-features = false, features = ["std", "gles", "wgsl"] }
+
+[patch.crates-io]
+ohos-accessibility-binding = { path = "../ohos-native-bindings/crates/accessibility" }
+ohos-accessibility-sys = { path = "../ohos-native-bindings/sys/ohos-accessibility-sys" }
+ohos-arkui-input-binding = { path = "../ohos-native-bindings/crates/arkui_input" }
+ohos-arkui-input-sys = { path = "../ohos-native-bindings/sys/ohos-arkui-input-sys" }
+ohos-arkui-sys = { path = "../ohos-native-bindings/sys/ohos-arkui-sys" }
+ohos-image-native-sys = { path = "../ohos-native-bindings/sys/ohos-image-native-sys" }
+ohos-image-sys = { path = "../ohos-native-bindings/sys/ohos-image-sys" }
+ohos-native-buffer-sys = { path = "../ohos-native-bindings/sys/ohos-native-buffer-sys" }
+ohos-native-drawing-sys = { path = "../ohos-native-bindings/sys/ohos-native-drawing-sys" }
+ohos-resource-manager-sys = { path = "../ohos-native-bindings/sys/ohos-resource-manager-sys" }
+ohos-udmf-sys = { path = "../ohos-native-bindings/sys/ohos-udmf-sys" }
+ohos-xcomponent-binding = { path = "../ohos-native-bindings/crates/xcomponent" }
+ohos-xcomponent-sys = { path = "../ohos-native-bindings/sys/ohos-xcomponent-sys" }

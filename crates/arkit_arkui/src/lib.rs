@@ -2653,8 +2653,13 @@ fn extract_payload(
         CheckboxEventOnChange | RadioEventOnChange | ToggleOnChange => {
             ArkEventPayload::Bool(event.i32_value(0).unwrap_or(0) != 0)
         }
-        // Slider value: f32(0).
-        SliderEventOnChange => ArkEventPayload::Float(event.f32_value(0).unwrap_or(0.0)),
+        // Slider component payload: f32 value at 0, i32 change mode at 1.
+        // The generic number accessor returns zero for component events on
+        // current devices, so read the documented union payload directly.
+        SliderEventOnChange => ArkEventPayload::Slider {
+            value: component_event_f32(event, 0).unwrap_or_default(),
+            mode: component_event_i32(event, 1).unwrap_or_default(),
+        },
         // Text input/area change: the new text via async_string.
         TextInputOnChange | TextAreaOnChange => {
             ArkEventPayload::String(event.async_string().unwrap_or_default())
@@ -2715,13 +2720,19 @@ fn extract_payload(
 /// contains the documented per-frame offsets. The pointer is owned by ArkUI
 /// and remains valid only for the duration of the callback.
 fn component_event_f32(event: &ArkNativeEvent, index: usize) -> Option<f32> {
-    component_event_number(event, index).map(|value| unsafe { value.f32_ })
+    component_event_number(event, index).map(|value| {
+        // SAFETY: the event schema documents this slot as an f32.
+        unsafe { value.f32_ }
+    })
 }
 
 /// Same `GetNumberValue` hole as [`component_event_f32`], for List/WaterFlow
 /// visible-index callbacks (`data[n].i32`).
 fn component_event_i32(event: &ArkNativeEvent, index: usize) -> Option<i32> {
-    component_event_number(event, index).map(|value| unsafe { value.i32_ })
+    component_event_number(event, index).map(|value| {
+        // SAFETY: the event schema documents this slot as an i32.
+        unsafe { value.i32_ }
+    })
 }
 
 fn component_event_number(

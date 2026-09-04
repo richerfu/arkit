@@ -42,7 +42,7 @@ pub fn Home() -> Element {
                         font_size: 14.0,
                         line_height: 20.0,
                         font_color: CAPTION_COLOR,
-                        "14 个示例统一入口 — 点击进入对应页面"
+                    "15 个示例统一入口 — 点击进入对应页面"
                     }
 
                     for group in DEMO_GROUPS {

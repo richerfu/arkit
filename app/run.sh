@@ -228,6 +228,7 @@ case "$ACTION" in
   all)
     sync_shell
     do_build
+    do_sign
     do_install
     do_start
     echo ">> deployed demos (libdemos.so). tail logs: $0 log"

@@ -81,7 +81,18 @@ pub fn create_node(kind: NodeKind) -> ArkUIResult<ArkUINode> {
         NodeKind::TextInput => TextInput::new()?.into(),
         NodeKind::Toggle => Toggle::new()?.into(),
         NodeKind::WaterFlow => WaterFlow::new()?.into(),
-        NodeKind::XComponent => XComponent::new()?.into(),
+        NodeKind::XComponent => {
+            let component = XComponent::new()?;
+            #[cfg(feature = "xcomponent-native")]
+            // Surface creation can be synchronous with insertion into the
+            // native tree, before a component's mounted-node hook runs.
+            // Install the shared trampoline while the node is still detached
+            // so the binding caches that first live OHNativeWindow. Consumers
+            // can then attach their own routed closures after mount and query
+            // the already-created surface without forcing a recreation.
+            let _ = component.native_xcomponent().register_callback();
+            component.into()
+        }
     })
 }
 

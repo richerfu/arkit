@@ -58,6 +58,16 @@ and writes directly into an ArkUI XComponent native window; the default
 dependency graph contains neither the renderer nor network stack. See
 [examples/lottie](examples/lottie/src/lib.rs).
 
+Native video playback is enabled with the independent `video` feature. It uses
+OpenHarmony AVPlayer on a dedicated worker and presents decoded frames through
+an XComponent surface. URL/HTTP-header and retained file-descriptor sources,
+play/pause/seek, volume/mute, looping, arbitrary playback rate, adaptive
+bitrates, media tracks, external subtitles, buffering/progress events and
+foreground lifecycle suspension are exposed through a typed controller/view
+API. A configurable native control overlay includes progress, time, playback,
+rate, mute and fullscreen controls; applications can restyle it or replace it
+with controller-driven custom markup. See [examples/video](examples/video/src/lib.rs).
+
 ## License
 
 [MIT](./LICENSE-MIT) or [Apache2.0](./LICENSE-APACHE)

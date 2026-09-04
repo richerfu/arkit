@@ -27,6 +27,7 @@ Arkit 的 UI 只走 Dioxus 这一条路：业务写出组件树，运行时 diff
 | `arkit_i18n` / `arkit_i18n_macros` | runtime locale 与编译期 Fluent catalog                                      |
 | `arkit_icon`                       | embedded SVG catalog、raster source 与有界 cache                            |
 | `arkit_lottie`                     | ThorVG worker、XComponent/NativeWindow Lottie 渲染                          |
+| `arkit_video`                      | AVPlayer worker、XComponent 视频输出与媒体事件                              |
 | `arkit_camera`                     | CameraKit 预览、拍照；可选 scan 解码                                        |
 | `arkit_barcode`                    | 独立条码/二维码生成（rxing），无相机依赖                                    |
 | `arkit_terminal`                   | rio-vt + GPU cell renderer；会话 I/O 由应用托管                             |
@@ -105,7 +106,7 @@ OpenHarmony binding 中部分 node/adapter handle 没有隐式 Drop：
 - `markdown` / `code` → `shadcn`（`markdown-highlight` = 二者组合）
 - `camera-scan` → `animation` + `camera` + scan decoder
 - `lottie-network` → `lottie` + HTTP 栈；`lottie-expressions` 可选
-- `barcode`、`canvas`、`terminal`、`camera`、`lottie` 各自独立可选；`canvas` 独立引入 native drawing
+- `barcode`、`canvas`、`terminal`、`camera`、`lottie`、`video` 各自独立可选；`canvas` 独立引入 native drawing，`video` 独立引入 AVPlayer
 
 这些关系只在 root `Cargo.toml`/crate manifest 中声明，业务 crate 用 `arkit` features 选择。
 

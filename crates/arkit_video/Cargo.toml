@@ -1,0 +1,22 @@
+[package]
+name = "arkit_video"
+description = "Native OpenHarmony AVPlayer video component for arkit"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+arkit_arkui = { workspace = true, features = ["xcomponent-native"] }
+arkit_hooks.workspace = true
+arkit_prelude.workspace = true
+arkit_runtime.workspace = true
+ohos-avplayer-binding.workspace = true
+ohos-hilog-binding.workspace = true
+ohos-native-window-binding.workspace = true
+ohos-xcomponent-binding.workspace = true
+ohos-xcomponent-sys.workspace = true
+tokio.workspace = true
