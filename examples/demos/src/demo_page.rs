@@ -30,6 +30,7 @@ pub fn Demo(slug: String) -> Element {
                     "complex_cases" => rsx! { complex_cases::ComplexCasesPage {} },
                     "i18n" => rsx! { i18n_example::I18nPage {} },
                     "lottie" => rsx! { lottie_example::LottiePage {} },
+                    "video" => rsx! { video_example::VideoPage {} },
                     "router" => rsx! { router_example::RouterPage {} },
                     "shadcn_showcase" => rsx! { shadcn_showcase::ShadcnShowcasePage {} },
                     "terminal" => rsx! { terminal_example::TerminalPage {} },

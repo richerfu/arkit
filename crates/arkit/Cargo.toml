@@ -11,7 +11,7 @@ workspace = true
 
 [features]
 default = []
-full = ["animation", "barcode", "camera-scan", "canvas", "chart", "code", "i18n", "icon", "lottie-network", "markdown", "router", "shadcn", "terminal", "webview"]
+full = ["animation", "barcode", "camera-scan", "canvas", "chart", "code", "i18n", "icon", "lottie-network", "markdown", "router", "shadcn", "terminal", "video", "webview"]
 animation = ["dep:arkit_animation"]
 # Standalone barcode / QR generation (no camera required).
 barcode = ["dep:arkit_barcode"]
@@ -33,6 +33,7 @@ router = ["animation", "dep:arkit_router"]
 shadcn = ["animation", "i18n", "icon", "dep:arkit_shadcn"]
 # Embedded terminal (rio-vt + wgpu cell renderer).
 terminal = ["dep:arkit_terminal"]
+video = ["dep:arkit_video"]
 # Pluginized WebView capability (ohos.webview bridge plugin). The framework
 # registers the plugin facade and injects initialization automatically;
 # integrators just enable the feature.
@@ -55,6 +56,7 @@ arkit_shadcn = { workspace = true, optional = true }
 arkit_icon = { workspace = true, optional = true }
 arkit_lottie = { workspace = true, optional = true }
 arkit_terminal = { workspace = true, optional = true }
+arkit_video = { workspace = true, optional = true }
 ohos-arkui-binding.workspace = true
 openharmony-ability.workspace = true
 napi-ohos.workspace = true

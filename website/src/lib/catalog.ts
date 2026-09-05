@@ -28,6 +28,7 @@ const docsGroups: readonly NavGroup[] = [
       "canvas",
       "camera",
       "lottie",
+      "video",
       "terminal",
       "webview",
     ],

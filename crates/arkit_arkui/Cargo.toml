@@ -9,6 +9,13 @@ license.workspace = true
 [lints]
 workspace = true
 
+[features]
+default = []
+xcomponent-native = [
+    "ohos-arkui-binding/xcomponent",
+    "ohos-arkui-binding/xcomponent_multi_mode",
+]
+
 [dependencies]
 arkit_dom.workspace = true
 arkit_elements.workspace = true

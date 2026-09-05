@@ -93,6 +93,8 @@ pub enum ArkEventPayload {
     Bool(bool),
     /// A single float (slider value, refresh offset).
     Float(f32),
+    /// Slider value and its native change mode (begin/moving/end/click).
+    Slider { value: f32, mode: i32 },
     /// A single integer (swiper index, submit return code).
     Int(i32),
     /// A string value (text input/area change).
@@ -315,7 +317,7 @@ impl From<&ArkEventData> for PointerData {
 
 /// Data for a value-change event (checkbox/toggle/radio/slider/text input).
 ///
-/// `bool_value`/`float_value`/`string_value` are populated depending on the
+/// `bool_value`/`float_value`/`int_value`/`string_value` are populated depending on the
 /// source component; the others remain at their defaults.
 #[derive(Default, Clone, Debug)]
 pub struct ChangeData {
@@ -323,6 +325,9 @@ pub struct ChangeData {
     pub bool_value: bool,
     /// Numeric value for slider/progress.
     pub float_value: f32,
+    /// Native secondary integer value. Slider uses `0/1/2/3` for
+    /// begin/moving/end/click.
+    pub int_value: i32,
     /// Text value for text input/area.
     pub string_value: String,
 }
@@ -339,6 +344,10 @@ impl From<&ArkEventData> for ChangeData {
         match &data.payload {
             ArkEventPayload::Bool(b) => out.bool_value = *b,
             ArkEventPayload::Float(f) => out.float_value = *f,
+            ArkEventPayload::Slider { value, mode } => {
+                out.float_value = *value;
+                out.int_value = *mode;
+            }
             ArkEventPayload::Int(i) => out.float_value = *i as f32,
             ArkEventPayload::String(s) => out.string_value = s.clone(),
             ArkEventPayload::ScrollIndex(_)

@@ -4,7 +4,7 @@
 //! the ArkUI element registry, per-root runtime, and exact-element hooks. Domain
 //! libraries are opt-in through the `animation`, `barcode`, `camera`, `canvas`,
 //! `chart`, `code`, `i18n`, `icon`, `lottie`, `markdown`, `router`, `shadcn`,
-//! `terminal`, and `webview` features (or `full`). Barcode/QR generation is the
+//! `terminal`, `video`, and `webview` features (or `full`). Barcode/QR generation is the
 //! `barcode` feature (no camera). Code highlighting uses `code`; Markdown
 //! fences need `markdown` + `code`. Terminal uses `terminal` (rio-vt).
 //! `webview` enables the pluginized WebView capability (`ohos.webview` bridge
@@ -186,6 +186,18 @@ pub use arkit_lottie::{
     LottieFrame, LottieFrameRenderOptions, LottieFrameRenderer, LottieNetworkSource, LottiePlayer,
     LottiePlayerProps, LottieRenderedFrame, LottieRepeatMode, LottieResult, LottieSource,
     LottieStatus,
+};
+
+// --- Native AVPlayer video ---
+#[cfg(feature = "video")]
+pub use arkit_video as video;
+#[cfg(feature = "video")]
+pub use arkit_video::{
+    VideoBuffering, VideoControlIcons, VideoControlLabels, VideoController, VideoControls,
+    VideoControlsStyle, VideoError, VideoErrorKind, VideoFileSource, VideoMetadata,
+    VideoNetworkSource, VideoPlayer, VideoPlayerProps, VideoProgress, VideoResizeMode, VideoResult,
+    VideoSeekMode, VideoSize, VideoSnapshot, VideoSource, VideoStatus, VideoSubtitleCue,
+    VideoSubtitleSource, VideoTrack, VideoTrackType,
 };
 
 // --- Native ECharts-compatible charts ---
@@ -393,6 +405,15 @@ pub mod prelude {
         LottieFit, LottieFrame, LottieFrameRenderOptions, LottieFrameRenderer, LottieNetworkSource,
         LottiePlayer, LottiePlayerProps, LottieRenderedFrame, LottieRepeatMode, LottieResult,
         LottieSource, LottieStatus,
+    };
+
+    #[cfg(feature = "video")]
+    pub use crate::{
+        video, VideoBuffering, VideoControlIcons, VideoControlLabels, VideoController,
+        VideoControls, VideoControlsStyle, VideoError, VideoErrorKind, VideoFileSource,
+        VideoMetadata, VideoNetworkSource, VideoPlayer, VideoPlayerProps, VideoProgress,
+        VideoResizeMode, VideoResult, VideoSeekMode, VideoSize, VideoSnapshot, VideoSource,
+        VideoStatus, VideoSubtitleCue, VideoSubtitleSource, VideoTrack, VideoTrackType,
     };
 
     #[cfg(feature = "router")]

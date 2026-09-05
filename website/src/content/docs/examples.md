@@ -5,7 +5,7 @@ description: "仓库里有哪些示例、各自练什么，以及怎么编进真
 
 # 示例索引
 
-仓库里目前有 **14** 个可在设备上跑的示例（见 workspace 的 `members`）。它们既是上手材料，也是公开 API 是否还能编译、能否上真机的活合同。
+仓库里目前有 **15** 个可在设备上跑的示例（见 workspace 的 `members`）。它们既是上手材料，也是公开 API 是否还能编译、能否上真机的活合同。
 
 ## 一览
 
@@ -21,6 +21,7 @@ description: "仓库里有哪些示例、各自练什么，以及怎么编进真
 | `complex_cases`   | 10,000 item List/Grid/WaterFlow、单项动态更新与变高重排                   | `examples/complex_cases/src/lib.rs`   |
 | `i18n`            | Fluent macro、typed message、locale switch、Cargo rename                  | `examples/i18n/src/lib.rs`            |
 | `lottie`          | ThorVG worker、XComponent 帧同步、播放控制、fit/repeat/speed              | `examples/lottie/src/lib.rs`          |
+| `video`           | AVPlayer、URL/FD、播放控制、轨道/字幕、buffer/progress                    | `examples/video/src/lib.rs`           |
 | `router`          | typed routes、ArkUI Link、dynamic param、route transition                 | `examples/router/src/lib.rs`          |
 | `shadcn_showcase` | themes、表单、导航、浮层、反馈、Guide、数据展示组件                       | `examples/shadcn_showcase/src/lib.rs` |
 | `terminal`        | GPU 终端、本地 shell / SSH Host、`feed_vt` 与 IME gutter                  | `examples/terminal/src/lib.rs`        |
@@ -122,6 +123,17 @@ cd examples/lottie
 ohrs build --arch aarch
 cd ../../
 ./app/run.sh lottie all
+```
+
+## video
+
+通过独立 `video` feature 引入 AVPlayer binding。示例使用公开 MP4，验证 source 加载、首帧、状态/进度/缓冲事件、播放暂停、停止回到起点、前后 seek、静音、任意倍速、循环和四种 resize mode。切到后台会暂停，返回后按原播放意图恢复；销毁并重建 Surface 会安全重建 player。
+
+```sh
+cd examples/video
+ohrs build --arch aarch
+cd ../../
+./app/run.sh video all
 ```
 
 ## i18n

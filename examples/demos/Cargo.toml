@@ -30,6 +30,7 @@ arkit = { workspace = true, features = [
     "router",
     "shadcn",
     "terminal",
+    "video",
     "webview",
 ] }
 arkit_calendar_icu.workspace = true
@@ -53,6 +54,7 @@ lottie_example = { path = "../lottie" }
 router_example = { path = "../router" }
 shadcn_showcase = { path = "../shadcn_showcase" }
 terminal_example = { path = "../terminal" }
+video_example = { path = "../video" }
 webview_example = { path = "../webview" }
 
 [features]
