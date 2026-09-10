@@ -44,6 +44,11 @@ mod window;
 /// host that disappeared without removal callbacks). The renderer cannot know
 /// about such destruction, so the runtime propagates a per-root liveness flag:
 /// integrations read it during their teardown and skip native calls when dead.
+///
+/// This is one of four layers that describe native lifetime; see the
+/// "Native lifetime ownership" section of the `arkit_arkui` crate docs for how
+/// it relates to the `MountedNodeLease` epoch, the renderer's retired-subtree
+/// queue, and lazy-item abandonment.
 #[derive(Clone, Default)]
 pub struct NativeLiveness(std::rc::Rc<std::cell::Cell<bool>>);
 

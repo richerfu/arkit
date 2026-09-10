@@ -17,10 +17,49 @@
 //! - A native child index therefore cannot equal a dioxus logical child index.
 //!
 //! The host tree is the single source of truth; the native tree is a
-//! *projection*. Mutations update the host tree, then `sync_native` reconciles
-//! the projection. Text nodes are never deleted or "swallowed" — they remain in
+//! *projection*. Text nodes are never deleted or "swallowed" — they remain in
 //! the host tree and are merged into the parent's content attribute at
 //! projection time.
+//!
+//! Structural mutations move native children positionally (`attach_native_at`
+//! and `detach_native_at`), because dioxus already reports exact insertion and
+//! removal positions. Wholesale reconciliation of a parent's native child list
+//! survives only for the root, where portal layer and activation order cannot
+//! be expressed as a single position.
+//!
+//! ## Native lifetime ownership
+//!
+//! Four layers describe the same native tree from four vantage points. They are
+//! not one mechanism duplicated four times — each answers a question the others
+//! cannot, and each advances on a different event:
+//!
+//! | Layer | Answers | Advances when |
+//! | --- | --- | --- |
+//! | `NativeHostState` + `RetiredSubtreeQueue` | which native node a host owns, whether it is attached, when a retired subtree is disposed | a structural mutation retires a subtree |
+//! | `MountedNodeLease` epoch | may this handle still touch its node? | the element binds to a different native node |
+//! | `NativeLiveness` | may hook-owned integrations still touch native? | a host subtree was destroyed *outside* the renderer |
+//! | `VirtualItemMount` | when is an item-local owner released? | ArkUI removes or abandons a lazy item |
+//!
+//! The last two are complementary rather than duplicate: an abandoned lazy item
+//! is where external destruction is detected, and `NativeLiveness` is how that
+//! fact reaches integrations that never saw the item. The renderer cannot
+//! observe that destruction itself, which is why the flag exists at all.
+//!
+//! ### Two teardown registries, and the ordering between them
+//!
+//! - `MountedNodeLease::install_native_teardown` holds *application* cleanups
+//!   (animators, XComponent callbacks) keyed by mount epoch. They run when the
+//!   element rebinds, or when it unbinds during retired-subtree preparation.
+//! - `RetiredSubtreeQueue` holds *renderer* native disposal, deferred to a
+//!   frame boundary because ArkUI must not destroy nodes mid-batch.
+//!
+//! Application cleanups are guaranteed to run before the native nodes are
+//! dismantled: retired-subtree preparation unbinds element references (running
+//! their teardowns) before native teardown is collected, and rebinding runs the
+//! previous epoch's teardowns before advancing the epoch. Merging the two
+//! registries would make that ordering explicit, but it is a redesign of node
+//! ownership rather than a simplification, so the ordering is recorded here
+//! instead.
 
 use std::cell::RefCell;
 use std::ffi::c_void;
