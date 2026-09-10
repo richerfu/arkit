@@ -1381,82 +1381,82 @@ impl ArkUIRenderer {
             .iter()
             .map(|(_, native)| Self::native_raw_id(native))
             .collect::<FxHashSet<_>>();
-        let mut mounted = parent_native.borrow().children().to_vec();
 
-        for index in (0..mounted.len()).rev() {
-            if desired_raws.contains(&Self::native_raw_id(&mounted[index])) {
-                continue;
+        let child_count = parent_native.borrow().children().len();
+        for index in (0..child_count).rev() {
+            let should_remove = parent_native
+                .borrow()
+                .children()
+                .get(index)
+                .map(|child| !desired_raws.contains(&Self::native_raw_id(child)))
+                .unwrap_or(false);
+            if should_remove {
+                let result = parent_native.borrow_mut().remove_child(index);
+                if self
+                    .latch_structural("sync_native_children remove_child", result)
+                    .is_none()
+                {
+                    return;
+                }
             }
-            let result = parent_native.borrow_mut().remove_child(index);
-            if self
-                .latch_structural("sync_native_children remove_child", result)
-                .is_none()
-            {
-                return;
-            }
-            mounted.remove(index);
         }
 
         for (native_index, (child, child_native)) in desired.into_iter().enumerate() {
             let parent_attached = self.hosts[parent].native_attached;
             let desired_raw = Self::native_raw_id(&child_native);
-            let already_at_index = mounted
-                .get(native_index)
-                .is_some_and(|mounted| Self::native_raw_id(mounted) == desired_raw);
+            let mounted_at_index = parent_native.borrow().children().get(native_index).cloned();
 
-            if already_at_index {
-                let mounted_child = mounted[native_index].clone();
-                let wrapper_changed = !Rc::ptr_eq(&child_native, &mounted_child);
-                let was_attached = self.hosts[child].native_attached;
-                self.hosts[child].native = Some(mounted_child);
-                self.hosts[child].native_attached = parent_attached;
-                let became_attached = !was_attached && parent_attached;
-                if wrapper_changed || was_attached != parent_attached {
-                    self.rebind_mounted_projection(child, became_attached);
-                }
-                continue;
-            }
-
-            // The desired node may already be mounted later in the same parent
-            // (a Dioxus reorder). Move that native node instead of inserting a
-            // duplicate and leaving a stale tail child.
-            let node_to_insert = if let Some(index) = mounted
-                .iter()
-                .position(|mounted| Self::native_raw_id(mounted) == desired_raw)
+            if mounted_at_index
+                .as_ref()
+                .is_some_and(|mounted| Self::native_raw_id(mounted) == desired_raw)
             {
-                let result = parent_native.borrow_mut().remove_child(index);
-                let removed =
-                    self.latch_structural("sync_native_children detach reordered child", result);
-                let Some(Some(removed)) = removed else {
-                    return;
+                if let Some(mounted) = mounted_at_index {
+                    let wrapper_changed = !Rc::ptr_eq(&child_native, &mounted);
+                    let was_attached = self.hosts[child].native_attached;
+                    self.hosts[child].native = Some(mounted);
+                    self.hosts[child].native_attached = parent_attached;
+                    let became_attached = !was_attached && parent_attached;
+                    if wrapper_changed || was_attached != parent_attached {
+                        self.rebind_mounted_projection(child, became_attached);
+                    }
+                }
+            } else {
+                // The desired node may already be mounted later in the same
+                // parent (a Dioxus reorder). Move that native node instead of
+                // inserting a duplicate and leaving a stale tail child.
+                let mounted_elsewhere = parent_native
+                    .borrow()
+                    .children()
+                    .iter()
+                    .position(|mounted| Self::native_raw_id(mounted) == desired_raw);
+                let node_to_insert = if let Some(index) = mounted_elsewhere {
+                    let result = parent_native.borrow_mut().remove_child(index);
+                    let removed = self
+                        .latch_structural("sync_native_children detach reordered child", result);
+                    let Some(Some(removed)) = removed else {
+                        return;
+                    };
+                    removed
+                } else {
+                    child_native.clone()
                 };
-                mounted.remove(index);
-                removed
-            } else {
-                child_native.clone()
-            };
-            let result = {
-                let mut parent_mut = parent_native.borrow_mut();
-                parent_mut.insert_child(node_to_insert, native_index)
-            };
-            let inserted = self
-                .latch_structural("sync_native_children insert_child", result)
-                .is_some();
-            if !inserted {
-                return;
+                let result = {
+                    let mut parent_mut = parent_native.borrow_mut();
+                    parent_mut.insert_child(node_to_insert, native_index)
+                };
+                let inserted = self
+                    .latch_structural("sync_native_children insert_child", result)
+                    .is_some();
+                if !inserted {
+                    return;
+                }
+                let mounted = parent_native.borrow().children().get(native_index).cloned();
+                if let Some(mounted) = mounted {
+                    self.hosts[child].native = Some(mounted);
+                    self.hosts[child].native_attached = parent_attached;
+                    self.rebind_mounted_projection(child, parent_attached);
+                }
             }
-            let mounted_child = parent_native.borrow().children().get(native_index).cloned();
-            let Some(mounted_child) = mounted_child else {
-                continue;
-            };
-            if let Some(slot) = mounted.get_mut(native_index) {
-                *slot = mounted_child.clone();
-            } else {
-                mounted.insert(native_index, mounted_child.clone());
-            }
-            self.hosts[child].native = Some(mounted_child);
-            self.hosts[child].native_attached = parent_attached;
-            self.rebind_mounted_projection(child, parent_attached);
         }
     }
 
