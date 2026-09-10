@@ -184,6 +184,67 @@ impl RuntimeCore {
             panic!("arkit_runtime: {scope} native projection became inconsistent: {fault}");
         }
     }
+
+    /// Assemble a core around an already-constructed renderer.
+    ///
+    /// Both runtimes install the same queueing event sink, publish the same
+    /// runtime-handle context, then rebuild and flush the first batch. What
+    /// differs stays at the call site: which renderer is constructed, which
+    /// extra contexts are provided before this point, and which handles the
+    /// runtime keeps for its own loop.
+    fn assemble(
+        mut dom: VirtualDom,
+        mut renderer: ArkUIRenderer,
+        runtime_handle: &RuntimeHandle,
+    ) -> (Self, Rc<RuntimeEventSink>, NativeLiveness) {
+        // Install the sink before rebuild so every listener captures the same
+        // phase-isolated native event boundary.
+        let sink = Rc::new(RuntimeEventSink::new(runtime_handle.clone()));
+        renderer.set_sink(sink.clone());
+
+        dom.provide_root_context(runtime_handle.clone());
+        // Liveness for hook-owned native integrations. The root renderer owns
+        // its native lifetime for the whole session and never kills the flag;
+        // an embedded runtime kills its own when the host node disappears.
+        let liveness = NativeLiveness::default();
+        dom.provide_root_context(liveness.clone());
+
+        // Initial mount: build the real DOM tree onto the slot.
+        dom.rebuild(&mut renderer);
+        renderer.finish_mutation_batch();
+
+        (Self { dom, renderer }, sink, liveness)
+    }
+
+    /// Arm the one-shot appear replay for `inner`.
+    ///
+    /// ArkUI controls may write their own skin attributes after insertion, so
+    /// declarative values are reapplied from `EventOnAppear` — after layout and
+    /// before the first paint. `scope` labels a panic escaping the native
+    /// callback, which must not unwind across the ArkUI frame.
+    fn install_appear_replay<H: RuntimeHost + 'static>(
+        inner: &Rc<RefCell<H>>,
+        scope: &'static str,
+    ) {
+        let replay_inner = Rc::downgrade(inner);
+        inner
+            .borrow_mut()
+            .core_mut()
+            .renderer
+            .set_appear_replay_handler(Rc::new(move |element| {
+                if let Some(inner) = replay_inner.upgrade() {
+                    if let Err(payload) = panic::catch_unwind(AssertUnwindSafe(|| {
+                        inner
+                            .borrow_mut()
+                            .core_mut()
+                            .renderer
+                            .replay_element_attrs(element);
+                    })) {
+                        log_panic_payload(scope, payload.as_ref());
+                    }
+                }
+            }));
+    }
 }
 
 trait RuntimeHost {
@@ -659,7 +720,7 @@ impl ArkRuntime {
     pub fn from_virtual_dom_with_policy_and_runtime(
         slot: ArkUIHandle,
         app: OpenHarmonyApp,
-        mut dom: VirtualDom,
+        dom: VirtualDom,
         safe_area_policy: SafeAreaPolicy,
         async_runtime: tokio::runtime::Runtime,
     ) -> Result<Self> {
@@ -670,12 +731,7 @@ impl ArkRuntime {
             async_runtime.handle().clone(),
         );
 
-        let mut renderer = ArkUIRenderer::new(slot).map_err(map_arkui_error)?;
-
-        // Install the queueing event sink before rebuild so every listener
-        // captures the same phase-isolated native event boundary.
-        let sink = Rc::new(RuntimeEventSink::new(runtime_handle.clone()));
-        renderer.set_sink(sink.clone());
+        let renderer = ArkUIRenderer::new(slot).map_err(map_arkui_error)?;
 
         // Window state is owned by the native runtime and provided before the
         // first rebuild so the framework root and every business component see
@@ -688,43 +744,18 @@ impl ArkRuntime {
         dom.provide_root_context(window_metrics.clone());
         dom.provide_root_context(application_lifecycle.clone());
         dom.provide_root_context(safe_area_policy);
-        dom.provide_root_context(runtime_handle.clone());
-        // Root-level liveness for hook-owned native integrations. The renderer
-        // owns this root's native lifetime, so it stays alive until unmount;
-        // embedded runtimes override their own flag when a host disappears.
-        dom.provide_root_context(NativeLiveness::default());
-
-        // Initial mount: build the real DOM tree onto the slot.
-        dom.rebuild(&mut renderer);
-        renderer.finish_mutation_batch();
 
         let weak_runtime = Rc::downgrade(&dom.runtime());
+        let (core, sink, _liveness) = RuntimeCore::assemble(dom, renderer, &runtime_handle);
         let inner = Rc::new(RefCell::new(RuntimeInner {
-            core: RuntimeCore { dom, renderer },
+            core,
             retired_disposal: RetiredSubtreeDisposalGate::default(),
         }));
 
         // One-shot EventOnAppear replays route back into the renderer so
         // declarative attrs are reapplied after ArkUI control skins settle,
         // before the node's first paint (single-frame convergence).
-        let replay_inner = Rc::downgrade(&inner);
-        inner
-            .borrow_mut()
-            .core
-            .renderer
-            .set_appear_replay_handler(Rc::new(move |element| {
-                if let Some(inner) = replay_inner.upgrade() {
-                    if let Err(payload) = panic::catch_unwind(AssertUnwindSafe(|| {
-                        inner
-                            .borrow_mut()
-                            .core
-                            .renderer
-                            .replay_element_attrs(element);
-                    })) {
-                        log_panic_payload("appear_replay", payload.as_ref());
-                    }
-                }
-            }));
+        RuntimeCore::install_appear_replay(&inner, "appear_replay");
 
         // Bridge dioxus' scheduler to OpenHarmony. A pending
         // `VirtualDom::wait_for_work` poll retains this waker, including when a
@@ -876,45 +907,20 @@ impl Drop for ArkRuntime {
 /// before disposing that node.
 pub fn mount_embedded_virtual_dom(
     root: Rc<RefCell<ArkUINode>>,
-    mut dom: VirtualDom,
+    dom: VirtualDom,
     runtime_handle: RuntimeHandle,
 ) -> EmbeddedArkRuntime {
-    let mut renderer = ArkUIRenderer::new_embedded(root);
-    let sink = Rc::new(RuntimeEventSink::new(runtime_handle.clone()));
-    renderer.set_sink(sink.clone());
-    dom.provide_root_context(runtime_handle.clone());
-    let liveness = NativeLiveness::default();
-    dom.provide_root_context(liveness.clone());
-
-    dom.rebuild(&mut renderer);
-    renderer.finish_mutation_batch();
-
+    let renderer = ArkUIRenderer::new_embedded(root);
+    let (core, sink, liveness) = RuntimeCore::assemble(dom, renderer, &runtime_handle);
     let inner = Rc::new(RefCell::new(EmbeddedRuntimeInner {
-        core: RuntimeCore { dom, renderer },
+        core,
         sink,
         liveness,
     }));
 
     // Same single-frame appear replay as the root runtime: item subtrees also
     // converge on declarative styles before their first paint.
-    let replay_inner = Rc::downgrade(&inner);
-    inner
-        .borrow_mut()
-        .core
-        .renderer
-        .set_appear_replay_handler(Rc::new(move |element| {
-            if let Some(inner) = replay_inner.upgrade() {
-                if let Err(payload) = panic::catch_unwind(AssertUnwindSafe(|| {
-                    inner
-                        .borrow_mut()
-                        .core
-                        .renderer
-                        .replay_element_attrs(element);
-                })) {
-                    log_panic_payload("embedded_appear_replay", payload.as_ref());
-                }
-            }
-        }));
+    RuntimeCore::install_appear_replay(&inner, "embedded_appear_replay");
     let registration = runtime_handle.register_embedded(Rc::downgrade(&inner));
 
     render_host(&inner, "embedded");
