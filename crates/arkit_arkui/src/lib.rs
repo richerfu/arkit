@@ -1062,6 +1062,75 @@ impl ArkUIRenderer {
         true
     }
 
+    /// Native index of `child`'s projected node inside `parent`'s native list.
+    ///
+    /// Resolved by identity against the live native list, never from an index
+    /// mirrored on the Rust side: a reorder removes and re-inserts native
+    /// children, so any index kept alongside drifts as soon as the list length
+    /// changes under it.
+    fn native_child_index(&self, parent: HostId, child: HostId) -> Option<usize> {
+        let raw = Self::native_raw_id(self.hosts[child].native.as_ref()?);
+        let parent_native = self.native_child_container(parent)?;
+        let parent_native = parent_native.borrow();
+        parent_native
+            .children()
+            .iter()
+            .position(|mounted| Self::native_raw_id(mounted) == raw)
+    }
+
+    /// Native insertion point for a child placed at `logical_index`.
+    ///
+    /// Anchored on the first following sibling that owns a native child; with
+    /// no such sibling the node appends. The answer comes from the native list
+    /// itself, so unlike a running projection count it cannot drift.
+    fn native_insert_index(&self, parent: HostId, logical_index: usize) -> usize {
+        let Some(parent_native) = self.native_child_container(parent) else {
+            return 0;
+        };
+        let parent_native = parent_native.borrow();
+        let mounted = parent_native.children();
+        self.hosts[parent].children[logical_index..]
+            .iter()
+            .find_map(|sibling| {
+                let native = self.hosts[*sibling].native.as_ref()?;
+                let raw = Self::native_raw_id(native);
+                mounted
+                    .iter()
+                    .position(|child| Self::native_raw_id(child) == raw)
+            })
+            .unwrap_or(mounted.len())
+    }
+
+    /// Remove `child`'s projected node from `parent`'s native child list.
+    ///
+    /// Mirror of [`Self::attach_native_at`]. Two shapes own no native child to
+    /// remove: portals, which project into the root layer, and text merged into
+    /// a container's content attribute.
+    fn detach_native_at(&mut self, parent: HostId, child: HostId) -> bool {
+        if self.fault.is_some() {
+            return false;
+        }
+        if matches!(self.hosts[child].kind, HostKind::Portal { .. }) {
+            return false;
+        }
+        let parent_tag = self.hosts[parent].tag();
+        if matches!(self.hosts[child].kind, HostKind::Text { .. })
+            && Self::merges_text_children(parent_tag)
+        {
+            self.sync_content_attribute(parent);
+            return false;
+        }
+        let Some(index) = self.native_child_index(parent, child) else {
+            return false;
+        };
+        let Some(parent_native) = self.native_child_container(parent) else {
+            return false;
+        };
+        let result = parent_native.borrow_mut().remove_child(index);
+        self.latch_structural("detach_native remove_child", result)
+            .is_some()
+    }
+
     fn projected_native_len_at_end(&self, parent: HostId) -> usize {
         self.hosts[parent]
             .children
@@ -1317,11 +1386,23 @@ impl ArkUIRenderer {
     /// exposes intermediate child lists to ArkUI. Composite projections
     /// (`button` outer container + internal content Row) make that especially
     /// fragile, so structural mutations use this final-state sync instead.
+    /// Reconcile a parent's native child list against the logical tree.
+    ///
+    /// This is wholesale reconciliation and is now only correct for the root:
+    /// portal membership and layer ordering live in the root's native child
+    /// list and cannot be expressed as a single position mutation. Every other
+    /// structural change goes through [`Self::attach_native_at`] and
+    /// [`Self::detach_native_at`] instead.
     fn sync_native_children(&mut self, parent: HostId) {
         if self.fault.is_some() {
             return;
         }
         let root = self.hosts.root();
+        debug_assert_eq!(
+            parent, root,
+            "wholesale native child reconciliation is root-and-portal only; \
+             use attach_native_at / detach_native_at for structural mutations"
+        );
         if parent == root {
             // A direct root reconciliation consumes every portal invalidation
             // accumulated so far in this mutation batch.
@@ -2012,18 +2093,30 @@ impl WriteMutations for ArkUIRenderer {
             return;
         };
 
+        // Resolve the native position before detaching. The target's own node
+        // marks it exactly; a target that projects nothing (a placeholder) is
+        // located by its logical position instead.
+        let native_start = self
+            .native_child_index(parent, target)
+            .unwrap_or_else(|| self.native_insert_index(parent, logical_index));
+
         self.hosts[parent].children.remove(logical_index);
         self.hosts[target].parent = None;
+        self.detach_native_at(parent, target);
 
-        // Insert the new hosts at the same logical position.
+        // Insert the replacements at the same position, advancing the native
+        // cursor only for children that actually project a node.
+        let mut cursor = native_start;
         for (offset, &child) in new_hosts.iter().enumerate() {
             self.hosts[child].parent = Some(parent);
             self.hosts[parent]
                 .children
                 .insert(logical_index + offset, child);
             self.activate_portals_in_subtree(child);
+            if self.attach_native_at(parent, child, cursor) {
+                cursor += 1;
+            }
         }
-        self.sync_native_children(parent);
         self.retire_subtree(target);
     }
 
@@ -2058,18 +2151,25 @@ impl WriteMutations for ArkUIRenderer {
             return;
         };
 
+        // A bare placeholder projects no native node, so the insertion point
+        // comes from the first following sibling that does.
+        let native_start = self.native_insert_index(parent, logical_index);
+
         // Clear the placeholder (no native to dispose for a bare placeholder).
         self.hosts[parent].children.remove(logical_index);
         self.dispose_subtree(placeholder);
 
+        let mut cursor = native_start;
         for (offset, &child) in new_hosts.iter().enumerate() {
             self.hosts[child].parent = Some(parent);
             self.hosts[parent]
                 .children
                 .insert(logical_index + offset, child);
             self.activate_portals_in_subtree(child);
+            if self.attach_native_at(parent, child, cursor) {
+                cursor += 1;
+            }
         }
-        self.sync_native_children(parent);
     }
 
     fn insert_nodes_after(&mut self, id: ElementId, m: usize) {
@@ -2344,9 +2444,12 @@ impl WriteMutations for ArkUIRenderer {
         else {
             return;
         };
+        // Detach the projected native node while the child still records it;
+        // the position is resolved by identity, so sibling reorders that
+        // happened earlier in this batch cannot make it stale.
+        self.detach_native_at(parent, host);
         self.hosts[parent].children.remove(logical_index);
         self.hosts[host].parent = None;
-        self.sync_native_children(parent);
         self.retire_subtree(host);
     }
 
