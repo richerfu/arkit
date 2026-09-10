@@ -1611,10 +1611,41 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
             ArkUINodeAttributeType::LoadingProgressEnableLoading,
             EncodedAttrValue::Bool(as_bool(value)?),
         ),
-        _ => return None,
+        _ => {
+            report_unknown_attribute(tag, name);
+            return None;
+        }
     };
 
     Some(attr)
+}
+
+/// Report an attribute name this renderer has no encoding for.
+///
+/// RSX already rejects unknown attributes at compile time: `define_element!`
+/// emits a constant per declared attribute, so `font_colr: ..` fails to
+/// resolve and rustc suggests `font_color`. Reaching this arm therefore means
+/// the element declarations and this encoder have drifted — an element offers
+/// an attribute that nothing here encodes, which compiles fine and then does
+/// nothing at all. That is precisely the case worth surfacing.
+///
+/// Report once per tag/name pair: an attribute offered on every item of a long
+/// list would otherwise emit one line per item. Attribute *values* that fail
+/// to convert are a different case and keep their existing behaviour.
+fn report_unknown_attribute(tag: &str, name: &str) {
+    use std::cell::RefCell;
+
+    thread_local! {
+        static REPORTED: RefCell<rustc_hash::FxHashSet<String>> =
+            RefCell::new(rustc_hash::FxHashSet::default());
+    }
+
+    let first = REPORTED.with(|reported| reported.borrow_mut().insert(format!("{tag}\u{0}{name}")));
+    if first {
+        ohos_hilog_binding::warn(format!(
+            "arkit_arkui: attribute `{name}` on <{tag}> is not recognized and has no effect"
+        ));
+    }
 }
 
 fn parse_f32_list(value: &str) -> Option<Vec<f32>> {

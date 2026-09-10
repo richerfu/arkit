@@ -200,7 +200,7 @@ define_element! {
 define_element! {
     /// Toggle element (ArkUI `Toggle`).
     toggle => "toggle" {
-        checked, toggle_state, toggle_selected_color, toggle_unselected_color,
+        checked, toggle_selected_color, toggle_unselected_color,
         toggle_switch_point_color, background_color, padding, margin,
         margin_top, margin_bottom, margin_left, margin_right, margin_x, margin_y, margin_horizontal, margin_vertical,
         width, height, opacity, border_radius,
@@ -374,7 +374,7 @@ define_element! {
 define_element! {
     /// Calendar picker (ArkUI `CalendarPicker`).
     calendar => "calendarpicker" {
-        calendar_selected, calendar_selected_date, background_color, padding, margin,
+        background_color, padding, margin,
         margin_top, margin_bottom, margin_left, margin_right, margin_x, margin_y, margin_horizontal, margin_vertical,
         width, height, opacity, border_radius, border_width,
         border_color, visibility, enabled, clip, hit_test_behavior, aspect_ratio,
@@ -385,8 +385,7 @@ define_element! {
 define_element! {
     /// Date picker (ArkUI `DatePicker`).
     datepicker => "datepicker" {
-        datepicker_selected, datepicker_selected_date, datepicker_start, datepicker_end,
-        datepicker_lunar, background_color, padding, margin, margin_top, margin_bottom,
+        background_color, padding, margin, margin_top, margin_bottom,
         margin_left, margin_right, margin_x, margin_y, margin_horizontal, margin_vertical, width, height,
         opacity, border_radius, border_width, border_color, visibility, enabled, clip,
         hit_test_behavior, aspect_ratio, position, z_index,
