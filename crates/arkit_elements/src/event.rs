@@ -498,24 +498,42 @@ mod tests {
     use super::{classify_event_name, ArkEventKind};
 
     #[test]
-    fn event_aliases_share_one_semantic_identity() {
-        for name in ["onclick", "click", "on_press", "_press"] {
+    fn canonical_event_names_share_one_semantic_identity() {
+        for name in ["onclick", "click"] {
             assert_eq!(classify_event_name(name), Some(ArkEventKind::Click));
         }
-        for name in ["onlongpress", "longpress", "on_long_press", "_long_press"] {
+        for name in ["onlongpress", "longpress"] {
             assert_eq!(classify_event_name(name), Some(ArkEventKind::LongPress));
         }
-        for name in ["onfocus", "focus", "on_focus", "_focus"] {
+        for name in ["onfocus", "focus"] {
             assert_eq!(classify_event_name(name), Some(ArkEventKind::Focus));
         }
-        for name in ["onblur", "blur", "on_blur", "_blur"] {
+        for name in ["onblur", "blur"] {
             assert_eq!(classify_event_name(name), Some(ArkEventKind::Blur));
         }
-        for name in ["onreachend", "reachend", "on_reach_end", "_reach_end"] {
+        for name in ["onreachend", "reachend"] {
             assert_eq!(classify_event_name(name), Some(ArkEventKind::ReachEnd));
         }
         assert!(ArkEventKind::Click.bubbles());
         assert!(ArkEventKind::LongPress.bubbles());
         assert!(!ArkEventKind::Change.bubbles());
+    }
+
+    #[test]
+    fn historical_snake_case_aliases_are_rejected() {
+        for name in [
+            "on_press",
+            "_press",
+            "on_long_press",
+            "_long_press",
+            "on_focus",
+            "_focus",
+            "on_blur",
+            "_blur",
+            "on_reach_end",
+            "_reach_end",
+        ] {
+            assert_eq!(classify_event_name(name), None, "{name}");
+        }
     }
 }
