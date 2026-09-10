@@ -320,10 +320,12 @@ fn realtime_option(tick: u32) -> ChartOption {
                 DataPoint::values([1.0, 48.0 + (tick % 8) as f64]),
                 DataPoint::values([5.0, 35.0 + (tick % 12) as f64]),
             ],
-        ));
-    option.animation.initial.duration = 900;
-    option.animation.update.duration = 800;
-    option.animation.update.easing = String::from("cubicInOut");
+        ))
+        .animation(
+            AnimationOptions::default()
+                .initial(900, "cubicInOut")
+                .update(800, "cubicInOut"),
+        );
     for series in &mut option.series {
         let options = match series {
             Series::Line(series) | Series::Bar(series) | Series::Scatter(series) => {

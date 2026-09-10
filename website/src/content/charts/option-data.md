@@ -16,6 +16,8 @@ let option = ChartOption::new()
     .series([line, bar]);
 ```
 
+每个顶层组都有对应的 builder 方法：`title`、`legend`、`grid`、`x_axis` / `y_axis`、`radar`、`tooltip`、`data_zoom`、`dataset`、`visual_map`、`timeline`、`brush`、`media`、`animation`、`visual_style`。多坐标系图表用 `push_grid` / `push_x_axis` / `push_y_axis` / `push_series` 追加；类型化 model 尚未覆盖的 ECharts 字段走 `extra(key, value)`，不要为此改动公开 model 字段。
+
 更新时构造下一份 option 并传回组件。不要直接修改 renderer 内部 series 状态。
 
 ## JSON

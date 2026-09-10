@@ -22,6 +22,20 @@ rsx! { ECharts { option: option() } }
 
 批量更新领域数据后一次生成 option，避免同一业务 tick 连续创建多份中间配置。
 
+## 动画时序
+
+```rust
+ChartOption::new()
+    .animation(
+        AnimationOptions::default()
+            .initial(900, "cubicInOut")
+            .update(800, "cubicInOut"),
+    )
+    .push_series(Series::line("值", values()))
+```
+
+`initial` 是首次绘制的进场动画，`update` 是数据更新的过渡，`state` 是 highlight / downplay 的状态切换。`AnimationTiming::new(duration, easing).with_delay(ms)` 单独构造某一档时序。元素数超过 `threshold` 时按 `enabled` 策略整体跳过动画。
+
 ## appendData
 
 ```rust

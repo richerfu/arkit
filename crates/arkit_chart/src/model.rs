@@ -73,12 +73,19 @@ pub struct AnimationTiming {
 }
 
 impl AnimationTiming {
-    fn new(duration: u64, easing: &str) -> Self {
+    /// One enter/update/state animation timing with no delay.
+    pub fn new(duration: u64, easing: &str) -> Self {
         Self {
             duration,
             easing: easing.to_string(),
             delay: 0,
         }
+    }
+
+    /// Delay before the timing starts, in milliseconds.
+    pub fn with_delay(mut self, delay: u64) -> Self {
+        self.delay = delay;
+        self
     }
 }
 
@@ -100,6 +107,38 @@ impl Default for AnimationOptions {
             update: AnimationTiming::new(500, "cubicInOut"),
             state: AnimationTiming::new(300, "cubicOut"),
         }
+    }
+}
+
+impl AnimationOptions {
+    /// Enable or disable the global enter/update/state animation policy.
+    pub fn enabled(mut self, enabled: bool) -> Self {
+        self.enabled = enabled;
+        self
+    }
+
+    /// Element count above which charts render without animation.
+    pub fn threshold(mut self, threshold: usize) -> Self {
+        self.threshold = threshold;
+        self
+    }
+
+    /// Enter animation applied when a chart is first drawn.
+    pub fn initial(mut self, duration: u64, easing: &str) -> Self {
+        self.initial = AnimationTiming::new(duration, easing);
+        self
+    }
+
+    /// Animation applied to data updates.
+    pub fn update(mut self, duration: u64, easing: &str) -> Self {
+        self.update = AnimationTiming::new(duration, easing);
+        self
+    }
+
+    /// Animation applied to highlight/downplay state changes.
+    pub fn state(mut self, duration: u64, easing: &str) -> Self {
+        self.state = AnimationTiming::new(duration, easing);
+        self
     }
 }
 
@@ -148,6 +187,75 @@ impl ChartOption {
 
     pub fn push_series(mut self, series: Series) -> Self {
         self.series.push(series);
+        self
+    }
+
+    /// Append one grid, for charts that lay out multiple coordinate systems.
+    pub fn push_grid(mut self, grid: Grid) -> Self {
+        self.grid.push(grid);
+        self
+    }
+
+    /// Append one x axis, for charts that plot against more than one.
+    pub fn push_x_axis(mut self, axis: Axis) -> Self {
+        self.x_axis.push(axis);
+        self
+    }
+
+    /// Append one y axis, for charts that plot against more than one.
+    pub fn push_y_axis(mut self, axis: Axis) -> Self {
+        self.y_axis.push(axis);
+        self
+    }
+
+    pub fn radar(mut self, radar: RadarCoordinate) -> Self {
+        self.radar = vec![radar];
+        self
+    }
+
+    pub fn tooltip(mut self, tooltip: Tooltip) -> Self {
+        self.tooltip = tooltip;
+        self
+    }
+
+    pub fn dataset(mut self, dataset: Dataset) -> Self {
+        self.datasets.push(dataset);
+        self
+    }
+
+    pub fn visual_map(mut self, visual_map: VisualMap) -> Self {
+        self.visual_maps.push(visual_map);
+        self
+    }
+
+    pub fn timeline(mut self, timeline: Timeline) -> Self {
+        self.timeline = Some(timeline);
+        self
+    }
+
+    pub fn brush(mut self, brush: BrushOptions) -> Self {
+        self.brush = Some(brush);
+        self
+    }
+
+    pub fn media(mut self, media: MediaOptions) -> Self {
+        self.media = Some(media);
+        self
+    }
+
+    pub fn animation(mut self, animation: AnimationOptions) -> Self {
+        self.animation = animation;
+        self
+    }
+
+    pub fn visual_style(mut self, visual_style: VisualStyle) -> Self {
+        self.visual_style = visual_style;
+        self
+    }
+
+    /// Insert a raw ECharts option that the typed model does not cover.
+    pub fn extra(mut self, key: impl Into<String>, value: Value) -> Self {
+        self.extra.insert(key.into(), value);
         self
     }
 
