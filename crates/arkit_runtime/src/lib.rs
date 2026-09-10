@@ -513,6 +513,7 @@ pub struct ArkRuntime {
 pub struct EmbeddedArkRuntime {
     registration: Option<session::EmbeddedRuntimeRegistration>,
     inner: Option<Rc<RefCell<EmbeddedRuntimeInner>>>,
+    handle: RuntimeHandle,
 }
 
 impl EmbeddedArkRuntime {
@@ -528,6 +529,9 @@ impl EmbeddedArkRuntime {
                 .core
                 .dom
                 .mark_dirty(dioxus_core::ScopeId::APP);
+            // Adapter callbacks can arrive after the current UI tick. Marking
+            // a scope dirty does not wake Dioxus' scheduler on its own.
+            self.handle.wake();
         }
     }
 
@@ -935,6 +939,7 @@ pub fn mount_embedded_virtual_dom(
     EmbeddedArkRuntime {
         registration: Some(registration),
         inner: Some(inner),
+        handle: runtime_handle,
     }
 }
 

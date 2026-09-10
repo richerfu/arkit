@@ -382,6 +382,22 @@ struct BrushDrag {
     pointer_last: (f32, f32),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ChartAnimationGates {
+    finite: bool,
+    continuous: bool,
+}
+
+fn chart_animation_gates(app_foreground: bool, component_visible: bool) -> ChartAnimationGates {
+    ChartAnimationGates {
+        // A finite transition runs offscreen for at most its configured
+        // duration. Letting it converge avoids retaining a collapsed initial
+        // canvas forever when a platform visibility notification is missed.
+        finite: app_foreground,
+        continuous: app_foreground && component_visible,
+    }
+}
+
 impl ChartRenderState {
     #[cfg(test)]
     fn new(option: ChartOption) -> Self {
@@ -397,13 +413,14 @@ impl ChartRenderState {
         transition_driver: ChartTransitionDriver,
         state_transition_driver: ChartTransitionDriver,
     ) -> Self {
+        let prop_option = option.clone();
+        let source_option = option.clone();
+        let option = crate::parser::resolve_option_data(option);
         let zoom_windows = initial_windows(&option);
         let selected_items = initial_selected_items(&option);
         let hidden_series = initial_hidden_series(&option);
         let option = SharedChartOption::new(option);
         let transition = ChartTransition::initial(option.snapshot(), transition_driver.clone());
-        let prop_option = option.borrow().clone();
-        let source_option = prop_option.clone();
         Self {
             inner: Rc::new(ChartRenderStateInner {
                 prop_option: RefCell::new(prop_option),
@@ -550,7 +567,7 @@ impl ChartRenderState {
         if width > 0.0 && height > 0.0 {
             self.apply_media(width, height);
         } else {
-            self.replace_option(option.clone());
+            self.replace_option(crate::parser::resolve_option_data(option.clone()));
         }
     }
 
@@ -725,7 +742,7 @@ impl ChartRenderState {
             return;
         }
         let resolved = crate::parser::resolve_media_option(&source, width, height, timeline_index)
-            .unwrap_or_else(|_| source.clone());
+            .unwrap_or_else(|_| crate::parser::resolve_option_data(source.clone()));
         drop(source);
         self.media_signature.replace(signature);
         self.media_timeline_index.set(timeline_index);
@@ -1038,9 +1055,9 @@ impl ChartRenderState {
         };
         let mut option = if width > 0.0 && height > 0.0 {
             crate::parser::resolve_media_option(&source, width, height, restore_timeline_index)
-                .unwrap_or_else(|_| source.clone())
+                .unwrap_or_else(|_| crate::parser::resolve_option_data(source.clone()))
         } else {
-            source.clone()
+            crate::parser::resolve_option_data(source.clone())
         };
         let signature = crate::parser::media_signature(&source, width, height);
         drop(source);
@@ -1896,7 +1913,7 @@ pub fn ECharts(props: EChartsProps) -> Element {
     // the visibility hook in the background and corrupt Dioxus' hook indices.
     let app_foreground = use_app_foreground();
     let component_visible = use_component_visibility(node_ref.clone());
-    let lifecycle_active = app_foreground && component_visible;
+    let animation_gates = chart_animation_gates(app_foreground, component_visible);
     let transition_progress = arkit_animation::use_animatable(0.0_f32);
     let state_progress = arkit_animation::use_animatable(0.0_f32);
     let clock_pulse = arkit_animation::use_animatable(0.0_f32);
@@ -2078,14 +2095,14 @@ pub fn ECharts(props: EChartsProps) -> Element {
         }
         // The initial commands may have been queued before the native node was
         // mounted. Resume once to wake the root FrameDriver with a valid node.
-        if lifecycle_active {
+        if animation_gates.finite {
             draw_transition_progress.controls().resume();
             draw_state_progress.controls().resume();
         } else {
             draw_transition_progress.controls().pause();
             draw_state_progress.controls().pause();
         }
-        if lifecycle_active && draw_state.needs_animation_clock() {
+        if animation_gates.continuous && draw_state.needs_animation_clock() {
             draw_clock.start();
             if draw_clock.is_running() {
                 draw_clock.poke();
@@ -2096,21 +2113,25 @@ pub fn ECharts(props: EChartsProps) -> Element {
         mark_node_dirty(&node);
     });
 
+    let foreground_transition_progress = transition_progress.clone();
+    let foreground_state_progress = state_progress.clone();
+    use_effect(use_reactive(&animation_gates.finite, move |active| {
+        if active {
+            foreground_transition_progress.controls().resume();
+            foreground_state_progress.controls().resume();
+        } else {
+            foreground_transition_progress.controls().pause();
+            foreground_state_progress.controls().pause();
+        }
+    }));
+
     let lifecycle_clock = animation_clock.clone();
     let lifecycle_state = state.clone();
-    let lifecycle_transition_progress = transition_progress.clone();
-    let lifecycle_state_progress = state_progress.clone();
-    use_effect(use_reactive(&lifecycle_active, move |active| {
-        if active {
-            lifecycle_transition_progress.controls().resume();
-            lifecycle_state_progress.controls().resume();
-            if lifecycle_state.needs_animation_clock() {
-                lifecycle_clock.start();
-                lifecycle_clock.poke();
-            }
+    use_effect(use_reactive(&animation_gates.continuous, move |active| {
+        if active && lifecycle_state.needs_animation_clock() {
+            lifecycle_clock.start();
+            lifecycle_clock.poke();
         } else {
-            lifecycle_transition_progress.controls().pause();
-            lifecycle_state_progress.controls().pause();
             lifecycle_clock.stop();
         }
     }));
@@ -2986,7 +3007,23 @@ fn toolbox_event(name: &str, x: f32, y: f32) -> ChartEvent {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::Series;
+    use crate::model::{Dataset, Series};
+
+    fn dataset_option(rows: [(&str, i32); 2]) -> ChartOption {
+        ChartOption::new()
+            .dataset(Dataset {
+                source: vec![
+                    vec!["day".into(), "value".into()],
+                    vec![rows[0].0.into(), rows[0].1.into()],
+                    vec![rows[1].0.into(), rows[1].1.into()],
+                ],
+                dimensions: vec!["day".into(), "value".into()],
+                source_header: true,
+                id: None,
+                extra: Default::default(),
+            })
+            .push_series(Series::line("Dataset", []))
+    }
 
     #[test]
     fn render_state_replaces_option_and_clears_stale_selection() {
@@ -3012,6 +3049,80 @@ mod tests {
 
         assert_eq!(state.option.borrow().title.as_ref().unwrap().text, "next");
         assert!(state.selected.borrow().is_none());
+    }
+
+    #[test]
+    fn offscreen_foreground_charts_finish_finite_but_stop_continuous_animation() {
+        assert_eq!(
+            chart_animation_gates(true, false),
+            ChartAnimationGates {
+                finite: true,
+                continuous: false,
+            }
+        );
+        assert_eq!(
+            chart_animation_gates(false, true),
+            ChartAnimationGates {
+                finite: false,
+                continuous: false,
+            }
+        );
+        assert_eq!(
+            chart_animation_gates(true, true),
+            ChartAnimationGates {
+                finite: true,
+                continuous: true,
+            }
+        );
+    }
+
+    #[test]
+    fn render_state_resolves_typed_dataset_on_create_update_and_restore() {
+        let initial = dataset_option([("Mon", 1), ("Tue", 2)]);
+        let state = ChartRenderState::new(initial);
+        {
+            let source_option = state.source_option.borrow();
+            let Series::Line(source) = &source_option.series[0] else {
+                panic!("line")
+            };
+            assert!(source.data.is_empty(), "source option must stay unresolved");
+        }
+        {
+            let rendered_option = state.option.borrow();
+            let Series::Line(rendered) = &rendered_option.series[0] else {
+                panic!("line")
+            };
+            assert_eq!(rendered.data[1].number_opt(0), Some(2.0));
+        }
+
+        let update = dataset_option([("Wed", 10), ("Thu", 20)]);
+        state.update_option(&update);
+        {
+            let source_option = state.source_option.borrow();
+            let Series::Line(source) = &source_option.series[0] else {
+                panic!("line")
+            };
+            assert!(
+                source.data.is_empty(),
+                "updates must retain source semantics"
+            );
+        }
+        {
+            let rendered_option = state.option.borrow();
+            let Series::Line(rendered) = &rendered_option.series[0] else {
+                panic!("line")
+            };
+            assert_eq!(rendered.data[0].number_opt(0), Some(10.0));
+            assert_eq!(rendered.data[1].number_opt(0), Some(20.0));
+            assert_eq!(rendered_option.x_axis[0].data, ["Wed", "Thu"]);
+        }
+
+        state.restore();
+        let restored_option = state.option.borrow();
+        let Series::Line(restored) = &restored_option.series[0] else {
+            panic!("line")
+        };
+        assert_eq!(restored.data[1].number_opt(0), Some(20.0));
     }
 
     #[test]

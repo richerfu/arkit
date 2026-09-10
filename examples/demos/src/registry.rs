@@ -53,6 +53,11 @@ pub const DEMO_GROUPS: &[DemoGroup] = &[
         title: "框架能力",
         demos: &[
             DemoSpec {
+                slug: "regressions",
+                name: "重构回归验收",
+                description: "keyed 移动、文本合并、Portal 分层与 dataset 对照",
+            },
+            DemoSpec {
                 slug: "counter",
                 name: "计数器",
                 description: "最简示例:rsx! 与 use_signal 信号驱动",

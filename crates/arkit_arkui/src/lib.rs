@@ -113,6 +113,10 @@ mod attributes;
 use attributes::{AttrMutation, DesiredAttrs, ListScrollToIndexCommand, ScrollOffsetCommand};
 mod host;
 use host::{ElementKey, HostId, HostKind, HostTree, PortalLayer};
+mod projection_logic;
+use projection_logic::{
+    insert_detached_at, native_insert_index as resolve_native_insert_index, remove_once,
+};
 
 fn log_arkui_result<T, E: ToString>(context: &str, result: Result<T, E>) -> Option<T> {
     match result {
@@ -631,6 +635,49 @@ impl ArkUIRenderer {
         self.hosts.alloc(kind)
     }
 
+    /// Detach pushed hosts from any existing parent before inserting them at a
+    /// new Dioxus mutation position. A pushed root is often a newly-created
+    /// detached subtree, but keyed reconciliation pushes already-mounted
+    /// hosts. Treating both cases as fresh insertions duplicates the latter in
+    /// both the logical and native child lists.
+    fn prepare_hosts_for_insertion(&mut self, destination_parent: HostId, hosts: &[HostId]) {
+        for &host in hosts {
+            assert_ne!(host, self.hosts.root(), "cannot insert the synthetic root");
+            assert_ne!(
+                host, destination_parent,
+                "a host cannot become its own logical child"
+            );
+
+            let Some(old_parent) = self.hosts[host].parent else {
+                continue;
+            };
+            let was_connected = self.hosts.is_connected_to_root(host);
+            let will_be_connected = self.hosts.is_connected_to_root(destination_parent);
+            assert!(
+                remove_once(&mut self.hosts[old_parent].children, &host).is_some(),
+                "host parent pointer was absent from the parent's child list"
+            );
+
+            // The logical removal happens first so merged text parents observe
+            // their final content when detach_native_at synchronizes them.
+            self.detach_native_at(old_parent, host);
+            self.hosts[host].parent = None;
+
+            // Connected-to-connected moves retain portal activation order and
+            // exact-node leases. Moving into a detached subtree must remove its
+            // portal projection until that subtree is mounted again.
+            if was_connected && !will_be_connected {
+                self.deactivate_portals_in_subtree(host);
+            }
+        }
+    }
+
+    fn insert_logical_child_at(&mut self, parent: HostId, index: usize, child: HostId) {
+        debug_assert!(self.hosts[child].parent.is_none());
+        insert_detached_at(&mut self.hosts[parent].children, index, child);
+        self.hosts[child].parent = Some(parent);
+    }
+
     fn bind_element(&mut self, id: ElementId, host: HostId) {
         self.hosts.bind_element(ElementKey::new(id.0), host);
     }
@@ -1119,25 +1166,32 @@ impl ArkUIRenderer {
 
     /// Native insertion point for a child placed at `logical_index`.
     ///
-    /// Anchored on the first following sibling that owns a native child; with
-    /// no such sibling the node appends. The answer comes from the native list
-    /// itself, so unlike a running projection count it cannot drift.
+    /// Anchored on the first following sibling that projects a native child.
+    /// With no such sibling, non-root content appends while root content stops
+    /// before the first active portal. The answer comes from live native
+    /// identity, so unlike a mirrored running index it cannot drift.
     fn native_insert_index(&self, parent: HostId, logical_index: usize) -> usize {
         let Some(parent_native) = self.native_child_container(parent) else {
             return 0;
         };
         let parent_native = parent_native.borrow();
         let mounted = parent_native.children();
-        self.hosts[parent].children[logical_index..]
+        let following = self.hosts[parent].children[logical_index..]
             .iter()
-            .find_map(|sibling| {
-                let native = self.hosts[*sibling].native.as_ref()?;
-                let raw = Self::native_raw_id(native);
-                mounted
-                    .iter()
-                    .position(|child| Self::native_raw_id(child) == raw)
-            })
-            .unwrap_or(mounted.len())
+            .filter(|sibling| self.projects_native_root(**sibling))
+            .filter_map(|sibling| self.hosts[*sibling].native.as_ref())
+            .map(Self::native_raw_id);
+        if parent == self.hosts.root() {
+            let trailing_portals = self
+                .projection
+                .active_portals
+                .keys()
+                .filter_map(|portal| self.hosts[*portal].native.as_ref())
+                .map(Self::native_raw_id);
+            resolve_native_insert_index(mounted, following, trailing_portals, Self::native_raw_id)
+        } else {
+            resolve_native_insert_index(mounted, following, std::iter::empty(), Self::native_raw_id)
+        }
     }
 
     /// Remove `child`'s projected node from `parent`'s native child list.
@@ -1418,13 +1472,6 @@ impl ArkUIRenderer {
         count
     }
 
-    /// Reconcile a parent's native child list from its final HostTree children.
-    ///
-    /// Dioxus can replace one logical node with multiple nodes in a single
-    /// mutation. Applying that as a sequence of native detach/attach operations
-    /// exposes intermediate child lists to ArkUI. Composite projections
-    /// (`button` outer container + internal content Row) make that especially
-    /// fragile, so structural mutations use this final-state sync instead.
     /// Reconcile a parent's native child list against the logical tree.
     ///
     /// This is wholesale reconciliation and is now only correct for the root:
@@ -2045,10 +2092,11 @@ impl WriteMutations for ArkUIRenderer {
             .collect();
         // children popped in reverse document order; reverse to restore order.
         let children: Vec<HostId> = children.into_iter().rev().collect();
+        self.prepare_hosts_for_insertion(parent, &children);
         let mut native_index = self.projected_native_len_at_end(parent);
         for child in children {
-            self.hosts[child].parent = Some(parent);
-            self.hosts[parent].children.push(child);
+            let index = self.hosts[parent].children.len();
+            self.insert_logical_child_at(parent, index, child);
             if self.attach_native_at(parent, child, native_index) {
                 native_index += 1;
             }
@@ -2120,6 +2168,15 @@ impl WriteMutations for ArkUIRenderer {
             self.discard_detached_hosts(new_hosts);
             return;
         };
+        if !self.hosts[parent].children.contains(&target) {
+            ohos_hilog_binding::warn(
+                "arkit_arkui: replace_node_with target is not a child of its recorded parent",
+            );
+            self.discard_detached_hosts(new_hosts);
+            return;
+        }
+
+        self.prepare_hosts_for_insertion(parent, &new_hosts);
         let Some(logical_index) = self.hosts[parent]
             .children
             .iter()
@@ -2135,23 +2192,25 @@ impl WriteMutations for ArkUIRenderer {
         // Resolve the native position before detaching. The target's own node
         // marks it exactly; a target that projects nothing (a placeholder) is
         // located by its logical position instead.
-        let native_start = self
-            .native_child_index(parent, target)
-            .unwrap_or_else(|| self.native_insert_index(parent, logical_index));
+        let native_start = if self.projects_native_root(target) {
+            self.native_child_index(parent, target)
+                .unwrap_or_else(|| self.native_insert_index(parent, logical_index))
+        } else {
+            self.native_insert_index(parent, logical_index)
+        };
 
         self.hosts[parent].children.remove(logical_index);
-        self.hosts[target].parent = None;
         self.detach_native_at(parent, target);
+        self.hosts[target].parent = None;
+        // Removed portal branches stop projecting in this mutation batch. The
+        // retirement pass repeats this idempotently before native disposal.
+        self.deactivate_portals_in_subtree(target);
 
         // Insert the replacements at the same position, advancing the native
         // cursor only for children that actually project a node.
         let mut cursor = native_start;
         for (offset, &child) in new_hosts.iter().enumerate() {
-            self.hosts[child].parent = Some(parent);
-            self.hosts[parent]
-                .children
-                .insert(logical_index + offset, child);
-            self.activate_portals_in_subtree(child);
+            self.insert_logical_child_at(parent, logical_index + offset, child);
             if self.attach_native_at(parent, child, cursor) {
                 cursor += 1;
             }
@@ -2178,6 +2237,15 @@ impl WriteMutations for ArkUIRenderer {
             self.discard_detached_hosts(new_hosts);
             return;
         };
+        if !self.hosts[parent].children.contains(&placeholder) {
+            ohos_hilog_binding::warn(
+                "arkit_arkui: placeholder is not a child of its recorded parent",
+            );
+            self.discard_detached_hosts(new_hosts);
+            return;
+        }
+
+        self.prepare_hosts_for_insertion(parent, &new_hosts);
         let Some(logical_index) = self.hosts[parent]
             .children
             .iter()
@@ -2200,11 +2268,7 @@ impl WriteMutations for ArkUIRenderer {
 
         let mut cursor = native_start;
         for (offset, &child) in new_hosts.iter().enumerate() {
-            self.hosts[child].parent = Some(parent);
-            self.hosts[parent]
-                .children
-                .insert(logical_index + offset, child);
-            self.activate_portals_in_subtree(child);
+            self.insert_logical_child_at(parent, logical_index + offset, child);
             if self.attach_native_at(parent, child, cursor) {
                 cursor += 1;
             }
@@ -2224,6 +2288,15 @@ impl WriteMutations for ArkUIRenderer {
             self.discard_detached_hosts(new_hosts);
             return;
         };
+        if !self.hosts[parent].children.contains(&sibling) {
+            ohos_hilog_binding::warn(
+                "arkit_arkui: insert_nodes_after sibling is not in its recorded parent",
+            );
+            self.discard_detached_hosts(new_hosts);
+            return;
+        }
+
+        self.prepare_hosts_for_insertion(parent, &new_hosts);
         let Some(logical_index) = self.hosts[parent]
             .children
             .iter()
@@ -2235,15 +2308,13 @@ impl WriteMutations for ArkUIRenderer {
             self.discard_detached_hosts(new_hosts);
             return;
         };
+        let insertion_index = logical_index + 1;
         let mut native_index = self.projected_native_len_before(parent, sibling);
         if self.projects_native_root(sibling) {
             native_index += 1;
         }
         for (offset, &child) in new_hosts.iter().enumerate() {
-            self.hosts[child].parent = Some(parent);
-            self.hosts[parent]
-                .children
-                .insert(logical_index + 1 + offset, child);
+            self.insert_logical_child_at(parent, insertion_index + offset, child);
             if self.attach_native_at(parent, child, native_index) {
                 native_index += 1;
             }
@@ -2263,6 +2334,15 @@ impl WriteMutations for ArkUIRenderer {
             self.discard_detached_hosts(new_hosts);
             return;
         };
+        if !self.hosts[parent].children.contains(&sibling) {
+            ohos_hilog_binding::warn(
+                "arkit_arkui: insert_nodes_before sibling is not in its recorded parent",
+            );
+            self.discard_detached_hosts(new_hosts);
+            return;
+        }
+
+        self.prepare_hosts_for_insertion(parent, &new_hosts);
         let Some(logical_index) = self.hosts[parent]
             .children
             .iter()
@@ -2276,10 +2356,7 @@ impl WriteMutations for ArkUIRenderer {
         };
         let mut native_index = self.projected_native_len_before(parent, sibling);
         for (offset, &child) in new_hosts.iter().enumerate() {
-            self.hosts[child].parent = Some(parent);
-            self.hosts[parent]
-                .children
-                .insert(logical_index + offset, child);
+            self.insert_logical_child_at(parent, logical_index + offset, child);
             if self.attach_native_at(parent, child, native_index) {
                 native_index += 1;
             }
@@ -2483,12 +2560,12 @@ impl WriteMutations for ArkUIRenderer {
         else {
             return;
         };
-        // Detach the projected native node while the child still records it;
-        // the position is resolved by identity, so sibling reorders that
-        // happened earlier in this batch cannot make it stale.
-        self.detach_native_at(parent, host);
         self.hosts[parent].children.remove(logical_index);
+        // Remove the logical child first so merged TextContent is computed from
+        // the final list rather than retaining the just-removed text node.
+        self.detach_native_at(parent, host);
         self.hosts[host].parent = None;
+        self.deactivate_portals_in_subtree(host);
         self.retire_subtree(host);
     }
 
@@ -2878,13 +2955,21 @@ fn extract_payload(
 /// contains the documented per-frame offsets. The pointer is owned by ArkUI
 /// and remains valid only for the duration of the callback.
 fn component_event_f32(event: &ArkNativeEvent, index: usize) -> Option<f32> {
-    component_event_number(event, index).map(|value| unsafe { value.f32_ })
+    component_event_number(event, index).map(|value| {
+        // SAFETY: this helper is used only for component event fields whose
+        // ArkUI contract declares the union member as `f32_`.
+        unsafe { value.f32_ }
+    })
 }
 
 /// Same `GetNumberValue` hole as [`component_event_f32`], for List/WaterFlow
 /// visible-index callbacks (`data[n].i32`).
 fn component_event_i32(event: &ArkNativeEvent, index: usize) -> Option<i32> {
-    component_event_number(event, index).map(|value| unsafe { value.i32_ })
+    component_event_number(event, index).map(|value| {
+        // SAFETY: this helper is used only for component event fields whose
+        // ArkUI contract declares the union member as `i32_`.
+        unsafe { value.i32_ }
+    })
 }
 
 fn component_event_number(

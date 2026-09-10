@@ -106,10 +106,8 @@ pub(crate) fn parse_option_value(value: Value) -> Result<ChartOption, ChartParse
         option.diagnostics.extend(diagnostics);
     }
 
-    apply_dataset(&mut option);
-
     option.extra = object.into_iter().collect();
-    Ok(option)
+    Ok(resolve_option_data(option))
 }
 
 fn parse_animation_options(object: &serde_json::Map<String, Value>) -> AnimationOptions {
@@ -298,7 +296,7 @@ pub(crate) fn resolve_media_option(
     timeline_index: usize,
 ) -> Result<ChartOption, ChartParseError> {
     let Some(media) = option.media.as_ref() else {
-        return Ok(option.clone());
+        return Ok(resolve_option_data(option.clone()));
     };
     let mut merged = media.base_option.clone();
     if let Some(frame) = media.timeline_options.get(timeline_index) {
@@ -318,6 +316,18 @@ pub(crate) fn resolve_media_option(
         resolved.timeline_options = option.timeline_options.clone();
     }
     Ok(resolved)
+}
+
+/// Resolve data derived from `dataset` for every snapshot that may become
+/// active at runtime. The source option remains separate in the component so
+/// a later prop update is always resolved from the caller's empty/explicit
+/// series data, rather than from a previously materialized snapshot.
+pub(crate) fn resolve_option_data(mut option: ChartOption) -> ChartOption {
+    for frame in &mut option.timeline_options {
+        apply_dataset(frame);
+    }
+    apply_dataset(&mut option);
+    option
 }
 
 fn deep_merge(target: &mut Value, source: Value) {
@@ -424,7 +434,7 @@ fn toolbox_axis_indices(value: Option<&Value>, count: usize) -> Vec<usize> {
 }
 
 fn apply_dataset(option: &mut ChartOption) {
-    let datasets = option.datasets.clone();
+    let datasets = &option.datasets;
     let axis_dataset_index = option
         .series
         .iter()
@@ -3521,6 +3531,83 @@ mod tests {
                 .number(0),
             18.0
         );
+    }
+
+    #[test]
+    fn typed_dataset_resolves_like_json_independent_of_builder_order() {
+        let dataset = Dataset {
+            source: vec![
+                vec!["day".into(), "orders".into(), "revenue".into()],
+                vec!["Mon".into(), 12.into(), 8.into()],
+                vec!["Tue".into(), 20.into(), 18.into()],
+            ],
+            dimensions: vec!["day".into(), "orders".into(), "revenue".into()],
+            source_header: true,
+            id: None,
+            extra: BTreeMap::new(),
+        };
+        let empty_series = || [Series::bar("Orders", []), Series::line("Revenue", [])];
+        let dataset_first = ChartOption::new()
+            .dataset(dataset.clone())
+            .series(empty_series());
+        let series_first = ChartOption::new().series(empty_series()).dataset(dataset);
+
+        let Series::Bar(raw) = &dataset_first.series[0] else {
+            panic!("bar")
+        };
+        assert!(raw.data.is_empty(), "builders must preserve source data");
+
+        let dataset_first = resolve_option_data(dataset_first);
+        let series_first = resolve_option_data(series_first);
+        let json = parse_option_str(
+            r#"{
+                "dataset":{"source":[["day","orders","revenue"],["Mon",12,8],["Tue",20,18]]},
+                "series":[
+                    {"type":"bar","name":"Orders"},
+                    {"type":"line","name":"Revenue"}
+                ]
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(dataset_first, series_first);
+        assert_eq!(dataset_first.datasets, json.datasets);
+        assert_eq!(dataset_first.x_axis, json.x_axis);
+        for (typed, parsed) in dataset_first.series.iter().zip(&json.series) {
+            let typed = match typed {
+                Series::Line(series) | Series::Bar(series) => &series.data,
+                _ => panic!("basic series"),
+            };
+            let parsed = match parsed {
+                Series::Line(series) | Series::Bar(series) => &series.data,
+                _ => panic!("basic series"),
+            };
+            assert_eq!(typed, parsed);
+        }
+    }
+
+    #[test]
+    fn dataset_resolution_preserves_explicit_series_data() {
+        let option = ChartOption::new()
+            .dataset(Dataset {
+                source: vec![
+                    vec!["day".into(), "value".into()],
+                    vec!["Mon".into(), 12.into()],
+                ],
+                dimensions: vec!["day".into(), "value".into()],
+                source_header: true,
+                id: None,
+                extra: BTreeMap::new(),
+            })
+            .push_series(Series::line("Manual", [99.0]));
+
+        let resolved = resolve_option_data(option);
+        let Series::Line(series) = &resolved.series[0] else {
+            panic!("line")
+        };
+        assert_eq!(series.data.len(), 1);
+        assert_eq!(series.data[0].number_opt(0), Some(99.0));
+        assert_eq!(resolved.x_axis[0].data, ["Mon"]);
     }
 
     #[test]

@@ -426,10 +426,8 @@ pub fn Index(props: IndexProps) -> Element {
                     if pointer.action != dioxus_elements::event::PointerAction::Down {
                         return;
                     }
-                    if pointer.x + RAIL_WIDTH < pointer.target_width {
-                        if scrub.peek().is_some() {
-                            scrub.set(None);
-                        }
+                    if pointer.x + RAIL_WIDTH < pointer.target_width && scrub.peek().is_some() {
+                        scrub.set(None);
                     }
                 },
                 column {
