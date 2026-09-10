@@ -198,9 +198,9 @@ mod tests {
     #[test]
     fn loading_progress_tag_maps_to_native_kind() {
         assert_eq!(
-            kind_from_tag("loadingprogress"),
+            kind_from_tag("LoadingProgress"),
             Some(NodeKind::LoadingProgress)
         );
-        assert_eq!(canonical_tag("loadingprogress"), "loadingprogress");
+        assert_eq!(canonical_tag("LoadingProgress"), "loadingprogress");
     }
 }
