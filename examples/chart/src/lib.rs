@@ -5,6 +5,7 @@
 
 use std::time::Duration;
 
+use arkit::echarts::*;
 use arkit::prelude::*;
 
 #[component]

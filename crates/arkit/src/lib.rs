@@ -89,38 +89,7 @@ pub use arkit_router::{
 #[cfg(feature = "animation")]
 pub use arkit_animation as animation;
 #[cfg(feature = "animation")]
-pub use arkit_animation::WindowMetrics as AnimationWindowMetrics;
-#[cfg(feature = "animation")]
-pub use arkit_animation::{
-    stagger, use_animatable, use_animatable_with_defaults, use_animate_presence, use_animation,
-    use_animation_host_provider, use_animation_layout, use_animation_scope, use_animation_snapshot,
-    use_animation_target, use_draggable, use_layout_snapshot, use_presence_visibility,
-    use_scoped_animation, use_scroll_observer, Angle, Animatable, AnimatableDefaults,
-    AnimatableValue, AnimatePresence, Animation, AnimationAdapterError, AnimationBackend,
-    AnimationBuildError, AnimationControls, AnimationFinished, AnimationHostError,
-    AnimationInstanceSnapshot, AnimationOutcome, AnimationPerformanceCounters, AnimationScope,
-    AnimationScopeDefaults, AnimationSelector, AnimationSubscription, AnimationTarget,
-    AnimationValue, AutoScroll, BackendRejection, BuiltinEase, CallPolicy, CapabilityRequirements,
-    Composition, DiscreteValue, DragAxis, DragConstraints, DragMapping, DragPhase, DragSnap,
-    DragUpdate, Draggable, DraggableCallbacks, DraggableConfig, DraggableHandle, EaseDirection,
-    Easing, EasingError, ExecutionPolicy, ExitCancelPolicy, InvalidationClass, IrregularEase,
-    IterationCount, JumpMode, LabelName, LayoutAnimation, LayoutAnimationMode, LayoutChangeKind,
-    LayoutDelta, LayoutEngine, LayoutId, LayoutMountState, LayoutNode, LayoutNodeId,
-    LayoutSnapshot, Length, LengthUnit, LinearPoint, LinearRgba, LoweringReport, Modifier,
-    MountTransition, NativeCapability, NativeLoweringError, PlaybackDirection, PlaybackRate,
-    PlaybackSettings, PlaybackState, PresenceEntry, PresenceHandle, PresenceKey, PresenceMode,
-    PresencePhase, PresenceTransition, PresenceVisibility, Property, PropertyKeyframe,
-    PropertyName, ScopeCleanupPolicy, ScopeMethodName, ScrollAxis, ScrollCallbacks,
-    ScrollDirection, ScrollObserver, ScrollRange, ScrollSample, ScrollSync, ScrollThreshold,
-    ShadowValue, SharedElementProjection, SpringSpec, Stagger, StaggerAxis, StaggerDirection,
-    StaggerFrom, StaggerGrid, TargetName, TimeError, TimeOffset, TimePoint, TimeSpan, Timeline,
-    TimelinePosition, TransformValue, TransitionPreset, UnsupportedFeature, ValueError, ValueKind,
-    Vec2, Vec3, VelocityTracker, VisibleTransition, WindowCondition, ASPECT_RATIO,
-    BACKGROUND_COLOR, BLUR, BORDER_COLOR, BORDER_RADIUS, BORDER_WIDTH, BRIGHTNESS, CONTRAST,
-    FONT_COLOR, FONT_SIZE, FOREGROUND_COLOR, GRAYSCALE, HEIGHT, INVERT, LETTER_SPACING,
-    LINE_HEIGHT, OPACITY, POSITION_X, POSITION_Y, ROTATION, SATURATION, SCALE_X, SCALE_Y, SEPIA,
-    TRANSLATE_X, TRANSLATE_Y, WIDTH,
-};
+pub use arkit_animation::prelude::*;
 
 // --- Barcode / QR generation ---
 #[cfg(feature = "barcode")]
@@ -157,19 +126,6 @@ pub use arkit_camera::{
 // --- W3C-aligned Canvas 2D ---
 #[cfg(feature = "canvas")]
 pub use arkit_canvas as canvas;
-#[cfg(feature = "canvas")]
-pub use arkit_canvas::{
-    Canvas, CanvasColor, CanvasColorSpace, CanvasColorType, CanvasController, CanvasError,
-    CanvasFont, CanvasFontFace, CanvasFontKerning, CanvasFontRegistry, CanvasFontStretch,
-    CanvasFontStyle, CanvasFontVariantCaps, CanvasGradient, CanvasImage, CanvasImageDecodeOptions,
-    CanvasImageEncodeOptions, CanvasImageFormat, CanvasImageSmoothingQuality, CanvasLineCap,
-    CanvasLineJoin, CanvasPattern, CanvasPatternRepetition, CanvasRadius, CanvasRenderer,
-    CanvasRenderingContext2D, CanvasRenderingContext2DSettings, CanvasResult, CanvasStyle,
-    CanvasTextAlign, CanvasTextBaseline, CanvasTextDirection, CanvasTextMetrics,
-    CanvasTextRendering, DomMatrix2D, FillRule, Float16, GlobalCompositeOperation, ImageData,
-    ImageDataArray, ImageDataPixelFormat, ImageDataSettings, IntoCanvasFont, IntoCanvasRadii,
-    IntoCanvasStyle, OffscreenCanvas, Path2D,
-};
 
 // --- Icon ---
 #[cfg(feature = "icon")]
@@ -189,17 +145,6 @@ pub use arkit_lottie::{
 // --- Native ECharts-compatible charts ---
 #[cfg(feature = "chart")]
 pub use arkit_chart as echarts;
-#[cfg(feature = "chart")]
-pub use arkit_chart::{
-    Axis, AxisLabelStyle, AxisLine, AxisOrientation, AxisTick, AxisType, BasicSeries, ChartAction,
-    ChartActionKind, ChartActionTarget, ChartAppendData, ChartController, ChartCoordinateFinder,
-    ChartCoordinatePoint, ChartEvent, ChartOption, ChartParseError, ChartRuntimeEvent,
-    ChartRuntimeEventBatchItem, ChartSelectedItems, DataPoint, DataValue, Dataset, Diagnostic,
-    ECharts, EChartsProps, GraphSeries, Grid, ItemStyle, LabelLayoutCallback,
-    LabelLayoutCallbackParams, LabelLayoutCallbackResult, LabelLayoutOptions, LabelStyle, Legend,
-    LineStyle, LinkData, MapFeature, MapOptions, MapPolygon, MapSeries, NodeData, SankeySeries,
-    Series, SeriesOptions, Title, Tooltip, VisualStyle,
-};
 
 // --- Embedded terminal (rio-vt) ---
 #[cfg(feature = "terminal")]
@@ -400,65 +345,13 @@ pub mod prelude {
     };
 
     #[cfg(feature = "animation")]
-    pub use crate::{
-        stagger, use_animatable, use_animatable_with_defaults, use_animate_presence, use_animation,
-        use_animation_layout, use_animation_scope, use_animation_snapshot, use_animation_target,
-        use_draggable, use_layout_snapshot, use_presence_visibility, use_scoped_animation,
-        use_scroll_observer, Angle, Animatable, AnimatableDefaults, AnimatableValue,
-        AnimatePresence, Animation, AnimationAdapterError, AnimationBackend, AnimationBuildError,
-        AnimationControls, AnimationFinished, AnimationHostError, AnimationInstanceSnapshot,
-        AnimationOutcome, AnimationPerformanceCounters, AnimationScope, AnimationScopeDefaults,
-        AnimationSelector, AnimationSubscription, AnimationTarget, AnimationValue,
-        AnimationWindowMetrics, AutoScroll, BackendRejection, BuiltinEase, CallPolicy,
-        CapabilityRequirements, Composition, DiscreteValue, DragAxis, DragConstraints, DragMapping,
-        DragPhase, DragSnap, DragUpdate, Draggable, DraggableCallbacks, DraggableConfig,
-        DraggableHandle, EaseDirection, Easing, EasingError, ExecutionPolicy, ExitCancelPolicy,
-        InvalidationClass, IrregularEase, IterationCount, JumpMode, LabelName, LayoutAnimation,
-        LayoutAnimationMode, LayoutChangeKind, LayoutDelta, LayoutEngine, LayoutId,
-        LayoutMountState, LayoutNode, LayoutNodeId, LayoutSnapshot, Length, LengthUnit,
-        LinearPoint, LinearRgba, LoweringReport, Modifier, MountTransition, NativeCapability,
-        NativeLoweringError, PlaybackDirection, PlaybackRate, PlaybackSettings, PlaybackState,
-        PresenceEntry, PresenceHandle, PresenceKey, PresenceMode, PresencePhase,
-        PresenceTransition, PresenceVisibility, Property, PropertyKeyframe, PropertyName,
-        ScopeCleanupPolicy, ScopeMethodName, ScrollAxis, ScrollCallbacks, ScrollDirection,
-        ScrollObserver, ScrollRange, ScrollSample, ScrollSync, ScrollThreshold, ShadowValue,
-        SharedElementProjection, SpringSpec, Stagger, StaggerAxis, StaggerDirection, StaggerFrom,
-        StaggerGrid, TargetName, TimeError, TimeOffset, TimePoint, TimeSpan, Timeline,
-        TimelinePosition, TransformValue, TransitionPreset, UnsupportedFeature, ValueError,
-        ValueKind, Vec2, Vec3, VelocityTracker, VisibleTransition, WindowCondition, ASPECT_RATIO,
-        BACKGROUND_COLOR, BLUR, BORDER_COLOR, BORDER_RADIUS, BORDER_WIDTH, BRIGHTNESS, CONTRAST,
-        FONT_COLOR, FONT_SIZE, FOREGROUND_COLOR, GRAYSCALE, HEIGHT, INVERT, LETTER_SPACING,
-        LINE_HEIGHT, OPACITY, POSITION_X, POSITION_Y, ROTATION, SATURATION, SCALE_X, SCALE_Y,
-        SEPIA, TRANSLATE_X, TRANSLATE_Y, WIDTH,
-    };
+    pub use arkit_animation::prelude::*;
 
     #[cfg(feature = "chart")]
-    pub use crate::{
-        Axis, AxisLabelStyle, AxisLine, AxisOrientation, AxisTick, AxisType, BasicSeries,
-        ChartAction, ChartActionKind, ChartActionTarget, ChartAppendData, ChartController,
-        ChartCoordinateFinder, ChartCoordinatePoint, ChartEvent, ChartOption, ChartParseError,
-        ChartRuntimeEvent, ChartRuntimeEventBatchItem, ChartSelectedItems, DataPoint, DataValue,
-        Dataset, Diagnostic, ECharts, EChartsProps, GraphSeries, Grid, ItemStyle,
-        LabelLayoutCallback, LabelLayoutCallbackParams, LabelLayoutCallbackResult,
-        LabelLayoutOptions, LabelStyle, Legend, LineStyle, LinkData, MapFeature, MapOptions,
-        MapPolygon, MapSeries, NodeData, SankeySeries, Series, SeriesOptions, Title, Tooltip,
-        VisualStyle,
-    };
+    pub use crate::echarts;
 
     #[cfg(feature = "canvas")]
-    pub use crate::{
-        canvas, Canvas, CanvasColor, CanvasColorSpace, CanvasColorType, CanvasController,
-        CanvasError, CanvasFont, CanvasFontFace, CanvasFontKerning, CanvasFontRegistry,
-        CanvasFontStretch, CanvasFontStyle, CanvasFontVariantCaps, CanvasGradient, CanvasImage,
-        CanvasImageDecodeOptions, CanvasImageEncodeOptions, CanvasImageFormat,
-        CanvasImageSmoothingQuality, CanvasLineCap, CanvasLineJoin, CanvasPattern,
-        CanvasPatternRepetition, CanvasRadius, CanvasRenderer, CanvasRenderingContext2D,
-        CanvasRenderingContext2DSettings, CanvasResult, CanvasStyle, CanvasTextAlign,
-        CanvasTextBaseline, CanvasTextDirection, CanvasTextMetrics, CanvasTextRendering,
-        DomMatrix2D, FillRule, Float16, GlobalCompositeOperation, ImageData, ImageDataArray,
-        ImageDataPixelFormat, ImageDataSettings, IntoCanvasFont, IntoCanvasRadii, IntoCanvasStyle,
-        OffscreenCanvas, Path2D,
-    };
+    pub use crate::canvas;
 
     #[cfg(feature = "barcode")]
     pub use crate::{

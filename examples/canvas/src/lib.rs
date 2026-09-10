@@ -5,6 +5,7 @@ mod tiger;
 use std::f32::consts::{PI, TAU};
 use std::rc::Rc;
 
+use arkit::canvas::*;
 use arkit::prelude::*;
 
 use tiger::TigerScene;

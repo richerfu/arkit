@@ -1,3 +1,4 @@
+use arkit::animation::CapabilityRequirements;
 use arkit::prelude::*;
 
 use crate::{
