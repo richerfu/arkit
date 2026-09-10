@@ -3143,6 +3143,15 @@ pub(crate) fn parse_color(value: &Value) -> Option<u32> {
     }
 }
 
+/// Parse an ECharts JSON colour into ArkUI's packed ARGB word.
+///
+/// ECharts follows CSS, so the four- and eight-digit forms are read as
+/// **RGBA** / **RRGGBBAA** and converted to ARGB here.
+///
+/// Do not fold this together with `arkit_arkui`'s identically named helper:
+/// that one reads RSX attributes, which this repo spells **AARRGGBB**. The two
+/// disagree on every input that carries alpha, and the three- and six-digit
+/// forms are the only ones they share.
 fn parse_hex_color(value: &str) -> Option<u32> {
     if let Some(value) = value.strip_prefix('#') {
         return match value.len() {

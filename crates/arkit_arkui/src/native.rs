@@ -180,6 +180,13 @@ pub fn canonical_tag(tag: &str) -> &'static str {
 
 /// Parse a CSS-like hex color (`"#RRGGBB"` / `"#AARRGGBB"` / `"RRGGBB"`) into a
 /// 32-bit ARGB value. Returns `Err` if the string is not a hex color.
+/// Parse a packed **AARRGGBB** colour, rejecting anything but six or eight
+/// digits.
+///
+/// This is the strict subset of [`crate::css_value::parse_hex_color`], which
+/// also accepts the three- and four-digit CSS shorthands. The two agree
+/// wherever they overlap; a caller that wants the shorthands should use that
+/// one, since neither is a compatibility wrapper for the other.
 pub fn parse_color(s: &str) -> Result<u32, ()> {
     let s = s.strip_prefix('#').unwrap_or(s);
     match s.len() {

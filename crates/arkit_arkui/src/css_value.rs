@@ -82,6 +82,15 @@ pub fn parse_css_color(value: &AttributeValue) -> Option<u32> {
     }
 }
 
+/// Parse an RSX colour attribute into ArkUI's packed ARGB word.
+///
+/// The four- and eight-digit forms are read as **AARRGGBB**, matching how every
+/// RSX attribute in this repo is written (`font_color: "#FF1F2937"`).
+///
+/// Do not fold this together with `arkit_chart`'s identically named helper:
+/// that one reads ECharts JSON, where the same syntax follows CSS and means
+/// **RRGGBBAA**. The two disagree on every input that carries alpha, and the
+/// three- and six-digit forms are the only ones they share.
 fn parse_hex_color(s: &str) -> Option<u32> {
     let s = s.trim().trim_start_matches('#');
     match s.len() {
