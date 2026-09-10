@@ -27,8 +27,6 @@ const GUIDE_DEFAULT_BACKDROP: u32 = 0xA6000000;
 ///
 /// The panel automatically flips to the opposite side when the preferred side
 /// does not have enough room.
-pub type GuideSide = FloatingSide;
-
 /// One guide step and the target it describes.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GuideStep {
@@ -36,7 +34,7 @@ pub struct GuideStep {
     pub target: String,
     pub title: String,
     pub description: String,
-    pub side: GuideSide,
+    pub side: FloatingSide,
 }
 
 impl GuideStep {
@@ -49,11 +47,11 @@ impl GuideStep {
             target: target.into(),
             title: title.into(),
             description: description.into(),
-            side: GuideSide::Bottom,
+            side: FloatingSide::Bottom,
         }
     }
 
-    pub const fn side(mut self, side: GuideSide) -> Self {
+    pub const fn side(mut self, side: FloatingSide) -> Self {
         self.side = side;
         self
     }
@@ -351,7 +349,7 @@ impl GuideGeometry {
         target: arkit_hooks::LayoutFrame,
         viewport: arkit_hooks::OverlayViewport,
         style: GuideStyle,
-        preferred_side: GuideSide,
+        preferred_side: FloatingSide,
     ) -> Option<Self> {
         if !target.is_measured() {
             return None;
@@ -430,19 +428,19 @@ impl GuideGeometry {
         );
 
         let (raw_x, raw_y) = match side {
-            GuideSide::Top => (
+            FloatingSide::Top => (
                 spotlight.x + (spotlight.width - panel_width) / 2.0,
                 spotlight.y - side_offset - panel_height,
             ),
-            GuideSide::Bottom => (
+            FloatingSide::Bottom => (
                 spotlight.x + (spotlight.width - panel_width) / 2.0,
                 spotlight.bottom() + side_offset,
             ),
-            GuideSide::Left => (
+            FloatingSide::Left => (
                 spotlight.x - side_offset - panel_width,
                 spotlight.y + (spotlight.height - panel_height) / 2.0,
             ),
-            GuideSide::Right => (
+            FloatingSide::Right => (
                 spotlight.right() + side_offset,
                 spotlight.y + (spotlight.height - panel_height) / 2.0,
             ),
@@ -463,48 +461,48 @@ impl GuideGeometry {
 }
 
 fn resolve_side(
-    preferred: GuideSide,
+    preferred: FloatingSide,
     spotlight: GuideRect,
     panel_width: f32,
     panel_height: f32,
     offset: f32,
     bounds: GuideRect,
-) -> GuideSide {
+) -> FloatingSide {
     let top = spotlight.y - bounds.y;
     let bottom = bounds.bottom() - spotlight.bottom();
     let left = spotlight.x - bounds.x;
     let right = bounds.right() - spotlight.right();
     let fits = |side| match side {
-        GuideSide::Top => top >= panel_height + offset,
-        GuideSide::Bottom => bottom >= panel_height + offset,
-        GuideSide::Left => left >= panel_width + offset,
-        GuideSide::Right => right >= panel_width + offset,
+        FloatingSide::Top => top >= panel_height + offset,
+        FloatingSide::Bottom => bottom >= panel_height + offset,
+        FloatingSide::Left => left >= panel_width + offset,
+        FloatingSide::Right => right >= panel_width + offset,
     };
     if fits(preferred) {
         return preferred;
     }
     let opposite = match preferred {
-        GuideSide::Top => GuideSide::Bottom,
-        GuideSide::Bottom => GuideSide::Top,
-        GuideSide::Left => GuideSide::Right,
-        GuideSide::Right => GuideSide::Left,
+        FloatingSide::Top => FloatingSide::Bottom,
+        FloatingSide::Bottom => FloatingSide::Top,
+        FloatingSide::Left => FloatingSide::Right,
+        FloatingSide::Right => FloatingSide::Left,
     };
     if fits(opposite) {
         return opposite;
     }
     match preferred {
-        GuideSide::Top | GuideSide::Bottom => {
+        FloatingSide::Top | FloatingSide::Bottom => {
             if bottom >= top {
-                GuideSide::Bottom
+                FloatingSide::Bottom
             } else {
-                GuideSide::Top
+                FloatingSide::Top
             }
         }
-        GuideSide::Left | GuideSide::Right => {
+        FloatingSide::Left | FloatingSide::Right => {
             if right >= left {
-                GuideSide::Right
+                FloatingSide::Right
             } else {
-                GuideSide::Left
+                FloatingSide::Left
             }
         }
     }
@@ -746,8 +744,8 @@ mod tests {
             height: 40.0,
         };
         assert_eq!(
-            resolve_side(GuideSide::Bottom, target, 280.0, 160.0, 12.0, bounds),
-            GuideSide::Top
+            resolve_side(FloatingSide::Bottom, target, 280.0, 160.0, 12.0, bounds),
+            FloatingSide::Top
         );
     }
 
@@ -766,8 +764,8 @@ mod tests {
             height: 48.0,
         };
         assert_eq!(
-            resolve_side(GuideSide::Bottom, target, 280.0, 160.0, 12.0, bounds),
-            GuideSide::Bottom
+            resolve_side(FloatingSide::Bottom, target, 280.0, 160.0, 12.0, bounds),
+            FloatingSide::Bottom
         );
     }
 
@@ -798,7 +796,7 @@ mod tests {
                 estimated_panel_height: 100.0,
                 ..GuideStyle::default()
             },
-            GuideSide::Bottom,
+            FloatingSide::Bottom,
         )
         .expect("measured target should resolve");
 

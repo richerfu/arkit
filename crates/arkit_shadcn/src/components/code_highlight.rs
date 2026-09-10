@@ -7,8 +7,8 @@
 //! palette types, and custom registration ([`register_language`],
 //! [`register_highlight_configuration`], and related helpers)—is compiled
 //! **only** when the `code` Cargo feature is enabled. It does **not** require
-//! `markdown`. Enable `markdown` + `code` (or the `markdown-highlight` alias)
-//! to highlight fenced code inside Markdown documents.
+//! `markdown`. Enable both `markdown` and `code` to highlight fenced code
+//! inside Markdown documents.
 //!
 //! # Custom languages
 //!

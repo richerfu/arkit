@@ -94,8 +94,6 @@ mod tests {
                 "lines",
                 vec![LineSegment {
                     name: Some(String::from("route")),
-                    from: (0.0, 0.0),
-                    to: (1.0, 1.0),
                     coords: vec![(0.0, 0.0), (1.0, 1.0)],
                     value: 1.0,
                 }],

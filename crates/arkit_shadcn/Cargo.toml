@@ -25,8 +25,6 @@ code = [
     "dep:tree-sitter-c",
 ]
 markdown = ["dep:pulldown-cmark", "dep:smallvec"]
-# Convenience alias: Markdown + Code (fenced-code highlighting in Markdown).
-markdown-highlight = ["markdown", "code"]
 
 [dependencies]
 arkit_animation = { workspace = true }

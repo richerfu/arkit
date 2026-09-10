@@ -599,7 +599,7 @@ pub fn IndexBar(props: IndexBarProps) -> Element {
             padding_bottom: spacing::XS,
             align_items: "center",
             background_color: HIT_FILL,
-            on_touch: move |event| {
+            ontouch: move |event| {
                 let Some(pointer) = event.data().pointer else {
                     return;
                 };

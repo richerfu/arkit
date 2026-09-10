@@ -231,10 +231,8 @@ impl CalendarLabels {
 /// Props for [`Calendar`].
 #[derive(Props, Clone, PartialEq)]
 pub struct CalendarProps {
-    /// Backwards-compatible single selected date in `YYYY-MM-DD` form.
-    pub selected: Option<String>,
-    /// Additional selected dates. Supplying this list enables controlled
-    /// multi-selection without changing the component's interaction model.
+    /// Selected dates in `YYYY-MM-DD` form. Supplying this list enables
+    /// controlled multi-selection without changing the component's interaction model.
     #[props(default)]
     pub selected_dates: Vec<String>,
     /// Initially visible month in `YYYY-MM` form. Defaults to the current
@@ -310,7 +308,6 @@ pub fn Calendar(props: CalendarProps) -> Element {
     let selection_color = props.selection_color.unwrap_or(default_accent);
     let today_color = props.today_color.unwrap_or(selection_color);
     let embedded = props.embedded;
-    let selected = props.selected.clone();
     let selected_dates = props.selected_dates.clone();
     let on_day_press = props.on_day_press;
     let on_month_change = props.on_month_change;
@@ -486,7 +483,6 @@ pub fn Calendar(props: CalendarProps) -> Element {
                     month,
                     today,
                     year_range,
-                    selected,
                     selected_dates,
                     selection_color,
                     today_color,
@@ -702,7 +698,6 @@ fn CalendarDays(
     month: CalendarMonth,
     today: CalendarDate,
     year_range: CalendarYearRange,
-    selected: Option<String>,
     selected_dates: Vec<String>,
     selection_color: u32,
     today_color: u32,
@@ -722,8 +717,7 @@ fn CalendarDays(
     let weeks = dates.chunks_exact(7).map(|week| {
         let cells = week.iter().copied().map(|date| {
             let date_string = date.to_string();
-            let is_selected = selected.as_deref() == Some(date_string.as_str())
-                || selected_dates.iter().any(|value| value == &date_string);
+            let is_selected = selected_dates.iter().any(|value| value == &date_string);
             let is_today = date == today;
             let is_outside = date.calendar_month() != month;
             let enabled = year_range.contains(date.year());

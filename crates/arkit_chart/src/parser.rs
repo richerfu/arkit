@@ -52,11 +52,9 @@ pub(crate) fn parse_option_value(value: Value) -> Result<ChartOption, ChartParse
     }
     if let Some(value) = object.remove("dataset") {
         option.datasets = parse_dataset_list(value);
-        option.dataset = option.datasets.first().cloned();
     }
     if let Some(value) = object.remove("visualMap") {
         option.visual_maps = parse_visual_map_list(value);
-        option.visual_map = option.visual_maps.first().cloned();
     }
     if let Some(value) = object.remove("dataZoom") {
         option.data_zoom = parse_data_zoom_list(value);
@@ -426,11 +424,7 @@ fn toolbox_axis_indices(value: Option<&Value>, count: usize) -> Vec<usize> {
 }
 
 fn apply_dataset(option: &mut ChartOption) {
-    let datasets = if option.datasets.is_empty() {
-        option.dataset.iter().cloned().collect::<Vec<_>>()
-    } else {
-        option.datasets.clone()
-    };
+    let datasets = option.datasets.clone();
     let axis_dataset_index = option
         .series
         .iter()
@@ -2041,8 +2035,6 @@ fn parse_line_segment(value: &Value) -> Option<LineSegment> {
             Some((point.first()?.as_f64()?, point.get(1)?.as_f64()?))
         })
         .collect::<Vec<_>>();
-    let from = *coords.first()?;
-    let to = *coords.last()?;
     if coords.len() < 2 {
         return None;
     }
@@ -2051,8 +2043,6 @@ fn parse_line_segment(value: &Value) -> Option<LineSegment> {
             .get("name")
             .and_then(Value::as_str)
             .map(ToOwned::to_owned),
-        from,
-        to,
         coords,
         value: object.get("value").and_then(Value::as_f64).unwrap_or(1.0),
     })
@@ -3359,7 +3349,7 @@ mod tests {
         )
         .unwrap();
 
-        let visual_map = option.visual_map.as_ref().expect("visualMap");
+        let visual_map = option.visual_maps.first().expect("visualMap");
         assert_eq!(visual_map.dimension, Some(2));
         assert_eq!(visual_map.symbol_size_range, Some([8.0, 32.0]));
         let Series::EffectScatter(scatter) = &option.series[0] else {
@@ -3675,7 +3665,7 @@ mod tests {
             ]}}"##,
         )
         .unwrap();
-        let visual_map = option.visual_map.unwrap();
+        let visual_map = option.visual_maps.into_iter().next().unwrap();
         assert_eq!(visual_map.pieces.len(), 3);
         assert!(visual_map.pieces[1].contains(12.0));
         assert_eq!(visual_map.pieces[1].symbol_size, Some(18.0));

@@ -265,7 +265,7 @@ pub fn mount_entry_with_policy(
     safe_area_policy: SafeAreaPolicy,
 ) -> napi_ohos::Result<ArkRuntime> {
     let dom = VirtualDom::new_with_props(arkit_entry_root, EntryRootProps { root });
-    arkit_runtime::mount_virtual_dom_with_policy(slot, app, dom, safe_area_policy)
+    arkit_runtime::ArkRuntime::from_virtual_dom_with_policy(slot, app, dom, safe_area_policy)
 }
 
 fn arkit_entry_root(props: EntryRootProps) -> Element {

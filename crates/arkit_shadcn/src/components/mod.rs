@@ -132,14 +132,14 @@ pub use code_highlight::{
 pub use collapsible::{Collapsible, CollapsibleProps};
 pub use combobox::{Combobox, ComboboxProps};
 pub use command::{Command, CommandProps};
-pub use context_menu::{ContextMenu, ContextMenuEntry, ContextMenuProps};
+pub use context_menu::{ContextMenu, ContextMenuProps};
 pub use date_picker::{DatePicker, DatePickerProps};
 pub use dialog::{
     use_dialog_close, Dialog, DialogClose, DialogFooter, DialogFooterProps, DialogHeader,
     DialogHeaderProps, DialogProps,
 };
 pub use drawer::{Drawer, DrawerProps};
-pub use dropdown_menu::{DropdownMenu, DropdownMenuEntry, DropdownMenuProps};
+pub use dropdown_menu::{DropdownMenu, DropdownMenuProps};
 pub use floating_layer::{FloatingAlign, FloatingLayer, FloatingLayerProps, FloatingSide};
 pub use form::{
     Field, FieldContent, FieldContentProps, FieldDescription, FieldDescriptionProps, FieldError,
@@ -149,7 +149,7 @@ pub use form::{
     FormItemProps, FormProps,
 };
 pub use guide::{
-    Guide, GuideLabels, GuideProps, GuideSide, GuideStep, GuideStyle, GuideTarget, GuideTargetProps,
+    Guide, GuideLabels, GuideProps, GuideStep, GuideStyle, GuideTarget, GuideTargetProps,
 };
 pub use hover_card::{HoverCard, HoverCardProps};
 pub use index::{
@@ -168,7 +168,7 @@ pub use menu_common::{
     menu_separator_entry, menu_submenu_entry, MenuActionEntry, MenuCheckboxEntry, MenuEntry,
     MenuLabelEntry, MenuRadioEntry, MenuStyle, MenuSubmenuEntry,
 };
-pub use menubar::{Menubar, MenubarEntry, MenubarMenuSpec, MenubarProps};
+pub use menubar::{Menubar, MenubarMenuSpec, MenubarProps};
 pub use navigation_menu::{
     NavigationItem, NavigationItemProps, NavigationMenu, NavigationMenuProps,
 };

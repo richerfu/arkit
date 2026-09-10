@@ -21,7 +21,7 @@ use arkit::shadcn::components::{
     CarouselControlsPlacement, CarouselIndicatorVariant, CarouselStyle, Checkbox, Code,
     Collapsible, ContextMenu, DatePicker, Dialog, DialogFooter, DialogHeader, DropdownMenu, Field,
     FieldContent, FieldDescription, FieldError, FieldGroup, FieldOrientation, FieldSeparator,
-    FieldSet, FieldTitle, Form, FormItem, Guide, GuideSide, GuideStep, GuideTarget, HoverCard,
+    FieldSet, FieldTitle, FloatingSide, Form, FormItem, Guide, GuideStep, GuideTarget, HoverCard,
     Index, IndexBarSlot, IndexHeaderContext, IndexItemContext, IndexItemSpec, InfiniteScroll,
     Input, InputMode, InputOtp, InputOtpMode, InputOtpSeparator, Label, LoadMoreIndicator,
     LoadMoreState, Markdown, MenuEntry, Menubar, MenubarMenuSpec, MultiSlider, Popover, Progress,
@@ -1861,7 +1861,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
             column {
                 width: "100%",
                 Calendar {
-                    selected: calendar_selected(),
+                    selected_dates: calendar_selected().into_iter().collect(),
                     year_range: CalendarYearRange::new(1900, 2100),
                     plugins: vec![lunar_calendar_plugin, memo_calendar_plugin],
                     on_day_press: move |date| calendar_selected.set(Some(date)),
@@ -2917,19 +2917,19 @@ fn ComponentDemo(slug: &'static str) -> Element {
                             "Your workspace",
                             "This summary keeps the active project and its recent activity in one place.",
                         )
-                        .side(GuideSide::Bottom),
+                        .side(FloatingSide::Bottom),
                         GuideStep::new(
                             "guide-search",
                             "Find anything",
                             "Search across components, examples, and documentation without leaving the page.",
                         )
-                        .side(GuideSide::Bottom),
+                        .side(FloatingSide::Bottom),
                         GuideStep::new(
                             "guide-settings",
                             "Tune the experience",
                             "Open preferences to change appearance, notifications, and workspace defaults.",
                         )
-                        .side(GuideSide::Top),
+                        .side(FloatingSide::Top),
                     ],
                     open: Some(guide_open()),
                     step: Some(guide_step()),

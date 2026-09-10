@@ -15,11 +15,9 @@ use arkit_prelude::*;
 
 const MENU_PANEL_WIDTH: f32 = 224.0;
 
-pub type ContextMenuEntry = MenuEntry;
-
 #[component]
 pub fn ContextMenu(
-    items: Vec<ContextMenuEntry>,
+    items: Vec<MenuEntry>,
     children: Element,
     open: Option<bool>,
     default_open: bool,

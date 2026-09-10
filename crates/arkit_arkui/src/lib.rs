@@ -26,7 +26,6 @@ use std::cell::RefCell;
 use std::ffi::c_void;
 use std::rc::Rc;
 
-use arkit_dom::{ElementKey, HostId, HostKind, HostTree, PortalLayer};
 use dioxus_core::{ElementId, Template, TemplateNode, WriteMutations};
 use ohos_arkui_binding::common::error::ArkUIResult;
 use ohos_arkui_binding::common::handle::ArkUIHandle;
@@ -73,6 +72,8 @@ pub use node_builder::{NativeNodeEvent, NodeBuilder, NodeEventType, PreDragStatu
 
 mod attributes;
 use attributes::{AttrMutation, DesiredAttrs, ListScrollToIndexCommand, ScrollOffsetCommand};
+mod host;
+use host::{ElementKey, HostId, HostKind, HostTree, PortalLayer};
 
 fn log_arkui_result<T, E: ToString>(context: &str, result: Result<T, E>) -> Option<T> {
     match result {
@@ -841,7 +842,7 @@ impl ArkUIRenderer {
         let children = self.hosts[host].children.clone();
         let mut native_index = 0;
         for child in children {
-            if self.native_roots(child).is_empty() {
+            if !self.projects_native_root(child) {
                 continue;
             }
             let mounted_child = container.borrow().children().get(native_index).cloned();
@@ -884,33 +885,26 @@ impl ArkUIRenderer {
         Some(out)
     }
 
-    /// Native nodes this host projects onto, in order. For a normal element
-    /// that is just `[self.native]`; for text-under-container it is its own
-    /// native text node; for text-under-text/button and placeholders it is `[]`.
-    fn native_roots(&self, host: HostId) -> Vec<NodeRef> {
+    /// Whether this host contributes one native root to its logical parent's
+    /// native child list.
+    ///
+    /// Normal elements project their own node; text under a normal container
+    /// projects a native `Text`; placeholders, portals, and text merged into a
+    /// `text`/`button` parent contribute no native child node.
+    fn projects_native_root(&self, host: HostId) -> bool {
         let h = &self.hosts[host];
         match &h.kind {
-            HostKind::Root | HostKind::Element { .. } => h.native.clone().into_iter().collect(),
-            // A portal has a logical parent but projects directly under the
-            // renderer root. It contributes no native root to that logical
-            // parent's child list.
-            HostKind::Portal { .. } => Vec::new(),
+            HostKind::Root | HostKind::Element { .. } => h.native.is_some(),
+            HostKind::Portal { .. } | HostKind::Placeholder => false,
             HostKind::Text { .. } => {
-                // Text under text/button merges into parent → no native root.
-                // Text under a normal container → its own native Text.
+                if h.native.is_none() {
+                    return false;
+                }
                 match h.parent {
-                    Some(parent) => {
-                        let parent_tag = self.hosts[parent].tag();
-                        if Self::merges_text_children(parent_tag) {
-                            Vec::new()
-                        } else {
-                            h.native.clone().into_iter().collect()
-                        }
-                    }
-                    None => h.native.clone().into_iter().collect(),
+                    Some(parent) => !Self::merges_text_children(self.hosts[parent].tag()),
+                    None => true,
                 }
             }
-            HostKind::Placeholder => Vec::new(),
         }
     }
 
@@ -1004,13 +998,23 @@ impl ArkUIRenderer {
     /// children before/after this insertion point are unaffected because ArkUI
     /// `insert_child` is positional.
     fn attach_native(&mut self, parent: HostId, child: HostId) {
+        let native_index = self.projected_native_len_before(parent, child);
+        self.attach_native_at(parent, child, native_index);
+    }
+
+    /// Attach one logical child at an already-computed native index.
+    ///
+    /// Returns `true` when the child contributed a native root under `parent`.
+    /// Batch callers use this to advance the insertion cursor without
+    /// recomputing the projected prefix for every sibling.
+    fn attach_native_at(&mut self, parent: HostId, child: HostId, native_index: usize) -> bool {
         if self.fault.is_some() {
-            return;
+            return false;
         }
         self.activate_portals_in_subtree(child);
         if matches!(self.hosts[child].kind, HostKind::Portal { .. }) {
             self.ensure_native(child);
-            return;
+            return false;
         }
         // If the parent merges text children, a child text node contributes to
         // the parent's content attribute instead of a native child.
@@ -1018,7 +1022,7 @@ impl ArkUIRenderer {
         let child_is_text = matches!(self.hosts[child].kind, HostKind::Text { .. });
         if child_is_text && Self::merges_text_children(parent_tag) {
             self.sync_content_attribute(parent);
-            return;
+            return false;
         }
 
         // Ensure the child has a native node if its projection requires one.
@@ -1027,15 +1031,12 @@ impl ArkUIRenderer {
 
         let Some(child_native) = self.hosts[child].native.clone() else {
             // Placeholder / non-projecting child: nothing to attach.
-            return;
+            return false;
         };
         let Some(parent_native) = self.native_child_container(parent) else {
-            return;
+            return false;
         };
 
-        // Compute the native insertion index: the count of native roots
-        // contributed by logical children preceding `child`.
-        let native_index = self.projected_native_len_before(parent, child);
         let insert_result = {
             let mut parent_mut = parent_native.borrow_mut();
             parent_mut.insert_child(child_native.clone(), native_index)
@@ -1046,7 +1047,7 @@ impl ArkUIRenderer {
         if !inserted {
             // Do not bind this logical child to whatever node happened to be
             // at the requested index when native insertion failed.
-            return;
+            return false;
         }
 
         // Keep renderer state synchronized with the parent's mounted wrapper.
@@ -1059,6 +1060,15 @@ impl ArkUIRenderer {
             self.hosts[child].native_attached = parent_attached;
             self.rebind_mounted_projection(child, parent_attached);
         }
+        true
+    }
+
+    fn projected_native_len_at_end(&self, parent: HostId) -> usize {
+        self.hosts[parent]
+            .children
+            .iter()
+            .filter(|child| self.projects_native_root(**child))
+            .count()
     }
 
     /// Ensure a host node has a native node allocated if its kind projects one.
@@ -1300,7 +1310,7 @@ impl ArkUIRenderer {
             if c == child {
                 break;
             }
-            count += self.native_roots(c).len();
+            count += usize::from(self.projects_native_root(c));
         }
         count
     }
@@ -1371,82 +1381,82 @@ impl ArkUIRenderer {
             .iter()
             .map(|(_, native)| Self::native_raw_id(native))
             .collect::<FxHashSet<_>>();
+        let mut mounted = parent_native.borrow().children().to_vec();
 
-        let child_count = parent_native.borrow().children().len();
-        for index in (0..child_count).rev() {
-            let should_remove = parent_native
-                .borrow()
-                .children()
-                .get(index)
-                .map(|child| !desired_raws.contains(&Self::native_raw_id(child)))
-                .unwrap_or(false);
-            if should_remove {
-                let result = parent_native.borrow_mut().remove_child(index);
-                if self
-                    .latch_structural("sync_native_children remove_child", result)
-                    .is_none()
-                {
-                    return;
-                }
+        for index in (0..mounted.len()).rev() {
+            if desired_raws.contains(&Self::native_raw_id(&mounted[index])) {
+                continue;
             }
+            let result = parent_native.borrow_mut().remove_child(index);
+            if self
+                .latch_structural("sync_native_children remove_child", result)
+                .is_none()
+            {
+                return;
+            }
+            mounted.remove(index);
         }
 
         for (native_index, (child, child_native)) in desired.into_iter().enumerate() {
             let parent_attached = self.hosts[parent].native_attached;
             let desired_raw = Self::native_raw_id(&child_native);
-            let mounted_at_index = parent_native.borrow().children().get(native_index).cloned();
+            let already_at_index = mounted
+                .get(native_index)
+                .is_some_and(|mounted| Self::native_raw_id(mounted) == desired_raw);
 
-            if mounted_at_index
-                .as_ref()
-                .is_some_and(|mounted| Self::native_raw_id(mounted) == desired_raw)
-            {
-                if let Some(mounted) = mounted_at_index {
-                    let wrapper_changed = !Rc::ptr_eq(&child_native, &mounted);
-                    let was_attached = self.hosts[child].native_attached;
-                    self.hosts[child].native = Some(mounted);
-                    self.hosts[child].native_attached = parent_attached;
-                    let became_attached = !was_attached && parent_attached;
-                    if wrapper_changed || was_attached != parent_attached {
-                        self.rebind_mounted_projection(child, became_attached);
-                    }
+            if already_at_index {
+                let mounted_child = mounted[native_index].clone();
+                let wrapper_changed = !Rc::ptr_eq(&child_native, &mounted_child);
+                let was_attached = self.hosts[child].native_attached;
+                self.hosts[child].native = Some(mounted_child);
+                self.hosts[child].native_attached = parent_attached;
+                let became_attached = !was_attached && parent_attached;
+                if wrapper_changed || was_attached != parent_attached {
+                    self.rebind_mounted_projection(child, became_attached);
                 }
-            } else {
-                // The desired node may already be mounted later in the same
-                // parent (a Dioxus reorder). Move that native node instead of
-                // inserting a duplicate and leaving a stale tail child.
-                let mounted_elsewhere = parent_native
-                    .borrow()
-                    .children()
-                    .iter()
-                    .position(|mounted| Self::native_raw_id(mounted) == desired_raw);
-                let node_to_insert = if let Some(index) = mounted_elsewhere {
-                    let result = parent_native.borrow_mut().remove_child(index);
-                    let removed = self
-                        .latch_structural("sync_native_children detach reordered child", result);
-                    let Some(Some(removed)) = removed else {
-                        return;
-                    };
-                    removed
-                } else {
-                    child_native.clone()
-                };
-                let result = {
-                    let mut parent_mut = parent_native.borrow_mut();
-                    parent_mut.insert_child(node_to_insert, native_index)
-                };
-                let inserted = self
-                    .latch_structural("sync_native_children insert_child", result)
-                    .is_some();
-                if !inserted {
-                    return;
-                }
-                let mounted = parent_native.borrow().children().get(native_index).cloned();
-                if let Some(mounted) = mounted {
-                    self.hosts[child].native = Some(mounted);
-                    self.hosts[child].native_attached = parent_attached;
-                    self.rebind_mounted_projection(child, parent_attached);
-                }
+                continue;
             }
+
+            // The desired node may already be mounted later in the same parent
+            // (a Dioxus reorder). Move that native node instead of inserting a
+            // duplicate and leaving a stale tail child.
+            let node_to_insert = if let Some(index) = mounted
+                .iter()
+                .position(|mounted| Self::native_raw_id(mounted) == desired_raw)
+            {
+                let result = parent_native.borrow_mut().remove_child(index);
+                let removed =
+                    self.latch_structural("sync_native_children detach reordered child", result);
+                let Some(Some(removed)) = removed else {
+                    return;
+                };
+                mounted.remove(index);
+                removed
+            } else {
+                child_native.clone()
+            };
+            let result = {
+                let mut parent_mut = parent_native.borrow_mut();
+                parent_mut.insert_child(node_to_insert, native_index)
+            };
+            let inserted = self
+                .latch_structural("sync_native_children insert_child", result)
+                .is_some();
+            if !inserted {
+                return;
+            }
+            let mounted_child = parent_native.borrow().children().get(native_index).cloned();
+            let Some(mounted_child) = mounted_child else {
+                continue;
+            };
+            if let Some(slot) = mounted.get_mut(native_index) {
+                *slot = mounted_child.clone();
+            } else {
+                mounted.insert(native_index, mounted_child.clone());
+            }
+            self.hosts[child].native = Some(mounted_child);
+            self.hosts[child].native_attached = parent_attached;
+            self.rebind_mounted_projection(child, parent_attached);
         }
     }
 
@@ -1924,10 +1934,13 @@ impl WriteMutations for ArkUIRenderer {
             .collect();
         // children popped in reverse document order; reverse to restore order.
         let children: Vec<HostId> = children.into_iter().rev().collect();
+        let mut native_index = self.projected_native_len_at_end(parent);
         for child in children {
             self.hosts[child].parent = Some(parent);
             self.hosts[parent].children.push(child);
-            self.attach_native(parent, child);
+            if self.attach_native_at(parent, child, native_index) {
+                native_index += 1;
+            }
         }
     }
 
@@ -2092,12 +2105,18 @@ impl WriteMutations for ArkUIRenderer {
             self.discard_detached_hosts(new_hosts);
             return;
         };
+        let mut native_index = self.projected_native_len_before(parent, sibling);
+        if self.projects_native_root(sibling) {
+            native_index += 1;
+        }
         for (offset, &child) in new_hosts.iter().enumerate() {
             self.hosts[child].parent = Some(parent);
             self.hosts[parent]
                 .children
                 .insert(logical_index + 1 + offset, child);
-            self.attach_native(parent, child);
+            if self.attach_native_at(parent, child, native_index) {
+                native_index += 1;
+            }
         }
     }
 
@@ -2125,12 +2144,15 @@ impl WriteMutations for ArkUIRenderer {
             self.discard_detached_hosts(new_hosts);
             return;
         };
+        let mut native_index = self.projected_native_len_before(parent, sibling);
         for (offset, &child) in new_hosts.iter().enumerate() {
             self.hosts[child].parent = Some(parent);
             self.hosts[parent]
                 .children
                 .insert(logical_index + offset, child);
-            self.attach_native(parent, child);
+            if self.attach_native_at(parent, child, native_index) {
+                native_index += 1;
+            }
         }
     }
 

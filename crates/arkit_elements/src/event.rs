@@ -49,30 +49,31 @@ impl ArkEventKind {
     }
 }
 
-/// Classify either an RSX attribute name or the stripped listener name passed
-/// by Dioxus to a renderer.
+/// Classify an RSX listener name passed by Dioxus to a renderer.
+///
+/// The canonical listener names are the compact Dioxus/ArkUI spelling:
+/// `onclick`, `onchange`, `onscroll`, `onarea`, and so on.
 pub fn classify_event_name(name: &str) -> Option<ArkEventKind> {
     let name = name.strip_prefix("on").unwrap_or(name);
-    let name = name.strip_prefix('_').unwrap_or(name);
     Some(match name {
-        "click" | "press" => ArkEventKind::Click,
-        "longpress" | "long_press" => ArkEventKind::LongPress,
+        "click" => ArkEventKind::Click,
+        "longpress" => ArkEventKind::LongPress,
         "change" | "input" | "toggle" => ArkEventKind::Change,
         "submit" => ArkEventKind::Submit,
         "scroll" => ArkEventKind::Scroll,
-        "reachend" | "reach_end" => ArkEventKind::ReachEnd,
-        "swiperchange" | "swiper_change" | "swiper" => ArkEventKind::SwiperChange,
+        "reachend" => ArkEventKind::ReachEnd,
+        "swiperchange" => ArkEventKind::SwiperChange,
         "refresh" => ArkEventKind::Refresh,
-        "area" | "area_change" | "layout" | "layout_change" => ArkEventKind::AreaChange,
+        "area" => ArkEventKind::AreaChange,
         "focus" => ArkEventKind::Focus,
         "blur" => ArkEventKind::Blur,
         "hover" => ArkEventKind::Hover,
-        "hovermove" | "hover_move" => ArkEventKind::HoverMove,
-        "dragstart" | "drag_start" => ArkEventKind::DragStart,
-        "dragmove" | "drag_move" => ArkEventKind::DragMove,
-        "dragend" | "drag_end" => ArkEventKind::DragEnd,
-        "dragleave" | "drag_leave" => ArkEventKind::DragLeave,
-        "dragenter" | "drag_enter" => ArkEventKind::DragEnter,
+        "hovermove" => ArkEventKind::HoverMove,
+        "dragstart" => ArkEventKind::DragStart,
+        "dragmove" => ArkEventKind::DragMove,
+        "dragend" => ArkEventKind::DragEnd,
+        "dragleave" => ArkEventKind::DragLeave,
+        "dragenter" => ArkEventKind::DragEnter,
         "touch" => ArkEventKind::Touch,
         _ => return None,
     })

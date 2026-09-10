@@ -9,11 +9,9 @@
 //! - `markdown` — native CommonMark/GFM [`components::Markdown`] renderer
 //! - `code` — standalone [`components::Code`] + tree-sitter highlighting and
 //!   language registration (no Markdown required)
-//! - `markdown-highlight` — convenience alias for `markdown` + `code` so
-//!   fenced blocks inside Markdown use the Code pipeline
 //!
-//! With only `markdown` enabled, fenced code is plain monospace. Enable
-//! `code` (alone or with Markdown) for syntax highlighting.
+//! Enable both `markdown` and `code` for syntax-highlighted fenced blocks,
+//! because Markdown reuses the Code pipeline when both features are present.
 //!
 //! ## Controlled state
 //!
@@ -25,7 +23,6 @@
 pub mod components;
 mod i18n;
 pub mod icon;
-pub mod styles;
 pub mod theme;
 
 pub mod prelude {

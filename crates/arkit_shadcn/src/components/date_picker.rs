@@ -149,7 +149,7 @@ pub fn DatePicker(props: DatePickerProps) -> Element {
                 padding_right: DATE_PICKER_CONTENT_INSET,
                 padding_left: DATE_PICKER_CONTENT_INSET,
                 Calendar {
-                    selected: selected.clone(),
+                    selected_dates: selected.clone().into_iter().collect(),
                     initial_month,
                     month: calendar_month,
                     year_range: calendar_year_range,

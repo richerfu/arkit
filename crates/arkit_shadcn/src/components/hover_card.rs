@@ -84,7 +84,7 @@ pub fn HoverCard(
         row {
             native_ref: trigger_ref,
             onclick: move |_| set_open.call(!current),
-            on_hover: move |evt| {
+            onhover: move |evt| {
                 if evt.data().is_hovering {
                     show_card.call(());
                 } else {

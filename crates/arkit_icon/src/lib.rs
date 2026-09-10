@@ -19,8 +19,6 @@ use rustc_hash::FxHashMap;
 use crate::embed::embedded_icon;
 pub use embed::{has_icon, icon_names};
 
-pub const DEFAULT_ICON_SIZE: f32 = 24.0;
-pub const DEFAULT_ICON_COLOR: u32 = 0xFF171717;
 pub const DEFAULT_STROKE_WIDTH: f32 = 2.0;
 
 fn pixel_ratio() -> f32 {

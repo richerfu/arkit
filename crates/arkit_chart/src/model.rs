@@ -20,11 +20,9 @@ pub struct ChartOption {
     pub y_axis: Vec<Axis>,
     pub radar: Vec<RadarCoordinate>,
     pub tooltip: Tooltip,
-    pub dataset: Option<Dataset>,
-    /// All ECharts dataset components. `dataset` remains the index-0 compatibility view.
+    /// All ECharts dataset components.
     pub datasets: Vec<Dataset>,
-    pub visual_map: Option<VisualMap>,
-    /// All ECharts visualMap components. `visual_map` remains the index-0 compatibility view.
+    /// All ECharts visualMap components.
     pub visual_maps: Vec<VisualMap>,
     pub data_zoom: Vec<DataZoom>,
     pub timeline: Option<Timeline>,
@@ -51,9 +49,7 @@ impl Default for ChartOption {
             y_axis: vec![Axis::value()],
             radar: Vec::new(),
             tooltip: Tooltip::default(),
-            dataset: None,
             datasets: Vec::new(),
-            visual_map: None,
             visual_maps: Vec::new(),
             data_zoom: Vec::new(),
             timeline: None,
@@ -164,9 +160,6 @@ impl ChartOption {
     }
 
     pub(crate) fn visual_map_for_series(&self, series_index: usize) -> Option<&VisualMap> {
-        if self.visual_maps.is_empty() {
-            return self.visual_map.as_ref();
-        }
         self.visual_maps
             .iter()
             .find(|visual_map| {
@@ -1578,9 +1571,7 @@ pub struct MapSeries {
 #[derive(Debug, Clone, PartialEq)]
 pub struct LineSegment {
     pub name: Option<String>,
-    pub from: (f64, f64),
-    pub to: (f64, f64),
-    /// Full ECharts `coords` path. `from`/`to` remain for typed API compatibility.
+    /// Full ECharts `coords` path.
     pub coords: Vec<(f64, f64)>,
     pub value: f64,
 }

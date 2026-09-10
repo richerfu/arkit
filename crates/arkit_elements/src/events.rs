@@ -44,61 +44,55 @@ macro_rules! impl_event {
 
 impl_event! {
     ClickData;
-    onclick on_press onlongpress on_long_press
+    onclick onlongpress
 }
 
 impl_event! {
     ChangeData;
-    onchange on_change oninput on_input ontoggle on_toggle
+    onchange oninput ontoggle
 }
 
 impl_event! {
     SubmitData;
-    onsubmit on_submit
+    onsubmit
 }
 
 impl_event! {
     ScrollData;
-    onscroll on_scroll
+    onscroll
 }
 
 impl_event! {
     ReachEndData;
-    onreachend on_reach_end
+    onreachend
 }
 
 impl_event! {
     SwiperChangeData;
-    onswiperchange on_swiper_change
+    onswiperchange
 }
 
 impl_event! {
     RefreshData;
-    onrefresh on_refresh
+    onrefresh
 }
 
 impl_event! {
     AreaData;
-    onarea on_area_change onlayout on_layout
+    onarea
 }
 
 impl_event! {
     HoverData;
-    onhover on_hover
+    onhover
 }
 
 impl_event! {
     FocusData;
-    onfocus on_focus onblur on_blur
+    onfocus onblur
 }
 
 impl_event! {
     PointerData;
-    onhovermove on_hover_move
-    ondragstart on_drag_start
-    ondragmove on_drag_move
-    ondragend on_drag_end
-    ondragleave on_drag_leave
-    ondragenter on_drag_enter
-    ontouch on_touch
+    onhovermove ondragstart ondragmove ondragend ondragleave ondragenter ontouch
 }

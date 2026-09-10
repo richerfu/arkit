@@ -66,7 +66,7 @@ pub fn Textarea(props: TextareaProps) -> Element {
             padding_bottom: spacing::SM,
             padding_left: spacing::MD,
             width: if let Some(w) = props.width { w },
-            on_change: move |evt| {
+            onchange: move |evt| {
                 if !disabled {
                     if let Some(handler) = on_change {
                         handler.call(evt.data().string_value.clone());
@@ -83,7 +83,7 @@ pub fn Textarea(props: TextareaProps) -> Element {
                     }
                 }
             },
-            on_focus: move |_| focus_request.set(false),
+            onfocus: move |_| focus_request.set(false),
         }
     }
 }

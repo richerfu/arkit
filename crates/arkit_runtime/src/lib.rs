@@ -4,7 +4,7 @@
 //! the dioxus wake/render loop into the OpenHarmony UI loop.
 //!
 //! ## Lifecycle
-//! 1. `ArkRuntime::from_virtual_dom(slot, app, dom)` installs the renderer and
+//! 1. `ArkRuntime::from_virtual_dom_with_policy(slot, app, dom, policy)` installs the renderer and
 //!    event sink, rebuilds the VirtualDom, and wires the OpenHarmony loop.
 //! 2. Native events (registered by the renderer) call [`EventSink::dispatch`],
 //!    which queues owned event data and wakes the OpenHarmony UI loop.
@@ -628,20 +628,11 @@ fn event_bubbles(name: &str) -> bool {
 
 impl ArkRuntime {
     /// Create and mount a runtime from an already-configured dioxus
-    /// [`VirtualDom`].
+    /// [`VirtualDom`] with an explicit root safe-area policy.
     ///
     /// This is the native-renderer boundary used by higher-level launchers that
     /// need root props or context wrappers. The runtime owns the VirtualDom
     /// directly; it does not reconstruct or reinterpret the component tree.
-    pub fn from_virtual_dom(
-        slot: ArkUIHandle,
-        app: OpenHarmonyApp,
-        dom: VirtualDom,
-    ) -> Result<Self> {
-        Self::from_virtual_dom_with_policy(slot, app, dom, SafeAreaPolicy::EdgeToEdge)
-    }
-
-    /// Create and mount a runtime with an explicit root safe-area policy.
     pub fn from_virtual_dom_with_policy(
         slot: ArkUIHandle,
         app: OpenHarmonyApp,
@@ -927,25 +918,6 @@ pub fn mount_embedded_virtual_dom(
         registration: Some(registration),
         inner: Some(inner),
     }
-}
-
-/// Mount an already-configured dioxus [`VirtualDom`] into a NodeContent slot.
-pub fn mount_virtual_dom(
-    slot: ArkUIHandle,
-    app: OpenHarmonyApp,
-    dom: VirtualDom,
-) -> Result<ArkRuntime> {
-    ArkRuntime::from_virtual_dom(slot, app, dom)
-}
-
-/// Mount a VirtualDom with an explicit root safe-area policy.
-pub fn mount_virtual_dom_with_policy(
-    slot: ArkUIHandle,
-    app: OpenHarmonyApp,
-    dom: VirtualDom,
-    safe_area_policy: SafeAreaPolicy,
-) -> Result<ArkRuntime> {
-    ArkRuntime::from_virtual_dom_with_policy(slot, app, dom, safe_area_policy)
 }
 
 fn map_arkui_error<E: ToString>(error: E) -> Error {

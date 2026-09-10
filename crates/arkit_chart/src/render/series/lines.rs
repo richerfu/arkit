@@ -118,11 +118,7 @@ pub(super) fn render(series: &LinesSeries, context: &mut FreeRenderContext<'_>) 
 }
 
 fn segment_coordinates(segment: &LineSegment) -> Box<dyn Iterator<Item = (f64, f64)> + '_> {
-    if segment.coords.len() >= 2 {
-        Box::new(segment.coords.iter().copied())
-    } else {
-        Box::new(std::iter::once(segment.from).chain(std::iter::once(segment.to)))
-    }
+    Box::new(segment.coords.iter().copied())
 }
 
 fn draw_end_symbol(

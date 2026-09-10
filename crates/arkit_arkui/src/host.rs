@@ -1,8 +1,8 @@
-//! Platform-independent logical tree used by Arkit renderers.
+//! Renderer-internal logical host tree used by [`crate::ArkUIRenderer`].
 //!
-//! This crate owns Dioxus-facing node identity and tree mutation semantics. It
-//! deliberately has no OpenHarmony or ArkUI dependency, so projection behavior
-//! can be verified on the host toolchain.
+//! This module owns Dioxus-facing node identity and tree mutation semantics.
+//! It deliberately has no OpenHarmony or ArkUI dependency, so projection
+//! behavior can be verified on the host toolchain without native APIs.
 
 use std::ops::{Deref, DerefMut, Index, IndexMut};
 
@@ -223,18 +223,6 @@ impl<P: Default> HostTree<P> {
         false
     }
 
-    pub fn len(&self) -> usize {
-        self.nodes.len()
-    }
-
-    /// Whether the backing arena has no nodes.
-    ///
-    /// A constructed tree always contains its synthetic root, so this remains
-    /// false for every valid `HostTree`.
-    pub fn is_empty(&self) -> bool {
-        self.nodes.is_empty()
-    }
-
     pub fn alloc(&mut self, kind: HostKind) -> HostId {
         if let Some(id) = self.free.pop() {
             self.nodes[id] = HostNode::new(kind, P::default());
@@ -283,16 +271,19 @@ impl<P: Default> HostTree<P> {
         self.free.push(host);
     }
 
+    #[cfg(test)]
     pub fn append_child(&mut self, parent: HostId, child: HostId) {
         self.nodes[child].parent = Some(parent);
         self.nodes[parent].children.push(child);
     }
 
+    #[cfg(test)]
     pub fn insert_child(&mut self, parent: HostId, index: usize, child: HostId) {
         self.nodes[child].parent = Some(parent);
         self.nodes[parent].children.insert(index, child);
     }
 
+    #[cfg(test)]
     pub fn detach_child(&mut self, parent: HostId, child: HostId) -> Option<usize> {
         let index = self.nodes[parent]
             .children

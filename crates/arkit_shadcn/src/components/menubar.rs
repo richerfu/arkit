@@ -22,17 +22,15 @@ const SUBMENU_PANEL_WIDTH: f32 = MENU_PANEL_WIDTH - (spacing::XXS * 2.0);
 const MENU_PANEL_SIDE_OFFSET: f32 = spacing::SM;
 const MENUBAR_ITEM_TRANSPARENT: u32 = 0x00000000;
 
-pub type MenubarEntry = MenuEntry;
-
 /// A single menu spec: trigger title + entries.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MenubarMenuSpec {
     pub title: String,
-    pub items: Vec<MenubarEntry>,
+    pub items: Vec<MenuEntry>,
 }
 
 impl MenubarMenuSpec {
-    pub fn new(title: impl Into<String>, items: Vec<MenubarEntry>) -> Self {
+    pub fn new(title: impl Into<String>, items: Vec<MenuEntry>) -> Self {
         Self {
             title: title.into(),
             items,
@@ -115,11 +113,8 @@ pub fn Menubar(
         );
         Some((items, placement))
     });
-    let last_overlay = use_hook(|| {
-        Rc::new(RefCell::new(
-            None::<(Vec<MenubarEntry>, MenuOverlayPlacement)>,
-        ))
-    });
+    let last_overlay =
+        use_hook(|| Rc::new(RefCell::new(None::<(Vec<MenuEntry>, MenuOverlayPlacement)>)));
     if let Some(payload) = overlay_payload.clone() {
         *last_overlay.borrow_mut() = Some(payload);
     }

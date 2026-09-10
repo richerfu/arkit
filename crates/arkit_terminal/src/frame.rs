@@ -341,7 +341,6 @@ impl TerminalFrame {
 }
 
 /// Terminal display width of a single codepoint (1 or 2).
-#[allow(dead_code)] // used by stub capture and public embedders
 pub fn east_asian_width(c: char) -> u8 {
     if is_likely_wide_char(c) {
         2

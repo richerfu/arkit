@@ -382,7 +382,7 @@ fn time_picker_column(
                 // BottomSheet handles downward drag gestures at its root.
                 // Keep wheel scrolling local so a minute/hour swipe cannot
                 // dismiss the entire sheet.
-                on_touch: move |event| event.stop_propagation(),
+                ontouch: move |event| event.stop_propagation(),
                 column {
                     width: "100%",
                     for option in options {

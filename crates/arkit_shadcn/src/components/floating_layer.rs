@@ -298,7 +298,7 @@ pub fn FloatingLayer(
             if hover {
                 row {
                     onclick: move |_| toggle.call(()),
-                    on_hover: move |_| open_up.call(()),
+                    onhover: move |_| open_up.call(()),
                     {trigger}
                 }
             } else {

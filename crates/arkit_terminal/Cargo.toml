@@ -9,12 +9,6 @@ license.workspace = true
 [lints]
 workspace = true
 
-[features]
-default = []
-# Kept so existing `--features stub` type-check commands keep working.
-# The engine is pure Rust now; this flag is a no-op.
-stub = []
-
 [dependencies]
 arkit_arkui.workspace = true
 arkit_hooks.workspace = true

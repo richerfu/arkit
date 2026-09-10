@@ -3,11 +3,12 @@
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
-use arkit_dom::{MountEpochEvent, MountEpochSubscriber};
 use dioxus_core::{AttributeValue, IntoAttributeValue};
 use ohos_arkui_binding::api::node_custom_event::{IntOffset, IntSize};
 use ohos_arkui_binding::common::node::ArkUINode;
 use rustc_hash::{FxHashMap, FxHashSet};
+
+use crate::host::{MountEpochEvent, MountEpochSubscriber};
 
 pub(crate) type SharedNativeNode = Rc<RefCell<ArkUINode>>;
 
