@@ -20,8 +20,8 @@ use arkit::shadcn::components::{
     CalendarYearRange, Card, CardContent, CardFooter, CardHeader, Carousel,
     CarouselControlsPlacement, CarouselIndicatorVariant, CarouselStyle, Checkbox, Code,
     Collapsible, ContextMenu, DatePicker, Dialog, DialogFooter, DialogHeader, DropdownMenu, Field,
-    FieldContent, FieldDescription, FieldError, FieldGroup, FieldOrientation, FieldSeparator,
-    FieldSet, FieldTitle, FloatingSide, Form, FormItem, Guide, GuideStep, GuideTarget, HoverCard,
+    FieldContent, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldOrientation,
+    FieldSeparator, FieldSet, FieldTitle, FloatingSide, Guide, GuideStep, GuideTarget, HoverCard,
     Index, IndexBarSlot, IndexHeaderContext, IndexItemContext, IndexItemSpec, InfiniteScroll,
     Input, InputMode, InputOtp, InputOtpMode, InputOtpSeparator, Label, LoadMoreIndicator,
     LoadMoreState, Markdown, MenuEntry, Menubar, MenubarMenuSpec, MultiSlider, Popover, Progress,
@@ -2755,15 +2755,19 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         text_align: "start",
                     }
                     v_gap { height: spacing::XXL }
-                    Form {
-                        submit_label: "Save changes".to_string(),
-                        on_submit: move |_| {
-                            form_attempted.set(true);
-                            let valid = form_name().trim().chars().count() >= 2
-                                && is_valid_email(form_email().as_str())
-                                && form_terms_accepted();
-                            form_status.set(Some(valid));
-                        },
+                    column {
+                        width: "100%",
+                        align_items: "start",
+                        background_color: theme.colors.card,
+                        foreground_color: theme.colors.card_foreground,
+                        border_width: 1.0,
+                        border_color: theme.colors.border,
+                        border_radius: theme.radii.xl,
+                        shadow: "sm",
+                        padding_top: spacing::XXL,
+                        padding_right: spacing::XXL,
+                        padding_bottom: spacing::XXL,
+                        padding_left: spacing::XXL,
                         FieldSet {
                             arkit_shadcn::components::FieldLegend {
                                 content: "Profile".to_string(),
@@ -2774,11 +2778,13 @@ fn ComponentDemo(slug: &'static str) -> Element {
                             }
                             v_gap { height: spacing::XL }
                             FieldGroup {
-                                FormItem {
-                                    label: "Display name".to_string(),
-                                    required: true,
-                                    description: Some("Use the name your teammates know you by.".to_string()),
-                                    error: if form_name_invalid { Some("Enter at least two characters.".to_string()) } else { None },
+                                Field {
+                                    invalid: form_name_invalid,
+                                    FieldLabel {
+                                        content: "Display name".to_string(),
+                                        required: true,
+                                        invalid: form_name_invalid,
+                                    }
                                     Input {
                                         value: Some(form_name()),
                                         placeholder: Some("Your name".to_string()),
@@ -2789,12 +2795,21 @@ fn ComponentDemo(slug: &'static str) -> Element {
                                             form_status.set(None);
                                         },
                                     }
+                                    FieldDescription {
+                                        content: "Use the name your teammates know you by.".to_string(),
+                                        inset: false,
+                                    }
+                                    if form_name_invalid {
+                                        FieldError { message: Some("Enter at least two characters.".to_string()) }
+                                    }
                                 }
-                                FormItem {
-                                    label: "Email address".to_string(),
-                                    required: true,
-                                    description: Some("We only use this for account and security updates.".to_string()),
-                                    error: if form_email_invalid { Some("Enter a valid email address.".to_string()) } else { None },
+                                Field {
+                                    invalid: form_email_invalid,
+                                    FieldLabel {
+                                        content: "Email address".to_string(),
+                                        required: true,
+                                        invalid: form_email_invalid,
+                                    }
                                     Input {
                                         value: Some(form_email()),
                                         placeholder: Some("name@example.com".to_string()),
@@ -2805,10 +2820,18 @@ fn ComponentDemo(slug: &'static str) -> Element {
                                             form_status.set(None);
                                         },
                                     }
+                                    FieldDescription {
+                                        content: "We only use this for account and security updates.".to_string(),
+                                        inset: false,
+                                    }
+                                    if form_email_invalid {
+                                        FieldError { message: Some("Enter a valid email address.".to_string()) }
+                                    }
                                 }
-                                FormItem {
-                                    label: "Bio".to_string(),
-                                    description: Some("Keep it short. You can change this anytime.".to_string()),
+                                Field {
+                                    FieldLabel {
+                                        content: "Bio".to_string(),
+                                    }
                                     Textarea {
                                         value: Some(form_bio()),
                                         placeholder: Some("Tell people a little about yourself.".to_string()),
@@ -2818,6 +2841,10 @@ fn ComponentDemo(slug: &'static str) -> Element {
                                             form_bio.set(value);
                                             form_status.set(None);
                                         },
+                                    }
+                                    FieldDescription {
+                                        content: "Keep it short. You can change this anytime.".to_string(),
+                                        inset: false,
                                     }
                                 }
                             }
@@ -2901,6 +2928,21 @@ fn ComponentDemo(slug: &'static str) -> Element {
                                         text_align: "start",
                                     }
                                 }
+                            }
+                        }
+                        row {
+                            width: "100%",
+                            Button {
+                                variant: ButtonVariant::Default,
+                                width: "100%",
+                                onclick: move |_| {
+                                    form_attempted.set(true);
+                                    let valid = form_name().trim().chars().count() >= 2
+                                        && is_valid_email(form_email().as_str())
+                                        && form_terms_accepted();
+                                    form_status.set(Some(valid));
+                                },
+                                "Save changes"
                             }
                         }
                     }

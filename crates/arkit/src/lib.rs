@@ -50,9 +50,7 @@ pub use arkit_arkui::{
 /// renderer or virtual source. Renderer-owned mounted nodes are only available
 /// through generation-checked [`MountedNodeLease`] values.
 pub mod native {
-    pub use arkit_arkui::{
-        NativeNodeEvent, NodeBuilder, NodeEventType, OwnedNativeNode, PreDragStatus,
-    };
+    pub use arkit_arkui::{NativeNodeEvent, NodeBuilder, NodeEventType, OwnedNativeNode};
 }
 
 // --- Hooks (exact refs / portals / virtualization) ---

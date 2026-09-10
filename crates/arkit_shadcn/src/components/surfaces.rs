@@ -367,8 +367,8 @@ fn callback_eq(left: &Option<Rc<dyn Fn()>>, right: &Option<Rc<dyn Fn()>>) -> boo
 /// Props for a standalone toast card.
 #[derive(Props, Clone, PartialEq)]
 pub struct ToastProps {
-    /// Primary line. Kept as `message` for compatibility with the old API.
-    pub message: String,
+    /// Primary line.
+    pub title: String,
     #[props(default)]
     pub description: Option<String>,
     #[props(default)]
@@ -466,7 +466,7 @@ pub fn Toast(props: ToastProps) -> Element {
     let pad_x = if is_minimal { 12.0 } else { spacing::MD };
     let title_weight = if is_minimal { 500_i32 } else { 600_i32 };
     let chip_width = if is_minimal {
-        Some(minimal_chip_width(&props.message, has_icon))
+        Some(minimal_chip_width(&props.title, has_icon))
     } else {
         None
     };
@@ -525,7 +525,7 @@ pub fn Toast(props: ToastProps) -> Element {
                     }
                 }
                 text {
-                    content: props.message,
+                    content: props.title,
                     font_size: typography::SM,
                     font_weight: title_weight,
                     font_color: palette.foreground,
@@ -597,7 +597,7 @@ pub fn Toast(props: ToastProps) -> Element {
                 justify_content: "center",
                 text {
                     width: "100%",
-                    content: props.message,
+                    content: props.title,
                     font_size: typography::SM,
                     font_weight: title_weight,
                     font_color: palette.foreground,
@@ -678,22 +678,6 @@ pub fn Toast(props: ToastProps) -> Element {
                 }
             }
             }
-        }
-    }
-}
-
-/// Compatibility wrapper for the former destructive-only toast component.
-#[derive(Props, Clone, PartialEq)]
-pub struct ToastDestructiveProps {
-    pub message: String,
-}
-
-#[component]
-pub fn ToastDestructive(props: ToastDestructiveProps) -> Element {
-    rsx! {
-        Toast {
-            message: props.message,
-            variant: ToastVariant::Error,
         }
     }
 }
@@ -1564,7 +1548,7 @@ fn SonnerToastEntry(
                 exit_duration_ms: Some(TOAST_EXIT_MS),
                 distance: Some(TOAST_DISTANCE),
                 Toast {
-                    message: toast.title,
+                    title: toast.title,
                     description: toast.description,
                     variant: toast.variant,
                     appearance: toast.appearance,

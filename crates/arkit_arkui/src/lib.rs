@@ -68,7 +68,7 @@ pub mod virtual_adapter;
 pub use virtual_adapter::{MountItem, RenderItem, VirtualItemMount, VirtualKind, VirtualSource};
 
 pub mod node_builder;
-pub use node_builder::{NativeNodeEvent, NodeBuilder, NodeEventType, PreDragStatus};
+pub use node_builder::{NativeNodeEvent, NodeBuilder, NodeEventType};
 
 mod attributes;
 use attributes::{AttrMutation, DesiredAttrs, ListScrollToIndexCommand, ScrollOffsetCommand};

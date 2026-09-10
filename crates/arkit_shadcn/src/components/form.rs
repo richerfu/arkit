@@ -1,75 +1,11 @@
-//! Form and field composition primitives.
+//! Field composition primitives.
 //!
-//! The form root keeps the original Arkit card-and-submit API for backwards
-//! compatibility. The `Field*` family mirrors the current shadcn composition
-//! model: forms own their state and validation, while these components provide
-//! consistent mobile layout for labels, controls, descriptions, groups, and
-//! validation messages.
+//! Forms own their state and validation; these components provide consistent
+//! mobile layout for labels, controls, descriptions, groups, and validation
+//! messages.
 
-use super::button::{Button, ButtonVariant};
 use crate::theme::*;
 use arkit_prelude::*;
-
-/// Props for [`Form`].
-#[derive(Props, Clone, PartialEq)]
-pub struct FormProps {
-    pub submit_label: String,
-    pub on_submit: Option<EventHandler<()>>,
-    /// Disables the built-in submit action without changing its layout.
-    #[props(default)]
-    pub submit_disabled: bool,
-    /// Renders the legacy card surface. Disable this when the surrounding page
-    /// already provides its own form surface.
-    #[props(default = true)]
-    pub surface: bool,
-    pub children: Element,
-}
-
-/// A mobile form surface with an optional built-in submit action.
-///
-/// Validation and field state remain controlled by the caller. An empty
-/// `submit_label` omits the built-in action, allowing fully compositional use.
-#[component]
-pub fn Form(props: FormProps) -> Element {
-    let theme = use_theme();
-    let on_submit = props.on_submit;
-    let submit_label = props.submit_label.clone();
-    let padding = if props.surface { spacing::XXL } else { 0.0 };
-
-    rsx! {
-        column {
-            width: "100%",
-            align_items: "start",
-            background_color: if props.surface { theme.colors.card } else { 0x00000000 },
-            foreground_color: theme.colors.card_foreground,
-            border_width: if props.surface { 1.0 } else { 0.0 },
-            border_color: if props.surface { theme.colors.border } else { 0x00000000 },
-            border_radius: if props.surface { theme.radii.xl } else { 0.0 },
-            shadow: if props.surface { "sm" },
-            padding_top: padding,
-            padding_right: padding,
-            padding_bottom: padding,
-            padding_left: padding,
-            {props.children}
-            if !submit_label.is_empty() {
-                row {
-                    width: "100%",
-                    Button {
-                        variant: ButtonVariant::Default,
-                        width: "100%",
-                        disabled: Some(props.submit_disabled),
-                        onclick: move |_| {
-                            if let Some(handler) = on_submit {
-                                handler.call(());
-                            }
-                        },
-                        "{submit_label}"
-                    }
-                }
-            }
-        }
-    }
-}
 
 /// Layout direction for [`Field`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -390,50 +326,6 @@ pub fn FieldSeparator(props: FieldSeparatorProps) -> Element {
                     height: 1.0,
                     background_color: theme.colors.border,
                 }
-            }
-        }
-    }
-}
-
-/// Props for [`FormItem`].
-#[derive(Props, Clone, PartialEq)]
-pub struct FormItemProps {
-    pub label: String,
-    #[props(default)]
-    pub description: Option<String>,
-    #[props(default)]
-    pub error: Option<String>,
-    #[props(default)]
-    pub required: bool,
-    #[props(default)]
-    pub disabled: bool,
-    pub children: Element,
-}
-
-/// Backwards-compatible labelled field convenience wrapper.
-///
-/// New code can use the `Field*` primitives directly when it needs a custom
-/// composition. `FormItem` covers the common label-control-description-error
-/// stack and keeps the original `label + children` call shape intact.
-#[component]
-pub fn FormItem(props: FormItemProps) -> Element {
-    let invalid = props.error.as_ref().is_some_and(|error| !error.is_empty());
-
-    rsx! {
-        Field {
-            invalid,
-            disabled: props.disabled,
-            FieldLabel {
-                content: props.label.clone(),
-                required: props.required,
-                invalid,
-            }
-            {props.children}
-            if let Some(description) = props.description.as_ref().filter(|description| !description.is_empty()) {
-                FieldDescription { content: description.clone() }
-            }
-            if let Some(error) = props.error.as_ref().filter(|error| !error.is_empty()) {
-                FieldError { message: Some(error.clone()) }
             }
         }
     }
