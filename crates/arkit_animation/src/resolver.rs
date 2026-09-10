@@ -4,7 +4,7 @@ use arkit_animation_core::{
     WindowMetrics,
 };
 
-use crate::AdapterRegistry;
+use crate::adapter_registry::AdapterRegistry;
 
 pub struct AdapterResolutionSnapshot<'registry> {
     registry: &'registry AdapterRegistry,
@@ -22,7 +22,7 @@ impl<'registry> AdapterResolutionSnapshot<'registry> {
     fn adapter(
         &self,
         target: &ResolvedTarget,
-    ) -> Result<&dyn crate::TargetAdapter, AnimationResolveError> {
+    ) -> Result<&dyn crate::adapter::TargetAdapter, AnimationResolveError> {
         self.registry
             .get(target.adapter)
             .map_err(|error| AnimationResolveError::context(error.to_string()))
@@ -38,7 +38,7 @@ impl ResolutionContext for AdapterResolutionSnapshot<'_> {
         for adapter in self.registry.iter() {
             match adapter.resolve_targets(target) {
                 Ok(mut targets) => resolved.append(&mut targets),
-                Err(crate::AnimationAdapterError::UnknownTarget(_)) => {}
+                Err(crate::diagnostic::AnimationAdapterError::UnknownTarget(_)) => {}
                 Err(error) => return Err(AnimationResolveError::context(error.to_string())),
             }
         }

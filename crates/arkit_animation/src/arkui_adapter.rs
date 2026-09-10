@@ -9,11 +9,12 @@ use arkit_arkui::MountedNodeLease;
 use ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
 use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
 
+use crate::adapter::{TargetAdapter, TargetLifecycle};
+use crate::diagnostic::AnimationAdapterError;
 use crate::property_reader::{first_f32, first_u32, numbers};
-use crate::{
-    property_writer, AnimationAdapterError, PropertySchema, TargetAdapter, TargetLifecycle,
-    TargetStore,
-};
+use crate::property_schema::PropertySchema;
+use crate::property_writer;
+use crate::target_store::TargetStore;
 
 pub struct ArkUiAdapter {
     id: AdapterId,

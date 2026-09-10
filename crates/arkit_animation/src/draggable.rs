@@ -8,10 +8,12 @@ use arkit_animation_core::{
     TimeSpan, TimelinePosition, Vec2,
 };
 
+use crate::api::{Animation, Timeline};
 use crate::controls::TimelineParts;
+use crate::controls::{AnimationControls, AnimationSubscription};
 use crate::frame_driver::FrameSourceSubscription;
 use crate::properties::{TRANSLATE_X, TRANSLATE_Y};
-use crate::{Animation, AnimationControls, AnimationSelector, AnimationSubscription, Timeline};
+use crate::selector::AnimationSelector;
 use arkit_prelude::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

@@ -3,8 +3,9 @@ use std::rc::Rc;
 
 use arkit_animation_core::{Easing, TimePoint, TimeSpan};
 
+use crate::controls::AnimationControls;
+use crate::frame_driver::FrameDriver;
 use crate::frame_driver::FrameSourceSubscription;
-use crate::{AnimationControls, FrameDriver};
 use arkit_prelude::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

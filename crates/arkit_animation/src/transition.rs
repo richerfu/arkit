@@ -7,11 +7,12 @@ use arkit_animation_core::{
 use arkit_prelude::*;
 
 use crate::api::{Animation, Timeline};
+use crate::hooks::{use_animation, use_animation_target};
 use crate::presence::{
     use_animate_presence, PresenceKey, PresenceMode, PresencePhase, OVERLAY_PRESENCE_KEY,
 };
 use crate::properties::{OPACITY, ROTATION, SCALE_X, SCALE_Y, TRANSLATE_X, TRANSLATE_Y};
-use crate::{use_animation, use_animation_target, AnimationSelector};
+use crate::selector::AnimationSelector;
 
 /// Default slide distance for [`MountTransition`] (page-scale motion).
 const MOUNT_DISTANCE: f32 = 48.0;

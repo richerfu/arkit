@@ -3,7 +3,8 @@ use ohos_arkui_binding::common::attribute::ArkUINodeAttributeItem;
 use ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
 use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
 
-use crate::{AnimationAdapterError, AnimationTargetBinding};
+use crate::diagnostic::AnimationAdapterError;
+use crate::target::AnimationTargetBinding;
 
 pub(crate) fn write(
     binding: &mut AnimationTargetBinding,

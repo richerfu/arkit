@@ -10,8 +10,9 @@ use arkit_prelude::*;
 use oxc_index::IndexVec;
 use rustc_hash::FxHashMap;
 
+use crate::api::{Animation, Timeline};
 use crate::properties::{SCALE_X, SCALE_Y, TRANSLATE_X, TRANSLATE_Y};
-use crate::{Animation, AnimationSelector, Timeline};
+use crate::selector::AnimationSelector;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LayoutMountState {

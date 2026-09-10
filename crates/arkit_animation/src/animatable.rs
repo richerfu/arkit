@@ -9,10 +9,12 @@ use arkit_animation_core::{
 };
 use arkit_prelude::*;
 
+use crate::adapter::TargetAdapter;
 use crate::api::{Animation, Timeline};
 use crate::controls::{AnimationControls, ControlsInner};
+use crate::drawing_adapter::DrawingAdapter;
 use crate::hooks::use_animation_context;
-use crate::{AnimationSelector, DrawingAdapter, TargetAdapter};
+use crate::selector::AnimationSelector;
 
 #[derive(Clone)]
 pub struct Animatable<T: AnimatableValue> {
@@ -58,7 +60,7 @@ impl Default for AnimatableDefaults {
 }
 
 struct AnimatableRegistration {
-    host: Weak<crate::AnimationHost>,
+    host: Weak<crate::host::AnimationHost>,
     adapter: arkit_animation_core::AdapterId,
 }
 
@@ -210,8 +212,8 @@ pub fn use_animatable_with_defaults<T: AnimatableValue>(
                 context.host.clone(),
                 context.driver.clone(),
                 source.clone(),
-                crate::ExecutionPolicy::SampledOnly,
-                crate::CapabilityRequirements::default(),
+                crate::native_capability::ExecutionPolicy::SampledOnly,
+                crate::native_capability::CapabilityRequirements::default(),
                 Vec::new(),
             ),
         };

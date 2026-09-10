@@ -24,7 +24,7 @@ use ohos_arkui_sys::{
     OH_ArkUI_GetContextByNode, OH_ArkUI_QueryModuleInterfaceByName,
 };
 
-use crate::AnimationBackend;
+use crate::native_capability::AnimationBackend;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NativeInstanceError {

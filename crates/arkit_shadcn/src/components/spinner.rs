@@ -8,9 +8,10 @@
 use std::cell::Cell;
 
 use crate::theme::*;
+use arkit_animation::engine::ExecutionPolicy;
 use arkit_animation::{
-    Angle, Animation, AnimationSelector, Composition, Easing, ExecutionPolicy, IterationCount,
-    Modifier, TargetName, TimeSpan, Timeline, TimelinePosition, ROTATION,
+    Angle, Animation, AnimationSelector, Composition, Easing, IterationCount, Modifier, TargetName,
+    TimeSpan, Timeline, TimelinePosition, ROTATION,
 };
 use arkit_prelude::*;
 

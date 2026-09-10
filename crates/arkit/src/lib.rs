@@ -214,7 +214,7 @@ pub fn mount_entry_with_policy(
 fn arkit_entry_root(props: EntryRootProps) -> Element {
     arkit_hooks::use_runtime_context_providers();
     #[cfg(feature = "animation")]
-    let root_ref = arkit_animation::use_animation_host_provider();
+    let root_ref = arkit_animation::engine::use_animation_host_provider();
     #[cfg(not(feature = "animation"))]
     let root_ref = arkit_hooks::use_native_element_ref();
     use_root_content_rect(root_ref.clone());

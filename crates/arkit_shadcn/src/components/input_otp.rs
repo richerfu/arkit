@@ -9,9 +9,10 @@ use std::cell::Cell;
 
 use crate::icon::icon_placeholder;
 use crate::theme::*;
+use arkit_animation::engine::ExecutionPolicy;
 use arkit_animation::{
-    Animation, AnimationSelector, ExecutionPolicy, IterationCount, PropertyKeyframe, TargetName,
-    TimeSpan, Timeline, TimelinePosition, OPACITY,
+    Animation, AnimationSelector, IterationCount, PropertyKeyframe, TargetName, TimeSpan, Timeline,
+    TimelinePosition, OPACITY,
 };
 use arkit_prelude::*;
 

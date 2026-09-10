@@ -6,8 +6,10 @@ use std::task::{Context, Poll, Waker};
 
 use crate::api::Timeline;
 use crate::callbacks::AnimationCallbacks;
-use crate::{AnimationHost, FrameDriver};
-use crate::{CapabilityRequirements, ExecutionPolicy, LoweringReport};
+use crate::frame_driver::FrameDriver;
+use crate::host::AnimationHost;
+use crate::native_capability::{CapabilityRequirements, ExecutionPolicy};
+use crate::native_lowerer::LoweringReport;
 use arkit_animation_core::{
     AnimationInstanceSnapshot, AnimationOutcome, EngineCommand, EngineEvent, InstanceKey,
     OutputSeek, PlaybackDirection, PlaybackRate, SeekMode, TimePoint, TimeSpan,

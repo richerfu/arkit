@@ -8,7 +8,8 @@ use arkit_prelude::*;
 
 use crate::api::Timeline;
 use crate::controls::{AnimationControls, ControlsInner};
-use crate::{AnimationHost, FrameDriver};
+use crate::frame_driver::FrameDriver;
+use crate::host::AnimationHost;
 
 #[derive(Clone)]
 pub(crate) struct AnimationHostContext {
@@ -217,7 +218,7 @@ fn try_register_controls(controls: &ControlsInner) {
             controls.lowering_report.replace(Some(report));
             controls.notify_observers();
         }
-        Err(crate::AnimationHostError::Resolve(
+        Err(crate::host::AnimationHostError::Resolve(
             arkit_animation_core::AnimationResolveError::EmptyTargetSelection,
         )) => {}
         Err(error) => {

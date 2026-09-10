@@ -4,7 +4,7 @@ use arkit_animation_core::{
     ValueFunctionName,
 };
 
-use crate::AnimationAdapterError;
+use crate::diagnostic::AnimationAdapterError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TargetLifecycle {

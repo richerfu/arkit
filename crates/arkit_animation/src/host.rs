@@ -16,17 +16,18 @@ use arkit_animation_core::{
 use arkit_arkui::MountedNodeLease;
 use rustc_hash::FxHashMap;
 
-use crate::{
-    native_instance::ArkUiNodeAnimatorInstance, NativeAnimationInstance, NativeAnimatorSpec,
-    NativeInstanceError,
+use crate::adapter::TargetAdapter;
+use crate::adapter_registry::AdapterRegistry;
+use crate::arkui_adapter::ArkUiAdapter;
+use crate::diagnostic::AnimationAdapterError;
+use crate::native_capability::{AnimationBackend, CapabilityRequirements, ExecutionPolicy};
+use crate::native_instance::{
+    ArkUiNodeAnimatorInstance, NativeAnimationInstance, NativeAnimatorSpec, NativeInstanceError,
 };
-use crate::{
-    AdapterRegistry, AdapterResolutionSnapshot, AnimationAdapterError, ArkUiAdapter, TargetAdapter,
+use crate::native_lowerer::{
+    BackendRejection, LoweringReport, NativeLowerer, NativeLoweringError, UnsupportedFeature,
 };
-use crate::{
-    AnimationBackend, BackendRejection, CapabilityRequirements, ExecutionPolicy, LoweringReport,
-    NativeLowerer, NativeLoweringError, UnsupportedFeature,
-};
+use crate::resolver::AdapterResolutionSnapshot;
 
 type EngineListener = Rc<dyn Fn(EngineEvent)>;
 type ContextNodeProvider = Rc<dyn Fn() -> Option<MountedNodeLease>>;

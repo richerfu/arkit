@@ -9,7 +9,9 @@ use arkit_animation_core::{
     TargetName, TargetSetName,
 };
 
-use crate::{AnimationAdapterError, PropertySchema, TargetAdapter};
+use crate::adapter::TargetAdapter;
+use crate::diagnostic::AnimationAdapterError;
+use crate::property_schema::PropertySchema;
 
 struct DrawingTarget {
     name: TargetName,
@@ -161,13 +163,13 @@ impl TargetAdapter for DrawingAdapter {
         "drawing"
     }
 
-    fn target_lifecycle(&self, target: AdapterTargetId) -> Option<crate::TargetLifecycle> {
+    fn target_lifecycle(&self, target: AdapterTargetId) -> Option<crate::adapter::TargetLifecycle> {
         self.targets
             .borrow()
             .raw
             .get(target.index())
             .and_then(Option::as_ref)
-            .map(|target| crate::TargetLifecycle {
+            .map(|target| crate::adapter::TargetLifecycle {
                 version: target.version,
                 mounted: true,
             })
