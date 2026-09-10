@@ -798,6 +798,39 @@ mod tests {
         assert_eq!(max_length.ty, ArkUINodeAttributeType::TextInputMaxLength);
         assert_eq!(max_length.value, EncodedAttrValue::I32(6));
     }
+
+    #[test]
+    fn desired_attr_mutations_are_idempotent_and_removable() {
+        let mut attrs = DesiredAttrs::default();
+        let first = AttributeValue::Text("100%".into());
+        let second = AttributeValue::Text("50%".into());
+
+        assert!(matches!(
+            attrs.set("column", "width", &first),
+            AttrMutation::Set
+        ));
+        assert!(matches!(
+            attrs.set("column", "width", &first),
+            AttrMutation::Unchanged
+        ));
+        assert!(matches!(
+            attrs.set("column", "width", &second),
+            AttrMutation::Set
+        ));
+        assert_eq!(
+            attrs.get("width").map(|attr| attr.value.clone()),
+            Some(EncodedAttrValue::F32(0.5))
+        );
+        assert!(matches!(
+            attrs.set("column", "width", &AttributeValue::None),
+            AttrMutation::Removed(_)
+        ));
+        assert!(attrs.get("width").is_none());
+        assert!(matches!(
+            attrs.set("column", "width", &AttributeValue::None),
+            AttrMutation::Unchanged
+        ));
+    }
 }
 
 fn is_box_attr(name: &str) -> bool {
@@ -1749,7 +1782,9 @@ fn scroll_bar_display_mode(value: &dioxus_core::AttributeValue) -> Option<i32> {
 }
 
 impl DesiredAttrs {
-    pub(crate) fn apply_initial(&self, node: &mut ArkUINode, tag: &str) {
+    /// Apply the ArkUI control roles that must exist before declarative
+    /// attributes are written.
+    pub(crate) fn apply_control_roles(&self, node: &mut ArkUINode, tag: &str) {
         if tag == "button" {
             let _ = node.set_attribute(ArkUINodeAttributeType::Focusable, true.into());
             let _ = node.set_attribute(
@@ -1760,11 +1795,33 @@ impl DesiredAttrs {
         }
     }
 
-    pub(crate) fn after_attach(&self, node: &mut ArkUINode, tag: &str) {
+    /// Apply control roles and the complete declarative state to a newly
+    /// created native node.
+    pub(crate) fn apply_created(&self, node: &mut ArkUINode, tag: &str) {
+        self.apply_control_roles(node, tag);
+        self.apply_to(node, tag);
+    }
+
+    /// Replay control roles plus the complete declarative state and
+    /// control-specific patch defaults. Used when a native subtree is
+    /// physically mounted or appears.
+    pub(crate) fn apply_full(&self, node: &mut ArkUINode, tag: &str) {
+        self.apply_control_roles(node, tag);
+        self.replay(node, tag, &rustc_hash::FxHashSet::default());
+    }
+
+    /// Replay declarative values and patch defaults without changing control
+    /// roles.
+    pub(crate) fn replay(
+        &self,
+        node: &mut ArkUINode,
+        tag: &str,
+        skip: &rustc_hash::FxHashSet<String>,
+    ) {
         // Several ArkUI layout attributes are accepted only after a node is in
         // the mounted tree. Reapply the complete declarative state here; this
         // is the same encoder used for initial creation and later patches.
-        self.apply_to(node, tag);
+        self.apply_to_skipping(node, tag, skip);
         self.after_patch(node, tag);
     }
 

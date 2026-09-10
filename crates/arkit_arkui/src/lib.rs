@@ -806,8 +806,7 @@ impl ArkUIRenderer {
                 Self::apply_text_defaults(&mut native);
             }
             let attrs = self.hosts[host].desired_attrs.borrow();
-            attrs.apply_initial(&mut native, tag);
-            attrs.after_attach(&mut native, tag);
+            attrs.apply_full(&mut native, tag);
         }
         if is_text_host {
             self.apply_text_value(host);
@@ -1102,16 +1101,12 @@ impl ArkUIRenderer {
             HostKind::Placeholder => {}
         }
 
-        // After native creation, apply element defaults and replay all desired
-        // attrs so nothing is lost when native was
-        // created lazily after set_attribute calls.
+        // After native creation, apply control roles and desired declarative
+        // attrs so nothing is lost when native was created lazily after
+        // set_attribute calls.
         if let Some(native) = self.hosts[host].native.clone() {
             let attrs = self.hosts[host].desired_attrs.borrow();
-            attrs.apply_initial(&mut native.borrow_mut(), tag);
-        }
-        if let Some(native) = self.hosts[host].native.clone() {
-            let attrs = self.hosts[host].desired_attrs.borrow();
-            attrs.apply_to(&mut native.borrow_mut(), tag);
+            attrs.apply_created(&mut native.borrow_mut(), tag);
         }
         self.apply_host_image_source(host);
         self.replay_composite_content(host);
@@ -1876,11 +1871,8 @@ impl ArkUIRenderer {
                 let (native, content_native) = Self::create_native_for(tag);
                 self.hosts[host].native = Some(native);
                 self.hosts[host].content_native = content_native;
-                // Apply element defaults before static attrs.
-                if let Some(native) = self.hosts[host].native.clone() {
-                    DesiredAttrs::default().apply_initial(&mut native.borrow_mut(), tag);
-                }
-                // Apply static attributes — both to native and desired_attrs.
+                // Store static attributes and install the complete declarative
+                // state on the freshly created node.
                 if let Some(native) = self.hosts[host].native.clone() {
                     for (name, value) in attrs {
                         let av = dioxus_core::AttributeValue::Text(value.clone());
@@ -1890,8 +1882,7 @@ impl ArkUIRenderer {
                             .set(tag, name, &av);
                     }
                     let desired_attrs = self.hosts[host].desired_attrs.borrow();
-                    desired_attrs.apply_to(&mut native.borrow_mut(), tag);
-                    desired_attrs.after_patch(&mut native.borrow_mut(), tag);
+                    desired_attrs.apply_full(&mut native.borrow_mut(), tag);
                 }
                 self.replay_composite_content(host);
                 // Instantiate static children (Dynamic children are NOT
@@ -2376,6 +2367,16 @@ impl ArkUIRenderer {
         self.appear_replay_handler = Some(handler);
     }
 
+    /// Whether `EventOnAppear` replay is useful for this native node kind.
+    ///
+    /// Pure layout containers do not install a control skin that can overwrite
+    /// declarative attributes after attachment; their normal post-attach
+    /// replay is sufficient. ArkUI controls and leaf nodes keep the one-shot
+    /// convergence pass.
+    fn needs_appear_replay(tag: &str) -> bool {
+        !matches!(tag, "column" | "row" | "stack" | "flex" | "portal")
+    }
+
     /// Arm a one-shot `EventOnAppear` replay for a freshly attached host.
     ///
     /// ArkUI controls (notably `Button`) may write their own skin attributes
@@ -2386,6 +2387,9 @@ impl ArkUIRenderer {
     /// single frame.
     fn arm_appear_replay(&mut self, host: HostId) {
         if self.appear_replay_handler.is_none() || self.hosts[host].appear_replay_armed {
+            return;
+        }
+        if !Self::needs_appear_replay(self.hosts[host].tag()) {
             return;
         }
         let Some(native) = self.hosts[host].native.clone() else {
@@ -2444,12 +2448,7 @@ impl ArkUIRenderer {
             .map(NativeElementRef::animated_attrs)
             .unwrap_or_default();
         let attrs = self.hosts[host].desired_attrs.borrow();
-        if animated.is_empty() {
-            attrs.apply_to(&mut native.borrow_mut(), tag);
-        } else {
-            attrs.apply_to_skipping(&mut native.borrow_mut(), tag, &animated);
-        }
-        attrs.after_patch(&mut native.borrow_mut(), tag);
+        attrs.replay(&mut native.borrow_mut(), tag, &animated);
         drop(attrs);
         self.apply_host_image_source(host);
         self.replay_composite_content(host);
