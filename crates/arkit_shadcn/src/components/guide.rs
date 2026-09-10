@@ -261,7 +261,7 @@ pub fn GuideTarget(
 
 #[derive(Clone)]
 struct GuideRegistry {
-    frames: Rc<RefCell<Vec<(String, arkit_hooks::LayoutFrame)>>>,
+    frames: Rc<RefCell<Vec<(String, arkit_arkui::LayoutFramePx)>>>,
     revision: Signal<u64>,
 }
 
@@ -277,7 +277,7 @@ impl GuideRegistry {
         (self.revision)()
     }
 
-    fn frame(&self, id: &str) -> Option<arkit_hooks::LayoutFrame> {
+    fn frame(&self, id: &str) -> Option<arkit_arkui::LayoutFramePx> {
         self.frames
             .borrow()
             .iter()
@@ -285,7 +285,7 @@ impl GuideRegistry {
             .map(|(_, frame)| *frame)
     }
 
-    fn update(&self, id: &str, frame: arkit_hooks::LayoutFrame) {
+    fn update(&self, id: &str, frame: arkit_arkui::LayoutFramePx) {
         let mut frames = self.frames.borrow_mut();
         if let Some((_, current)) = frames.iter_mut().find(|(registered, _)| registered == id) {
             if *current == frame {
@@ -346,7 +346,7 @@ struct GuideGeometry {
 
 impl GuideGeometry {
     fn resolve(
-        target: arkit_hooks::LayoutFrame,
+        target: arkit_arkui::LayoutFramePx,
         viewport: arkit_hooks::OverlayViewport,
         style: GuideStyle,
         preferred_side: FloatingSide,
@@ -514,7 +514,7 @@ struct GuideOverlaySnapshot {
     step: Option<GuideStep>,
     current_step: usize,
     total_steps: usize,
-    target_frame: Option<arkit_hooks::LayoutFrame>,
+    target_frame: Option<arkit_arkui::LayoutFramePx>,
     viewport: arkit_hooks::OverlayViewport,
     labels: GuideLabels,
     style: GuideStyle,
@@ -772,7 +772,7 @@ mod tests {
     #[test]
     fn converts_physical_target_frame_into_overlay_vp_geometry() {
         let viewport = arkit_hooks::OverlayViewport {
-            frame: arkit_hooks::LayoutFrame {
+            frame: arkit_arkui::LayoutFramePx {
                 x: 10.0,
                 y: 20.0,
                 width: 800.0,
@@ -781,7 +781,7 @@ mod tests {
             safe_area: arkit_runtime::EdgeInsets::default(),
             scale: 2.0,
         };
-        let target = arkit_hooks::LayoutFrame {
+        let target = arkit_arkui::LayoutFramePx {
             x: 110.0,
             y: 220.0,
             width: 100.0,

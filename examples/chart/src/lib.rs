@@ -34,8 +34,11 @@ pub fn ChartPage() -> Element {
     let realtime_option = realtime_option(tick());
     let selected_label = selected();
     let highlight_controller = controller.clone();
+    let mut highlight_status = selected;
     let select_controller = controller.clone();
+    let mut select_status = selected;
     let downplay_controller = controller.clone();
+    let mut downplay_status = selected;
     let append_controller = stream_controller.clone();
     let clear_controller = stream_controller.clone();
     let cards: Vec<Element> = gallery_options()
@@ -93,9 +96,12 @@ pub fn ChartPage() -> Element {
                     button {
                         margin_left: 8.0,
                         width: 160.0,
-                        onclick: move |_| highlight_controller.dispatch_action(ChartAction::new(
-                            ChartActionKind::Highlight(ChartActionTarget::item(1, 0)),
-                        )),
+                        onclick: move |_| {
+                            let result = highlight_controller.dispatch_action(ChartAction::new(
+                                ChartActionKind::Highlight(ChartActionTarget::item(1, 0)),
+                            ));
+                            highlight_status.set(format!("highlight: {result:?}"));
+                        },
                         "Highlight"
                     }
                 }
@@ -103,22 +109,28 @@ pub fn ChartPage() -> Element {
                     margin_top: 6.0,
                     button {
                         width: 160.0,
-                        onclick: move |_| select_controller.dispatch_actions([
-                            ChartAction::new(ChartActionKind::ToggleSelect(
-                                ChartActionTarget::item(1, 0),
-                            )),
-                            ChartAction::new(ChartActionKind::ToggleSelect(
-                                ChartActionTarget::item(1, 1),
-                            )),
-                        ]),
+                        onclick: move |_| {
+                            let result = select_controller.dispatch_actions([
+                                ChartAction::new(ChartActionKind::ToggleSelect(
+                                    ChartActionTarget::item(1, 0),
+                                )),
+                                ChartAction::new(ChartActionKind::ToggleSelect(
+                                    ChartActionTarget::item(1, 1),
+                                )),
+                            ]);
+                            select_status.set(format!("select: {result:?}"));
+                        },
                         "Select"
                     }
                     button {
                         margin_left: 8.0,
                         width: 160.0,
-                        onclick: move |_| downplay_controller.dispatch_action(ChartAction::new(
-                            ChartActionKind::Downplay(ChartActionTarget::item(1, 0)),
-                        )),
+                        onclick: move |_| {
+                            let result = downplay_controller.dispatch_action(ChartAction::new(
+                                ChartActionKind::Downplay(ChartActionTarget::item(1, 0)),
+                            ));
+                            downplay_status.set(format!("downplay: {result:?}"));
+                        },
                         "Downplay"
                     }
                 }
@@ -133,13 +145,14 @@ pub fn ChartPage() -> Element {
                                 5.0 + f64::from(index),
                                 3.0 + f64::from((index * 3) % 7),
                             );
-                            append_controller.append_data(ChartAppendData::scatter(
+                            let append_result = append_controller.append_data(ChartAppendData::scatter(
                                 0,
                                 [DataPoint::values([point.x.clone(), point.y.clone()])],
                             ));
                             let count = append_controller
                                 .get_option()
-                                .and_then(|option| match option.series.first() {
+                                .ok()
+                                .and_then(|snapshot| match snapshot.option().series.first() {
                                     Some(Series::Scatter(series)) => Some(series.data.len()),
                                     _ => None,
                                 })
@@ -154,7 +167,7 @@ pub fn ChartPage() -> Element {
                             );
                             let inside = append_controller.contain_pixel(finder, pixel);
                             selected.set(format!(
-                                "appendData points={count} pixel={pixel:?} inside={inside:?} back={roundtrip:?}",
+                                "appendData={append_result:?} points={count} pixel={pixel:?} inside={inside:?} back={roundtrip:?}",
                             ));
                         },
                         "Append data"
@@ -163,12 +176,12 @@ pub fn ChartPage() -> Element {
                         margin_left: 8.0,
                         width: 160.0,
                         onclick: move |_| {
-                            clear_controller.clear();
+                            let result = clear_controller.clear();
                             selected.set(format!(
-                                "clear series={} size={:?}",
+                                "clear={result:?} series={} size={:?}",
                                 clear_controller
                                     .get_option()
-                                    .map_or(0, |option| option.series.len()),
+                                    .map_or(0, |snapshot| snapshot.option().series.len()),
                                 clear_controller.get_size()
                             ));
                         },

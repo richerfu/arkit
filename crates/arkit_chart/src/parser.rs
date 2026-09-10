@@ -107,7 +107,11 @@ pub(crate) fn parse_option_value(value: Value) -> Result<ChartOption, ChartParse
     }
 
     option.extra = object.into_iter().collect();
-    Ok(resolve_option_data(option))
+    // Parsing produces the same raw input DTO as the typed builder. Dataset
+    // expansion belongs to the render/runtime preparation boundary so a
+    // caller can mutate a parsed dataset without retaining stale derived
+    // series data.
+    Ok(option)
 }
 
 fn parse_animation_options(object: &serde_json::Map<String, Value>) -> AnimationOptions {
@@ -231,6 +235,7 @@ fn parse_composite_option(
                 base_option: base_value,
                 timeline_options: frame_values,
                 rules,
+                initial_active_datasets: Vec::new(),
             });
         }
     }
@@ -240,6 +245,10 @@ fn parse_composite_option(
             .as_ref()
             .map_or(0, |timeline| timeline.current_index);
         base_option.apply_timeline_index(current_index);
+    }
+    let initial_active_datasets = base_option.datasets.clone();
+    if let Some(media) = base_option.media.as_mut() {
+        media.initial_active_datasets = initial_active_datasets;
     }
     Ok(base_option)
 }
@@ -298,24 +307,99 @@ pub(crate) fn resolve_media_option(
     let Some(media) = option.media.as_ref() else {
         return Ok(resolve_option_data(option.clone()));
     };
-    let mut merged = media.base_option.clone();
-    if let Some(frame) = media.timeline_options.get(timeline_index) {
-        deep_merge(&mut merged, frame.clone());
-    }
-    for index in media_signature(option, width, height) {
-        if let Some(rule) = media.rules.get(index as usize) {
-            deep_merge(&mut merged, rule.option.clone());
+    let dataset_patch =
+        (option.datasets != media.initial_active_datasets).then_some(option.datasets.as_slice());
+    let matched = media_signature(option, width, height);
+    let prepare_frame = |frame_index: usize| -> Result<ChartOption, ChartParseError> {
+        let mut merged = media.base_option.clone();
+        if let Some(datasets) = dataset_patch {
+            replace_json_datasets(&mut merged, datasets);
         }
-    }
-    let mut resolved = parse_option_value(merged)?;
+        if let Some(frame) = media.timeline_options.get(frame_index) {
+            deep_merge(&mut merged, frame.clone());
+        }
+        for index in &matched {
+            if let Some(rule) = media.rules.get(*index as usize) {
+                deep_merge(&mut merged, rule.option.clone());
+            }
+        }
+        parse_option_value(merged).map(resolve_option_data)
+    };
+    let mut resolved = prepare_frame(timeline_index)?;
     resolved.media = Some(media.clone());
     if !option.timeline_options.is_empty() {
         let mut timeline = option.timeline.clone().unwrap_or_default();
         timeline.current_index = timeline_index.min(option.timeline_options.len() - 1);
         resolved.timeline = Some(timeline);
-        resolved.timeline_options = option.timeline_options.clone();
+        resolved.timeline_options = (0..option.timeline_options.len())
+            .map(prepare_frame)
+            .collect::<Result<Vec<_>, _>>()?;
     }
     Ok(resolved)
+}
+
+fn replace_json_datasets(option: &mut Value, datasets: &[Dataset]) {
+    let Some(object) = option.as_object_mut() else {
+        return;
+    };
+    let values = datasets.iter().map(dataset_to_json).collect::<Vec<_>>();
+    object.insert(
+        String::from("dataset"),
+        if values.len() == 1 {
+            values.into_iter().next().unwrap_or(Value::Null)
+        } else {
+            Value::Array(values)
+        },
+    );
+}
+
+fn dataset_to_json(dataset: &Dataset) -> Value {
+    let mut object = dataset
+        .extra
+        .iter()
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect::<serde_json::Map<_, _>>();
+    if let Some(id) = &dataset.id {
+        object.insert(String::from("id"), Value::String(id.clone()));
+    }
+    if !dataset.dimensions.is_empty() {
+        object.insert(
+            String::from("dimensions"),
+            Value::Array(
+                dataset
+                    .dimensions
+                    .iter()
+                    .cloned()
+                    .map(Value::String)
+                    .collect(),
+            ),
+        );
+    }
+    object.insert(
+        String::from("sourceHeader"),
+        Value::Bool(dataset.source_header),
+    );
+    object.insert(
+        String::from("source"),
+        Value::Array(
+            dataset
+                .source
+                .iter()
+                .map(|row| Value::Array(row.iter().map(data_value_to_json).collect()))
+                .collect(),
+        ),
+    );
+    Value::Object(object)
+}
+
+fn data_value_to_json(value: &DataValue) -> Value {
+    match value {
+        DataValue::Number(value) => serde_json::Number::from_f64(*value)
+            .map(Value::Number)
+            .unwrap_or(Value::Null),
+        DataValue::String(value) => Value::String(value.clone()),
+        DataValue::Null => Value::Null,
+    }
 }
 
 /// Resolve data derived from `dataset` for every snapshot that may become
@@ -3508,7 +3592,7 @@ mod tests {
 
     #[test]
     fn dataset_populates_categories_and_multiple_series() {
-        let option = parse_option_str(
+        let raw = parse_option_str(
             r#"{
                 "dataset":{"source":[["day","orders","revenue"],["Mon",12,8],["Tue",20,18]]},
                 "xAxis":{"type":"category"},"yAxis":{},
@@ -3516,6 +3600,14 @@ mod tests {
             }"#,
         )
         .unwrap();
+        let Series::Bar(series) = &raw.series[0] else {
+            panic!("bar")
+        };
+        assert!(
+            series.data.is_empty(),
+            "JSON parsing must preserve raw input"
+        );
+        let option = resolve_option_data(raw);
         assert_eq!(option.x_axis[0].data, ["Mon", "Tue"]);
         assert_eq!(
             super::basic_series_mut(&mut option.series[0].clone())
@@ -3557,9 +3649,10 @@ mod tests {
         };
         assert!(raw.data.is_empty(), "builders must preserve source data");
 
+        let mut typed_update = dataset_first.clone();
         let dataset_first = resolve_option_data(dataset_first);
         let series_first = resolve_option_data(series_first);
-        let json = parse_option_str(
+        let mut json_update = parse_option_str(
             r#"{
                 "dataset":{"source":[["day","orders","revenue"],["Mon",12,8],["Tue",20,18]]},
                 "series":[
@@ -3569,6 +3662,7 @@ mod tests {
             }"#,
         )
         .unwrap();
+        let json = resolve_option_data(json_update.clone());
 
         assert_eq!(dataset_first, series_first);
         assert_eq!(dataset_first.datasets, json.datasets);
@@ -3584,6 +3678,16 @@ mod tests {
             };
             assert_eq!(typed, parsed);
         }
+
+        typed_update.datasets[0].source[1][1] = 30.into();
+        json_update.datasets[0].source[1][1] = 30.into();
+        let typed_update = resolve_option_data(typed_update);
+        let json_update = resolve_option_data(json_update);
+        assert_eq!(typed_update, json_update);
+        let Series::Bar(series) = &typed_update.series[0] else {
+            panic!("bar")
+        };
+        assert_eq!(series.data[0].number_opt(0), Some(30.0));
     }
 
     #[test]
@@ -3608,6 +3712,96 @@ mod tests {
         assert_eq!(series.data.len(), 1);
         assert_eq!(series.data[0].number_opt(0), Some(99.0));
         assert_eq!(resolved.x_axis[0].data, ["Mon"]);
+    }
+
+    #[test]
+    fn parsed_dataset_mutation_rederives_without_stale_series() {
+        let mut raw = parse_option_str(
+            r#"{
+                "dataset":{"source":[["day","value"],["Mon",12],["Tue",20]]},
+                "xAxis":{"type":"category"},
+                "series":[{"type":"bar","name":"Orders"}]
+            }"#,
+        )
+        .unwrap();
+        let first = resolve_option_data(raw.clone());
+        let Series::Bar(first) = &first.series[0] else {
+            panic!("bar")
+        };
+        assert_eq!(first.data[0].number_opt(0), Some(12.0));
+
+        raw.datasets[0].source[1][1] = 30.into();
+        let Series::Bar(raw_series) = &raw.series[0] else {
+            panic!("bar")
+        };
+        assert!(raw_series.data.is_empty());
+        let second = resolve_option_data(raw);
+        let Series::Bar(second) = &second.series[0] else {
+            panic!("bar")
+        };
+        assert_eq!(second.data[0].number_opt(0), Some(30.0));
+    }
+
+    #[test]
+    fn parsed_media_keeps_later_dataset_mutations() {
+        let mut raw = parse_option_str(
+            r#"{
+                "baseOption":{
+                    "dataset":{"source":[["day","value"],["Mon",12]]},
+                    "xAxis":{"type":"category"},
+                    "series":[{"type":"bar"}]
+                },
+                "media":[{"query":{"maxWidth":400},"option":{"title":{"text":"compact"}}}]
+            }"#,
+        )
+        .unwrap();
+        raw.datasets[0].source[1][1] = 30.into();
+        let resolved = resolve_media_option(&raw, 320.0, 240.0, 0).unwrap();
+        let Series::Bar(series) = &resolved.series[0] else {
+            panic!("bar")
+        };
+        assert_eq!(series.data[0].number_opt(0), Some(30.0));
+    }
+
+    #[test]
+    fn media_dataset_precedence_distinguishes_source_patch_from_overrides() {
+        let mut raw = parse_option_str(
+            r#"{
+                "baseOption":{
+                    "timeline":{"currentIndex":0,"data":["A","B"]},
+                    "dataset":{"source":[["day","value"],["Mon",12]]},
+                    "xAxis":{"type":"category"},
+                    "series":[{"type":"bar"}]
+                },
+                "options":[
+                    {"dataset":{"source":[["day","value"],["Mon",20]]}},
+                    {"title":{"text":"inherits base dataset"}}
+                ],
+                "media":[{
+                    "query":{"maxWidth":400},
+                    "option":{"dataset":{"source":[["day","value"],["Mon",99]]}}
+                }]
+            }"#,
+        )
+        .unwrap();
+        let first_value = |option: &ChartOption| match &option.series[0] {
+            Series::Line(series) | Series::Bar(series) => series.data[0].number_opt(0),
+            _ => None,
+        };
+
+        let compact = resolve_media_option(&raw, 320.0, 240.0, 0).unwrap();
+        assert_eq!(first_value(&compact), Some(99.0));
+
+        let mut wide = resolve_media_option(&raw, 720.0, 240.0, 0).unwrap();
+        assert_eq!(first_value(&wide), Some(20.0));
+        assert!(wide.apply_timeline_index(1));
+        assert_eq!(first_value(&wide), Some(12.0));
+
+        raw.datasets[0].source[1][1] = 50.into();
+        let mut patched = resolve_media_option(&raw, 720.0, 240.0, 0).unwrap();
+        assert_eq!(first_value(&patched), Some(20.0));
+        assert!(patched.apply_timeline_index(1));
+        assert_eq!(first_value(&patched), Some(50.0));
     }
 
     #[test]
@@ -3770,8 +3964,9 @@ mod tests {
 
     #[test]
     fn multiple_datasets_respect_series_dataset_index() {
-        let option = parse_option_str(
-            r#"{
+        let option = resolve_option_data(
+            parse_option_str(
+                r#"{
                 "dataset":[
                     {"source":[["day","value"],["Mon",1],["Tue",2]]},
                     {"source":[["day","value"],["Mon",10],["Tue",20]]}
@@ -3781,8 +3976,9 @@ mod tests {
                     {"type":"line","datasetIndex":1,"encode":{"y":"value"}}
                 ]
             }"#,
-        )
-        .unwrap();
+            )
+            .unwrap(),
+        );
         assert_eq!(option.datasets.len(), 2);
         let Series::Line(first) = &option.series[0] else {
             panic!("line")
@@ -3796,8 +3992,9 @@ mod tests {
 
     #[test]
     fn dataset_filter_and_sort_pipeline_feeds_axis_and_series() {
-        let option = parse_option_str(
-            r#"{
+        let option = resolve_option_data(
+            parse_option_str(
+                r#"{
                 "dataset":[
                     {
                         "id":"raw",
@@ -3824,8 +4021,9 @@ mod tests {
                     "encode":{"x":"Product","y":"Sales"}
                 }]
             }"#,
-        )
-        .unwrap();
+            )
+            .unwrap(),
+        );
         assert_eq!(option.datasets.len(), 2);
         let transformed = &option.datasets[1];
         assert!(transformed.source_header);
@@ -3843,7 +4041,7 @@ mod tests {
 
     #[test]
     fn dataset_filter_supports_nested_conditions_and_object_rows() {
-        let option = parse_option_str(
+        let option = resolve_option_data(parse_option_str(
             r#"{
                 "dataset":[
                     {
@@ -3864,7 +4062,7 @@ mod tests {
                 "series":[{"type":"pie","datasetIndex":1,"encode":{"itemName":"name","value":"score"}}]
             }"#,
         )
-        .unwrap();
+        .unwrap());
         assert!(!option.datasets[0].source_header);
         assert_eq!(option.datasets[1].source.len(), 1);
         let Series::Pie(series) = &option.series[0] else {

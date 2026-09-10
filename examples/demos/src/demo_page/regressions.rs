@@ -95,15 +95,15 @@ pub(super) fn RegressionPage() -> Element {
             on_chart_inspect: move |_| {
                 let typed = inspect_typed
                     .get_option()
-                    .map(|option| chart_signature(&option));
+                    .map(|snapshot| chart_signature(snapshot.option()));
                 let json = inspect_json
                     .get_option()
-                    .map(|option| chart_signature(&option));
+                    .map(|snapshot| chart_signature(snapshot.option()));
                 let expected = expected_chart_signature(dataset_version());
                 let result = match (&typed, &json) {
-                    (Some(typed), Some(json)) if typed == json && typed == expected => "PASS",
-                    (Some(_), Some(_)) => "FAIL",
-                    _ => "NOT_MOUNTED",
+                    (Ok(typed), Ok(json)) if typed == json && typed == expected => "PASS",
+                    (Ok(_), Ok(_)) => "FAIL",
+                    _ => "NOT_BOUND",
                 };
                 chart_status.set(format!(
                     "CHART result={result} expected={expected} typed={} json={}",
@@ -424,6 +424,7 @@ fn RegressionBody(props: RegressionBodyProps) -> Element {
                             controller: Some(props.json_controller.clone()),
                         }
                     }
+                    super::chart_contracts::ChartContracts {}
                 }
             }
         }

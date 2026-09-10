@@ -86,7 +86,7 @@ pub fn RouteProvider(props: RouteProviderProps) -> Element {
     };
 
     let restore_command = use_signal(|| None::<(String, f32)>);
-    let last_effect_route = use_hook(|| RefCell::new(String::new()));
+    let last_effect_route = use_hook(|| Rc::new(RefCell::new(String::new())));
     let effect_route = route.clone();
     let effect_runtime = runtime.clone();
     let mut restore_effect = use_effect(move || {

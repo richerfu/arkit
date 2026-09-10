@@ -11,7 +11,10 @@ use ohos_arkui_binding::types::advanced::NodeDirtyFlag;
 use ohos_drawing_binding::{BlendMode, Canvas as NativeCanvas, ClipOperation, Rect as NativeRect};
 
 use crate::context::CanvasSurface;
-use crate::{CanvasImage, CanvasRenderingContext2D, CanvasRenderingContext2DSettings};
+use crate::{
+    CanvasError, CanvasImage, CanvasRenderingContext2D, CanvasRenderingContext2DSettings,
+    CanvasResult,
+};
 
 type CanvasDrawCallback = dyn for<'frame> Fn(&mut CanvasRenderingContext2D<'frame>);
 
@@ -59,6 +62,18 @@ struct CanvasControllerState {
     next_binding: u64,
     binding: Option<CanvasControllerBinding>,
     pending_redraw: bool,
+    last_binding_error: Option<CanvasError>,
+}
+
+struct CanvasControllerLease {
+    controller: CanvasController,
+    id: u64,
+}
+
+impl Drop for CanvasControllerLease {
+    fn drop(&mut self) {
+        self.controller.unbind(self.id);
+    }
 }
 
 /// Imperative handle for redraw requests and mounted logical size queries.
@@ -72,6 +87,9 @@ impl CanvasController {
         Self::default()
     }
 
+    /// Request a draw. Before a binding exists, one idempotent redraw bit is
+    /// retained and consumed by the next mount; no payload or chart-like
+    /// command state crosses that lifecycle boundary.
     pub fn request_redraw(&self) {
         let invalidate = self
             .inner
@@ -124,14 +142,22 @@ impl CanvasController {
         self.inner.borrow().binding.is_some()
     }
 
+    pub fn last_binding_error(&self) -> Option<CanvasError> {
+        self.inner.borrow().last_binding_error.clone()
+    }
+
     fn bind(
         &self,
         invalidate: CanvasInvalidator,
         size: CanvasSizeReader,
         snapshot: CanvasSnapshotReader,
-    ) -> u64 {
+    ) -> CanvasResult<CanvasControllerLease> {
         let (id, pending) = {
             let mut state = self.inner.borrow_mut();
+            if state.binding.is_some() {
+                state.last_binding_error = Some(CanvasError::ControllerAlreadyBound);
+                return Err(CanvasError::ControllerAlreadyBound);
+            }
             state.next_binding = state
                 .next_binding
                 .checked_add(1)
@@ -143,12 +169,16 @@ impl CanvasController {
                 size,
                 snapshot,
             });
+            state.last_binding_error = None;
             (id, std::mem::take(&mut state.pending_redraw))
         };
         if pending {
             invalidate();
         }
-        id
+        Ok(CanvasControllerLease {
+            controller: self.clone(),
+            id,
+        })
     }
 
     fn unbind(&self, id: u64) {
@@ -230,19 +260,17 @@ pub fn Canvas(props: CanvasProps) -> Element {
     let registered_node = use_hook(|| Rc::new(Cell::new(None::<u64>)));
     let surface = use_hook(|| Rc::new(RefCell::new(None::<CanvasSurface>)));
 
-    let controller_binding = use_hook(|| Rc::new(RefCell::new(None::<(CanvasController, u64)>)));
+    let controller_binding = use_hook(|| Rc::new(RefCell::new(None::<CanvasControllerLease>)));
     let controller_changed = {
         let binding = controller_binding.borrow();
         match (binding.as_ref(), props.controller.as_ref()) {
-            (Some((current, _)), Some(next)) => current != next,
+            (Some(current), Some(next)) => current.controller.ne(next),
             (None, None) => false,
             _ => true,
         }
     };
     if controller_changed {
-        if let Some((controller, binding)) = controller_binding.borrow_mut().take() {
-            controller.unbind(binding);
-        }
+        controller_binding.borrow_mut().take();
         if let Some(controller) = props.controller.clone() {
             let invalidate_node = node_ref.clone();
             let size_node = node_ref.clone();
@@ -277,16 +305,14 @@ pub fn Canvas(props: CanvasProps) -> Element {
                         .and_then(|surface| surface.as_ref().and_then(CanvasSurface::snapshot))
                 }),
             );
-            controller_binding
-                .borrow_mut()
-                .replace((controller, binding));
+            if let Ok(binding) = binding {
+                controller_binding.borrow_mut().replace(binding);
+            }
         }
     }
     let drop_binding = controller_binding.clone();
     use_drop(move || {
-        if let Some((controller, binding)) = drop_binding.borrow_mut().take() {
-            controller.unbind(binding);
-        }
+        drop_binding.borrow_mut().take();
     });
 
     let effect_renderer = renderer.clone();
@@ -381,5 +407,54 @@ pub fn Canvas(props: CanvasProps) -> Element {
             height: height,
             hit_test_behavior: "default",
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn duplicate_binding_is_rejected_and_pending_redraw_stays_bounded() {
+        let controller = CanvasController::new();
+        let first_calls = Rc::new(Cell::new(0));
+        controller.request_redraw();
+        controller.request_redraw();
+
+        let calls = first_calls.clone();
+        let first = controller
+            .bind(
+                Rc::new(move || calls.set(calls.get() + 1)),
+                Rc::new(|| [320.0, 240.0]),
+                Rc::new(|| None),
+            )
+            .unwrap();
+        assert_eq!(first_calls.get(), 1, "pending redraw is one coalesced bit");
+
+        assert!(matches!(
+            controller.bind(Rc::new(|| {}), Rc::new(|| [1.0, 1.0]), Rc::new(|| None),),
+            Err(CanvasError::ControllerAlreadyBound)
+        ));
+        assert_eq!(
+            controller.last_binding_error(),
+            Some(CanvasError::ControllerAlreadyBound)
+        );
+        controller.request_redraw();
+        assert_eq!(first_calls.get(), 2, "duplicate bind must not steal target");
+
+        drop(first);
+        controller.request_redraw();
+        let second_calls = Rc::new(Cell::new(0));
+        let calls = second_calls.clone();
+        let second = controller
+            .bind(
+                Rc::new(move || calls.set(calls.get() + 1)),
+                Rc::new(|| [1.0, 1.0]),
+                Rc::new(|| None),
+            )
+            .unwrap();
+        assert_eq!(second_calls.get(), 1);
+        assert_eq!(controller.last_binding_error(), None);
+        drop(second);
     }
 }

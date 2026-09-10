@@ -11,6 +11,7 @@ pub enum CameraErrorKind {
     Native,
     Image,
     WorkerStopped,
+    AlreadyBound,
 }
 
 /// A CameraKit, surface, image, or lifecycle failure.
@@ -72,6 +73,15 @@ impl CameraError {
             operation,
             native_code: None,
             message: "camera worker has stopped".into(),
+        }
+    }
+
+    pub(crate) fn already_bound(operation: &'static str) -> Self {
+        Self {
+            kind: CameraErrorKind::AlreadyBound,
+            operation,
+            native_code: None,
+            message: "one camera controller cannot target two mounted previews".into(),
         }
     }
 

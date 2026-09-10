@@ -39,17 +39,20 @@ ChartOption::new()
 ## appendData
 
 ```rust
-controller.append_data(ChartAppendData::scatter(
+let status = controller.append_data(ChartAppendData::scatter(
     0,
     [DataPoint::values([12.0, 36.0])],
-));
+))?;
 ```
 
 当前增量限制：
 
 - 只支持 scatter 和 lines。
 - series index 必须指向匹配类型。
+- dataset 驱动的 scatter 必须通过受控 option 更新，不能用 appendData 改写来源语义。
 - 其他 series 使用受控 option 更新。
+
+调用返回 `Result<ChartCommandStatus, ChartError>`。未绑定/未 ready、index 错误和不支持的 series 不再静默丢弃；生产者应显式处理错误，卸载后停止推送。
 
 不要手工复制 renderer 内部 data，再同时 append 和替换 option；选定一个所有权路径。
 

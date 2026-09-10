@@ -250,6 +250,26 @@ impl RuntimeCore {
                 }
             }));
     }
+
+    /// Route animation ownership releases through the existing queued
+    /// native-ref boundary before touching renderer/native state.
+    fn install_animation_restore<H: RuntimeHost + 'static>(inner: &Rc<RefCell<H>>) {
+        let restore_inner = Rc::downgrade(inner);
+        inner
+            .borrow_mut()
+            .core_mut()
+            .renderer
+            .set_animation_restore_handler(Rc::new(move |element, lease, attrs| {
+                let Some(inner) = restore_inner.upgrade() else {
+                    return;
+                };
+                inner
+                    .borrow_mut()
+                    .core_mut()
+                    .renderer
+                    .restore_released_animated_attrs(element, lease, attrs);
+            }));
+    }
 }
 
 trait RuntimeHost {
@@ -765,6 +785,7 @@ impl ArkRuntime {
         // declarative attrs are reapplied after ArkUI control skins settle,
         // before the node's first paint (single-frame convergence).
         RuntimeCore::install_appear_replay(&inner, "appear_replay");
+        RuntimeCore::install_animation_restore(&inner);
 
         // Bridge dioxus' scheduler to OpenHarmony. A pending
         // `VirtualDom::wait_for_work` poll retains this waker, including when a
@@ -930,6 +951,7 @@ pub fn mount_embedded_virtual_dom(
     // Same single-frame appear replay as the root runtime: item subtrees also
     // converge on declarative styles before their first paint.
     RuntimeCore::install_appear_replay(&inner, "embedded_appear_replay");
+    RuntimeCore::install_animation_restore(&inner);
     let registration = runtime_handle.register_embedded(Rc::downgrade(&inner));
 
     render_host(&inner, "embedded");

@@ -36,13 +36,15 @@ rsx! {
 
 | API                               | 回调参数                   | 用途                       |
 | --------------------------------- | -------------------------- | -------------------------- |
-| `use_layout_size(ref, callback)`  | `LayoutSize`               | width / height             |
-| `use_layout_frame(ref, callback)` | `LayoutFrame`              | window-relative 完整 frame |
+| `use_layout_size(ref, callback)`  | `LayoutSizePx`             | width / height             |
+| `use_layout_frame(ref, callback)` | `LayoutFramePx`            | window-relative 完整 frame |
 | `use_component_lifecycle(ref)`    | `ComponentLifecycleState`  | 精确节点的挂载与可见状态   |
-| `use_component_visibility(ref)`   | `bool`                     | 精确节点是否可见           |
+| `use_component_visibility(ref)`   | `bool`                     | 平台已确认精确节点可见     |
 | `use_mounted_node(ref, callback)` | `Option<MountedNodeLease>` | 框架级原生集成             |
 
-`LayoutSize` 与 `LayoutFrame` 使用物理像素；`is_measured()` 可过滤零尺寸首帧。ref 的多个消费者复用 renderer 的统一 native event route，不会互相覆盖 ArkUI callback。
+`LayoutSizePx` 与 `LayoutFramePx` 使用物理像素；`is_measured()` 可过滤零尺寸首帧。逻辑单位使用 `LogicalSizeVp` / `LocalVpPoint`，通过显式 scale 转换；无效 scale 返回 `None`。ref 的多个消费者复用 renderer 的统一 native event route，不会互相覆盖 ArkUI callback。
+
+`ComponentLifecycleState` 不会用 `false` 混合“未挂载”“尚未观测”和“已确认隐藏”：挂载事件先产生 `Unknown`，收到 ArkUI 可见性通知后才变为 `Hidden` 或 `Visible { fraction }`，卸载后为 `Unmounted`。布尔 helper 等价于 `is_known_visible()`，因此 `Unknown` 返回 `false`；需要让有限初始化工作在未知阶段继续时，应显式匹配状态，而不是全局把未知视为可见。
 
 `MountedNodeLease` 是非 owning、generation-checked 的借用。普通业务不需要访问它；框架组件只有在 binding API 无法声明式表达时，才通过带安全约束的 `with_native` / `with_native_mut` 调用原生能力。
 

@@ -1,12 +1,9 @@
 //! Complex cases — List / Grid / WaterFlow virtualized via ArkUI `NodeAdapter`.
 //!
-//! `use_virtual_source` binds through the host's `virtual_source` attribute so
-//! host so only visible items are created on demand (true virtualization).
-//! List/Grid/WaterFlow exercise RSX items and item-local invalidation; Native
-//! exercises the same public hook with `NodeBuilder` items.
-
-use std::cell::RefCell;
-use std::rc::Rc;
+//! `use_virtual_items` binds stable identity/revision snapshots through the
+//! host's `virtual_source` attribute so only visible items are created on
+//! demand. List/Grid/WaterFlow exercise identity-preserving moves and targeted
+//! reloads; Native exercises the manually controlled low-level source.
 
 use arkit::dioxus_signals::WritableExt;
 use arkit::native::NodeBuilder;
@@ -22,6 +19,12 @@ enum Case {
 }
 
 const TOTAL: u32 = 10_000;
+
+#[derive(Clone, Copy)]
+struct DemoItem {
+    id: u32,
+    revision: u32,
+}
 
 #[component]
 pub fn ComplexCasesPage() -> Element {
@@ -87,16 +90,30 @@ pub fn ComplexCasesPage() -> Element {
 
 #[component]
 fn VirtualCaseView(kind: VirtualKind, active: bool) -> Element {
-    let revisions = use_hook(|| Rc::new(RefCell::new(vec![0_u32; TOTAL as usize])));
-    let render_revisions = revisions.clone();
-    let source = use_virtual_source(kind, TOTAL, move |index| {
-        let revision = render_revisions.borrow()[index as usize];
-        render_virtual_item(kind, index, revision)
+    let mut items = use_signal(|| {
+        (0..TOTAL)
+            .map(|id| DemoItem { id, revision: 0 })
+            .collect::<Vec<_>>()
     });
     let mut target = use_signal(|| 2_u32);
-    let mut status = use_signal(|| "点击更新只会重建目标 item".to_string());
-    let target_index = target();
-    let target_revision = revisions.borrow()[target_index as usize];
+    let mut next_id = use_signal(|| TOTAL);
+    let mut status = use_signal(|| "先点目标行累计 taps，再移动+更新；taps 应保留".to_string());
+    let snapshot = items();
+    let target_id = target();
+    let target_index = snapshot
+        .iter()
+        .position(|item| item.id == target_id)
+        .unwrap_or_default();
+    let target_revision = snapshot[target_index].revision;
+    let stamps = snapshot
+        .iter()
+        .map(|item| VirtualItemStamp::new(item.id, item.revision))
+        .collect();
+    let render_items = snapshot.clone();
+    let source = use_virtual_items(kind, stamps, move |index| {
+        let item = render_items[index as usize];
+        render_virtual_item(kind, item.id, index, item.revision)
+    });
     let height = if active { "100%" } else { "0%" };
     let visibility = if active { "visible" } else { "hidden" };
     let opacity = if active { 1.0 } else { 0.0 };
@@ -110,22 +127,77 @@ fn VirtualCaseView(kind: VirtualKind, active: bool) -> Element {
         let current = *target.peek();
         target.set((current + 1) % TOTAL);
     };
-    let update_revisions = revisions.clone();
-    let update_source = source.clone();
     let update_target = move |_| {
-        let index = *target.peek();
-        let revision = {
-            let mut revisions = update_revisions.borrow_mut();
-            let revision = &mut revisions[index as usize];
-            *revision = revision.wrapping_add(1);
-            *revision
-        };
-        match update_source.reload_items(index, 1) {
-            Ok(()) => status.set(format!(
-                "{kind_label} #{index:05} 已局部更新到 rev {revision}"
-            )),
-            Err(error) => status.set(format!("局部更新失败: {error}")),
-        }
+        let id = *target.peek();
+        let mut revision = 0;
+        items.with_mut(|items| {
+            let item = items
+                .iter_mut()
+                .find(|item| item.id == id)
+                .expect("selected virtual demo item disappeared");
+            item.revision = item.revision.wrapping_add(1);
+            revision = item.revision;
+        });
+        status.set(format!(
+            "{kind_label} id #{id:05} 原位 Reload 到 rev {revision}"
+        ));
+    };
+    let move_and_update_target = move |_| {
+        let id = *target.peek();
+        let mut destination = 0;
+        let mut revision = 0;
+        items.with_mut(|items| {
+            let from = items
+                .iter()
+                .position(|item| item.id == id)
+                .expect("selected virtual demo item disappeared");
+            let mut item = items.remove(from);
+            item.revision = item.revision.wrapping_add(1);
+            revision = item.revision;
+            destination = (from + 2).min(items.len());
+            items.insert(destination, item);
+        });
+        status.set(format!(
+            "{kind_label} id #{id:05} Move 到 {destination} + Reload rev {revision}；taps 应不变"
+        ));
+    };
+    let remove_target = move |_| {
+        let id = *target.peek();
+        let mut next_target = id;
+        let mut count = 0;
+        items.with_mut(|items| {
+            if items.len() <= 1 {
+                return;
+            }
+            let index = items
+                .iter()
+                .position(|item| item.id == id)
+                .expect("selected virtual demo item disappeared");
+            items.remove(index);
+            next_target = items[index.min(items.len() - 1)].id;
+            count = items.len();
+        });
+        target.set(next_target);
+        status.set(format!(
+            "{kind_label} 删除 id #{id:05}，count {count}；其他行 taps 应保留"
+        ));
+    };
+    let insert_fresh = move |_| {
+        let id = *next_id.peek();
+        next_id.set(id.wrapping_add(1));
+        let selected = *target.peek();
+        let mut index = 0;
+        items.with_mut(|items| {
+            index = items
+                .iter()
+                .position(|item| item.id == selected)
+                .map_or(items.len(), |position| position + 1);
+            items.insert(index, DemoItem { id, revision: 0 });
+        });
+        target.set(id);
+        status.set(format!(
+            "{kind_label} 插入全新 id #{id:05} @ {index}；taps 必须从 0 开始"
+        ));
     };
 
     rsx! {
@@ -144,7 +216,7 @@ fn VirtualCaseView(kind: VirtualKind, active: bool) -> Element {
                     height: 34.0,
                     font_size: 12.0,
                     font_color: "#ff475569",
-                    "{kind_label} #{target_index:05} · rev {target_revision}\n{status}"
+                    "{kind_label} id #{target_id:05} · index {target_index} · rev {target_revision}\n{status}"
                 }
                 row {
                     width: "100%",
@@ -171,6 +243,33 @@ fn VirtualCaseView(kind: VirtualKind, active: bool) -> Element {
                         margin_left: 6.0,
                         font_size: 12.0,
                         padding: 8.0,
+                        background_color: "#ff7c3aed",
+                        font_color: "#ffffffff",
+                        onclick: move_and_update_target,
+                        "移动+更新"
+                    }
+                    button {
+                        margin_left: 6.0,
+                        font_size: 12.0,
+                        padding: 8.0,
+                        background_color: "#ffdc2626",
+                        font_color: "#ffffffff",
+                        onclick: remove_target,
+                        "删除"
+                    }
+                    button {
+                        margin_left: 6.0,
+                        font_size: 12.0,
+                        padding: 8.0,
+                        background_color: "#ff059669",
+                        font_color: "#ffffffff",
+                        onclick: insert_fresh,
+                        "插入新ID"
+                    }
+                    button {
+                        margin_left: 6.0,
+                        font_size: 12.0,
+                        padding: 8.0,
                         background_color: "#ffffffff",
                         font_color: "#ff334155",
                         onclick: next_target,
@@ -178,7 +277,7 @@ fn VirtualCaseView(kind: VirtualKind, active: bool) -> Element {
                     }
                 }
             }
-            VirtualHost { kind, source }
+            VirtualItemsHost { kind, source }
         }
     }
 }
@@ -211,7 +310,6 @@ fn NativeVirtualCaseView(active: bool) -> Element {
             visibility,
             opacity,
             VirtualHost {
-                kind: VirtualKind::List,
                 source,
             }
         }
@@ -219,14 +317,25 @@ fn NativeVirtualCaseView(active: bool) -> Element {
 }
 
 #[component]
-fn VirtualHost(kind: VirtualKind, source: VirtualSource) -> Element {
+fn VirtualHost(source: VirtualSource) -> Element {
+    rsx! {
+        list {
+            virtual_source: source,
+            width: "100%",
+            layout_weight: 1.0,
+            scroll_bar: "off",
+        }
+    }
+}
+
+#[component]
+fn VirtualItemsHost(kind: VirtualKind, source: VirtualItems) -> Element {
     match kind {
         VirtualKind::List => rsx! {
             list {
                 virtual_source: source,
                 width: "100%",
                 layout_weight: 1.0,
-                // Virtual lists: hide scrollbar so it does not steal hit area.
                 scroll_bar: "off",
             }
         },
@@ -255,7 +364,7 @@ fn VirtualHost(kind: VirtualKind, source: VirtualSource) -> Element {
     }
 }
 
-fn render_virtual_item(kind: VirtualKind, index: u32, revision: u32) -> Element {
+fn render_virtual_item(kind: VirtualKind, id: u32, index: u32, revision: u32) -> Element {
     let mut taps = use_signal(|| 0_u32);
     let (height, background_color) = match kind {
         VirtualKind::WaterFlow => {
@@ -284,11 +393,11 @@ fn render_virtual_item(kind: VirtualKind, index: u32, revision: u32) -> Element 
     };
     let label = if kind == VirtualKind::WaterFlow {
         format!(
-            "#{index:05}\nrev {revision} · {height:.0}vp · taps {}",
+            "id #{id:05} @ {index}\nrev {revision} · {height:.0}vp · taps {}",
             taps()
         )
     } else {
-        format!("#{index:05} · rev {revision} · taps {}", taps())
+        format!("id #{id:05} @ {index} · rev {revision} · taps {}", taps())
     };
 
     let width = if kind == VirtualKind::WaterFlow {

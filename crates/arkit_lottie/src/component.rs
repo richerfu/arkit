@@ -6,6 +6,7 @@ use arkit_hooks::{use_app_foreground, use_mounted_node, use_native_element_ref};
 use arkit_prelude::*;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
+use crate::controller::LottieControllerLease;
 use crate::network::LottieSourceLoader;
 use crate::surface::SurfaceRegistration;
 use crate::worker::{PlayerConfiguration, UiEvent, WorkerHandle, WorkerMessage};
@@ -23,6 +24,46 @@ struct ComponentRuntime {
 struct DownloadTask {
     ui_task: arkit_prelude::dioxus_core::Task,
     network_task: tokio::task::AbortHandle,
+}
+
+#[derive(Default)]
+struct ControllerBindingSlot {
+    attempted: Option<LottieController>,
+    lease: Option<LottieControllerLease>,
+}
+
+impl ControllerBindingSlot {
+    fn reconcile(
+        &mut self,
+        controller: Option<LottieController>,
+        sender: Option<std::sync::mpsc::Sender<WorkerMessage>>,
+    ) -> Option<LottieError> {
+        if self.attempted.as_ref() == controller.as_ref() {
+            return None;
+        }
+
+        self.lease.take();
+        self.attempted = controller.clone();
+        let (Some(controller), Some(sender)) = (controller, sender) else {
+            return None;
+        };
+        match controller.bind(sender) {
+            Ok(lease) => {
+                self.lease = Some(lease);
+                None
+            }
+            Err(error) => Some(error),
+        }
+    }
+
+    fn active(&self) -> Option<&LottieControllerLease> {
+        self.lease.as_ref()
+    }
+
+    fn clear(&mut self) {
+        self.lease.take();
+        self.attempted = None;
+    }
 }
 
 impl Drop for DownloadTask {
@@ -143,7 +184,7 @@ pub fn LottiePlayer(props: LottiePlayerProps) -> Element {
     let effective_active = props.active && app_foreground;
     let surface_registration = use_hook(|| Rc::new(RefCell::new(None::<SurfaceRegistration>)));
     let registered_node = use_hook(|| Rc::new(Cell::new(None::<u64>)));
-    let controller_binding = use_hook(|| Rc::new(RefCell::new(None::<(LottieController, u64)>)));
+    let controller_binding = use_hook(|| Rc::new(RefCell::new(ControllerBindingSlot::default())));
     let source_loader = use_hook(|| {
         Rc::new(RefCell::new(
             None::<crate::LottieResult<LottieSourceLoader>>,
@@ -163,24 +204,11 @@ pub fn LottiePlayer(props: LottiePlayerProps) -> Element {
     complete_handler.set(props.on_complete);
     error_handler.set(props.on_error);
 
-    let controller_changed = {
-        let binding = controller_binding.borrow();
-        match (binding.as_ref(), props.controller.as_ref()) {
-            (Some((current, _)), Some(next)) => current != next,
-            (None, None) => false,
-            _ => true,
-        }
-    };
-    if controller_changed {
-        if let Some((controller, binding)) = controller_binding.borrow_mut().take() {
-            controller.unbind(binding);
-        }
-        if let (Some(controller), Some(sender)) = (props.controller.clone(), runtime.sender()) {
-            let binding = controller.bind(sender);
-            controller_binding
-                .borrow_mut()
-                .replace((controller, binding));
-        }
+    if let Some(error) = controller_binding
+        .borrow_mut()
+        .reconcile(props.controller.clone(), runtime.sender())
+    {
+        runtime.emit_error(error);
     }
 
     let receiver_slot = use_hook(|| Rc::new(RefCell::new(runtime.take_receiver())));
@@ -190,6 +218,10 @@ pub fn LottiePlayer(props: LottiePlayerProps) -> Element {
     let events_frame = frame_handler.clone();
     let events_complete = complete_handler.clone();
     let events_error = error_handler.clone();
+    // ComponentRuntime and its worker are created once by `use_hook` and are
+    // never replaced before `use_drop`. Worker events therefore belong to this
+    // component/native surface, not to a controller lease: after a controller
+    // prop swap, queued events intentionally update the current controller.
     let _event_task = use_future(move || {
         let receiver = receiver_slot.borrow_mut().take();
         let events_controller = events_controller.clone();
@@ -207,8 +239,8 @@ pub fn LottiePlayer(props: LottiePlayerProps) -> Element {
                     UiEvent::Status(status) => {
                         if let Some((controller, binding)) = events_controller
                             .borrow()
-                            .as_ref()
-                            .map(|(controller, binding)| (controller.clone(), *binding))
+                            .active()
+                            .map(|lease| (lease.controller().clone(), lease.binding()))
                         {
                             controller.update_status(binding, status.clone());
                         }
@@ -219,8 +251,8 @@ pub fn LottiePlayer(props: LottiePlayerProps) -> Element {
                     UiEvent::Composition(composition) => {
                         if let Some((controller, binding)) = events_controller
                             .borrow()
-                            .as_ref()
-                            .map(|(controller, binding)| (controller.clone(), *binding))
+                            .active()
+                            .map(|lease| (lease.controller().clone(), lease.binding()))
                         {
                             controller.update_composition(binding, composition);
                         }
@@ -231,8 +263,8 @@ pub fn LottiePlayer(props: LottiePlayerProps) -> Element {
                     UiEvent::Frame(frame) => {
                         if let Some((controller, binding)) = events_controller
                             .borrow()
-                            .as_ref()
-                            .map(|(controller, binding)| (controller.clone(), *binding))
+                            .active()
+                            .map(|lease| (lease.controller().clone(), lease.binding()))
                         {
                             controller.update_frame(binding, frame);
                         }
@@ -401,9 +433,7 @@ pub fn LottiePlayer(props: LottiePlayerProps) -> Element {
     use_drop(move || {
         drop_download.borrow_mut().take();
         drop_registration.borrow_mut().take();
-        if let Some((controller, binding)) = drop_binding.borrow_mut().take() {
-            controller.unbind(binding);
-        }
+        drop_binding.borrow_mut().clear();
         drop_runtime.shutdown();
     });
 
@@ -415,5 +445,42 @@ pub fn LottiePlayer(props: LottiePlayerProps) -> Element {
             height: height,
             background_color: props.background_color,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::LottieErrorKind;
+
+    #[test]
+    fn duplicate_binding_attempt_is_reported_once_and_controller_change_recovers() {
+        let occupied = LottieController::new();
+        let (occupied_sender, _) = std::sync::mpsc::channel();
+        let occupied_lease = occupied.bind(occupied_sender).unwrap();
+        let (component_sender, component_receiver) = std::sync::mpsc::channel();
+        let mut slot = ControllerBindingSlot::default();
+
+        let first = slot.reconcile(Some(occupied.clone()), Some(component_sender.clone()));
+        let rerender = slot.reconcile(Some(occupied.clone()), Some(component_sender.clone()));
+        assert_eq!(first.unwrap().kind(), LottieErrorKind::AlreadyBound);
+        assert!(
+            rerender.is_none(),
+            "the same failed attempt must not repeat"
+        );
+        assert!(slot.active().is_none());
+
+        let replacement = LottieController::new();
+        assert!(slot
+            .reconcile(Some(replacement.clone()), Some(component_sender))
+            .is_none());
+        assert!(slot.active().is_some());
+        replacement.play().unwrap();
+        assert!(matches!(
+            component_receiver.recv().unwrap(),
+            WorkerMessage::Playback(crate::worker::PlaybackCommand::Play)
+        ));
+
+        drop(occupied_lease);
     }
 }

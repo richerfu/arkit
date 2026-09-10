@@ -8,7 +8,7 @@
 
 use crate::theme::*;
 use arkit_arkui::VirtualKind;
-use arkit_hooks::use_virtual_source_items_keyed;
+use arkit_hooks::{use_virtual_items, VirtualItemStamp};
 use arkit_prelude::*;
 use dioxus_core::Callback;
 
@@ -100,6 +100,8 @@ fn resolve_rail(indexes: Option<&[String]>, populated: &[String], show_empty: bo
 /// One row in [`Index`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IndexItemSpec {
+    /// Stable identity used to preserve this row across content changes and moves.
+    pub id: String,
     /// Group key. Empty classifies [`Self::title`] into `#` or `A`–`Z`.
     pub index: String,
     pub title: String,
@@ -108,9 +110,10 @@ pub struct IndexItemSpec {
 }
 
 impl IndexItemSpec {
-    /// Title under `index`. Pass `""` to classify `title`.
-    pub fn new(index: impl Into<String>, title: impl Into<String>) -> Self {
+    /// Stable `id` and title under `index`. Pass `""` to classify `title`.
+    pub fn new(id: impl Into<String>, index: impl Into<String>, title: impl Into<String>) -> Self {
         Self {
+            id: id.into(),
             index: index.into(),
             title: title.into(),
             description: None,
@@ -153,6 +156,33 @@ pub struct IndexBarSlot {
 enum FlatKind {
     Header,
     Item(usize),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum IndexRowId {
+    Header(String),
+    Item(String),
+}
+
+#[derive(Clone, PartialEq)]
+enum IndexRowRevision {
+    Header {
+        index: String,
+        render_revision: u64,
+        custom: Option<Callback<IndexHeaderContext, Element>>,
+        background: u32,
+        foreground: u32,
+    },
+    Item {
+        item: IndexItemSpec,
+        item_index: usize,
+        index: String,
+        render_revision: u64,
+        custom: Option<Callback<IndexItemContext, Element>>,
+        background: u32,
+        title_foreground: u32,
+        description_foreground: u32,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -243,6 +273,10 @@ pub struct IndexProps {
     pub render_header: Option<Callback<IndexHeaderContext, Element>>,
     #[props(default)]
     pub render_bar: Option<Callback<IndexBarSlot, Element>>,
+    /// Increment when external visual inputs captured by custom row/header
+    /// renderers change without changing an [`IndexItemSpec`].
+    #[props(default)]
+    pub render_revision: u64,
     #[props(default)]
     pub on_select: EventHandler<usize>,
     #[props(default)]
@@ -298,24 +332,33 @@ pub fn Index(props: IndexProps) -> Element {
         })
         .unwrap_or_default();
 
-    let render_tag = match (props.render_item.is_some(), props.render_header.is_some()) {
-        (true, true) => "ih",
-        (true, false) => "i",
-        (false, true) => "h",
-        (false, false) => "d",
-    };
-    let item_keys: Vec<String> = rows
+    let stamps = rows
         .iter()
-        .enumerate()
-        .map(|(row_index, row)| match row.kind {
-            FlatKind::Header => format!("h:{render_tag}:{row_index}:{}", row.index),
+        .map(|row| match row.kind {
+            FlatKind::Header => VirtualItemStamp::new(
+                IndexRowId::Header(row.index.clone()),
+                IndexRowRevision::Header {
+                    index: row.index.clone(),
+                    render_revision: props.render_revision,
+                    custom: props.render_header,
+                    background: theme.colors.muted,
+                    foreground: theme.colors.muted_foreground,
+                },
+            ),
             FlatKind::Item(item_index) => {
                 let item = &items[item_index];
-                format!(
-                    "i:{render_tag}:{item_index}:{}:{}:{}",
-                    row.index,
-                    item.title,
-                    item.description.as_deref().unwrap_or("")
+                VirtualItemStamp::new(
+                    IndexRowId::Item(item.id.clone()),
+                    IndexRowRevision::Item {
+                        item: item.clone(),
+                        item_index,
+                        index: row.index.clone(),
+                        render_revision: props.render_revision,
+                        custom: props.render_item,
+                        background: theme.colors.background,
+                        title_foreground: theme.colors.foreground,
+                        description_foreground: theme.colors.muted_foreground,
+                    },
                 )
             }
         })
@@ -332,7 +375,7 @@ pub fn Index(props: IndexProps) -> Element {
     let on_select = props.on_select;
     let render_item = props.render_item;
     let render_header = props.render_header;
-    let source = use_virtual_source_items_keyed(VirtualKind::List, item_keys, move |index| {
+    let source = use_virtual_items(VirtualKind::List, stamps, move |index| {
         let Some(row) = list_rows.get(index as usize) else {
             return rsx! { row { height: 1.0 } };
         };
@@ -665,9 +708,9 @@ mod tests {
 
     fn sample() -> Vec<IndexItemSpec> {
         vec![
-            IndexItemSpec::new("A", "Ada"),
-            IndexItemSpec::new("A", "Alan"),
-            IndexItemSpec::new("C", "Carol").with_description("ext 12"),
+            IndexItemSpec::new("ada", "A", "Ada"),
+            IndexItemSpec::new("alan", "A", "Alan"),
+            IndexItemSpec::new("carol", "C", "Carol").with_description("ext 12"),
         ]
     }
 
@@ -723,12 +766,12 @@ mod tests {
     #[test]
     fn spy_uses_last_group_when_a_short_tail_cannot_reach_the_top() {
         let items = vec![
-            IndexItemSpec::new("W", "Wuhan"),
-            IndexItemSpec::new("W", "Urumqi"),
-            IndexItemSpec::new("X", "Xian"),
-            IndexItemSpec::new("X", "Xiamen"),
-            IndexItemSpec::new("Y", "Yinchuan"),
-            IndexItemSpec::new("Z", "Zhengzhou"),
+            IndexItemSpec::new("wuhan", "W", "Wuhan"),
+            IndexItemSpec::new("urumqi", "W", "Urumqi"),
+            IndexItemSpec::new("xian", "X", "Xian"),
+            IndexItemSpec::new("xiamen", "X", "Xiamen"),
+            IndexItemSpec::new("yinchuan", "Y", "Yinchuan"),
+            IndexItemSpec::new("zhengzhou", "Z", "Zhengzhou"),
         ];
         let keys = item_group_keys(&items);
         let rail = resolve_rail(None, &unique_indexes(&keys), false);

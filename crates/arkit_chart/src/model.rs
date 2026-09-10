@@ -29,7 +29,9 @@ pub struct ChartOption {
     /// Fully merged snapshots from ECharts `baseOption` + `options`.
     pub timeline_options: Vec<ChartOption>,
     pub brush: Option<BrushOptions>,
-    /// Raw responsive option rules from ECharts `baseOption + media`.
+    /// Parser-owned responsive recipe from ECharts `baseOption + media`.
+    /// Inspect it through [`MediaOptions`] accessors; construct composite
+    /// options through [`ChartOption::from_json_str`] or `from_json_value`.
     pub media: Option<MediaOptions>,
     /// ECharts global enter/update/state animation policy.
     pub animation: AnimationOptions,
@@ -328,9 +330,26 @@ impl ChartOption {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MediaOptions {
-    pub base_option: Value,
-    pub timeline_options: Vec<Value>,
-    pub rules: Vec<MediaRule>,
+    pub(crate) base_option: Value,
+    pub(crate) timeline_options: Vec<Value>,
+    pub(crate) rules: Vec<MediaRule>,
+    /// Raw datasets visible at parse time, used internally to distinguish a
+    /// later caller mutation from explicit timeline/media overrides.
+    pub(crate) initial_active_datasets: Vec<Dataset>,
+}
+
+impl MediaOptions {
+    pub fn base_option(&self) -> &Value {
+        &self.base_option
+    }
+
+    pub fn timeline_options(&self) -> &[Value] {
+        &self.timeline_options
+    }
+
+    pub fn rules(&self) -> &[MediaRule] {
+        &self.rules
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

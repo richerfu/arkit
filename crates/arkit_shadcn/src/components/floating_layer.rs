@@ -90,7 +90,7 @@ impl FloatingPanelPlacement {
     /// Pointer target bounds are intentionally ignored — clicks often hit an
     /// inner Text/icon node whose rect is narrower/offset from the control.
     pub(crate) fn resolve(
-        trigger: arkit_hooks::LayoutFrame,
+        trigger: arkit_arkui::LayoutFramePx,
         viewport: arkit_hooks::OverlayViewport,
         panel_width: f32,
         panel_height: f32,
@@ -114,7 +114,7 @@ impl FloatingPanelPlacement {
     }
 
     pub(crate) fn from_trigger(
-        trigger: arkit_hooks::LayoutFrame,
+        trigger: arkit_arkui::LayoutFramePx,
         viewport: arkit_hooks::OverlayViewport,
         panel_width: f32,
         panel_height: f32,
@@ -124,13 +124,22 @@ impl FloatingPanelPlacement {
     ) -> Self {
         let scale = viewport_scale(viewport);
         let overlay = viewport.frame;
-        let (overlay_x, overlay_y, viewport_width, viewport_height) =
-            overlay_metrics_vp(overlay, scale, panel_width, panel_height);
+        let metrics = overlay_metrics_vp(overlay, scale, panel_width, panel_height);
 
         // Trigger layout frames are physical / window-space; convert into the
         // overlay-local vp space used by ArkUI width/position attributes.
-        let trigger_x = ((trigger.x - overlay_x).max(0.0)) / scale;
-        let trigger_y = ((trigger.y - overlay_y).max(0.0)) / scale;
+        let trigger_origin = arkit_arkui::LocalVpPoint::from_window_px(
+            arkit_arkui::WindowPxPoint::new(trigger.x, trigger.y),
+            arkit_arkui::LayoutFramePx {
+                x: metrics.origin.x,
+                y: metrics.origin.y,
+                ..Default::default()
+            },
+            scale,
+        )
+        .unwrap_or_default();
+        let trigger_x = trigger_origin.x.max(0.0);
+        let trigger_y = trigger_origin.y.max(0.0);
         let trigger_width = trigger.width / scale;
         let trigger_height = trigger.height / scale;
 
@@ -139,10 +148,11 @@ impl FloatingPanelPlacement {
         let edge = spacing::SM;
         let min_x = viewport.safe_area.left.max(0.0) + edge;
         let min_y = viewport.safe_area.top.max(0.0) + edge;
-        let max_x =
-            (viewport_width - viewport.safe_area.right.max(0.0) - panel_width - edge).max(min_x);
+        let max_x = (metrics.size.width - viewport.safe_area.right.max(0.0) - panel_width - edge)
+            .max(min_x);
         let max_y =
-            (viewport_height - viewport.safe_area.bottom.max(0.0) - panel_height - edge).max(min_y);
+            (metrics.size.height - viewport.safe_area.bottom.max(0.0) - panel_height - edge)
+                .max(min_y);
 
         let raw_x = match align {
             FloatingAlign::Start => trigger_x,
@@ -198,35 +208,45 @@ pub(crate) fn viewport_scale(viewport: arkit_hooks::OverlayViewport) -> f32 {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct OverlayMetrics {
+    pub origin: arkit_arkui::WindowPxPoint,
+    pub size: arkit_arkui::LogicalSizeVp,
+}
+
 pub(crate) fn overlay_metrics_vp(
-    overlay: arkit_hooks::LayoutFrame,
+    overlay: arkit_arkui::LayoutFramePx,
     scale: f32,
     panel_width: f32,
     panel_height: f32,
-) -> (f32, f32, f32, f32) {
+) -> OverlayMetrics {
     let scale = scale.max(f32::EPSILON);
     if overlay.is_measured() {
-        (
-            overlay.x,
-            overlay.y,
-            (overlay.width / scale).max(panel_width + spacing::SM * 2.0),
-            (overlay.height / scale).max(panel_height + spacing::SM * 2.0),
-        )
+        let size = arkit_arkui::LogicalSizeVp::from_physical(overlay.into(), scale)
+            .expect("validated viewport scale must convert measured overlay dimensions");
+        OverlayMetrics {
+            origin: arkit_arkui::WindowPxPoint::new(overlay.x, overlay.y),
+            size: arkit_arkui::LogicalSizeVp::new(
+                size.width.max(panel_width + spacing::SM * 2.0),
+                size.height.max(panel_height + spacing::SM * 2.0),
+            ),
+        }
     } else {
-        (
-            0.0,
-            0.0,
-            (ohos_display_binding::default_display_width() as f32 / scale)
-                .max(panel_width + spacing::SM * 2.0),
-            (ohos_display_binding::default_display_height() as f32 / scale)
-                .max(panel_height + spacing::SM * 2.0),
-        )
+        OverlayMetrics {
+            origin: arkit_arkui::WindowPxPoint::default(),
+            size: arkit_arkui::LogicalSizeVp::new(
+                (ohos_display_binding::default_display_width() as f32 / scale)
+                    .max(panel_width + spacing::SM * 2.0),
+                (ohos_display_binding::default_display_height() as f32 / scale)
+                    .max(panel_height + spacing::SM * 2.0),
+            ),
+        }
     }
 }
 
 /// Trigger width in vp for same-width panels (Select).
 pub(crate) fn trigger_width_vp(
-    trigger: arkit_hooks::LayoutFrame,
+    trigger: arkit_arkui::LayoutFramePx,
     viewport: arkit_hooks::OverlayViewport,
     fallback: f32,
 ) -> f32 {
@@ -362,7 +382,7 @@ mod tests {
     #[test]
     fn placement_is_clamped_inside_safe_viewport() {
         let viewport = arkit_hooks::OverlayViewport {
-            frame: arkit_hooks::LayoutFrame {
+            frame: arkit_arkui::LayoutFramePx {
                 x: 0.0,
                 y: 0.0,
                 width: 400.0,
@@ -377,7 +397,7 @@ mod tests {
             scale: 1.0,
         };
         let placement = FloatingPanelPlacement::from_trigger(
-            arkit_hooks::LayoutFrame {
+            arkit_arkui::LayoutFramePx {
                 x: 0.0,
                 y: 0.0,
                 width: 10.0,
@@ -398,7 +418,7 @@ mod tests {
     #[test]
     fn resolve_prefers_measured_trigger_over_fallback() {
         let viewport = arkit_hooks::OverlayViewport {
-            frame: arkit_hooks::LayoutFrame {
+            frame: arkit_arkui::LayoutFramePx {
                 x: 0.0,
                 y: 0.0,
                 width: 400.0,
@@ -407,7 +427,7 @@ mod tests {
             safe_area: arkit_hooks::EdgeInsets::default(),
             scale: 1.0,
         };
-        let trigger = arkit_hooks::LayoutFrame {
+        let trigger = arkit_arkui::LayoutFramePx {
             x: 80.0,
             y: 120.0,
             width: 200.0,
@@ -429,7 +449,7 @@ mod tests {
     #[test]
     fn start_align_keeps_trigger_left_when_it_fits() {
         let viewport = arkit_hooks::OverlayViewport {
-            frame: arkit_hooks::LayoutFrame {
+            frame: arkit_arkui::LayoutFramePx {
                 x: 0.0,
                 y: 0.0,
                 width: 400.0,
@@ -444,7 +464,7 @@ mod tests {
             scale: 1.0,
         };
         let placement = FloatingPanelPlacement::from_trigger(
-            arkit_hooks::LayoutFrame {
+            arkit_arkui::LayoutFramePx {
                 x: 50.0,
                 y: 100.0,
                 width: 180.0,
@@ -463,7 +483,7 @@ mod tests {
     #[test]
     fn trigger_width_converts_physical_to_vp() {
         let viewport = arkit_hooks::OverlayViewport {
-            frame: arkit_hooks::LayoutFrame {
+            frame: arkit_arkui::LayoutFramePx {
                 x: 0.0,
                 y: 0.0,
                 width: 1080.0,
@@ -472,7 +492,7 @@ mod tests {
             safe_area: arkit_hooks::EdgeInsets::default(),
             scale: 3.0,
         };
-        let trigger = arkit_hooks::LayoutFrame {
+        let trigger = arkit_arkui::LayoutFramePx {
             x: 100.0,
             y: 200.0,
             width: 540.0,
@@ -490,5 +510,35 @@ mod tests {
         );
         assert!((placement.x - (100.0 / 3.0)).abs() < 0.01);
         assert!((placement.y - (200.0 / 3.0 + 120.0 / 3.0 + 4.0)).abs() < 0.01);
+    }
+
+    #[test]
+    fn overlay_metrics_keep_physical_origin_separate_from_logical_size() {
+        let measured = overlay_metrics_vp(
+            arkit_arkui::LayoutFramePx {
+                x: 70.0,
+                y: 35.0,
+                width: 350.0,
+                height: 175.0,
+            },
+            3.5,
+            10.0,
+            10.0,
+        );
+        assert_eq!(measured.origin, arkit_arkui::WindowPxPoint::new(70.0, 35.0));
+        assert_eq!(measured.size, arkit_arkui::LogicalSizeVp::new(100.0, 50.0));
+
+        let fallback = overlay_metrics_vp(
+            arkit_arkui::LayoutFramePx {
+                x: 70.0,
+                y: 35.0,
+                width: 0.0,
+                height: 0.0,
+            },
+            3.5,
+            10.0,
+            10.0,
+        );
+        assert_eq!(fallback.origin, arkit_arkui::WindowPxPoint::default());
     }
 }

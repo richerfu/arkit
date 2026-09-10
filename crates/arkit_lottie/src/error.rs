@@ -12,6 +12,7 @@ pub enum LottieErrorKind {
     UnsupportedPixelFormat,
     Render,
     WorkerStopped,
+    AlreadyBound,
 }
 
 /// An owned Lottie error that can cross the render-worker boundary.
@@ -61,6 +62,14 @@ impl LottieError {
             LottieErrorKind::WorkerStopped,
             operation,
             "the Lottie render worker is no longer running",
+        )
+    }
+
+    pub(crate) fn already_bound(operation: &'static str) -> Self {
+        Self::new(
+            LottieErrorKind::AlreadyBound,
+            operation,
+            "one Lottie controller cannot target two mounted players",
         )
     }
 

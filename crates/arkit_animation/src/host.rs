@@ -3,6 +3,7 @@ use std::collections::VecDeque;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::rc::Rc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 #[cfg(debug_assertions)]
 use std::time::Instant;
@@ -13,12 +14,12 @@ use arkit_animation_core::{
     AnimationRuntimeError, EngineCommand, EngineEvent, InstanceKey, PlaybackDirection,
     TimeDomainId, TimeExtent, TimePoint, TimeSpan, TimelineSource, WindowMetrics,
 };
-use arkit_arkui::MountedNodeLease;
+use arkit_arkui::{AnimatedAttributeGuard, AnimatedAttributeOwner, MountedNodeLease};
 use rustc_hash::FxHashMap;
 
 use crate::adapter::TargetAdapter;
 use crate::adapter_registry::AdapterRegistry;
-use crate::arkui_adapter::ArkUiAdapter;
+use crate::arkui_adapter::{ArkUiAdapter, AttributeClaimSpec};
 use crate::diagnostic::AnimationAdapterError;
 use crate::native_capability::{AnimationBackend, CapabilityRequirements, ExecutionPolicy};
 use crate::native_instance::{
@@ -129,6 +130,13 @@ struct HostedNativeInstance {
     direction: PlaybackDirection,
 }
 
+struct HostedAttributePlan {
+    specs: Vec<AttributeClaimSpec>,
+    guards: Vec<AnimatedAttributeGuard>,
+}
+
+static NEXT_ANIMATION_HOST_ID: AtomicU64 = AtomicU64::new(1);
+
 pub struct AnimationHost {
     engine: RefCell<AnimationEngine>,
     registry: RefCell<AdapterRegistry>,
@@ -138,8 +146,12 @@ pub struct AnimationHost {
     native_instances: RefCell<FxHashMap<InstanceKey, HostedNativeInstance>>,
     lowering_reports: RefCell<FxHashMap<InstanceKey, LoweringReport>>,
     native_commands: RefCell<VecDeque<EngineCommand>>,
+    pending_revert_drives: RefCell<Vec<InstanceKey>>,
     context_node_provider: RefCell<Option<ContextNodeProvider>>,
     event_scratch: RefCell<Vec<EngineEvent>>,
+    attribute_plans: RefCell<FxHashMap<InstanceKey, HostedAttributePlan>>,
+    attribute_host_id: u64,
+    next_attribute_claim: Cell<u64>,
     ticking: Cell<bool>,
     counters: HostCounters,
 }
@@ -158,8 +170,12 @@ impl AnimationHost {
             native_instances: RefCell::new(FxHashMap::default()),
             lowering_reports: RefCell::new(FxHashMap::default()),
             native_commands: RefCell::new(VecDeque::new()),
+            pending_revert_drives: RefCell::new(Vec::new()),
             context_node_provider: RefCell::new(None),
             event_scratch: RefCell::new(Vec::new()),
+            attribute_plans: RefCell::new(FxHashMap::default()),
+            attribute_host_id: NEXT_ANIMATION_HOST_ID.fetch_add(1, Ordering::Relaxed),
+            next_attribute_claim: Cell::new(0),
             ticking: Cell::new(false),
             counters: HostCounters::default(),
         }))
@@ -202,9 +218,6 @@ impl AnimationHost {
         // node is still valid. The sampled engine remains usable if Dioxus
         // later rebinds the animation root.
         self.native_instances.borrow_mut().clear();
-        // No animation can drive attributes anymore; restore declarative
-        // ownership so the renderer's next patch lands on the node.
-        self.arkui.clear_all_animated_attrs();
         for instance in instances {
             self.record_runtime_fallback(
                 instance,
@@ -285,6 +298,7 @@ impl AnimationHost {
             }
             Err(error) => return Err(error),
         };
+        let attribute_specs = self.arkui.attribute_claim_specs(&plan)?;
         let mut report = NativeLowerer.lower_plan(policy, &plan, requirements)?;
         let mut native = None;
         if report.selected == AnimationBackend::ArkUiAnimator {
@@ -356,6 +370,13 @@ impl AnimationHost {
         self.lowering_reports
             .borrow_mut()
             .insert(instance, report.clone());
+        self.attribute_plans.borrow_mut().insert(
+            instance,
+            HostedAttributePlan {
+                specs: attribute_specs,
+                guards: Vec::new(),
+            },
+        );
         Ok((instance, report))
     }
 
@@ -367,6 +388,7 @@ impl AnimationHost {
         requirements: CapabilityRequirements,
     ) -> Result<(), AnimationHostError> {
         let (plan, baselines) = self.resolve(source)?;
+        let attribute_specs = self.arkui.attribute_claim_specs(&plan)?;
         let mut report = NativeLowerer.lower_plan(policy, &plan, requirements)?;
         if report.selected != AnimationBackend::Sampled {
             if policy == ExecutionPolicy::NativeOnly {
@@ -381,9 +403,23 @@ impl AnimationHost {
             );
         }
         self.transition_native_to_sampled(instance)?;
+        let replacement_guards = self
+            .attribute_plans
+            .borrow()
+            .get(&instance)
+            .is_some_and(|plan| !plan.guards.is_empty())
+            .then(|| self.claim_attributes(&attribute_specs))
+            .transpose()?;
         self.engine
             .borrow_mut()
             .replace_resolution(instance, plan, baselines)?;
+        let mut attribute_plans = self.attribute_plans.borrow_mut();
+        let attribute_plan = attribute_plans
+            .get_mut(&instance)
+            .expect("live animation instance must retain its attribute plan");
+        attribute_plan.specs = attribute_specs;
+        attribute_plan.guards = replacement_guards.unwrap_or_default();
+        drop(attribute_plans);
         if report.fallback_reason.is_some() {
             increment(&self.counters.fallback_count);
         }
@@ -442,6 +478,24 @@ impl AnimationHost {
     }
 
     pub fn enqueue(&self, command: EngineCommand) {
+        if let EngineCommand::Revert(instance) = command {
+            // Revert writes the baseline without emitting an Update event
+            // until after frame acknowledgement. Remember it here so a
+            // completed/idle instance reacquires ownership before that write.
+            let will_write = self
+                .engine
+                .borrow()
+                .snapshot(instance)
+                .is_some_and(|snapshot| {
+                    snapshot.state != arkit_animation_core::PlaybackState::Reverted
+                });
+            if will_write {
+                let mut pending = self.pending_revert_drives.borrow_mut();
+                if !pending.contains(&instance) {
+                    pending.push(instance);
+                }
+            }
+        }
         if self
             .native_instances
             .borrow()
@@ -463,10 +517,56 @@ impl AnimationHost {
         let _tick_guard = TickGuard(&self.ticking);
         self.flush_native_commands()?;
         self.poll_native_instances();
+        let pending_reverts = self.pending_revert_drives.borrow().clone();
+        let mut newly_claimed = Vec::new();
+        for instance in pending_reverts.iter().copied() {
+            match self.ensure_attributes_claimed(instance) {
+                Ok(true) => newly_claimed.push(instance),
+                Ok(false) => {}
+                Err(error) => {
+                    for claimed in newly_claimed {
+                        self.release_attribute_claims(claimed);
+                    }
+                    // The engine has not consumed the Revert yet. Retain the
+                    // candidate so a later tick can retry after the
+                    // conflicting host releases its claim.
+                    return Err(error.into());
+                }
+            }
+        }
         #[cfg(debug_assertions)]
         let compute_started = Instant::now();
         let mut engine = self.engine.borrow_mut();
-        let frame = engine.tick(frame_time)?;
+        let frame = match engine.tick(frame_time) {
+            Ok(frame) => frame,
+            Err(error) => {
+                drop(engine);
+                for claimed in newly_claimed {
+                    self.release_attribute_claims(claimed);
+                }
+                // AnimationEngine only errors before consuming its command
+                // queue, so pending Revert candidates remain retryable.
+                return Err(error.into());
+            }
+        };
+        let driving_instances = engine
+            .events()
+            .iter()
+            .filter_map(driving_event_instance)
+            .collect::<Vec<_>>();
+        drop(engine);
+        for instance in driving_instances {
+            match self.ensure_attributes_claimed(instance) {
+                Ok(true) => newly_claimed.push(instance),
+                Ok(false) => {}
+                Err(error) => {
+                    self.engine.borrow_mut().reject_frame(frame)?;
+                    self.cleanup_rejected_frame(&newly_claimed, &pending_reverts);
+                    return Err(error.into());
+                }
+            }
+        }
+        let mut engine = self.engine.borrow_mut();
         #[cfg(debug_assertions)]
         self.counters
             .last_compute_ns
@@ -477,6 +577,8 @@ impl AnimationHost {
         if let Err(error) = self.registry.borrow().apply(engine.frame_batch()) {
             increment(&self.counters.adapter_failures);
             engine.reject_frame(frame)?;
+            drop(engine);
+            self.cleanup_rejected_frame(&newly_claimed, &pending_reverts);
             return Err(error.into());
         }
         #[cfg(debug_assertions)]
@@ -491,6 +593,7 @@ impl AnimationHost {
                 .saturating_add(dirty_writes),
         );
         engine.acknowledge_frame(frame)?;
+        self.consume_pending_reverts(&pending_reverts);
         // Listener callbacks require the engine borrow to be released. Reuse
         // one host-owned buffer instead of allocating a fresh Vec every frame.
         let mut events = self.event_scratch.take();
@@ -499,21 +602,7 @@ impl AnimationHost {
         drop(engine);
         self.publish_events(&events);
         self.remove_hosted_for_events(&events);
-        // Hosted instances finished: from this frame the renderer owns the
-        // driven attributes again (declarative value = steady state). Cleared
-        // declarations also let the next declarative patch land immediately
-        // instead of being skipped forever.
-        if events.iter().any(|event| {
-            matches!(
-                event,
-                EngineEvent::Complete { .. }
-                    | EngineEvent::Cancel { .. }
-                    | EngineEvent::Settled { .. }
-                    | EngineEvent::Removed { .. }
-            )
-        }) {
-            self.arkui.clear_all_animated_attrs();
-        }
+        self.release_attribute_claims_for_events(&events);
         events.clear();
         let displaced = self.event_scratch.replace(events);
         debug_assert!(displaced.is_empty());
@@ -795,9 +884,123 @@ impl AnimationHost {
         for instance in &removed {
             reports.remove(instance);
         }
+        let mut attribute_plans = self.attribute_plans.borrow_mut();
+        for instance in &removed {
+            attribute_plans.remove(instance);
+        }
+        drop(attribute_plans);
         self.native_commands
             .borrow_mut()
             .retain(|command| !removed.contains(&host_command_instance(*command)));
+        self.pending_revert_drives
+            .borrow_mut()
+            .retain(|instance| !removed.contains(instance));
+    }
+
+    fn claim_attributes(
+        &self,
+        specs: &[AttributeClaimSpec],
+    ) -> Result<Vec<AnimatedAttributeGuard>, AnimationAdapterError> {
+        let claim = self
+            .next_attribute_claim
+            .get()
+            .checked_add(1)
+            .expect("animation attribute claim space exhausted");
+        self.next_attribute_claim.set(claim);
+        let owner = AnimatedAttributeOwner::new(self.attribute_host_id, claim);
+        let mut guards = Vec::with_capacity(specs.len());
+        for spec in specs {
+            guards.push(spec.node.claim_animated_attributes(owner, &spec.attrs)?);
+        }
+        for guard in &mut guards {
+            if !guard.activate() {
+                return Err(arkit_arkui::AnimatedAttributeClaimError::StaleLease.into());
+            }
+        }
+        Ok(guards)
+    }
+
+    /// Returns whether this call changed the instance from declarative to
+    /// animation-driven ownership.
+    fn ensure_attributes_claimed(
+        &self,
+        instance: InstanceKey,
+    ) -> Result<bool, AnimationAdapterError> {
+        let specs = {
+            let plans = self.attribute_plans.borrow();
+            let Some(plan) = plans.get(&instance) else {
+                return Ok(false);
+            };
+            if !plan.guards.is_empty() {
+                return Ok(false);
+            }
+            plan.specs.clone()
+        };
+        let guards = self.claim_attributes(&specs)?;
+        self.attribute_plans
+            .borrow_mut()
+            .get_mut(&instance)
+            .expect("attribute plan cannot disappear during a UI-thread tick")
+            .guards = guards;
+        Ok(true)
+    }
+
+    fn release_attribute_claims(&self, instance: InstanceKey) {
+        if let Some(plan) = self.attribute_plans.borrow_mut().get_mut(&instance) {
+            plan.guards.clear();
+        }
+    }
+
+    fn release_attribute_claims_for_events(&self, events: &[EngineEvent]) {
+        for instance in events.iter().filter_map(terminal_event_instance) {
+            self.release_attribute_claims(instance);
+        }
+    }
+
+    fn consume_pending_reverts(&self, consumed: &[InstanceKey]) {
+        if consumed.is_empty() {
+            return;
+        }
+        self.pending_revert_drives
+            .borrow_mut()
+            .retain(|instance| !consumed.contains(instance));
+    }
+
+    fn cleanup_rejected_frame(
+        &self,
+        newly_claimed: &[InstanceKey],
+        consumed_reverts: &[InstanceKey],
+    ) {
+        for instance in newly_claimed.iter().copied() {
+            self.release_attribute_claims(instance);
+        }
+        // reject_frame clears deferred terminal events but deliberately does
+        // not roll instance playback state back. Release guards from those
+        // snapshots explicitly so rejected Complete/Cancel/Revert frames do
+        // not retain ownership forever.
+        let terminal = self
+            .attribute_plans
+            .borrow()
+            .keys()
+            .copied()
+            .filter(|instance| {
+                self.engine
+                    .borrow()
+                    .snapshot(*instance)
+                    .is_some_and(|snapshot| {
+                        matches!(
+                            snapshot.state,
+                            arkit_animation_core::PlaybackState::Completed
+                                | arkit_animation_core::PlaybackState::Cancelled
+                                | arkit_animation_core::PlaybackState::Reverted
+                        )
+                    })
+            })
+            .collect::<Vec<_>>();
+        for instance in terminal {
+            self.release_attribute_claims(instance);
+        }
+        self.consume_pending_reverts(consumed_reverts);
     }
 
     pub fn performance_counters(&self) -> AnimationPerformanceCounters {
@@ -874,6 +1077,27 @@ fn mark_native_fallback(
         unsupported: vec![unsupported],
     });
     report.fallback_reason = Some(reason.into());
+}
+
+const fn driving_event_instance(event: &EngineEvent) -> Option<InstanceKey> {
+    match event {
+        EngineEvent::Begin { instance }
+        | EngineEvent::BeforeUpdate { instance, .. }
+        | EngineEvent::Update { instance, .. }
+        | EngineEvent::Render { instance, .. } => Some(*instance),
+        _ => None,
+    }
+}
+
+const fn terminal_event_instance(event: &EngineEvent) -> Option<InstanceKey> {
+    match event {
+        EngineEvent::Complete { instance }
+        | EngineEvent::Cancel { instance }
+        | EngineEvent::Revert { instance }
+        | EngineEvent::Settled { instance, .. }
+        | EngineEvent::Removed { instance } => Some(*instance),
+        _ => None,
+    }
 }
 
 const fn host_command_instance(command: EngineCommand) -> InstanceKey {

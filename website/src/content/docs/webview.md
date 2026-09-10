@@ -33,6 +33,8 @@ use_effect(use_reactive(&visible, move |visible| {
 }));
 ```
 
+这里的布尔值表示“平台已经确认可见”；刚挂载但尚未收到可见性通知的 `Unknown` 会返回 `false`，因此 WebView 等持续工作不会在观测前提前启动。
+
 ## 挂载与同步
 
 ```rust

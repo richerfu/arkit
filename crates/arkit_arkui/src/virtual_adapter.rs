@@ -159,8 +159,16 @@ enum ItemRenderer {
 
 struct MountedItem {
     index: u32,
+    rendered_index: u32,
+    identity: ItemIdentity,
     node: Rc<RefCell<ArkUINode>>,
     mount: Option<VirtualItemMount>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ItemIdentity {
+    Index(u32),
+    Stable(u32),
 }
 
 impl MountedItem {
@@ -171,18 +179,36 @@ impl MountedItem {
             .is_some()
     }
 
-    fn prepare_index_update(&mut self, index: u32) -> Option<UpdateItemIndex> {
+    fn prepare_index_update(&mut self, index: u32, defer: bool) -> Option<UpdateItemIndex> {
         if self.index == index {
             return None;
         }
         self.index = index;
+        if defer {
+            return None;
+        }
+        self.rendered_index = index;
         self.mount
             .as_ref()
             .and_then(VirtualItemMount::index_updater)
     }
 
-    fn prepare_recycle(&mut self, index: u32) -> Option<UpdateItemIndex> {
+    fn prepare_recycle(&mut self, index: u32, defer: bool) -> Option<UpdateItemIndex> {
         self.index = index;
+        if defer {
+            return None;
+        }
+        self.rendered_index = index;
+        self.mount
+            .as_ref()
+            .and_then(VirtualItemMount::index_updater)
+    }
+
+    fn prepare_deferred_index_update(&mut self) -> Option<UpdateItemIndex> {
+        if self.rendered_index == self.index {
+            return None;
+        }
+        self.rendered_index = self.index;
         self.mount
             .as_ref()
             .and_then(VirtualItemMount::index_updater)
@@ -209,6 +235,10 @@ struct AdapterState {
     kind: VirtualKind,
     total_count: u32,
     renderer: ItemRenderer,
+    /// Stable per-item tokens supplied by the high-level stamps hook. The
+    /// low-level source leaves this unset and uses indices as recycle IDs.
+    stable_item_ids: Option<Vec<u32>>,
+    defer_index_updates: bool,
     /// Mounted items keyed by native handle. During a reload ArkUI may add the
     /// replacement for an index before removing the old node for that same
     /// index. Keying by index would overwrite and then dispose the replacement
@@ -249,6 +279,8 @@ impl VirtualSource {
                 kind,
                 total_count,
                 renderer: ItemRenderer::Content(render_item),
+                stable_item_ids: None,
+                defer_index_updates: false,
                 mounted: FxHashMap::default(),
                 recycled: Vec::new(),
                 adapter: None,
@@ -267,6 +299,8 @@ impl VirtualSource {
                 kind,
                 total_count,
                 renderer: ItemRenderer::Mounted(mount_item),
+                stable_item_ids: None,
+                defer_index_updates: false,
                 mounted: FxHashMap::default(),
                 recycled: Vec::new(),
                 adapter: None,
@@ -341,6 +375,101 @@ impl VirtualSource {
     /// Replace the direct item mounter used by future creates and reloads.
     pub fn set_mount_item(&self, mount_item: MountItem) {
         self.state.borrow_mut().renderer = ItemRenderer::Mounted(mount_item);
+    }
+
+    /// Install stable item tokens for the high-level identity/revision hook.
+    ///
+    /// Tokens must be unique. During a structural diff their length describes
+    /// the final snapshot and may temporarily differ from the native count.
+    #[doc(hidden)]
+    pub fn set_stable_item_ids(&self, item_ids: Vec<u32>) {
+        self.state.borrow_mut().stable_item_ids = Some(item_ids);
+    }
+
+    /// Start a high-level structural update against the supplied final IDs.
+    /// Mounted index callbacks are deferred so intermediate adapter states
+    /// never render a different logical identity through an existing subtree.
+    #[doc(hidden)]
+    pub fn begin_stable_item_update(&self, item_ids: Vec<u32>) {
+        let mut state = self.state.borrow_mut();
+        state.stable_item_ids = Some(item_ids);
+        state.defer_index_updates = true;
+    }
+
+    /// Finish a high-level structural update and render only final indices.
+    /// Any wrapper native callbacks created for an intermediate identity is
+    /// reloaded instead of being allowed to carry that identity's local state.
+    #[doc(hidden)]
+    pub fn finish_stable_item_update(&self) -> ArkUIResult<()> {
+        let (updates, mut mismatches) = {
+            let mut state = self.state.borrow_mut();
+            state.defer_index_updates = false;
+            let Some(item_ids) = state.stable_item_ids.clone() else {
+                return Ok(());
+            };
+            let mut updates = Vec::new();
+            let mut mismatches = Vec::new();
+            for item in state.mounted.values_mut() {
+                let Some(expected) = item_ids.get(item.index as usize).copied() else {
+                    // Native removal delivery may lag the logical count. This
+                    // wrapper is retiring, not a member of the next snapshot.
+                    continue;
+                };
+                if item.identity != ItemIdentity::Stable(expected) {
+                    mismatches.push(item.index);
+                } else if let Some(update) = item.prepare_deferred_index_update() {
+                    updates.push((update, item.index));
+                }
+            }
+            (updates, mismatches)
+        };
+        for (update, index) in updates {
+            update(index);
+        }
+        mismatches.sort_unstable();
+        mismatches.dedup();
+        for (start, count) in contiguous_index_ranges(&mismatches) {
+            self.reload_items(start, count)?;
+        }
+        Ok(())
+    }
+
+    /// Invalidate RSX items in place, preserving their mounted subtree state.
+    /// Native-content sources use the adapter's native reload operation.
+    #[doc(hidden)]
+    pub fn reload_items_preserving_mounted_state(&self, start: u32, count: u32) -> ArkUIResult<()> {
+        validate_item_range(self.total_count(), start, count)?;
+        if count == 0 {
+            return Ok(());
+        }
+        let updates = {
+            let state = self.state.borrow();
+            if matches!(state.renderer, ItemRenderer::Content(_)) {
+                None
+            } else {
+                let end = start + count;
+                Some(
+                    state
+                        .mounted
+                        .values()
+                        .filter(|item| item.index >= start && item.index < end)
+                        .filter_map(|item| {
+                            item.mount
+                                .as_ref()
+                                .and_then(VirtualItemMount::index_updater)
+                                .map(|update| (update, item.index))
+                        })
+                        .collect::<Vec<_>>(),
+                )
+            }
+        };
+        let Some(updates) = updates else {
+            return self.reload_items(start, count);
+        };
+        for (update, index) in updates {
+            update(index);
+        }
+        Ok(())
     }
 
     /// Return the current logical item count.
@@ -568,6 +697,7 @@ impl VirtualSource {
     ) {
         let updates = {
             let mut state = self.state.borrow_mut();
+            let defer = state.defer_index_updates;
             let mut updates = Vec::new();
             for (handle, previous_index) in mounted {
                 let Some(index) = next_index(*previous_index) else {
@@ -580,7 +710,7 @@ impl VirtualSource {
                 // handle. Only reindex the item represented by the
                 // pre-mutation snapshot.
                 if item.index == *previous_index {
-                    if let Some(update) = item.prepare_index_update(index) {
+                    if let Some(update) = item.prepare_index_update(index, defer) {
                         updates.push((update, index));
                     }
                 }
@@ -658,11 +788,18 @@ fn handle_adapter_event(state: &Weak<RefCell<AdapterState>>, event: &mut NodeAda
     match event.event_type() {
         NodeAdapterEventType::OnGetNodeId => {
             let index = event.item_index();
-            let _ = event.set_node_id(index as i32);
+            let node_id = state
+                .borrow()
+                .stable_item_ids
+                .as_ref()
+                .and_then(|item_ids| item_ids.get(index as usize))
+                .copied()
+                .unwrap_or(index);
+            let _ = event.set_node_id(node_id as i32);
         }
         NodeAdapterEventType::OnAddNodeToAdapter => {
             let index = event.item_index();
-            let (kind, renderer, recycled) = {
+            let (kind, renderer, identity, recycled, defer_index_updates) = {
                 let mut s = state.borrow_mut();
                 let renderer = match &s.renderer {
                     ItemRenderer::Content(render_item) => {
@@ -670,23 +807,30 @@ fn handle_adapter_event(state: &Weak<RefCell<AdapterState>>, event: &mut NodeAda
                     }
                     ItemRenderer::Mounted(mount_item) => ItemRenderer::Mounted(mount_item.clone()),
                 };
+                let identity = s
+                    .stable_item_ids
+                    .as_ref()
+                    .and_then(|item_ids| item_ids.get(index as usize))
+                    .copied()
+                    .map_or(ItemIdentity::Index(index), ItemIdentity::Stable);
                 let recycled = if matches!(&renderer, ItemRenderer::Mounted(_)) {
-                    s.recycled.pop()
+                    matching_identity_index(s.recycled.iter().map(|item| item.identity), identity)
+                        .map(|position| s.recycled.swap_remove(position))
                 } else {
                     None
                 };
-                (s.kind, renderer, recycled)
+                (s.kind, renderer, identity, recycled, s.defer_index_updates)
             };
             let item = if let Some(mut item) = recycled {
                 // A reload may recycle a wrapper back into the same logical
                 // index with changed backing data. Always invalidate its
                 // embedded subtree, even when the numeric index is unchanged.
-                if let Some(update) = item.prepare_recycle(index) {
+                if let Some(update) = item.prepare_recycle(index, defer_index_updates) {
                     update(index);
                 }
                 Ok(item)
             } else {
-                build_item(kind, index, &renderer)
+                build_item(kind, index, identity, &renderer)
             };
             match item {
                 Ok(item) => {
@@ -726,7 +870,10 @@ fn handle_adapter_event(state: &Weak<RefCell<AdapterState>>, event: &mut NodeAda
                 let mut state = state.borrow_mut();
                 let mut dispose = None;
                 if let Some(item) = state.mounted.remove(&node_key) {
-                    if item.is_recyclable() && state.recycled.len() < MAX_RECYCLED_MOUNTED_ITEMS {
+                    if item.is_recyclable() {
+                        if state.recycled.len() == MAX_RECYCLED_MOUNTED_ITEMS {
+                            dispose = Some(state.recycled.remove(0));
+                        }
                         state.recycled.push(item);
                     } else {
                         dispose = Some(item);
@@ -750,7 +897,12 @@ fn handle_adapter_event(state: &Weak<RefCell<AdapterState>>, event: &mut NodeAda
 
 /// Build a single virtual item: a wrapper (ListItem/GridItem/FlowItem)
 /// containing the content node returned by `render_item`.
-fn build_item(kind: VirtualKind, index: u32, renderer: &ItemRenderer) -> ArkUIResult<MountedItem> {
+fn build_item(
+    kind: VirtualKind,
+    index: u32,
+    identity: ItemIdentity,
+    renderer: &ItemRenderer,
+) -> ArkUIResult<MountedItem> {
     let wrapper = Rc::new(RefCell::new(kind.create_item_wrapper()?));
     let mount = match renderer {
         ItemRenderer::Content(render_item) => {
@@ -779,9 +931,40 @@ fn build_item(kind: VirtualKind, index: u32, renderer: &ItemRenderer) -> ArkUIRe
     };
     Ok(MountedItem {
         index,
+        rendered_index: index,
+        identity,
         node: wrapper,
         mount,
     })
+}
+
+fn contiguous_index_ranges(indices: &[u32]) -> Vec<(u32, u32)> {
+    let mut ranges = Vec::new();
+    let Some((&first, rest)) = indices.split_first() else {
+        return ranges;
+    };
+    let mut start = first;
+    let mut end = first;
+    for &index in rest {
+        if index == end.saturating_add(1) {
+            end = index;
+        } else {
+            ranges.push((start, end - start + 1));
+            start = index;
+            end = index;
+        }
+    }
+    ranges.push((start, end - start + 1));
+    ranges
+}
+
+fn matching_identity_index(
+    identities: impl IntoIterator<Item = ItemIdentity>,
+    desired: ItemIdentity,
+) -> Option<usize> {
+    identities
+        .into_iter()
+        .position(|identity| identity == desired)
 }
 
 fn moved_item_index(index: u32, from: u32, to: u32) -> Option<u32> {
@@ -847,8 +1030,8 @@ mod tests {
     use std::rc::Rc;
 
     use super::{
-        moved_item_index, validate_insert, validate_item_range, VirtualItemMount, VirtualKind,
-        VirtualSource,
+        contiguous_index_ranges, matching_identity_index, moved_item_index, validate_insert,
+        validate_item_range, ItemIdentity, VirtualItemMount, VirtualKind, VirtualSource,
     };
 
     struct DropProbe(Rc<Cell<u32>>);
@@ -958,5 +1141,35 @@ mod tests {
         assert_eq!(moved_item_index(1, 4, 1), Some(2));
         assert_eq!(moved_item_index(3, 4, 1), Some(4));
         assert_eq!(moved_item_index(0, 4, 1), None);
+    }
+
+    #[test]
+    fn identity_mismatches_are_grouped_into_tight_reload_ranges() {
+        assert_eq!(
+            contiguous_index_ranges(&[1, 2, 5, 7, 8, 9]),
+            vec![(1, 2), (5, 1), (7, 3)]
+        );
+        assert!(contiguous_index_ranges(&[]).is_empty());
+    }
+
+    #[test]
+    fn recycling_selects_only_the_same_logical_identity() {
+        let identities = [
+            ItemIdentity::Stable(3),
+            ItemIdentity::Stable(8),
+            ItemIdentity::Stable(13),
+        ];
+        assert_eq!(
+            matching_identity_index(identities, ItemIdentity::Stable(8)),
+            Some(1)
+        );
+        assert_eq!(
+            matching_identity_index(identities, ItemIdentity::Stable(5)),
+            None
+        );
+        assert_eq!(
+            matching_identity_index(identities, ItemIdentity::Index(8)),
+            None
+        );
     }
 }

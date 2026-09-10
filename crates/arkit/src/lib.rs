@@ -40,8 +40,9 @@ pub use arkit_runtime::{
 
 // --- Renderer-owned handles safe for application code ---
 pub use arkit_arkui::{
-    ArkImageSource, LayoutFramePx, MountedNodeLease, NativeElementEvent, NativeElementRef,
-    NativeElementSubscription, NativeVisibility, VirtualKind, VirtualSource,
+    ArkImageSource, LayoutFramePx, LayoutSizePx, LocalVpPoint, LogicalSizeVp, MountedNodeLease,
+    NativeElementEvent, NativeElementRef, NativeElementSubscription, NativeVisibility, VirtualKind,
+    VirtualSource, WindowPxPoint,
 };
 
 /// Explicit advanced-native construction APIs.
@@ -59,10 +60,10 @@ pub use arkit_hooks::{
     use_app_foreground, use_application_lifecycle, use_application_lifecycle_event,
     use_component_lifecycle, use_component_visibility, use_layout_frame, use_layout_size,
     use_load_more, use_mounted_node, use_native_element_ref, use_overlay_viewport, use_safe_area,
-    use_safe_area_policy, use_virtual_range, use_virtual_source, use_virtual_source_items_keyed,
-    use_window_metrics, ComponentLifecycleState, LayoutFrame, LayoutSize, LoadMoreController,
-    LoadMoreState, ModalPortal, ModalPresentation, OverlayLayer, OverlayViewport, Portal, SafeArea,
-    SafeAreaEdges, SafeAreaProps, VirtualSourceItem, VirtualVisibleRange,
+    use_safe_area_policy, use_virtual_items, use_virtual_range, use_virtual_source,
+    use_window_metrics, ComponentLifecycleState, LoadMoreController, LoadMoreState, ModalPortal,
+    ModalPresentation, OverlayLayer, OverlayViewport, Portal, SafeArea, SafeAreaEdges,
+    SafeAreaProps, VirtualItemStamp, VirtualItems, VirtualSourceItem, VirtualVisibleRange,
 };
 
 // --- i18n ---
@@ -306,8 +307,9 @@ pub mod prelude {
 
     // Renderer-owned safe handles.
     pub use crate::{
-        ArkImageSource, LayoutFramePx, MountedNodeLease, NativeElementEvent, NativeElementRef,
-        NativeElementSubscription, NativeVisibility, VirtualKind, VirtualSource,
+        ArkImageSource, LayoutFramePx, LayoutSizePx, LocalVpPoint, LogicalSizeVp, MountedNodeLease,
+        NativeElementEvent, NativeElementRef, NativeElementSubscription, NativeVisibility,
+        VirtualKind, VirtualSource, WindowPxPoint,
     };
 
     // Exact-element, portal, and virtual-source hooks.
@@ -315,11 +317,11 @@ pub mod prelude {
         use_app_foreground, use_application_lifecycle, use_application_lifecycle_event,
         use_component_lifecycle, use_component_visibility, use_layout_frame, use_layout_size,
         use_load_more, use_mounted_node, use_native_element_ref, use_overlay_viewport,
-        use_safe_area, use_safe_area_policy, use_virtual_range, use_virtual_source,
-        use_virtual_source_items_keyed, use_window_metrics, ComponentLifecycleState, LayoutFrame,
-        LayoutSize, LoadMoreController, LoadMoreState, ModalPortal, ModalPresentation,
-        OverlayLayer, OverlayViewport, Portal, SafeArea, SafeAreaEdges, SafeAreaProps,
-        VirtualSourceItem, VirtualVisibleRange,
+        use_safe_area, use_safe_area_policy, use_virtual_items, use_virtual_range,
+        use_virtual_source, use_window_metrics, ComponentLifecycleState, LoadMoreController,
+        LoadMoreState, ModalPortal, ModalPresentation, OverlayLayer, OverlayViewport, Portal,
+        SafeArea, SafeAreaEdges, SafeAreaProps, VirtualItemStamp, VirtualItems, VirtualSourceItem,
+        VirtualVisibleRange,
     };
 
     #[cfg(feature = "i18n")]

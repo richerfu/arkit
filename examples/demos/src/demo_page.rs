@@ -10,6 +10,7 @@ use arkit::router::RouteTransition;
 use crate::registry;
 use crate::Route;
 
+mod chart_contracts;
 mod regressions;
 use regressions::RegressionPage;
 pub(crate) use regressions::RegressionRootState;

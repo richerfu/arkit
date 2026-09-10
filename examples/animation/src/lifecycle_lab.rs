@@ -1,16 +1,164 @@
+use arkit::ohos_arkui_binding::common::attribute::{
+    ArkUINodeAttributeItem, ArkUINodeAttributeNumber,
+};
+use arkit::ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
+use arkit::ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
 use arkit::prelude::*;
 
 use crate::{cubic_out, restart_forward, reverse_and_play, target, ActionButton, Metric, Section};
 
 const LAYOUT_TARGET: &str = "lab-layout-card";
+const OWNERSHIP_TARGET: &str = "lab-attribute-ownership";
 
 #[component]
 pub(crate) fn LifecycleLab() -> Element {
     rsx! {
+        AttributeOwnershipDemo {}
         TransitionPresets {}
         PresenceDemo {}
         LayoutDemo {}
     }
+}
+
+#[component]
+fn AttributeOwnershipDemo() -> Element {
+    let target_ready = use_animation_target(OWNERSHIP_TARGET);
+    let target_ref = target_ready.native_ref();
+    let short = use_animation(Timeline::new().add(
+        Animation::new(target(OWNERSHIP_TARGET)).tween(
+            &OPACITY,
+            1.0,
+            0.25,
+            TimeSpan::from_millis(700),
+        ),
+        TimelinePosition::START,
+    ));
+    let long = use_animation(Timeline::new().add(
+        Animation::new(target(OWNERSHIP_TARGET)).tween(
+            &OPACITY,
+            1.0,
+            0.65,
+            TimeSpan::from_millis(8_000),
+        ),
+        TimelinePosition::START,
+    ));
+    let mut desired_opacity = use_signal(|| 1.0_f32);
+    let mut status = use_signal(|| "idle".to_string());
+    short.on_complete(move || {
+        let mut status = status;
+        status.set("A complete; B must still own opacity".to_string());
+    });
+    long.on_complete(move || {
+        let mut status = status;
+        status.set("B complete; native must equal latest desired opacity".to_string())
+    });
+
+    rsx! {
+        Section {
+            title: "Attribute ownership regression",
+            description: "Run overlapping opacity instances, change the declarative value while both drive, then verify A completion/cancel does not release B and B terminal restores the latest desired value.",
+            column {
+                native_ref: target_ref.clone(),
+                width: "100%",
+                height: 74.0,
+                opacity: desired_opacity(),
+                align_items: "center",
+                justify_content: "center",
+                background_color: 0xff0f766eu32,
+                border_radius: 14.0,
+                text { font_size: 13.0, font_weight: 700, font_color: 0xffffffffu32, "desired opacity = {desired_opacity():.2}" }
+                text { margin_top: 4.0, font_size: 10.0, font_color: 0xffccfbf1u32, "{status}" }
+            }
+            flex {
+                margin_top: 10.0,
+                width: "100%",
+                flex_wrap: "wrap",
+                ActionButton {
+                    label: "Run A + B",
+                    on_press: {
+                        let short = short.clone();
+                        let long = long.clone();
+                        move |_| {
+                            status.set("A + B running".to_string());
+                            restart_forward(&short);
+                            restart_forward(&long);
+                        }
+                    }
+                }
+                ActionButton {
+                    label: "Desired 0.35",
+                    on_press: move |_| {
+                        desired_opacity.set(0.35);
+                        status.set("desired changed during drive".to_string());
+                    }
+                }
+                ActionButton {
+                    label: "Cancel A",
+                    on_press: {
+                        let short = short.clone();
+                        move |_| {
+                            status.set("A cancelled; B must keep ownership".to_string());
+                            short.cancel();
+                        }
+                    }
+                }
+                ActionButton {
+                    label: "Cancel B",
+                    on_press: {
+                        let long = long.clone();
+                        move |_| {
+                            status.set("B cancelled; restore desired".to_string());
+                            long.cancel();
+                        }
+                    }
+                }
+                ActionButton {
+                    label: "Inspect ownership",
+                    on_press: {
+                        let target_ref = target_ref.clone();
+                        let short = short.clone();
+                        let long = long.clone();
+                        move |_| {
+                            let actual = target_ref.current().and_then(|lease| {
+                                // SAFETY: this is a read-only, epoch-checked
+                                // diagnostic used by the native regression UI.
+                                unsafe {
+                                    lease.with_native(|node| {
+                                        node.get_attribute(ArkUINodeAttributeType::Opacity)
+                                            .ok()
+                                            .and_then(first_attribute_f32)
+                                    })
+                                }
+                                .flatten()
+                            });
+                            status.set(format!(
+                                "actual={}; desired={:.2}; A={:?}; B={:?}",
+                                actual
+                                    .map(|value| format!("{value:.3}"))
+                                    .unwrap_or_else(|| "unavailable".to_string()),
+                                desired_opacity(),
+                                short.snapshot().map(|snapshot| snapshot.state),
+                                long.snapshot().map(|snapshot| snapshot.state),
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn first_attribute_f32(item: ArkUINodeAttributeItem) -> Option<f32> {
+    let value = match item {
+        ArkUINodeAttributeItem::NumberValue(values) => values.into_iter().next(),
+        ArkUINodeAttributeItem::Composite(value) => value.number_values.into_iter().next(),
+        ArkUINodeAttributeItem::String(_) | ArkUINodeAttributeItem::Object(_) => None,
+    }?;
+    Some(match value {
+        ArkUINodeAttributeNumber::Float(value) => value,
+        ArkUINodeAttributeNumber::Int(value) => value as f32,
+        ArkUINodeAttributeNumber::Uint(value) => value as f32,
+    })
 }
 
 #[component]
@@ -442,7 +590,7 @@ fn layout_snapshot(expanded: bool, generation: u64) -> LayoutSnapshot {
     let root = snapshot.push(LayoutNode {
         id: LayoutId::owned("lab-layout-root"),
         parent: None,
-        frame: LayoutFrame {
+        frame: LayoutFramePx {
             x: 0.0,
             y: 0.0,
             width: 320.0,
@@ -458,14 +606,14 @@ fn layout_snapshot(expanded: bool, generation: u64) -> LayoutSnapshot {
         id: LayoutId::owned("lab-layout-node"),
         parent: Some(root),
         frame: if expanded {
-            LayoutFrame {
+            LayoutFramePx {
                 x: 136.0,
                 y: 19.0,
                 width: 184.0,
                 height: 112.0,
             }
         } else {
-            LayoutFrame {
+            LayoutFramePx {
                 x: 0.0,
                 y: 36.0,
                 width: 118.0,

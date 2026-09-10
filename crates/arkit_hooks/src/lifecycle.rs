@@ -89,16 +89,34 @@ pub fn use_application_lifecycle_event(
     *state.callback.borrow_mut() = next;
 }
 
-/// Native presentation state for one exact mounted element.
+/// Mount and visibility observation for one exact native element.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct ComponentLifecycleState {
-    pub visible: bool,
-    pub visible_fraction: f32,
+pub enum ComponentLifecycleState {
+    /// The ref is not currently bound to a native node.
+    #[default]
+    Unmounted,
+    /// Mounted, but ArkUI has not reported actual visibility yet.
+    Unknown,
+    /// ArkUI reported that the mounted node has no visible area.
+    Hidden,
+    /// ArkUI reported a positive visible fraction.
+    Visible { fraction: f32 },
 }
 
 impl ComponentLifecycleState {
-    pub fn is_visible(self) -> bool {
-        self.visible && self.visible_fraction > 0.0
+    /// Whether ArkUI has positively observed this mounted element as visible.
+    ///
+    /// `Unknown` is deliberately false: callers deciding whether to run
+    /// finite or continuous work must choose their own unknown-state policy.
+    pub const fn is_known_visible(self) -> bool {
+        matches!(self, Self::Visible { .. })
+    }
+
+    pub const fn visible_fraction(self) -> Option<f32> {
+        match self {
+            Self::Visible { fraction } => Some(fraction),
+            Self::Unmounted | Self::Unknown | Self::Hidden => None,
+        }
     }
 }
 
@@ -109,9 +127,12 @@ impl From<NativeVisibility> for ComponentLifecycleState {
         } else {
             0.0
         };
-        Self {
-            visible: value.visible && visible_fraction > f32::EPSILON,
-            visible_fraction,
+        if value.visible && visible_fraction > f32::EPSILON {
+            Self::Visible {
+                fraction: visible_fraction,
+            }
+        } else {
+            Self::Hidden
         }
     }
 }
@@ -127,9 +148,10 @@ pub fn use_component_lifecycle(reference: NativeElementRef) -> ComponentLifecycl
     use_native_element_events(reference, move |event| {
         let callback_signal = lifecycle;
         let next = match event {
+            Some(NativeElementEvent::Mounted(_)) => ComponentLifecycleState::Unknown,
             Some(NativeElementEvent::Visibility { visibility, .. }) => visibility.into(),
-            None | Some(NativeElementEvent::Unmounted { .. }) => ComponentLifecycleState::default(),
-            Some(NativeElementEvent::Mounted(_) | NativeElementEvent::Layout { .. }) => return,
+            None | Some(NativeElementEvent::Unmounted { .. }) => ComponentLifecycleState::Unmounted,
+            Some(NativeElementEvent::Layout { .. }) => return,
         };
         let mut lifecycle = callback_signal;
         if lifecycle.peek().ne(&next) {
@@ -140,10 +162,14 @@ pub fn use_component_lifecycle(reference: NativeElementRef) -> ComponentLifecycl
     lifecycle()
 }
 
-/// Shorthand for [`use_component_lifecycle`]'s visible state.
+/// Whether ArkUI has positively observed the exact element as visible.
+///
+/// This returns `false` for unmounted, unknown, and observed-hidden states.
+/// Use [`use_component_lifecycle`] when the unknown state needs a distinct
+/// finite-work policy.
 #[track_caller]
 pub fn use_component_visibility(reference: NativeElementRef) -> bool {
-    use_component_lifecycle(reference).is_visible()
+    use_component_lifecycle(reference).is_known_visible()
 }
 
 #[cfg(test)]
@@ -156,7 +182,7 @@ mod tests {
             visible: true,
             fraction: 0.0,
         });
-        assert!(!state.is_visible());
+        assert_eq!(state, ComponentLifecycleState::Hidden);
     }
 
     #[test]
@@ -165,8 +191,8 @@ mod tests {
             visible: true,
             fraction: 0.5,
         });
-        assert!(state.is_visible());
-        assert_eq!(state.visible_fraction, 0.5);
+        assert!(state.is_known_visible());
+        assert_eq!(state.visible_fraction(), Some(0.5));
     }
 
     #[test]
@@ -176,8 +202,14 @@ mod tests {
                 visible: true,
                 fraction: f32::NAN,
             }),
-            ComponentLifecycleState::default()
+            ComponentLifecycleState::Hidden
         );
+    }
+
+    #[test]
+    fn unknown_is_not_treated_as_visible() {
+        assert!(!ComponentLifecycleState::Unknown.is_known_visible());
+        assert_eq!(ComponentLifecycleState::Unknown.visible_fraction(), None);
     }
 
     #[test]

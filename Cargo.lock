@@ -230,6 +230,7 @@ name = "arkit_chart"
 version = "1.0.0-beta.0"
 dependencies = [
  "arkit_animation",
+ "arkit_arkui",
  "arkit_hooks",
  "arkit_prelude",
  "ohos-arkui-binding",

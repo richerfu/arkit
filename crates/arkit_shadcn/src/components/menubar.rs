@@ -48,7 +48,7 @@ pub fn Menubar(
     let theme = use_theme();
     let viewport = arkit_hooks::use_overlay_viewport();
     let menubar_ref = arkit_hooks::use_native_element_ref();
-    let menubar_frame = use_signal(arkit_hooks::LayoutFrame::default);
+    let menubar_frame = use_signal(arkit_arkui::LayoutFramePx::default);
     arkit_hooks::use_layout_frame(menubar_ref.clone(), move |frame| {
         let mut menubar_frame = menubar_frame;
         menubar_frame.set(frame);
@@ -56,11 +56,12 @@ pub fn Menubar(
     let mut internal_active = use_signal(|| default_active);
     let is_controlled = active.is_some();
     let current_active = active.unwrap_or_else(|| *internal_active.read());
-    let trigger_frames = use_hook(|| Rc::new(RefCell::new(Vec::<arkit_hooks::LayoutFrame>::new())));
+    let trigger_frames =
+        use_hook(|| Rc::new(RefCell::new(Vec::<arkit_arkui::LayoutFramePx>::new())));
     {
         let mut frames = trigger_frames.borrow_mut();
         if frames.len() != menus.len() {
-            frames.resize(menus.len(), arkit_hooks::LayoutFrame::default());
+            frames.resize(menus.len(), arkit_arkui::LayoutFramePx::default());
         }
     }
     let mut frames_version = use_signal(|| 0_u64);
@@ -76,7 +77,7 @@ pub fn Menubar(
     });
     let recorded_frames = trigger_frames.clone();
     let on_trigger_frame =
-        EventHandler::new(move |(index, frame): (usize, arkit_hooks::LayoutFrame)| {
+        EventHandler::new(move |(index, frame): (usize, arkit_arkui::LayoutFramePx)| {
             let mut frames = recorded_frames.borrow_mut();
             if frames.get(index).copied() != Some(frame) && index < frames.len() {
                 frames[index] = frame;
@@ -180,7 +181,7 @@ fn MenubarMenu(
     active_background: u32,
     foreground: u32,
     on_active_change: EventHandler<Option<usize>>,
-    on_trigger_frame: EventHandler<(usize, arkit_hooks::LayoutFrame)>,
+    on_trigger_frame: EventHandler<(usize, arkit_arkui::LayoutFramePx)>,
 ) -> Element {
     let trigger_ref = arkit_hooks::use_native_element_ref();
     arkit_hooks::use_layout_frame(trigger_ref.clone(), move |frame| {

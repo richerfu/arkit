@@ -1,7 +1,7 @@
 //! Declarative root projection for floating, modal, and transient content.
 
-use crate::layout::LayoutFrame;
 use crate::safe_area::{use_safe_area, use_window_metrics};
+use arkit_arkui::LayoutFramePx;
 use arkit_prelude::*;
 
 const STACK_ALIGN_CENTER: &str = "center";
@@ -67,7 +67,7 @@ pub enum ModalPresentation {
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct OverlayViewport {
     /// Portal frame in physical window pixels.
-    pub frame: LayoutFrame,
+    pub frame: LayoutFramePx,
     /// Visual safe-area insets in vp.
     pub safe_area: arkit_runtime::EdgeInsets,
     /// Physical-pixel to ArkUI-vp scale.
@@ -80,7 +80,7 @@ pub fn use_overlay_viewport() -> OverlayViewport {
     let metrics = use_window_metrics();
     let content = metrics.content_rect;
     OverlayViewport {
-        frame: LayoutFrame {
+        frame: LayoutFramePx {
             x: content.left as f32,
             y: content.top as f32,
             width: content.width.max(0) as f32,

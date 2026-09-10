@@ -32,9 +32,9 @@ use arkit::shadcn::components::{Index, IndexItemSpec};
 
 Index {
     items: vec![
-        IndexItemSpec::new("#", "*客服"),
-        IndexItemSpec::new("", "12306").with_description("铁路"), // → #
-        IndexItemSpec::new("B", "北京"),
+        IndexItemSpec::new("support", "#", "*客服"),
+        IndexItemSpec::new("rail-12306", "", "12306").with_description("铁路"), // → #
+        IndexItemSpec::new("beijing", "B", "北京"),
     ],
     show_empty_indexes: false, // 隐藏没有数据的 A–Z
     on_select: move |item_index| {},
@@ -42,7 +42,7 @@ Index {
 }
 ```
 
-未传 `indexes` 时轨的底稿是 `#`、`A`–`Z`。`show_empty_indexes`（默认 `false`）控制底稿里没有行的键要不要画在侧栏上。有数据但不在底稿里的键会追加到轨尾。
+`IndexItemSpec::new(id, index, title)` 的 `id` 必须在列表内唯一，并在改标题、描述或分组时保持稳定。未传 `indexes` 时轨的底稿是 `#`、`A`–`Z`。`show_empty_indexes`（默认 `false`）控制底稿里没有行的键要不要画在侧栏上。有数据但不在底稿里的键会追加到轨尾。
 
 ## 自定义渲染
 
@@ -61,11 +61,14 @@ let render_bar = use_callback(|slot: IndexBarSlot| {
 
 Index {
     items,
+    render_revision: locale_revision,
     render_item: Some(render_item),
     render_header: Some(render_header),
     render_bar: Some(render_bar),
 }
 ```
+
+自定义 row/header 捕获的外部视觉输入变化、但 `items` 本身没有变化时，递增 `render_revision` 以定点失效虚拟内容。
 
 侧栏拖动仍由 `IndexBar` 自己算，自定义格子请 `hit_test_behavior: "none"`。只要轨、列表自己管时也可以单独用 `IndexBar`。
 
@@ -81,6 +84,7 @@ Index {
 | `render_item`        | `Option<Callback<IndexItemContext, Element>>`   | 默认标题+描述 | 自定义行                      |
 | `render_header`      | `Option<Callback<IndexHeaderContext, Element>>` | 默认分组条    | 自定义组头                    |
 | `render_bar`         | `Option<Callback<IndexBarSlot, Element>>`       | 默认字母      | 自定义侧栏格子                |
+| `render_revision`    | `u64`                                           | `0`           | 自定义行/组头的外部视觉版本   |
 | `on_select`          | `EventHandler<usize>`                           | —             | 点中一行，参数是 `items` 下标 |
 | `on_index_change`    | `EventHandler<String>`                          | —             | 当前组键                      |
 | `width` / `height`   | `String`                                        | `"100%"`      | 虚拟 List 需要明确高度        |

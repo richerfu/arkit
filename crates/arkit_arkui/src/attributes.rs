@@ -220,7 +220,7 @@ impl DesiredAttrs {
     }
 
     pub(crate) fn apply_to(&self, node: &mut ArkUINode, tag: &str) {
-        self.apply_to_skipping(node, tag, &rustc_hash::FxHashSet::default());
+        self.apply_to_skipping(node, tag, &[]);
     }
 
     /// Apply every desired attribute except those named in `skip`.
@@ -232,7 +232,7 @@ impl DesiredAttrs {
         &self,
         node: &mut ArkUINode,
         tag: &str,
-        skip: &rustc_hash::FxHashSet<String>,
+        skip: &[ArkUINodeAttributeType],
     ) {
         for group in [
             AttrGroup::Control,
@@ -250,7 +250,7 @@ impl DesiredAttrs {
         node: &mut ArkUINode,
         tag: &str,
         group: AttrGroup,
-        skip: &rustc_hash::FxHashSet<String>,
+        skip: &[ArkUINodeAttributeType],
     ) {
         if group == AttrGroup::Layout {
             // Geometry must be committed before alignment. Dioxus stores
@@ -265,7 +265,7 @@ impl DesiredAttrs {
                 .filter(|attr| !is_constraint_attr(attr.name()))
                 .filter(|attr| !is_flex_option_attr(attr.name()))
                 .filter(|attr| !is_alignment_attr(attr.name()))
-                .filter(|attr| !skip.contains(attr.name()))
+                .filter(|attr| !skip.contains(&attr.ty))
             {
                 let _ = attr.apply(node, tag);
             }
@@ -280,7 +280,7 @@ impl DesiredAttrs {
                 .iter()
                 .filter(|attr| attr_group(attr.name()) == group)
                 .filter(|attr| is_alignment_attr(attr.name()))
-                .filter(|attr| !skip.contains(attr.name()))
+                .filter(|attr| !skip.contains(&attr.ty))
             {
                 let _ = attr.apply(node, tag);
             }
@@ -292,7 +292,7 @@ impl DesiredAttrs {
             .attrs
             .iter()
             .filter(|attr| attr_group(attr.name()) == group)
-            .filter(|attr| !skip.contains(attr.name()))
+            .filter(|attr| !skip.contains(&attr.ty))
         {
             if is_deferred_attr(attr.name()) {
                 deferred.push(attr);
@@ -367,46 +367,163 @@ impl DesiredAttrs {
         self.apply_named(node, tag, &[name]);
     }
 
-    pub(crate) fn apply_button_text_attrs(&self, node: &mut ArkUINode) {
-        if !self.has_any(&["font_color", "foreground_color"]) {
+    pub(crate) fn native_type(&self, name: &str) -> Option<ArkUINodeAttributeType> {
+        self.get(name).map(|attr| attr.ty)
+    }
+
+    /// Replay only the native slots released by an animation. Values are read
+    /// from the current desired state at delivery time; aliases that encode to
+    /// the same native type naturally converge on the same slot.
+    pub(crate) fn replay_native_types(
+        &self,
+        node: &mut ArkUINode,
+        tag: &str,
+        types: &[ArkUINodeAttributeType],
+    ) {
+        for group in [
+            AttrGroup::Control,
+            AttrGroup::Layout,
+            AttrGroup::Visual,
+            AttrGroup::Text,
+            AttrGroup::Image,
+        ] {
+            let mut deferred = Vec::new();
+            for attr in self
+                .attrs
+                .iter()
+                .filter(|attr| attr_group(attr.name()) == group)
+                .filter(|attr| types.contains(&attr.ty))
+            {
+                if is_deferred_attr(attr.name()) {
+                    deferred.push(attr);
+                } else {
+                    let _ = attr.apply(node, tag);
+                }
+            }
+            for attr in deferred {
+                let _ = attr.apply(node, tag);
+            }
+        }
+        self.after_animation_release(node, tag, types);
+    }
+
+    fn after_animation_release(
+        &self,
+        node: &mut ArkUINode,
+        tag: &str,
+        released: &[ArkUINodeAttributeType],
+    ) {
+        if tag != "button" {
+            return;
+        }
+        if released.contains(&ArkUINodeAttributeType::Height)
+            && !self.has_any(&["height", "constraint_size"])
+        {
+            let _ =
+                node.set_attribute(ArkUINodeAttributeType::Height, BUTTON_DEFAULT_HEIGHT.into());
+        }
+        if released.contains(&ArkUINodeAttributeType::BackgroundColor)
+            && self.get("background_color").is_none()
+        {
+            let _ = node.set_attribute(
+                ArkUINodeAttributeType::BackgroundColor,
+                BUTTON_DEFAULT_BACKGROUND.into(),
+            );
+        }
+        if released.contains(&ArkUINodeAttributeType::BorderRadius)
+            && !self.has_any(&["border_radius", "corner_radius"])
+        {
+            let _ = node.set_attribute(
+                ArkUINodeAttributeType::BorderRadius,
+                vec![BUTTON_DEFAULT_RADIUS; 4].into(),
+            );
+        }
+    }
+
+    pub(crate) fn apply_button_text_attrs(
+        &self,
+        node: &mut ArkUINode,
+        skip: &[ArkUINodeAttributeType],
+    ) {
+        if !skip.contains(&ArkUINodeAttributeType::FontColor)
+            && !self.has_any(&["font_color", "foreground_color"])
+        {
             let _ = node.set_attribute(
                 ArkUINodeAttributeType::FontColor,
                 BUTTON_DEFAULT_FOREGROUND.into(),
             );
         }
-        if self.get("font_size").is_none() {
+        if !skip.contains(&ArkUINodeAttributeType::FontSize) && self.get("font_size").is_none() {
             let _ = node.set_attribute(
                 ArkUINodeAttributeType::FontSize,
                 BUTTON_DEFAULT_FONT_SIZE.into(),
             );
         }
-        if self.get("font_weight").is_none() {
+        if !skip.contains(&ArkUINodeAttributeType::FontWeight) && self.get("font_weight").is_none()
+        {
             let _ = node.set_attribute(
                 ArkUINodeAttributeType::FontWeight,
                 BUTTON_DEFAULT_FONT_WEIGHT.into(),
             );
         }
-        if self.get("text_align").is_none() {
+        if !skip.contains(&ArkUINodeAttributeType::TextAlign) && self.get("text_align").is_none() {
             let _ = node.set_attribute(ArkUINodeAttributeType::TextAlign, TEXT_ALIGN_CENTER.into());
         }
-        self.apply_named(
-            node,
-            "text",
-            &[
-                "font_color",
-                "foreground_color",
-                "font_size",
-                "font_weight",
-                "font_style",
-                "font_family",
-                "line_height",
-                "text_align",
-                "text_letter_spacing",
-                "text_decoration",
-                "text_overflow",
-                "max_lines",
-            ],
-        );
+        let names = [
+            "font_color",
+            "foreground_color",
+            "font_size",
+            "font_weight",
+            "font_style",
+            "font_family",
+            "line_height",
+            "text_align",
+            "text_letter_spacing",
+            "text_decoration",
+            "text_overflow",
+            "max_lines",
+        ]
+        .into_iter()
+        .filter(|name| {
+            self.native_type(name)
+                .is_none_or(|attribute| !skip.contains(&attribute))
+        })
+        .collect::<Vec<_>>();
+        self.apply_named(node, "text", &names);
+    }
+
+    pub(crate) fn restore_button_text_types(
+        &self,
+        node: &mut ArkUINode,
+        released: &[ArkUINodeAttributeType],
+    ) {
+        let released = released
+            .iter()
+            .copied()
+            .filter(|attribute| is_button_text_native_type(*attribute))
+            .collect::<Vec<_>>();
+        for attribute in &released {
+            let _ = node.reset_attribute(*attribute);
+        }
+        self.replay_native_types(node, "text", &released);
+        if released.iter().any(|attribute| {
+            matches!(
+                attribute,
+                ArkUINodeAttributeType::FontColor | ArkUINodeAttributeType::ForegroundColor
+            )
+        }) && !self.has_any(&["font_color", "foreground_color"])
+        {
+            let _ = node.set_attribute(
+                ArkUINodeAttributeType::FontColor,
+                BUTTON_DEFAULT_FOREGROUND.into(),
+            );
+        }
+        if released.contains(&ArkUINodeAttributeType::FontSize) && self.get("font_size").is_none() {
+            let _ = node.set_attribute(
+                ArkUINodeAttributeType::FontSize,
+                BUTTON_DEFAULT_FONT_SIZE.into(),
+            );
+        }
     }
 
     fn apply_box(&self, node: &mut ArkUINode, base: &str, ty: ArkUINodeAttributeType) {
@@ -514,15 +631,63 @@ impl DesiredAttrs {
     }
 }
 
+fn is_button_text_native_type(attribute: ArkUINodeAttributeType) -> bool {
+    matches!(
+        attribute,
+        ArkUINodeAttributeType::FontColor
+            | ArkUINodeAttributeType::ForegroundColor
+            | ArkUINodeAttributeType::FontSize
+            | ArkUINodeAttributeType::FontWeight
+            | ArkUINodeAttributeType::FontStyle
+            | ArkUINodeAttributeType::FontFamily
+            | ArkUINodeAttributeType::TextLineHeight
+            | ArkUINodeAttributeType::TextAlign
+            | ArkUINodeAttributeType::TextLetterSpacing
+            | ArkUINodeAttributeType::TextDecoration
+            | ArkUINodeAttributeType::TextOverflow
+            | ArkUINodeAttributeType::TextMaxLines
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use dioxus_core::AttributeValue;
     use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
 
     use super::{
-        encode_attr, parse_scroll_offset, parse_scroll_to_index, AttrMutation, DesiredAttrs,
-        EncodedAttrValue, ListScrollToIndexCommand, ScrollOffsetCommand,
+        encode_attr, is_button_text_native_type, parse_scroll_offset, parse_scroll_to_index,
+        AttrMutation, DesiredAttrs, EncodedAttrValue, ListScrollToIndexCommand,
+        ScrollOffsetCommand,
     };
+
+    #[test]
+    fn button_child_restore_is_limited_to_inherited_text_slots() {
+        for attribute in [
+            ArkUINodeAttributeType::FontColor,
+            ArkUINodeAttributeType::ForegroundColor,
+            ArkUINodeAttributeType::FontSize,
+            ArkUINodeAttributeType::FontWeight,
+            ArkUINodeAttributeType::FontStyle,
+            ArkUINodeAttributeType::FontFamily,
+            ArkUINodeAttributeType::TextLineHeight,
+            ArkUINodeAttributeType::TextAlign,
+            ArkUINodeAttributeType::TextLetterSpacing,
+            ArkUINodeAttributeType::TextDecoration,
+            ArkUINodeAttributeType::TextOverflow,
+            ArkUINodeAttributeType::TextMaxLines,
+        ] {
+            assert!(is_button_text_native_type(attribute), "{attribute:?}");
+        }
+        for attribute in [
+            ArkUINodeAttributeType::Width,
+            ArkUINodeAttributeType::Height,
+            ArkUINodeAttributeType::BackgroundColor,
+            ArkUINodeAttributeType::BorderRadius,
+            ArkUINodeAttributeType::Opacity,
+        ] {
+            assert!(!is_button_text_native_type(attribute), "{attribute:?}");
+        }
+    }
 
     #[test]
     fn margin_padding_accept_css_shorthand() {
@@ -1838,29 +2003,31 @@ impl DesiredAttrs {
     /// physically mounted or appears.
     pub(crate) fn apply_full(&self, node: &mut ArkUINode, tag: &str) {
         self.apply_control_roles(node, tag);
-        self.replay(node, tag, &rustc_hash::FxHashSet::default());
+        self.replay(node, tag, &[]);
     }
 
     /// Replay declarative values and patch defaults without changing control
     /// roles.
-    pub(crate) fn replay(
-        &self,
-        node: &mut ArkUINode,
-        tag: &str,
-        skip: &rustc_hash::FxHashSet<String>,
-    ) {
+    pub(crate) fn replay(&self, node: &mut ArkUINode, tag: &str, skip: &[ArkUINodeAttributeType]) {
         // Several ArkUI layout attributes are accepted only after a node is in
         // the mounted tree. Reapply the complete declarative state here; this
         // is the same encoder used for initial creation and later patches.
         self.apply_to_skipping(node, tag, skip);
-        self.after_patch(node, tag);
+        self.after_patch(node, tag, skip);
     }
 
-    pub(crate) fn after_patch(&self, node: &mut ArkUINode, tag: &str) {
+    pub(crate) fn after_patch(
+        &self,
+        node: &mut ArkUINode,
+        tag: &str,
+        skip: &[ArkUINodeAttributeType],
+    ) {
         if tag != "button" {
             return;
         }
-        if !self.has_any(&["height", "constraint_size"]) {
+        if !skip.contains(&ArkUINodeAttributeType::Height)
+            && !self.has_any(&["height", "constraint_size"])
+        {
             let _ =
                 node.set_attribute(ArkUINodeAttributeType::Height, BUTTON_DEFAULT_HEIGHT.into());
         }
@@ -1882,13 +2049,17 @@ impl DesiredAttrs {
                 .into(),
             );
         }
-        if self.get("background_color").is_none() {
+        if !skip.contains(&ArkUINodeAttributeType::BackgroundColor)
+            && self.get("background_color").is_none()
+        {
             let _ = node.set_attribute(
                 ArkUINodeAttributeType::BackgroundColor,
                 BUTTON_DEFAULT_BACKGROUND.into(),
             );
         }
-        if !self.has_any(&["border_radius", "corner_radius"]) {
+        if !skip.contains(&ArkUINodeAttributeType::BorderRadius)
+            && !self.has_any(&["border_radius", "corner_radius"])
+        {
             let _ = node.set_attribute(
                 ArkUINodeAttributeType::BorderRadius,
                 vec![BUTTON_DEFAULT_RADIUS; 4].into(),

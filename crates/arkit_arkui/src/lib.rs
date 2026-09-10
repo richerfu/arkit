@@ -87,14 +87,18 @@ pub use dioxus_elements::event::{
     ScrollIndexPayload, ScrollOffsetPayload,
 };
 
+mod animation_ownership;
 mod css_value;
 mod element_ref;
+mod geometry;
 mod native;
-use element_ref::SharedNativeNode;
 pub use element_ref::{
-    LayoutFramePx, MountedNodeLease, NativeElementDelivery, NativeElementEvent, NativeElementRef,
+    AnimatedAttributeClaimError, AnimatedAttributeGuard, AnimatedAttributeOwner, LayoutFramePx,
+    MountedNodeLease, NativeElementDelivery, NativeElementEvent, NativeElementRef,
     NativeElementSubscription, NativeVisibility,
 };
+use element_ref::{AnimationRestoreRoute, SharedNativeNode};
+pub use geometry::{LayoutSizePx, LocalVpPoint, LogicalSizeVp, WindowPxPoint};
 use native::{canonical_tag, create_node_by_tag, parse_color};
 
 mod owned_node;
@@ -147,6 +151,9 @@ pub trait EventSink {
     /// mutation phase.
     fn dispatch_native_ref(&self, delivery: NativeElementDelivery);
 }
+
+type AnimationRestoreHandler = Rc<dyn Fn(ElementId, MountedNodeLease, Vec<ArkUINodeAttributeType>)>;
+type SharedAnimationRestoreHandler = Rc<RefCell<Option<AnimationRestoreHandler>>>;
 
 type NodeRef = SharedNativeNode;
 
@@ -373,6 +380,9 @@ pub struct ArkUIRenderer {
     /// invoked from the native `EventOnAppear` callback so declarative attrs
     /// are reapplied after ArkUI control skins settle, before first paint.
     appear_replay_handler: Option<Rc<dyn Fn(ElementId)>>,
+    /// Shared indirection captured by mounted refs before the runtime can
+    /// install its weak renderer callback.
+    animation_restore_handler: SharedAnimationRestoreHandler,
 }
 
 #[derive(Default)]
@@ -580,6 +590,7 @@ impl ArkUIRenderer {
             fault: None,
             inert: false,
             appear_replay_handler: None,
+            animation_restore_handler: Rc::new(RefCell::new(None)),
         }
     }
 
@@ -1063,8 +1074,13 @@ impl ArkUIRenderer {
         let Some(native) = self.hosts[child].native.clone() else {
             return;
         };
+        let animated = self.hosts[parent]
+            .native_ref
+            .as_ref()
+            .map(NativeElementRef::animated_attrs)
+            .unwrap_or_default();
         let attrs = self.hosts[parent].desired_attrs.borrow();
-        attrs.apply_button_text_attrs(&mut native.borrow_mut());
+        attrs.apply_button_text_attrs(&mut native.borrow_mut(), &animated);
     }
 
     fn sync_button_text_children(&self, host: HostId) {
@@ -1939,12 +1955,30 @@ impl ArkUIRenderer {
         let Some(native) = self.hosts[host].native.as_ref() else {
             return;
         };
-        let Some(event) = reference.bind(native) else {
+        let restore_route = self.animation_restore_route(host);
+        let Some(event) = reference.bind(native, restore_route) else {
             return;
         };
         if let Some(sink) = &self.sink {
             sink.dispatch_native_ref(NativeElementDelivery::new(reference, event));
         }
+    }
+
+    fn animation_restore_route(&self, host: HostId) -> Option<AnimationRestoreRoute> {
+        let sink = Rc::downgrade(self.sink.as_ref()?);
+        let element = self.hosts.element_for_host(host)?;
+        let handler = self.animation_restore_handler.clone();
+        Some(Rc::new(move |lease, attrs| {
+            let Some(handler) = handler.borrow().clone() else {
+                return;
+            };
+            let Some(sink) = sink.upgrade() else {
+                return;
+            };
+            sink.dispatch_native_ref(NativeElementDelivery::deferred(move || {
+                handler(ElementId(element.index()), lease, attrs);
+            }));
+        }))
     }
 
     fn unbind_native_ref(&self, host: HostId) {
@@ -2474,22 +2508,30 @@ impl WriteMutations for ArkUIRenderer {
             .borrow_mut()
             .set(tag, name, value);
 
-        // Attributes currently driven by an animation stay declarative-only:
+        // Native attribute slots currently driven by an animation stay
+        // declarative-only. Matching by native slot covers aliases such as
+        // `corner_radius`/`border_radius` and compound x/y properties.
         // writing them here would fight the animation's per-frame writes (and
-        // be fought back, causing visible jitter). The animation clears its
-        // declaration when it finishes, after which the declarative value
-        // becomes the steady state again.
-        let animated = self.hosts[host]
+        // be fought back, causing visible jitter). When the last active owner
+        // releases a slot, the runtime queues restoration of the latest
+        // declarative value at a non-reentrant phase boundary.
+        let animated_attrs = self.hosts[host]
             .native_ref
             .as_ref()
-            .is_some_and(|reference| reference.animates(name));
+            .map(NativeElementRef::animated_attrs)
+            .unwrap_or_default();
 
         if let Some(native) = self.hosts[host].native.clone() {
             let desired_attrs = self.hosts[host].desired_attrs.borrow();
+            let native_type = match mutation {
+                AttrMutation::Removed(attribute) => Some(attribute),
+                AttrMutation::Set | AttrMutation::Unchanged => desired_attrs.native_type(name),
+            };
+            let animated = native_type.is_some_and(|attribute| animated_attrs.contains(&attribute));
             if !matches!(mutation, AttrMutation::Unchanged) && !animated {
                 let mut native = native.borrow_mut();
                 desired_attrs.apply_mutation(&mut native, tag, name, mutation);
-                desired_attrs.after_patch(&mut native, tag);
+                desired_attrs.after_patch(&mut native, tag, &animated_attrs);
             }
         }
         if name == "src" {
@@ -2586,6 +2628,11 @@ impl ArkUIRenderer {
         self.appear_replay_handler = Some(handler);
     }
 
+    /// Install the runtime-side phase-boundary handler for animation releases.
+    pub fn set_animation_restore_handler(&mut self, handler: AnimationRestoreHandler) {
+        self.animation_restore_handler.replace(Some(handler));
+    }
+
     /// Whether `EventOnAppear` replay is useful for this native node kind.
     ///
     /// Pure layout containers do not install a control skin that can overwrite
@@ -2671,6 +2718,56 @@ impl ArkUIRenderer {
         drop(attrs);
         self.apply_host_image_source(host);
         self.replay_composite_content(host);
+    }
+
+    /// Restore the latest declarative state after the final active animation
+    /// owner releases native attributes. The runtime invokes this only from
+    /// its queued native-ref phase boundary.
+    pub fn restore_released_animated_attrs(
+        &mut self,
+        element: ElementId,
+        requested: MountedNodeLease,
+        released: Vec<ArkUINodeAttributeType>,
+    ) {
+        let Some(host) = self.hosts.host_for_element(ElementKey::new(element.0)) else {
+            return;
+        };
+        let Some(reference) = self.hosts[host].native_ref.clone() else {
+            return;
+        };
+        let Some(current) = reference.current() else {
+            return;
+        };
+        let Some(native) = self.hosts[host].native.clone() else {
+            return;
+        };
+        crate::animation_ownership::restore_if_current(&requested, &current, || {
+            let animated = reference.animated_attrs();
+            let mut native = native.borrow_mut();
+            let released = released
+                .into_iter()
+                .filter(|attribute| !animated.contains(attribute))
+                .collect::<Vec<_>>();
+            for attribute in &released {
+                let _ = native.reset_attribute(*attribute);
+            }
+            let tag = self.hosts[host].tag();
+            let attrs = self.hosts[host].desired_attrs.borrow();
+            attrs.replay_native_types(&mut native, tag, &released);
+            drop(native);
+            if tag == "button" {
+                for child in self.hosts[host].children.iter().copied() {
+                    if !matches!(self.hosts[child].kind, HostKind::Text { .. }) {
+                        continue;
+                    }
+                    let Some(native) = self.hosts[child].native.clone() else {
+                        continue;
+                    };
+                    let mut native = native.borrow_mut();
+                    attrs.restore_button_text_types(&mut native, &released);
+                }
+            }
+        });
     }
 
     /// Commit renderer work that must run after a complete Dioxus mutation

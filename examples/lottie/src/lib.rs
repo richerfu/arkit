@@ -13,6 +13,8 @@ pub fn LottiePage() -> Element {
     let mut repeat = use_signal(|| LottieRepeatMode::Loop);
     let mut fit = use_signal(|| LottieFit::Contain);
     let mut use_network = use_signal(|| false);
+    let mut show_duplicate = use_signal(|| false);
+    let mut duplicate_errors = use_signal(|| 0_u32);
     let playing = status().is_playing();
     let progress_percent = frame().progress * 100.0;
     let source_label = if use_network() { "URL" } else { "embedded" };
@@ -63,6 +65,37 @@ pub fn LottiePage() -> Element {
                 font_size: 12.0,
                 font_color: "#FFCBD5E1",
                 "{status():?} · frame {frame().frame:.1} · {progress_percent:.0}% · {speed():.2}x · {source_label}"
+            }
+            text {
+                margin_top: 4.0,
+                font_size: 12.0,
+                font_color: "#FFFBBF24",
+                "LC duplicate errors={duplicate_errors()}"
+            }
+            button {
+                margin_top: 8.0,
+                width: "100%",
+                height: 36.0,
+                onclick: move |_| {
+                    let enabled = !show_duplicate();
+                    if enabled {
+                        duplicate_errors.set(0);
+                    }
+                    show_duplicate.set(enabled);
+                },
+                if show_duplicate() { "LC DUPLICATE OFF" } else { "LC DUPLICATE ON" }
+            }
+            if show_duplicate() {
+                LottiePlayer {
+                    source: LottieSource::embedded("orbit-duplicate", ORBIT),
+                    controller: Some(controller.clone()),
+                    active: false,
+                    playing: false,
+                    width: "100%",
+                    height: format!("{}", 80 + duplicate_errors() % 2),
+                    background_color: 0xFF11_1827_u32,
+                    on_error: move |_| duplicate_errors += 1,
+                }
             }
             button {
                 margin_top: 10.0,

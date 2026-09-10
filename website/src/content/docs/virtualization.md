@@ -69,18 +69,23 @@ rsx! {
 }
 ```
 
-## 精确更新
+## 稳定身份与精确更新
 
-`item_keys[index]` 应覆盖 item 的全部非响应式视觉输入。长度相同时，keyed hook 只 reload 变化的连续区间：
+高层 `use_virtual_items` 明确分开两件事：`id` 只表示稳定身份，`revision` 覆盖 item 的全部非响应式视觉输入。同一 ID 改 revision 会原位 reload；移动同一 ID 会保留仍被 adapter 持有的 item-local 状态。一个 snapshot 内的 ID 必须唯一，重复会被明确拒绝：
 
 ```rust
 let rows = use_signal(load_rows);
-let keys = rows().iter().map(|row| row.revision).collect();
-let source = use_virtual_source_items_keyed(
+let snapshot = rows();
+let stamps = snapshot
+    .iter()
+    .map(|row| VirtualItemStamp::new(row.id, row.revision))
+    .collect();
+let render_rows = snapshot.clone();
+let source = use_virtual_items(
     VirtualKind::List,
-    keys,
+    stamps,
     move |index| {
-        let row = rows()[index as usize].clone();
+        let row = render_rows[index as usize].clone();
         rsx! { RowView { row } }
     },
 );
@@ -88,7 +93,9 @@ let source = use_virtual_source_items_keyed(
 rsx! { list { virtual_source: source } }
 ```
 
-`VirtualSource` 也提供 `reload_items`、`reload_all_items`、`insert_items`、`remove_items`、`move_item` 和 `set_total_count`。结构更新前先更新业务数据，因为 ArkUI 可能在调用中同步请求新位置的 item。
+返回的 `VirtualItems` 只能绑定到 `virtual_source` 属性，不暴露手动数据 mutation，避免 snapshot 和 adapter 各自修改数量/顺序。
+
+需要手工控制时使用低层 `use_virtual_source` / `VirtualSource`。传入的 count 只是初始值；之后由调用方在更新业务数据后显式调用 `reload_items`、`reload_all_items`、`insert_items`、`remove_items`、`move_item` 或 `set_total_count`。ArkUI 可能在 mutation 中同步请求新位置的 item。
 
 ## Native item
 
@@ -110,7 +117,7 @@ callback 在 Dioxus render cycle 外执行，不能调用 hook。source 自动�
 
 ## 选择普通 keyed 列表还是虚拟 source
 
-小列表直接 keyed RSX 最简单。item 数量上千、首屏 native 创建成本明显，或需要 WaterFlow 回收时使用 `use_virtual_source`。不要捕获临时 borrow；callback 应捕获 `Rc`、signal handle 或 owned snapshot。
+小列表直接 keyed RSX 最简单。item 数量上千、首屏 native 创建成本明显，或需要 WaterFlow 回收时使用 `use_virtual_items`；需要直接操作 adapter 时才用 `use_virtual_source`。不要捕获临时 borrow；callback 应捕获 `Rc`、signal handle 或 owned snapshot。
 
 ## 可见范围
 

@@ -37,7 +37,7 @@ pub fn Select(
     let i18n = use_component_i18n();
     let viewport = arkit_hooks::use_overlay_viewport();
     let trigger_ref = arkit_hooks::use_native_element_ref();
-    let trigger_frame = use_signal(arkit_hooks::LayoutFrame::default);
+    let trigger_frame = use_signal(arkit_arkui::LayoutFramePx::default);
     arkit_hooks::use_layout_frame(trigger_ref.clone(), move |frame| {
         let mut trigger_frame = trigger_frame;
         trigger_frame.set(frame);
