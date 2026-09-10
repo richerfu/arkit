@@ -152,9 +152,18 @@ impl NodeBuilder {
 
     /// Register any ArkUI node event on an imperatively-built node.
     ///
-    /// This is the escape hatch for component-specific events. The borrowed
-    /// [`NativeNodeEvent`] is valid only for the duration of the callback and
-    /// must not be retained.
+    /// This is the escape hatch for component-specific events: it is the only
+    /// way to register a node event here, deliberately. Typed wrappers for
+    /// individual event kinds were removed because nothing used them and each
+    /// one invited registering an event the renderer already owns.
+    ///
+    /// Arkit targets API 20 and uses the API 18+ `OnClickEvent`, whose payload
+    /// is an `ArkUI_UIInputEvent`. Registering a legacy and a modern variant of
+    /// the same logical event together causes duplicate delivery on some
+    /// runtimes and unreliable delivery inside `NodeAdapter` items.
+    ///
+    /// The borrowed [`NativeNodeEvent`] is valid only for the duration of the
+    /// callback and must not be retained.
     pub fn on_event(
         mut self,
         event_type: NodeEventType,
@@ -167,30 +176,6 @@ impl NodeBuilder {
             .as_raw_mut();
         EventNode(node).on_event(event_type, callback);
         Ok(self)
-    }
-
-    /// Register a payload-free ArkUI node event.
-    pub fn on_event_no_param(
-        self,
-        event_type: NodeEventType,
-        callback: impl Fn() + 'static,
-    ) -> ArkUIResult<Self> {
-        self.on_event(event_type, move |_| callback())
-    }
-
-    /// Register a click callback.
-    ///
-    /// Arkit targets API 20 and deliberately uses the API 18+
-    /// `OnClickEvent`, whose payload is an `ArkUI_UIInputEvent`. Registering
-    /// the legacy and modern variants together causes duplicate delivery on
-    /// some runtimes and unreliable delivery inside `NodeAdapter` items.
-    pub fn on_click(self, callback: impl Fn() + 'static) -> ArkUIResult<Self> {
-        self.on_event_no_param(NodeEventType::OnClickEvent, callback)
-    }
-
-    /// Register raw touch input (down, move, up, and cancel).
-    pub fn on_touch(self, callback: impl Fn(&NativeNodeEvent) + 'static) -> ArkUIResult<Self> {
-        self.on_event(NodeEventType::TouchEvent, callback)
     }
 
     /// Build the node.
