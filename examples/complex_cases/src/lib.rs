@@ -97,8 +97,11 @@ fn VirtualCaseView(kind: VirtualKind, active: bool) -> Element {
     });
     let mut target = use_signal(|| 2_u32);
     let mut next_id = use_signal(|| TOTAL);
-    let mut status = use_signal(|| "先点目标行累计 taps，再移动+更新；taps 应保留".to_string());
+    let mut operation = use_signal(|| 0_u32);
+    let mut last_tap = use_signal(|| None::<(u32, u32)>);
+    let mut status = use_signal(|| "Tap id #00002, then Rot L/Rot R or Move+Rev".to_string());
     let snapshot = items();
+    let count = snapshot.len();
     let target_id = target();
     let target_index = snapshot
         .iter()
@@ -112,20 +115,40 @@ fn VirtualCaseView(kind: VirtualKind, active: bool) -> Element {
     let render_items = snapshot.clone();
     let source = use_virtual_items(kind, stamps, move |index| {
         let item = render_items[index as usize];
-        render_virtual_item(kind, item.id, index, item.revision)
+        render_virtual_item(kind, item.id, index, item.revision, last_tap)
     });
     let height = if active { "100%" } else { "0%" };
     let visibility = if active { "visible" } else { "hidden" };
     let opacity = if active { 1.0 } else { 0.0 };
     let kind_label = virtual_kind_label(kind);
+    let taps_status = last_tap().map_or_else(
+        || "last taps none".to_string(),
+        |(id, taps)| format!("last taps #{id:05}={taps}"),
+    );
 
     let previous_target = move |_| {
         let current = *target.peek();
-        target.set(if current == 0 { TOTAL - 1 } else { current - 1 });
+        let items = items.peek();
+        let index = items
+            .iter()
+            .position(|item| item.id == current)
+            .expect("selected virtual demo item disappeared");
+        let next = items[(index + items.len() - 1) % items.len()].id;
+        target.set(next);
+        operation += 1;
+        status.set(format!("Select previous id #{next:05}"));
     };
     let next_target = move |_| {
         let current = *target.peek();
-        target.set((current + 1) % TOTAL);
+        let items = items.peek();
+        let index = items
+            .iter()
+            .position(|item| item.id == current)
+            .expect("selected virtual demo item disappeared");
+        let next = items[(index + 1) % items.len()].id;
+        target.set(next);
+        operation += 1;
+        status.set(format!("Select next id #{next:05}"));
     };
     let update_target = move |_| {
         let id = *target.peek();
@@ -139,8 +162,9 @@ fn VirtualCaseView(kind: VirtualKind, active: bool) -> Element {
             revision = item.revision;
         });
         status.set(format!(
-            "{kind_label} id #{id:05} 原位 Reload 到 rev {revision}"
+            "{kind_label} Reload #{id:05} to rev {revision}; taps must stay"
         ));
+        operation += 1;
     };
     let move_and_update_target = move |_| {
         let id = *target.peek();
@@ -158,8 +182,9 @@ fn VirtualCaseView(kind: VirtualKind, active: bool) -> Element {
             items.insert(destination, item);
         });
         status.set(format!(
-            "{kind_label} id #{id:05} Move 到 {destination} + Reload rev {revision}；taps 应不变"
+            "{kind_label} Move+Reload #{id:05} -> {destination}, rev {revision}; taps must stay"
         ));
+        operation += 1;
     };
     let remove_target = move |_| {
         let id = *target.peek();
@@ -179,8 +204,9 @@ fn VirtualCaseView(kind: VirtualKind, active: bool) -> Element {
         });
         target.set(next_target);
         status.set(format!(
-            "{kind_label} 删除 id #{id:05}，count {count}；其他行 taps 应保留"
+            "{kind_label} Delete #{id:05}; count {count}; retained taps must stay"
         ));
+        operation += 1;
     };
     let insert_fresh = move |_| {
         let id = *next_id.peek();
@@ -196,7 +222,54 @@ fn VirtualCaseView(kind: VirtualKind, active: bool) -> Element {
         });
         target.set(id);
         status.set(format!(
-            "{kind_label} 插入全新 id #{id:05} @ {index}；taps 必须从 0 开始"
+            "{kind_label} Insert new #{id:05} @ {index}; taps must start at 0"
+        ));
+        operation += 1;
+    };
+    let reverse_all = move |_| {
+        items.with_mut(|items| items.reverse());
+        operation += 1;
+        status.set(format!(
+            "{kind_label} Reverse all; verify order/count, then Restore"
+        ));
+    };
+    let rotate_left = move |_| {
+        items.with_mut(|items| {
+            if items.len() > 1 {
+                items.rotate_left(1);
+            }
+        });
+        operation += 1;
+        status.set(format!(
+            "{kind_label} Rot L by 1; visible #00002 taps must stay"
+        ));
+    };
+    let rotate_right = move |_| {
+        items.with_mut(|items| {
+            if items.len() > 1 {
+                items.rotate_right(1);
+            }
+        });
+        operation += 1;
+        status.set(format!(
+            "{kind_label} Rot R by 1; visible #00002 taps must stay"
+        ));
+    };
+    let shuffle_all = move |_| {
+        items.with_mut(|items| deterministic_shuffle(items));
+        operation += 1;
+        status.set(format!(
+            "{kind_label} Shuffle seed 0x5eed; verify order/count, then Restore"
+        ));
+    };
+    let restore = move |_| {
+        items.set((0..TOTAL).map(|id| DemoItem { id, revision: 0 }).collect());
+        target.set(2);
+        next_id.set(TOTAL);
+        last_tap.set(None);
+        operation += 1;
+        status.set(format!(
+            "{kind_label} Restore baseline; offscreen taps are not persistent storage"
         ));
     };
 
@@ -208,76 +281,63 @@ fn VirtualCaseView(kind: VirtualKind, active: bool) -> Element {
             opacity,
             column {
                 width: "100%",
-                height: 88.0,
+                height: 146.0,
                 padding: 8.0,
                 background_color: "#fff1f5f9",
                 text {
                     width: "100%",
-                    height: 34.0,
-                    font_size: 12.0,
+                    height: 58.0,
+                    font_size: 11.0,
                     font_color: "#ff475569",
-                    "{kind_label} id #{target_id:05} · index {target_index} · rev {target_revision}\n{status}"
+                    "{kind_label} logical op#{operation} · count {count} · target #{target_id:05} @ {target_index} rev {target_revision}\n{taps_status} · {status}\nnative-layout: verify viewport; no completion callback"
                 }
                 row {
                     width: "100%",
-                    height: 38.0,
+                    height: 34.0,
                     alignment: "top",
-                    button {
-                        font_size: 12.0,
-                        padding: 8.0,
-                        background_color: "#ffffffff",
-                        font_color: "#ff334155",
-                        onclick: previous_target,
-                        "上一项"
-                    }
-                    button {
-                        margin_left: 6.0,
-                        font_size: 12.0,
-                        padding: 8.0,
-                        background_color: "#ff2563eb",
-                        font_color: "#ffffffff",
-                        onclick: update_target,
-                        "更新单项"
-                    }
-                    button {
-                        margin_left: 6.0,
-                        font_size: 12.0,
-                        padding: 8.0,
-                        background_color: "#ff7c3aed",
-                        font_color: "#ffffffff",
-                        onclick: move_and_update_target,
-                        "移动+更新"
-                    }
-                    button {
-                        margin_left: 6.0,
-                        font_size: 12.0,
-                        padding: 8.0,
-                        background_color: "#ffdc2626",
-                        font_color: "#ffffffff",
-                        onclick: remove_target,
-                        "删除"
-                    }
-                    button {
-                        margin_left: 6.0,
-                        font_size: 12.0,
-                        padding: 8.0,
-                        background_color: "#ff059669",
-                        font_color: "#ffffffff",
-                        onclick: insert_fresh,
-                        "插入新ID"
-                    }
-                    button {
-                        margin_left: 6.0,
-                        font_size: 12.0,
-                        padding: 8.0,
-                        background_color: "#ffffffff",
-                        font_color: "#ff334155",
-                        onclick: next_target,
-                        "下一项"
-                    }
+                    FixtureButton { label: "Prev", width: "14%", color: "#ffffffff", on_press: previous_target }
+                    FixtureButton { label: "Reload", width: "14%", color: "#ff2563eb", on_press: update_target }
+                    FixtureButton { label: "Move+Rev", width: "18%", color: "#ff7c3aed", on_press: move_and_update_target }
+                    FixtureButton { label: "Delete", width: "14%", color: "#ffdc2626", on_press: remove_target }
+                    FixtureButton { label: "New ID", width: "14%", color: "#ff059669", on_press: insert_fresh }
+                    FixtureButton { label: "Next", width: "14%", color: "#ffffffff", on_press: next_target }
+                }
+                row {
+                    margin_top: 4.0,
+                    width: "100%",
+                    height: 34.0,
+                    alignment: "top",
+                    FixtureButton { label: "Reverse", width: "18%", color: "#ff0f766e", on_press: reverse_all }
+                    FixtureButton { label: "Rot L", width: "18%", color: "#ff0369a1", on_press: rotate_left }
+                    FixtureButton { label: "Rot R", width: "18%", color: "#ff0369a1", on_press: rotate_right }
+                    FixtureButton { label: "Shuffle", width: "18%", color: "#ffc2410c", on_press: shuffle_all }
+                    FixtureButton { label: "Restore", width: "18%", color: "#ff334155", on_press: restore }
                 }
             }
             VirtualItemsHost { kind, source }
+        }
+    }
+}
+
+#[component]
+fn FixtureButton(
+    label: &'static str,
+    width: &'static str,
+    color: &'static str,
+    on_press: EventHandler<()>,
+) -> Element {
+    let light_background = color == "#ffffffff";
+    rsx! {
+        button {
+            width,
+            height: 32.0,
+            margin_right: 4.0,
+            padding: 2.0,
+            font_size: 10.0,
+            background_color: color,
+            font_color: if light_background { "#ff334155" } else { "#ffffffff" },
+            onclick: move |_| on_press.call(()),
+            "{label}"
         }
     }
 }
@@ -364,7 +424,13 @@ fn VirtualItemsHost(kind: VirtualKind, source: VirtualItems) -> Element {
     }
 }
 
-fn render_virtual_item(kind: VirtualKind, id: u32, index: u32, revision: u32) -> Element {
+fn render_virtual_item(
+    kind: VirtualKind,
+    id: u32,
+    index: u32,
+    revision: u32,
+    mut last_tap: Signal<Option<(u32, u32)>>,
+) -> Element {
     let mut taps = use_signal(|| 0_u32);
     let (height, background_color) = match kind {
         VirtualKind::WaterFlow => {
@@ -413,7 +479,10 @@ fn render_virtual_item(kind: VirtualKind, id: u32, index: u32, revision: u32) ->
             height,
             background_color,
             padding: 12.0,
-            onclick: move |_| taps += 1,
+            onclick: move |_| {
+                taps += 1;
+                last_tap.set(Some((id, taps())));
+            },
             text {
                 font_size: 14.0,
                 font_color: "#ff334155",
@@ -423,10 +492,50 @@ fn render_virtual_item(kind: VirtualKind, id: u32, index: u32, revision: u32) ->
     }
 }
 
+fn deterministic_shuffle(items: &mut [DemoItem]) {
+    let mut state = 0x5eed_5eed_d15c_a11e_u64;
+    for upper in (1..items.len()).rev() {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        let index = (state as usize) % (upper + 1);
+        items.swap(upper, index);
+    }
+}
+
 fn virtual_kind_label(kind: VirtualKind) -> &'static str {
     match kind {
         VirtualKind::List => "List",
         VirtualKind::Grid => "Grid",
         VirtualKind::WaterFlow => "WaterFlow",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{deterministic_shuffle, DemoItem};
+
+    #[test]
+    fn shuffle_is_deterministic_and_preserves_every_identity() {
+        let original = (0..32)
+            .map(|id| DemoItem { id, revision: id })
+            .collect::<Vec<_>>();
+        let mut first = original.clone();
+        let mut second = original.clone();
+
+        deterministic_shuffle(&mut first);
+        deterministic_shuffle(&mut second);
+
+        assert!(first
+            .iter()
+            .zip(&second)
+            .all(|(left, right)| { left.id == right.id && left.revision == right.revision }));
+        assert!(first
+            .iter()
+            .zip(&original)
+            .any(|(left, right)| left.id != right.id));
+        let mut ids = first.iter().map(|item| item.id).collect::<Vec<_>>();
+        ids.sort_unstable();
+        assert_eq!(ids, (0..32).collect::<Vec<_>>());
     }
 }

@@ -95,6 +95,10 @@ rsx! { list { virtual_source: source } }
 
 返回的 `VirtualItems` 只能绑定到 `virtual_source` 属性，不暴露手动数据 mutation，避免 snapshot 和 adapter 各自修改数量/顺序。
 
+`use_virtual_items` 也接受 full reverse、rotate 和 shuffle 这类全量顺序变化；身份仍由 ID 而不是 index 决定。不过 item-local hook 状态只保证在该 item 仍被 adapter 保留时随移动保存。把 item 移到远离 viewport 的位置后，ArkUI 可以回收其 subtree；再次滚回时重新得到初始 local state 属于正常的有界虚拟化行为，不应当被判定为 identity diff 错误。`complex_cases` 示例因此用保持目标仍可见的单步 rotate 检查 taps，用 reverse/shuffle 检查 native 顺序、数量和响应，再用 Restore 回到基线。
+
+性能记录也需要区分边界：业务 signal 更新只代表逻辑操作已触发，`use_virtual_items` effect 完成只代表 adapter mutation 已提交，真正 native layout 要到后续 ArkUI frame 才发生。当前高层 hook 没有暴露 native layout-complete 回调；没有该信号时不要把 render/effect 的时间标成“布局耗时”。
+
 需要手工控制时使用低层 `use_virtual_source` / `VirtualSource`。传入的 count 只是初始值；之后由调用方在更新业务数据后显式调用 `reload_items`、`reload_all_items`、`insert_items`、`remove_items`、`move_item` 或 `set_total_count`。ArkUI 可能在 mutation 中同步请求新位置的 item。
 
 ## Native item

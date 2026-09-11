@@ -26,6 +26,9 @@ use rustc_hash::FxHashMap;
 
 use crate::{element_ref::SharedNativeNode, OwnedNativeNode};
 
+#[path = "virtual_adapter_bookkeeping.rs"]
+mod bookkeeping;
+
 // ArkUI removes items that leave its cached window and immediately requests
 // replacements for newly visible indices. RSX-backed items can observe an
 // index change, so recycle a bounded number of detached wrappers instead of
@@ -244,9 +247,36 @@ struct AdapterState {
     /// index. Keying by index would overwrite and then dispose the replacement
     /// when the old removal arrives.
     mounted: FxHashMap<usize, MountedItem>,
+    mounted_index_scratch: bookkeeping::ReusableSnapshot<(usize, u32)>,
     recycled: Vec<MountedItem>,
     adapter: Option<NodeAdapter>,
     attached_host: Option<Weak<RefCell<ArkUINode>>>,
+}
+
+struct MountedIndexSnapshot {
+    entries: Vec<(usize, u32)>,
+    state: Weak<RefCell<AdapterState>>,
+}
+
+impl MountedIndexSnapshot {
+    fn as_slice(&self) -> &[(usize, u32)] {
+        &self.entries
+    }
+}
+
+impl Drop for MountedIndexSnapshot {
+    fn drop(&mut self) {
+        self.entries.clear();
+        let Some(state) = self.state.upgrade() else {
+            return;
+        };
+        let Ok(mut state) = state.try_borrow_mut() else {
+            return;
+        };
+        state
+            .mounted_index_scratch
+            .recycle(std::mem::take(&mut self.entries));
+    }
 }
 
 /// A virtual adapter attached to a `list`, `grid`, or `waterflow` host node.
@@ -282,6 +312,7 @@ impl VirtualSource {
                 stable_item_ids: None,
                 defer_index_updates: false,
                 mounted: FxHashMap::default(),
+                mounted_index_scratch: bookkeeping::ReusableSnapshot::default(),
                 recycled: Vec::new(),
                 adapter: None,
                 attached_host: None,
@@ -302,6 +333,7 @@ impl VirtualSource {
                 stable_item_ids: None,
                 defer_index_updates: false,
                 mounted: FxHashMap::default(),
+                mounted_index_scratch: bookkeeping::ReusableSnapshot::default(),
                 recycled: Vec::new(),
                 adapter: None,
                 attached_host: None,
@@ -404,12 +436,17 @@ impl VirtualSource {
         let (updates, mut mismatches) = {
             let mut state = self.state.borrow_mut();
             state.defer_index_updates = false;
-            let Some(item_ids) = state.stable_item_ids.clone() else {
+            let AdapterState {
+                stable_item_ids,
+                mounted,
+                ..
+            } = &mut *state;
+            let Some(item_ids) = stable_item_ids.as_deref() else {
                 return Ok(());
             };
             let mut updates = Vec::new();
             let mut mismatches = Vec::new();
-            for item in state.mounted.values_mut() {
+            for item in mounted.values_mut() {
                 let Some(expected) = item_ids.get(item.index as usize).copied() else {
                     // Native removal delivery may lag the logical count. This
                     // wrapper is retiring, not a member of the next snapshot.
@@ -635,7 +672,9 @@ impl VirtualSource {
             Ok(())
         })?;
         self.state.borrow_mut().total_count = next_total;
-        self.update_mounted_indices(&mounted, |index| (index >= start).then(|| index + count));
+        self.update_mounted_indices(mounted.as_slice(), |index| {
+            (index >= start).then(|| index + count)
+        });
         Ok(())
     }
 
@@ -660,7 +699,7 @@ impl VirtualSource {
             Ok(())
         })?;
         self.state.borrow_mut().total_count = next_total;
-        self.update_mounted_indices(&mounted, |index| {
+        self.update_mounted_indices(mounted.as_slice(), |index| {
             (index >= removed_end).then(|| index - count)
         });
         Ok(())
@@ -677,17 +716,25 @@ impl VirtualSource {
         }
         let mounted = self.mounted_indices();
         self.with_native_adapter(|adapter| adapter.move_item(from, to))?;
-        self.update_mounted_indices(&mounted, |index| moved_item_index(index, from, to));
+        self.update_mounted_indices(mounted.as_slice(), |index| {
+            moved_item_index(index, from, to)
+        });
         Ok(())
     }
 
-    fn mounted_indices(&self) -> Vec<(usize, u32)> {
-        self.state
-            .borrow()
-            .mounted
-            .iter()
-            .map(|(handle, item)| (*handle, item.index))
-            .collect()
+    fn mounted_indices(&self) -> MountedIndexSnapshot {
+        let mut state = self.state.borrow_mut();
+        let AdapterState {
+            mounted,
+            mounted_index_scratch,
+            ..
+        } = &mut *state;
+        let entries = mounted_index_scratch
+            .take_from(mounted.iter().map(|(handle, item)| (*handle, item.index)));
+        MountedIndexSnapshot {
+            entries,
+            state: Rc::downgrade(&self.state),
+        }
     }
 
     fn update_mounted_indices(
@@ -1026,12 +1073,13 @@ fn invalid_parameter(message: impl Into<String>) -> ohos_arkui_binding::common::
 
 #[cfg(test)]
 mod tests {
-    use std::cell::Cell;
+    use std::cell::{Cell, RefCell};
     use std::rc::Rc;
 
     use super::{
         contiguous_index_ranges, matching_identity_index, moved_item_index, validate_insert,
-        validate_item_range, ItemIdentity, VirtualItemMount, VirtualKind, VirtualSource,
+        validate_item_range, AdapterState, ItemIdentity, ItemRenderer, MountedIndexSnapshot,
+        VirtualItemMount, VirtualKind, VirtualSource,
     };
 
     struct DropProbe(Rc<Cell<u32>>);
@@ -1040,6 +1088,34 @@ mod tests {
         fn drop(&mut self) {
             self.0.set(self.0.get() + 1);
         }
+    }
+
+    #[test]
+    fn mounted_index_snapshot_drop_returns_its_buffer() {
+        let state = Rc::new(RefCell::new(AdapterState {
+            kind: VirtualKind::List,
+            total_count: 0,
+            renderer: ItemRenderer::Content(Rc::new(|_| {
+                unreachable!("snapshot test never renders native items")
+            })),
+            stable_item_ids: None,
+            defer_index_updates: false,
+            mounted: rustc_hash::FxHashMap::default(),
+            mounted_index_scratch: super::bookkeeping::ReusableSnapshot::default(),
+            recycled: Vec::new(),
+            adapter: None,
+            attached_host: None,
+        }));
+        drop(MountedIndexSnapshot {
+            entries: Vec::with_capacity(64),
+            state: Rc::downgrade(&state),
+        });
+
+        let reused = state
+            .borrow_mut()
+            .mounted_index_scratch
+            .take_from(std::iter::empty());
+        assert!(reused.capacity() >= 64);
     }
 
     #[test]
