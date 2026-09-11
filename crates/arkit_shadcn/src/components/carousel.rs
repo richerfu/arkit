@@ -350,7 +350,7 @@ pub fn Carousel(props: CarouselProps) -> Element {
             border_radius: style.viewport_radius,
             shadow: if style.viewport_shadow { "sm" },
             clip: true,
-            on_swiper_change: move |event| {
+            onswiperchange: move |event| {
                 let index = usize::try_from(event.data().index).unwrap_or_default();
                 let index = normalized_index(index, slide_count);
                 if index != active_index {
@@ -363,7 +363,7 @@ pub fn Carousel(props: CarouselProps) -> Element {
                     }
                 }
             },
-            on_touch: move |event| {
+            ontouch: move |event| {
                 let Some(pointer) = event.data().pointer else {
                     return;
                 };

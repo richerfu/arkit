@@ -1,24 +1,31 @@
 use std::cell::RefCell;
 
 use arkit_animation_core::{
-    AdapterId, AdapterPropertyId, AdapterTargetId, Angle, AnimationValue, Length, LengthUnit,
-    LinearRgba, OutputSeek, PropertyName, PropertyUpdate, ResolutionTarget, ResolvedProperty,
-    ResolvedTarget, SourceTarget, TargetLayoutSnapshot, TargetName, TimePoint,
+    AdapterId, AdapterPropertyId, AdapterTargetId, Angle, AnimationValue, CompiledAnimation,
+    Length, LengthUnit, LinearRgba, OutputSeek, PropertyName, PropertyUpdate, ResolutionTarget,
+    ResolvedProperty, ResolvedTarget, SourceTarget, TargetLayoutSnapshot, TargetName, TimePoint,
 };
 use arkit_arkui::MountedNodeLease;
 use ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
 use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
 
+use crate::adapter::{TargetAdapter, TargetLifecycle};
+use crate::diagnostic::AnimationAdapterError;
 use crate::property_reader::{first_f32, first_u32, numbers};
-use crate::{
-    property_writer, AnimationAdapterError, PropertySchema, TargetAdapter, TargetLifecycle,
-    TargetStore,
-};
+use crate::property_schema::PropertySchema;
+use crate::property_writer;
+use crate::target_store::TargetStore;
 
 pub struct ArkUiAdapter {
     id: AdapterId,
     targets: RefCell<TargetStore>,
     properties: PropertySchema,
+}
+
+#[derive(Clone)]
+pub(crate) struct AttributeClaimSpec {
+    pub(crate) node: MountedNodeLease,
+    pub(crate) attrs: Vec<ArkUINodeAttributeType>,
 }
 
 impl ArkUiAdapter {
@@ -40,34 +47,42 @@ impl ArkUiAdapter {
     }
 
     pub fn unregister_target(&self, target: AdapterTargetId) -> bool {
-        // Capture the lease before removal: after `unregister` the binding is
-        // gone and its animated-attribute declaration could not be cleared.
-        let node = self
-            .targets
-            .borrow()
-            .get(target)
-            .map(|binding| binding.node.clone());
-        let removed = self.targets.borrow_mut().unregister(target);
-        if removed {
-            // The target's animated-attribute declaration dies with it; the
-            // renderer resumes declarative writes for those attributes.
-            if let Some(node) = node {
-                let _ = node.clear_animated_attrs();
-            }
-        }
-        removed
+        self.targets.borrow_mut().unregister(target)
     }
 
-    /// Clear the animated-attribute declaration on every registered target.
-    ///
-    /// Called when hosted animation instances finish (Complete/Cancel/Settled/
-    /// Removed): from that point the renderer owns the attributes again and
-    /// declarative values become the steady state.
-    pub(crate) fn clear_all_animated_attrs(&self) {
+    pub(crate) fn attribute_claim_specs(
+        &self,
+        plan: &CompiledAnimation,
+    ) -> Result<Vec<AttributeClaimSpec>, AnimationAdapterError> {
         let targets = self.targets.borrow();
-        for target in targets.iter() {
-            let _ = target.node.clear_animated_attrs();
+        let mut specs: Vec<AttributeClaimSpec> = Vec::new();
+        for output in plan.outputs() {
+            let target = &plan.targets()[output.target];
+            if target.adapter != self.id {
+                continue;
+            }
+            let property = &plan.properties()[output.property];
+            let name = self.property_name(property.adapter_property)?;
+            let attributes = property_writer::ownership_attributes(name).ok_or(
+                AnimationAdapterError::UnknownPropertyId(property.adapter_property),
+            )?;
+            let binding = targets.get(target.adapter_target).ok_or(
+                AnimationAdapterError::UnknownTargetId(target.adapter_target),
+            )?;
+            if let Some(spec) = specs.iter_mut().find(|spec| spec.node == binding.node) {
+                for attribute in attributes {
+                    if !spec.attrs.contains(&attribute) {
+                        spec.attrs.push(attribute);
+                    }
+                }
+            } else {
+                specs.push(AttributeClaimSpec {
+                    node: binding.node.clone(),
+                    attrs: attributes,
+                });
+            }
         }
+        Ok(specs)
     }
 
     pub(crate) fn node(&self, target: AdapterTargetId) -> Option<MountedNodeLease> {
@@ -317,11 +332,6 @@ impl TargetAdapter for ArkUiAdapter {
         let binding = targets
             .get_mut(update.target)
             .ok_or(AnimationAdapterError::UnknownTargetId(update.target))?;
-        // Declare the driven attribute so the renderer keeps its declarative
-        // value authoritative but stops fighting this animation's writes.
-        let _ = binding
-            .node
-            .declare_animated_attrs(std::slice::from_ref(&name));
         property_writer::write(binding, update.property, name, &update.value)
     }
 
@@ -334,9 +344,6 @@ impl TargetAdapter for ArkUiAdapter {
             let binding = targets
                 .get_mut(update.target)
                 .ok_or(AnimationAdapterError::UnknownTargetId(update.target))?;
-            let _ = binding
-                .node
-                .declare_animated_attrs(std::slice::from_ref(&name));
             if let Some(next) = updates.get(index + 1).filter(|next| {
                 next.target == update.target
                     && matches!(
@@ -347,9 +354,6 @@ impl TargetAdapter for ArkUiAdapter {
                     )
             }) {
                 let next_name = self.property_name(next.property)?;
-                let _ = binding
-                    .node
-                    .declare_animated_attrs(std::slice::from_ref(&next_name));
                 property_writer::write_compound_pair(
                     binding,
                     update.property,

@@ -8,8 +8,9 @@ use arkit_animation_core::{
     ValueSource,
 };
 
-use crate::AnimationSelector;
-use crate::{AnimationBuildError, CapabilityRequirements, ExecutionPolicy};
+use crate::diagnostic::AnimationBuildError;
+use crate::native_capability::{CapabilityRequirements, ExecutionPolicy};
+use crate::selector::AnimationSelector;
 
 pub(crate) type TimelineParts = (
     TimelineSource,

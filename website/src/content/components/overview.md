@@ -11,7 +11,7 @@ description: "shadcn 风格原生组件库怎么装、怎么 import，以及和 
 
 - `markdown`：原生渲染 CommonMark / GFM（会自动带上 `shadcn`）
 - `code`：独立代码高亮，底层 tree-sitter，可以不依赖 Markdown
-- 两个都开时，Markdown 围栏会复用 Code 管线；嫌麻烦可以用 `markdown-highlight`
+- 两个都开时，Markdown 围栏会复用 Code 管线
 
 `Barcode` 走单独的 `barcode` feature，不强制 `shadcn`。GPU 终端在文档区的 [Terminal](../docs/terminal/)，不属于这套 compound 组件。
 
@@ -38,7 +38,6 @@ Markdown 围栏也要高亮：
 
 ```toml
 arkit = { version = "*", features = ["markdown", "code"] }
-# 或: features = ["markdown-highlight"]
 ```
 
 ```rust

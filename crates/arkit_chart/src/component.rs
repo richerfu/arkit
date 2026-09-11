@@ -5,6 +5,7 @@ use std::collections::BTreeSet;
 use std::ops::Deref;
 use std::rc::Rc;
 
+use arkit_arkui::{LocalVpPoint, LogicalSizeVp};
 use arkit_hooks::{
     use_app_foreground, use_component_visibility, use_mounted_node, use_native_element_ref,
     MountedNodeLease,
@@ -38,22 +39,94 @@ enum ChartCommand {
     Clear,
 }
 
-type ChartCommandDispatcher = Rc<dyn Fn(ChartCommand)>;
+struct ChartActionOutcome {
+    status: ChartCommandStatus,
+    event: Option<ChartRuntimeEvent>,
+}
+
+type ChartCommandDispatcher = Rc<dyn Fn(ChartCommand) -> Result<ChartCommandStatus, ChartError>>;
 type ChartOptionReader = Rc<dyn Fn() -> ChartOption>;
-type ChartSizeReader = Rc<dyn Fn() -> [f32; 2]>;
+type ChartReadyReader = Rc<dyn Fn() -> bool>;
+type ChartSizeReader = Rc<dyn Fn() -> LogicalSizeVp>;
+type ChartHitReader = Rc<dyn Fn(LocalVpPoint) -> Option<ChartEvent>>;
 
 struct ChartControllerBinding {
     id: u64,
     dispatcher: ChartCommandDispatcher,
-    option_reader: ChartOptionReader,
+    source_reader: ChartOptionReader,
+    resolved_reader: ChartOptionReader,
+    ready_reader: ChartReadyReader,
     size_reader: ChartSizeReader,
+    hit_reader: ChartHitReader,
 }
 
 #[derive(Default)]
 struct ChartControllerState {
     next_binding: u64,
     binding: Option<ChartControllerBinding>,
-    pending: Vec<ChartCommand>,
+    last_binding_error: Option<ChartError>,
+}
+
+/// Failure returned by an imperative chart instance operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChartError {
+    /// The controller is not logically attached to a chart component.
+    NotBound,
+    /// The chart is bound, but its native canvas has not completed a draw.
+    NotReady,
+    /// The controller already owns a live chart binding.
+    AlreadyBound,
+    /// The requested series, item, axis, grid, or component does not exist.
+    InvalidTarget,
+    /// The target exists, but does not support the requested operation.
+    UnsupportedOperation,
+}
+
+impl std::fmt::Display for ChartError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::NotBound => "chart controller is not bound",
+            Self::NotReady => "chart native instance is not ready",
+            Self::AlreadyBound => "chart controller is already bound",
+            Self::InvalidTarget => "chart command target is invalid",
+            Self::UnsupportedOperation => "chart target does not support this operation",
+        })
+    }
+}
+
+impl std::error::Error for ChartError {}
+
+/// Whether a valid imperative command changed chart runtime state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChartCommandStatus {
+    Applied,
+    Unchanged,
+}
+
+/// Read-only output of the current prepared chart runtime.
+///
+/// A snapshot includes dataset/media/runtime state and is not a reusable input
+/// option. Use [`ChartController::get_source_option`] for the raw input DTO.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ChartSnapshot {
+    option: ChartOption,
+}
+
+impl ChartSnapshot {
+    pub fn option(&self) -> &ChartOption {
+        &self.option
+    }
+}
+
+struct ChartControllerLease {
+    controller: ChartController,
+    binding: u64,
+}
+
+impl Drop for ChartControllerLease {
+    fn drop(&mut self) {
+        self.controller.unbind(self.binding);
+    }
 }
 
 /// Imperative ECharts-compatible action handle. Create one with
@@ -69,156 +142,228 @@ impl ChartController {
         Self::default()
     }
 
-    pub fn dispatch_action(&self, action: ChartAction) {
-        self.dispatch(ChartCommand::Action(action));
+    pub fn dispatch_action(&self, action: ChartAction) -> Result<ChartCommandStatus, ChartError> {
+        self.dispatch(ChartCommand::Action(action))
     }
 
     /// Dispatch multiple actions as one ECharts-style batch and emit one
-    /// aggregate event after all state mutations have completed.
-    pub fn dispatch_actions(&self, actions: impl IntoIterator<Item = ChartAction>) {
-        self.dispatch(ChartCommand::Actions(actions.into_iter().collect()));
+    /// aggregate event after all state mutations have completed. Structural
+    /// timeline changes and restore must be dispatched separately so a later
+    /// target cannot invalidate an otherwise atomic batch.
+    pub fn dispatch_actions(
+        &self,
+        actions: impl IntoIterator<Item = ChartAction>,
+    ) -> Result<ChartCommandStatus, ChartError> {
+        self.dispatch(ChartCommand::Actions(actions.into_iter().collect()))
     }
 
     /// Append a chunk without replacing the current option. This follows
     /// ECharts' native incremental-series restriction: scatter and lines.
-    pub fn append_data(&self, data: ChartAppendData) {
-        self.dispatch(ChartCommand::AppendData(data));
+    pub fn append_data(&self, data: ChartAppendData) -> Result<ChartCommandStatus, ChartError> {
+        self.dispatch(ChartCommand::AppendData(data))
     }
 
     /// Clear the mounted instance. A later controlled prop update can populate
     /// it again, matching the relationship between `clear` and `setOption`.
-    pub fn clear(&self) {
-        self.dispatch(ChartCommand::Clear);
+    pub fn clear(&self) -> Result<ChartCommandStatus, ChartError> {
+        self.dispatch(ChartCommand::Clear)
     }
 
-    /// Return the current resolved option, including runtime legend/dataZoom
-    /// and selected-item state. Returns `None` before mount or after unmount.
-    pub fn get_option(&self) -> Option<ChartOption> {
+    /// Return the current resolved runtime state as a read-only snapshot.
+    pub fn get_option(&self) -> Result<ChartSnapshot, ChartError> {
         let reader = self
             .inner
             .borrow()
             .binding
             .as_ref()
-            .map(|binding| binding.option_reader.clone())?;
-        Some(reader())
+            .map(|binding| binding.resolved_reader.clone())
+            .ok_or(ChartError::NotBound)?;
+        Ok(ChartSnapshot { option: reader() })
+    }
+
+    /// Return the current raw input DTO, including imperative source changes.
+    /// Dataset-derived series data is intentionally absent from this value.
+    pub fn get_source_option(&self) -> Result<ChartOption, ChartError> {
+        let reader = self
+            .inner
+            .borrow()
+            .binding
+            .as_ref()
+            .map(|binding| binding.source_reader.clone())
+            .ok_or(ChartError::NotBound)?;
+        Ok(reader())
     }
 
     /// Current logical canvas width and height in vp.
-    pub fn get_size(&self) -> Option<[f32; 2]> {
-        let reader = self
-            .inner
-            .borrow()
-            .binding
-            .as_ref()
-            .map(|binding| binding.size_reader.clone())?;
-        Some(reader())
+    pub fn get_size(&self) -> Result<LogicalSizeVp, ChartError> {
+        let (ready, reader) = self.ready_access(|binding| binding.size_reader.clone())?;
+        if !ready() {
+            return Err(ChartError::NotReady);
+        }
+        Ok(reader())
     }
 
-    pub fn get_width(&self) -> Option<f32> {
-        self.get_size().map(|size| size[0])
+    pub fn get_width(&self) -> Result<f32, ChartError> {
+        self.get_size().map(|size| size.width)
     }
 
-    pub fn get_height(&self) -> Option<f32> {
-        self.get_size().map(|size| size[1])
+    pub fn get_height(&self) -> Result<f32, ChartError> {
+        self.get_size().map(|size| size.height)
     }
 
-    /// Convert a cartesian data point into logical canvas pixels using the
-    /// current responsive layout and dataZoom state.
+    /// Convert a cartesian data point into canvas-local vp using the current
+    /// responsive layout and dataZoom state.
     pub fn convert_to_pixel(
         &self,
         finder: ChartCoordinateFinder,
         value: ChartCoordinatePoint,
-    ) -> Option<[f32; 2]> {
-        let option = self.get_option()?;
-        let [width, height] = self.get_size()?;
-        coordinate_to_pixel(
+    ) -> Result<LocalVpPoint, ChartError> {
+        let option = self.resolved_option_if_ready()?;
+        let size = self.get_size()?;
+        let point = coordinate_to_pixel(
             &option,
             &finder,
             &value,
             &initial_hidden_series(&option),
             &initial_windows(&option),
-            width,
-            height,
+            size.width,
+            size.height,
         )
+        .ok_or(ChartError::InvalidTarget)?;
+        Ok(LocalVpPoint::new(point[0], point[1]))
     }
 
-    /// Convert logical canvas pixels back into cartesian data/category values.
+    /// Convert a canvas-local vp point back into data/category values.
     pub fn convert_from_pixel(
         &self,
         finder: ChartCoordinateFinder,
-        pixel: [f32; 2],
-    ) -> Option<ChartCoordinatePoint> {
-        let option = self.get_option()?;
-        let [width, height] = self.get_size()?;
+        pixel: LocalVpPoint,
+    ) -> Result<ChartCoordinatePoint, ChartError> {
+        let option = self.resolved_option_if_ready()?;
+        let size = self.get_size()?;
         coordinate_from_pixel(
             &option,
             &finder,
-            pixel,
+            [pixel.x, pixel.y],
             &initial_hidden_series(&option),
             &initial_windows(&option),
-            width,
-            height,
+            size.width,
+            size.height,
         )
+        .ok_or(ChartError::InvalidTarget)
     }
 
-    /// Test whether a logical pixel lies inside the selected cartesian grid.
-    pub fn contain_pixel(&self, finder: ChartCoordinateFinder, pixel: [f32; 2]) -> Option<bool> {
-        let option = self.get_option()?;
-        let [width, height] = self.get_size()?;
+    /// Test whether a canvas-local vp point lies inside a cartesian grid.
+    pub fn contain_pixel(
+        &self,
+        finder: ChartCoordinateFinder,
+        pixel: LocalVpPoint,
+    ) -> Result<bool, ChartError> {
+        let option = self.resolved_option_if_ready()?;
+        let size = self.get_size()?;
         coordinate_contains_pixel(
             &option,
             &finder,
-            pixel,
+            [pixel.x, pixel.y],
             &initial_hidden_series(&option),
             &initial_windows(&option),
-            width,
-            height,
+            size.width,
+            size.height,
         )
+        .ok_or(ChartError::InvalidTarget)
     }
 
-    fn dispatch(&self, command: ChartCommand) {
-        let dispatcher = self
+    /// Hit-test the actual most recently drawn chart cache.
+    pub fn hit_test(&self, point: LocalVpPoint) -> Result<Option<ChartEvent>, ChartError> {
+        let (ready, reader) = self.ready_access(|binding| binding.hit_reader.clone())?;
+        if !ready() {
+            return Err(ChartError::NotReady);
+        }
+        Ok(reader(point))
+    }
+
+    fn dispatch(&self, command: ChartCommand) -> Result<ChartCommandStatus, ChartError> {
+        let (ready, dispatcher) = self.ready_access(|binding| binding.dispatcher.clone())?;
+        if !ready() {
+            return Err(ChartError::NotReady);
+        }
+        dispatcher(command)
+    }
+
+    fn ready_access<T>(
+        &self,
+        select: impl FnOnce(&ChartControllerBinding) -> T,
+    ) -> Result<(ChartReadyReader, T), ChartError> {
+        self.inner
+            .borrow()
+            .binding
+            .as_ref()
+            .map(|binding| (binding.ready_reader.clone(), select(binding)))
+            .ok_or(ChartError::NotBound)
+    }
+
+    fn resolved_option_if_ready(&self) -> Result<ChartOption, ChartError> {
+        let (ready, reader) = self.ready_access(|binding| binding.resolved_reader.clone())?;
+        if !ready() {
+            return Err(ChartError::NotReady);
+        }
+        Ok(reader())
+    }
+
+    pub fn is_bound(&self) -> bool {
+        self.inner.borrow().binding.is_some()
+    }
+
+    pub fn is_ready(&self) -> bool {
+        let reader = self
             .inner
             .borrow()
             .binding
             .as_ref()
-            .map(|binding| binding.dispatcher.clone());
-        if let Some(dispatcher) = dispatcher {
-            dispatcher(command);
-        } else {
-            self.inner.borrow_mut().pending.push(command);
-        }
+            .map(|binding| binding.ready_reader.clone());
+        reader.is_some_and(|reader| reader())
     }
 
-    pub fn is_mounted(&self) -> bool {
-        self.inner.borrow().binding.is_some()
+    /// Last component binding failure, primarily useful for diagnosing an
+    /// accidental attempt to share one controller across multiple charts.
+    pub fn last_binding_error(&self) -> Option<ChartError> {
+        self.inner.borrow().last_binding_error
     }
 
     fn bind(
         &self,
         dispatcher: ChartCommandDispatcher,
-        option_reader: ChartOptionReader,
+        source_reader: ChartOptionReader,
+        resolved_reader: ChartOptionReader,
+        ready_reader: ChartReadyReader,
         size_reader: ChartSizeReader,
-    ) -> u64 {
-        let (binding, pending) = {
-            let mut state = self.inner.borrow_mut();
-            state.next_binding = state
-                .next_binding
-                .checked_add(1)
-                .expect("arkit_chart: controller binding id space exhausted");
-            let binding = state.next_binding;
-            state.binding = Some(ChartControllerBinding {
-                id: binding,
-                dispatcher: dispatcher.clone(),
-                option_reader,
-                size_reader,
-            });
-            (binding, std::mem::take(&mut state.pending))
-        };
-        for command in pending {
-            dispatcher(command);
+        hit_reader: ChartHitReader,
+    ) -> Result<ChartControllerLease, ChartError> {
+        let mut state = self.inner.borrow_mut();
+        if state.binding.is_some() {
+            state.last_binding_error = Some(ChartError::AlreadyBound);
+            return Err(ChartError::AlreadyBound);
         }
-        binding
+        state.next_binding = state
+            .next_binding
+            .checked_add(1)
+            .expect("arkit_chart: controller binding id space exhausted");
+        let binding = state.next_binding;
+        state.binding = Some(ChartControllerBinding {
+            id: binding,
+            dispatcher,
+            source_reader,
+            resolved_reader,
+            ready_reader,
+            size_reader,
+            hit_reader,
+        });
+        state.last_binding_error = None;
+        drop(state);
+        Ok(ChartControllerLease {
+            controller: self.clone(),
+            binding,
+        })
     }
 
     fn unbind(&self, binding: u64) {
@@ -237,7 +382,8 @@ impl std::fmt::Debug for ChartController {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("ChartController")
-            .field("mounted", &self.is_mounted())
+            .field("bound", &self.is_bound())
+            .field("ready", &self.is_ready())
             .finish_non_exhaustive()
     }
 }
@@ -319,6 +465,7 @@ struct ChartRenderStateInner {
     action_tooltip: RefCell<Option<ChartEvent>>,
     highlighted: RefCell<Option<ChartEvent>>,
     draw_hits: RefCell<Vec<HitRegion>>,
+    has_drawn: Cell<bool>,
     hidden_series: RefCell<BTreeSet<usize>>,
     selected_items: RefCell<BTreeSet<(usize, usize)>>,
     zoom_windows: RefCell<Vec<ZoomWindow>>,
@@ -382,6 +529,22 @@ struct BrushDrag {
     pointer_last: (f32, f32),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ChartAnimationGates {
+    finite: bool,
+    continuous: bool,
+}
+
+fn chart_animation_gates(app_foreground: bool, component_visible: bool) -> ChartAnimationGates {
+    ChartAnimationGates {
+        // A finite transition runs offscreen for at most its configured
+        // duration. Letting it converge avoids retaining a collapsed initial
+        // canvas forever when a platform visibility notification is missed.
+        finite: app_foreground,
+        continuous: app_foreground && component_visible,
+    }
+}
+
 impl ChartRenderState {
     #[cfg(test)]
     fn new(option: ChartOption) -> Self {
@@ -397,13 +560,14 @@ impl ChartRenderState {
         transition_driver: ChartTransitionDriver,
         state_transition_driver: ChartTransitionDriver,
     ) -> Self {
+        let prop_option = option.clone();
+        let source_option = option.clone();
+        let option = crate::parser::resolve_option_data(option);
         let zoom_windows = initial_windows(&option);
         let selected_items = initial_selected_items(&option);
         let hidden_series = initial_hidden_series(&option);
         let option = SharedChartOption::new(option);
         let transition = ChartTransition::initial(option.snapshot(), transition_driver.clone());
-        let prop_option = option.borrow().clone();
-        let source_option = prop_option.clone();
         Self {
             inner: Rc::new(ChartRenderStateInner {
                 prop_option: RefCell::new(prop_option),
@@ -413,6 +577,7 @@ impl ChartRenderState {
                 action_tooltip: RefCell::new(None),
                 highlighted: RefCell::new(None),
                 draw_hits: RefCell::new(Vec::new()),
+                has_drawn: Cell::new(false),
                 hidden_series: RefCell::new(hidden_series),
                 selected_items: RefCell::new(selected_items),
                 zoom_windows: RefCell::new(zoom_windows.clone()),
@@ -550,7 +715,7 @@ impl ChartRenderState {
         if width > 0.0 && height > 0.0 {
             self.apply_media(width, height);
         } else {
-            self.replace_option(option.clone());
+            self.replace_option(crate::parser::resolve_option_data(option.clone()));
         }
     }
 
@@ -725,7 +890,7 @@ impl ChartRenderState {
             return;
         }
         let resolved = crate::parser::resolve_media_option(&source, width, height, timeline_index)
-            .unwrap_or_else(|_| source.clone());
+            .unwrap_or_else(|_| crate::parser::resolve_option_data(source.clone()));
         drop(source);
         self.media_signature.replace(signature);
         self.media_timeline_index.set(timeline_index);
@@ -756,14 +921,15 @@ impl ChartRenderState {
         snapshot
     }
 
-    fn append_data(&self, chunk: &ChartAppendData) -> bool {
+    fn append_data(&self, chunk: &ChartAppendData) -> Result<ChartCommandStatus, ChartError> {
+        validate_append_target(&self.source_option.borrow(), chunk)?;
         if chunk.is_empty() {
-            return false;
+            return Ok(ChartCommandStatus::Unchanged);
         }
         let previous_visual = self.animated_option();
         let changed = append_data_to_option(&mut self.option.borrow_mut(), chunk);
         if !changed {
-            return false;
+            return Err(ChartError::UnsupportedOperation);
         }
         append_data_to_option(&mut self.source_option.borrow_mut(), chunk);
         let target = self.option.snapshot();
@@ -772,7 +938,7 @@ impl ChartRenderState {
             target,
             self.transition_driver.clone(),
         ));
-        true
+        Ok(ChartCommandStatus::Applied)
     }
 
     fn clear(&self) {
@@ -1038,9 +1204,9 @@ impl ChartRenderState {
         };
         let mut option = if width > 0.0 && height > 0.0 {
             crate::parser::resolve_media_option(&source, width, height, restore_timeline_index)
-                .unwrap_or_else(|_| source.clone())
+                .unwrap_or_else(|_| crate::parser::resolve_option_data(source.clone()))
         } else {
-            source.clone()
+            crate::parser::resolve_option_data(source.clone())
         };
         let signature = crate::parser::media_signature(&source, width, height);
         drop(source);
@@ -1079,7 +1245,8 @@ impl ChartRenderState {
             .replace(initial_selected_items(&self.option.borrow()));
     }
 
-    fn dispatch_action(&self, action: ChartAction) -> Option<ChartRuntimeEvent> {
+    fn dispatch_action(&self, action: ChartAction) -> Result<ChartActionOutcome, ChartError> {
+        self.validate_action(&action.kind)?;
         let action_name = chart_action_name(&action.kind);
         let event_name = chart_action_event_name(&action.kind);
         let mut source = None;
@@ -1130,7 +1297,9 @@ impl ChartRenderState {
                 end,
             } => {
                 let mut windows = self.zoom_windows.borrow_mut();
-                let window = windows.get_mut(*data_zoom_index)?;
+                let window = windows
+                    .get_mut(*data_zoom_index)
+                    .expect("validated dataZoom target");
                 let next = ZoomWindow::new(*start, *end);
                 let changed = *window != next;
                 *window = next;
@@ -1155,7 +1324,7 @@ impl ChartRenderState {
             }
             ChartActionKind::TimelinePlayChange { play_state } => {
                 let mut option = self.option.borrow_mut();
-                let timeline = option.timeline.as_mut()?;
+                let timeline = option.timeline.as_mut().expect("validated timeline target");
                 let changed = timeline.auto_play != *play_state;
                 timeline.auto_play = *play_state;
                 self.timeline_elapsed_ms.set(0);
@@ -1166,31 +1335,114 @@ impl ChartRenderState {
                 true
             }
         };
-        if !changed || action.silent {
-            return None;
-        }
-        Some(self.runtime_event(event_name, Some(action_name), source))
+        let event = if !changed || action.silent {
+            None
+        } else {
+            Some(self.runtime_event(event_name, Some(action_name), source))
+        };
+        Ok(ChartActionOutcome {
+            status: if changed {
+                ChartCommandStatus::Applied
+            } else {
+                ChartCommandStatus::Unchanged
+            },
+            event,
+        })
     }
 
-    fn dispatch_actions(&self, actions: Vec<ChartAction>) -> Option<ChartRuntimeEvent> {
-        let batch = actions
-            .into_iter()
-            .filter_map(|action| self.dispatch_action(action))
-            .map(|event| ChartRuntimeEventBatchItem {
-                event_type: event.event_type,
-                source: event.source,
-                from_action: event.from_action,
+    fn dispatch_actions(
+        &self,
+        actions: Vec<ChartAction>,
+    ) -> Result<ChartActionOutcome, ChartError> {
+        if actions.len() > 1
+            && actions.iter().any(|action| {
+                matches!(
+                    &action.kind,
+                    ChartActionKind::TimelineChange { .. } | ChartActionKind::Restore
+                )
             })
-            .collect::<Vec<_>>();
-        let first_type = batch.first()?.event_type.as_str();
-        let event_type = if batch.iter().all(|item| item.event_type == first_type) {
-            first_type.to_string()
+        {
+            return Err(ChartError::UnsupportedOperation);
+        }
+        // Validate the whole batch before its first mutation. In particular,
+        // valid commands preceding an invalid target must never become a
+        // silent partial commit with no redraw or aggregate event.
+        for action in &actions {
+            self.validate_action(&action.kind)?;
+        }
+        let mut applied = false;
+        let mut batch = Vec::new();
+        for action in actions {
+            let outcome = self.dispatch_action(action)?;
+            applied |= outcome.status == ChartCommandStatus::Applied;
+            if let Some(event) = outcome.event {
+                batch.push(ChartRuntimeEventBatchItem {
+                    event_type: event.event_type,
+                    source: event.source,
+                    from_action: event.from_action,
+                });
+            }
+        }
+        let event = if batch.is_empty() {
+            None
         } else {
-            String::from("batch")
+            let first_type = batch[0].event_type.clone();
+            let event_type = if batch.iter().all(|item| item.event_type == first_type) {
+                first_type
+            } else {
+                String::from("batch")
+            };
+            let mut event = self.runtime_event(event_type, Some("batch"), None);
+            event.batch = batch;
+            Some(event)
         };
-        let mut event = self.runtime_event(event_type, Some("batch"), None);
-        event.batch = batch;
-        Some(event)
+        Ok(ChartActionOutcome {
+            status: if applied {
+                ChartCommandStatus::Applied
+            } else {
+                ChartCommandStatus::Unchanged
+            },
+            event,
+        })
+    }
+
+    fn validate_action(&self, action: &ChartActionKind) -> Result<(), ChartError> {
+        let option = self.option.borrow();
+        match action {
+            ChartActionKind::Highlight(target)
+            | ChartActionKind::Downplay(target)
+            | ChartActionKind::Select(target)
+            | ChartActionKind::Unselect(target)
+            | ChartActionKind::ToggleSelect(target)
+            | ChartActionKind::ShowTip(target) => resolve_action_target(&option, target)
+                .map(|_| ())
+                .ok_or(ChartError::InvalidTarget),
+            ChartActionKind::LegendSelect { name }
+            | ChartActionKind::LegendUnselect { name }
+            | ChartActionKind::LegendToggleSelect { name } => self
+                .series_index_by_name(name)
+                .map(|_| ())
+                .ok_or(ChartError::InvalidTarget),
+            ChartActionKind::DataZoom {
+                data_zoom_index, ..
+            } => self
+                .zoom_windows
+                .borrow()
+                .get(*data_zoom_index)
+                .map(|_| ())
+                .ok_or(ChartError::InvalidTarget),
+            ChartActionKind::TimelineChange { current_index } => option
+                .timeline_options
+                .get(*current_index)
+                .map(|_| ())
+                .ok_or(ChartError::InvalidTarget),
+            ChartActionKind::TimelinePlayChange { .. } => option
+                .timeline
+                .as_ref()
+                .map(|_| ())
+                .ok_or(ChartError::InvalidTarget),
+            ChartActionKind::HideTip | ChartActionKind::Restore => Ok(()),
+        }
     }
 
     fn apply_selection_action(&self, action: &ChartActionKind, event: &ChartEvent) -> bool {
@@ -1815,6 +2067,26 @@ fn append_data_to_option(option: &mut ChartOption, chunk: &ChartAppendData) -> b
     }
 }
 
+fn validate_append_target(option: &ChartOption, chunk: &ChartAppendData) -> Result<(), ChartError> {
+    let series_index = chunk.series_index();
+    let Some(series) = option.series.get(series_index) else {
+        return Err(ChartError::InvalidTarget);
+    };
+    match (chunk, series) {
+        (ChartAppendData::Scatter { .. }, Series::Scatter(series)) => {
+            if series.options.extra.contains_key("datasetIndex")
+                || (!option.datasets.is_empty() && series.data.is_empty())
+            {
+                Err(ChartError::UnsupportedOperation)
+            } else {
+                Ok(())
+            }
+        }
+        (ChartAppendData::Lines { .. }, Series::Lines(_)) => Ok(()),
+        _ => Err(ChartError::UnsupportedOperation),
+    }
+}
+
 fn initial_hidden_series(option: &ChartOption) -> BTreeSet<usize> {
     let Some(legend) = option.legend.as_ref() else {
         return BTreeSet::new();
@@ -1872,16 +2144,19 @@ fn mark_node_dirty(node: &MountedNodeLease) {
     let _ = unsafe { node.with_native(|node| node.mark_dirty(NodeDirtyFlag::NeedRender)) };
 }
 
-fn mounted_node_size(node: &MountedNodeLease) -> (f32, f32) {
+fn mounted_node_size(node: &MountedNodeLease) -> Option<(f32, f32)> {
     // SAFETY: layout is read synchronously from the mounted node.
     unsafe {
         node.with_native(|node| {
-            node.layout_size()
-                .map(|size| (size.width.max(1) as f32, size.height.max(1) as f32))
-                .unwrap_or((1.0, 1.0))
+            let size = node.layout_size().ok()?;
+            (size.width > 0 && size.height > 0).then_some((size.width as f32, size.height as f32))
         })
     }
-    .unwrap_or((1.0, 1.0))
+    .flatten()
+}
+
+fn chart_native_ready(has_drawn: bool, size: (f32, f32)) -> bool {
+    has_drawn && size.0.is_finite() && size.1.is_finite() && size.0 > 0.0 && size.1 > 0.0
 }
 
 /// Render an ECharts-compatible option through an ArkUI native canvas.
@@ -1896,7 +2171,7 @@ pub fn ECharts(props: EChartsProps) -> Element {
     // the visibility hook in the background and corrupt Dioxus' hook indices.
     let app_foreground = use_app_foreground();
     let component_visible = use_component_visibility(node_ref.clone());
-    let lifecycle_active = app_foreground && component_visible;
+    let animation_gates = chart_animation_gates(app_foreground, component_visible);
     let transition_progress = arkit_animation::use_animatable(0.0_f32);
     let state_progress = arkit_animation::use_animatable(0.0_f32);
     let clock_pulse = arkit_animation::use_animatable(0.0_f32);
@@ -1940,68 +2215,89 @@ pub fn ECharts(props: EChartsProps) -> Element {
     let event_handler = use_hook(|| Rc::new(Cell::new(None::<EventHandler<ChartRuntimeEvent>>)));
     select_handler.set(props.on_select);
     event_handler.set(props.on_event);
-    let controller_binding = use_hook(|| Rc::new(RefCell::new(None::<(ChartController, u64)>)));
+    let controller_binding = use_hook(|| Rc::new(RefCell::new(None::<ChartControllerLease>)));
     let controller_changed = {
         let binding = controller_binding.borrow();
         match (binding.as_ref(), props.controller.as_ref()) {
-            (Some((current, _)), Some(next)) => current != next,
+            (Some(current), Some(next)) => current.controller.ne(next),
             (None, None) => false,
             _ => true,
         }
     };
     if controller_changed {
-        if let Some((controller, binding)) = controller_binding.borrow_mut().take() {
-            controller.unbind(binding);
-        }
+        // Dropping the epoch lease releases only this component's binding.
+        controller_binding.borrow_mut().take();
         if let Some(controller) = props.controller.clone() {
             let command_state = state.clone();
             let command_clock = animation_clock.clone();
             let command_node = node_ref.clone();
             let command_events = event_handler.clone();
             let option_state = state.clone();
+            let source_state = state.clone();
             let size_state = state.clone();
+            let ready_state = state.clone();
+            let ready_node = node_ref.clone();
+            let hit_state = state.clone();
             let binding = controller.bind(
                 Rc::new(move |command| {
-                    let event = match command {
+                    let outcome = match command {
                         ChartCommand::Action(action) => command_state.dispatch_action(action),
                         ChartCommand::Actions(actions) => command_state.dispatch_actions(actions),
                         ChartCommand::AppendData(data) => {
-                            command_state.append_data(&data);
-                            None
+                            command_state
+                                .append_data(&data)
+                                .map(|status| ChartActionOutcome {
+                                    status,
+                                    event: None,
+                                })
                         }
                         ChartCommand::Clear => {
                             command_state.clear();
-                            None
+                            Ok(ChartActionOutcome {
+                                status: ChartCommandStatus::Applied,
+                                event: None,
+                            })
                         }
-                    };
-                    if let Some(node) = command_node.current() {
-                        mark_node_dirty(&node);
+                    }?;
+                    if outcome.status == ChartCommandStatus::Applied {
+                        if let Some(node) = command_node.current() {
+                            mark_node_dirty(&node);
+                        }
+                        if command_state.needs_animation_clock() {
+                            command_clock.start();
+                        } else {
+                            command_clock.stop();
+                        }
+                        if let (Some(event), Some(handler)) = (outcome.event, command_events.get())
+                        {
+                            handler.call(event);
+                        }
                     }
-                    if command_state.needs_animation_clock() {
-                        command_clock.start();
-                    } else {
-                        command_clock.stop();
-                    }
-                    if let (Some(event), Some(handler)) = (event, command_events.get()) {
-                        handler.call(event);
-                    }
+                    Ok(outcome.status)
                 }),
+                Rc::new(move || source_state.source_option.borrow().clone()),
                 Rc::new(move || option_state.runtime_option()),
                 Rc::new(move || {
-                    let (width, height) = size_state.media_size.get();
-                    [width, height]
+                    ready_node.current().is_some()
+                        && chart_native_ready(
+                            ready_state.has_drawn.get(),
+                            ready_state.media_size.get(),
+                        )
                 }),
+                Rc::new(move || {
+                    let (width, height) = size_state.media_size.get();
+                    LogicalSizeVp::new(width, height)
+                }),
+                Rc::new(move |point| hit_state.cached_hit(point.x, point.y)),
             );
-            controller_binding
-                .borrow_mut()
-                .replace((controller, binding));
+            if let Ok(binding) = binding {
+                controller_binding.borrow_mut().replace(binding);
+            }
         }
     }
     let drop_binding = controller_binding.clone();
     use_drop(move || {
-        if let Some((controller, binding)) = drop_binding.borrow_mut().take() {
-            controller.unbind(binding);
-        }
+        drop_binding.borrow_mut().take();
     });
     let draw_state = state.clone();
     let registered_for_effect = registered_node.clone();
@@ -2012,10 +2308,13 @@ pub fn ECharts(props: EChartsProps) -> Element {
     use_mounted_node(node_ref.clone(), move |node| {
         let Some(node) = node else {
             registered_for_effect.set(None);
+            draw_state.has_drawn.set(false);
+            draw_state.draw_hits.borrow_mut().clear();
             return;
         };
         let native_key = node.epoch();
         if registered_for_effect.get() != Some(native_key) {
+            draw_state.has_drawn.set(false);
             let draw_state = draw_state.clone();
             // SAFETY: custom-draw is separate from the renderer's normal node
             // event route. The callback belongs to this mounted Custom node.
@@ -2061,6 +2360,7 @@ pub fn ECharts(props: EChartsProps) -> Element {
                             },
                         );
                         draw_state.draw_hits.replace(hits);
+                        draw_state.has_drawn.set(true);
                         if let Some(drag) = *draw_state.toolbox_zoom_drag.borrow() {
                             draw_toolbox_zoom_selection(
                                 &canvas,
@@ -2078,14 +2378,14 @@ pub fn ECharts(props: EChartsProps) -> Element {
         }
         // The initial commands may have been queued before the native node was
         // mounted. Resume once to wake the root FrameDriver with a valid node.
-        if lifecycle_active {
+        if animation_gates.finite {
             draw_transition_progress.controls().resume();
             draw_state_progress.controls().resume();
         } else {
             draw_transition_progress.controls().pause();
             draw_state_progress.controls().pause();
         }
-        if lifecycle_active && draw_state.needs_animation_clock() {
+        if animation_gates.continuous && draw_state.needs_animation_clock() {
             draw_clock.start();
             if draw_clock.is_running() {
                 draw_clock.poke();
@@ -2096,21 +2396,25 @@ pub fn ECharts(props: EChartsProps) -> Element {
         mark_node_dirty(&node);
     });
 
+    let foreground_transition_progress = transition_progress.clone();
+    let foreground_state_progress = state_progress.clone();
+    use_effect(use_reactive(&animation_gates.finite, move |active| {
+        if active {
+            foreground_transition_progress.controls().resume();
+            foreground_state_progress.controls().resume();
+        } else {
+            foreground_transition_progress.controls().pause();
+            foreground_state_progress.controls().pause();
+        }
+    }));
+
     let lifecycle_clock = animation_clock.clone();
     let lifecycle_state = state.clone();
-    let lifecycle_transition_progress = transition_progress.clone();
-    let lifecycle_state_progress = state_progress.clone();
-    use_effect(use_reactive(&lifecycle_active, move |active| {
-        if active {
-            lifecycle_transition_progress.controls().resume();
-            lifecycle_state_progress.controls().resume();
-            if lifecycle_state.needs_animation_clock() {
-                lifecycle_clock.start();
-                lifecycle_clock.poke();
-            }
+    use_effect(use_reactive(&animation_gates.continuous, move |active| {
+        if active && lifecycle_state.needs_animation_clock() {
+            lifecycle_clock.start();
+            lifecycle_clock.poke();
         } else {
-            lifecycle_transition_progress.controls().pause();
-            lifecycle_state_progress.controls().pause();
             lifecycle_clock.stop();
         }
     }));
@@ -2133,7 +2437,9 @@ pub fn ECharts(props: EChartsProps) -> Element {
                 let Some(node) = node_ref.current() else {
                     return;
                 };
-                let size = mounted_node_size(&node);
+                let Some(size) = mounted_node_size(&node) else {
+                    return;
+                };
                 let ratio = pixel_ratio();
                 let logical_size = (size.0 / ratio, size.1 / ratio);
                 click_state.apply_media(logical_size.0, logical_size.1);
@@ -2986,7 +3292,23 @@ fn toolbox_event(name: &str, x: f32, y: f32) -> ChartEvent {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::Series;
+    use crate::model::{Dataset, Series};
+
+    fn dataset_option(rows: [(&str, i32); 2]) -> ChartOption {
+        ChartOption::new()
+            .dataset(Dataset {
+                source: vec![
+                    vec!["day".into(), "value".into()],
+                    vec![rows[0].0.into(), rows[0].1.into()],
+                    vec![rows[1].0.into(), rows[1].1.into()],
+                ],
+                dimensions: vec!["day".into(), "value".into()],
+                source_header: true,
+                id: None,
+                extra: Default::default(),
+            })
+            .push_series(Series::line("Dataset", []))
+    }
 
     #[test]
     fn render_state_replaces_option_and_clears_stale_selection() {
@@ -3012,6 +3334,80 @@ mod tests {
 
         assert_eq!(state.option.borrow().title.as_ref().unwrap().text, "next");
         assert!(state.selected.borrow().is_none());
+    }
+
+    #[test]
+    fn offscreen_foreground_charts_finish_finite_but_stop_continuous_animation() {
+        assert_eq!(
+            chart_animation_gates(true, false),
+            ChartAnimationGates {
+                finite: true,
+                continuous: false,
+            }
+        );
+        assert_eq!(
+            chart_animation_gates(false, true),
+            ChartAnimationGates {
+                finite: false,
+                continuous: false,
+            }
+        );
+        assert_eq!(
+            chart_animation_gates(true, true),
+            ChartAnimationGates {
+                finite: true,
+                continuous: true,
+            }
+        );
+    }
+
+    #[test]
+    fn render_state_resolves_typed_dataset_on_create_update_and_restore() {
+        let initial = dataset_option([("Mon", 1), ("Tue", 2)]);
+        let state = ChartRenderState::new(initial);
+        {
+            let source_option = state.source_option.borrow();
+            let Series::Line(source) = &source_option.series[0] else {
+                panic!("line")
+            };
+            assert!(source.data.is_empty(), "source option must stay unresolved");
+        }
+        {
+            let rendered_option = state.option.borrow();
+            let Series::Line(rendered) = &rendered_option.series[0] else {
+                panic!("line")
+            };
+            assert_eq!(rendered.data[1].number_opt(0), Some(2.0));
+        }
+
+        let update = dataset_option([("Wed", 10), ("Thu", 20)]);
+        state.update_option(&update);
+        {
+            let source_option = state.source_option.borrow();
+            let Series::Line(source) = &source_option.series[0] else {
+                panic!("line")
+            };
+            assert!(
+                source.data.is_empty(),
+                "updates must retain source semantics"
+            );
+        }
+        {
+            let rendered_option = state.option.borrow();
+            let Series::Line(rendered) = &rendered_option.series[0] else {
+                panic!("line")
+            };
+            assert_eq!(rendered.data[0].number_opt(0), Some(10.0));
+            assert_eq!(rendered.data[1].number_opt(0), Some(20.0));
+            assert_eq!(rendered_option.x_axis[0].data, ["Wed", "Thu"]);
+        }
+
+        state.restore();
+        let restored_option = state.option.borrow();
+        let Series::Line(restored) = &restored_option.series[0] else {
+            panic!("line")
+        };
+        assert_eq!(restored.data[1].number_opt(0), Some(20.0));
     }
 
     #[test]
@@ -3210,6 +3606,8 @@ mod tests {
 
         let highlight = state
             .dispatch_action(ChartAction::new(ChartActionKind::Highlight(target.clone())))
+            .unwrap()
+            .event
             .unwrap();
         assert_eq!(highlight.event_type, "highlight");
         assert_eq!(highlight.source.as_ref().unwrap().data_index, 1);
@@ -3217,6 +3615,8 @@ mod tests {
 
         let selected = state
             .dispatch_action(ChartAction::new(ChartActionKind::Select(target.clone())))
+            .unwrap()
+            .event
             .unwrap();
         assert_eq!(selected.event_type, "selectchanged");
         assert_eq!(selected.from_action.as_deref(), Some("select"));
@@ -3224,6 +3624,8 @@ mod tests {
 
         let shown = state
             .dispatch_action(ChartAction::new(ChartActionKind::ShowTip(target.clone())))
+            .unwrap()
+            .event
             .unwrap();
         assert_eq!(shown.event_type, "showTip");
         assert_eq!(
@@ -3249,12 +3651,20 @@ mod tests {
         );
         assert_eq!(state.highlighted.borrow().as_ref().unwrap().value, [25.0]);
 
-        assert!(state
-            .dispatch_action(ChartAction::new(ChartActionKind::Unselect(target.clone())).silent())
-            .is_none());
+        assert_eq!(
+            state
+                .dispatch_action(
+                    ChartAction::new(ChartActionKind::Unselect(target.clone())).silent()
+                )
+                .unwrap()
+                .status,
+            ChartCommandStatus::Applied
+        );
         assert!(state.selected_items.borrow().is_empty());
         assert!(state
             .dispatch_action(ChartAction::new(ChartActionKind::Downplay(target)))
+            .unwrap()
+            .event
             .is_some());
         assert!(state.highlighted.borrow().is_none());
 
@@ -3263,6 +3673,8 @@ mod tests {
                 ChartAction::new(ChartActionKind::Select(ChartActionTarget::item(0, 0))),
                 ChartAction::new(ChartActionKind::Select(ChartActionTarget::item(0, 1))),
             ])
+            .unwrap()
+            .event
             .unwrap();
         assert_eq!(batch.event_type, "selectchanged");
         assert_eq!(batch.from_action.as_deref(), Some("batch"));
@@ -3271,33 +3683,185 @@ mod tests {
     }
 
     #[test]
-    fn controller_replays_actions_queued_before_mount() {
+    fn invalid_batch_target_does_not_partially_apply_earlier_actions() {
+        let option = ChartOption::new().push_series(Series::bar("Orders", [10.0]));
+        let state = ChartRenderState::new(option);
+        let result = state.dispatch_actions(vec![
+            ChartAction::new(ChartActionKind::Select(ChartActionTarget::item(0, 0))),
+            ChartAction::new(ChartActionKind::Select(ChartActionTarget::item(9, 0))),
+        ]);
+        assert!(matches!(result, Err(ChartError::InvalidTarget)));
+        assert!(state.selected_items.borrow().is_empty());
+    }
+
+    #[test]
+    fn structural_action_batch_is_rejected_before_timeline_mutation() {
+        let option = ChartOption::from_json_str(
+            r#"{
+                "baseOption":{"timeline":{"currentIndex":0,"data":["A","B"]}},
+                "options":[
+                    {"series":[{"type":"bar","data":[1]}]},
+                    {"series":[]}
+                ]
+            }"#,
+        )
+        .unwrap();
+        let state = ChartRenderState::new(option);
+        let result = state.dispatch_actions(vec![
+            ChartAction::new(ChartActionKind::TimelineChange { current_index: 1 }),
+            ChartAction::new(ChartActionKind::Select(ChartActionTarget::item(0, 0))),
+        ]);
+        assert!(matches!(result, Err(ChartError::UnsupportedOperation)));
+        assert_eq!(
+            state
+                .option
+                .borrow()
+                .timeline
+                .as_ref()
+                .unwrap()
+                .current_index,
+            0
+        );
+        assert_eq!(state.option.borrow().series.len(), 1);
+    }
+
+    #[test]
+    fn native_readiness_rejects_missing_or_zero_measurements() {
+        assert!(!chart_native_ready(false, (320.0, 240.0)));
+        assert!(!chart_native_ready(true, (0.0, 240.0)));
+        assert!(!chart_native_ready(true, (320.0, 0.0)));
+        assert!(!chart_native_ready(true, (f32::NAN, 240.0)));
+        assert!(chart_native_ready(true, (320.0, 240.0)));
+    }
+
+    #[test]
+    fn controller_requires_explicit_binding_and_never_replays_commands() {
         let controller = ChartController::new();
-        controller.dispatch_action(ChartAction::new(ChartActionKind::HideTip));
+        assert_eq!(
+            controller.dispatch_action(ChartAction::new(ChartActionKind::HideTip)),
+            Err(ChartError::NotBound)
+        );
         let received = Rc::new(RefCell::new(Vec::new()));
         let output = received.clone();
-        let binding = controller.bind(
-            Rc::new(move |command| output.borrow_mut().push(command)),
-            Rc::new(|| ChartOption::new().title("mounted")),
-            Rc::new(|| [320.0, 240.0]),
-        );
-        assert!(controller.is_mounted());
-        assert_eq!(received.borrow().len(), 1);
-        assert!(matches!(
-            &received.borrow()[0],
-            ChartCommand::Action(ChartAction {
-                kind: ChartActionKind::HideTip,
-                ..
-            })
-        ));
+        let ready = Rc::new(Cell::new(false));
+        let ready_reader = ready.clone();
+        let binding = controller
+            .bind(
+                Rc::new(move |command| {
+                    output.borrow_mut().push(command);
+                    Ok(ChartCommandStatus::Applied)
+                }),
+                Rc::new(|| ChartOption::new().title("source")),
+                Rc::new(|| ChartOption::new().title("mounted")),
+                Rc::new(move || ready_reader.get()),
+                Rc::new(|| LogicalSizeVp::new(320.0, 240.0)),
+                Rc::new(|point| Some(toolbox_event("cached", point.x, point.y))),
+            )
+            .unwrap();
+        assert!(controller.is_bound());
+        assert!(!controller.is_ready());
         assert_eq!(
-            controller.get_option().unwrap().title.unwrap().text,
+            controller.dispatch_action(ChartAction::new(ChartActionKind::HideTip)),
+            Err(ChartError::NotReady)
+        );
+        assert!(received.borrow().is_empty());
+        ready.set(true);
+        assert_eq!(
+            controller.dispatch_action(ChartAction::new(ChartActionKind::HideTip)),
+            Ok(ChartCommandStatus::Applied)
+        );
+        assert_eq!(received.borrow().len(), 1);
+        assert_eq!(
+            controller
+                .get_option()
+                .unwrap()
+                .option()
+                .title
+                .as_ref()
+                .unwrap()
+                .text,
             "mounted"
         );
-        assert_eq!(controller.get_size(), Some([320.0, 240.0]));
-        controller.unbind(binding);
-        assert!(!controller.is_mounted());
-        assert!(controller.get_option().is_none());
+        assert_eq!(
+            controller.get_source_option().unwrap().title.unwrap().text,
+            "source"
+        );
+        assert_eq!(controller.get_size(), Ok(LogicalSizeVp::new(320.0, 240.0)));
+        assert_eq!(
+            controller
+                .hit_test(LocalVpPoint::new(12.0, 34.0))
+                .unwrap()
+                .unwrap()
+                .name
+                .as_deref(),
+            Some("cached")
+        );
+        drop(binding);
+        assert!(!controller.is_bound());
+        assert_eq!(controller.get_option(), Err(ChartError::NotBound));
+        assert_eq!(
+            controller.dispatch_action(ChartAction::new(ChartActionKind::HideTip)),
+            Err(ChartError::NotBound)
+        );
+
+        let replayed = received.clone();
+        let rebound = controller
+            .bind(
+                Rc::new(move |command| {
+                    replayed.borrow_mut().push(command);
+                    Ok(ChartCommandStatus::Applied)
+                }),
+                Rc::new(ChartOption::new),
+                Rc::new(ChartOption::new),
+                Rc::new(|| true),
+                Rc::new(|| LogicalSizeVp::new(1.0, 1.0)),
+                Rc::new(|_| None),
+            )
+            .unwrap();
+        assert_eq!(received.borrow().len(), 1, "unbound calls must not replay");
+        drop(rebound);
+    }
+
+    #[test]
+    fn duplicate_controller_binding_is_rejected_without_stealing_first_target() {
+        let controller = ChartController::new();
+        let first_calls = Rc::new(Cell::new(0));
+        let calls = first_calls.clone();
+        let first = controller
+            .bind(
+                Rc::new(move |_| {
+                    calls.set(calls.get() + 1);
+                    Ok(ChartCommandStatus::Applied)
+                }),
+                Rc::new(ChartOption::new),
+                Rc::new(ChartOption::new),
+                Rc::new(|| true),
+                Rc::new(|| LogicalSizeVp::new(1.0, 1.0)),
+                Rc::new(|_| None),
+            )
+            .unwrap();
+        assert!(matches!(
+            controller.bind(
+                Rc::new(|_| Ok(ChartCommandStatus::Applied)),
+                Rc::new(ChartOption::new),
+                Rc::new(ChartOption::new),
+                Rc::new(|| true),
+                Rc::new(|| LogicalSizeVp::new(1.0, 1.0)),
+                Rc::new(|_| None),
+            ),
+            Err(ChartError::AlreadyBound)
+        ));
+        assert_eq!(
+            controller.last_binding_error(),
+            Some(ChartError::AlreadyBound)
+        );
+        assert_eq!(
+            controller.clear(),
+            Ok(ChartCommandStatus::Applied),
+            "the first binding remains authoritative"
+        );
+        assert_eq!(first_calls.get(), 1);
+        drop(first);
     }
 
     #[test]
@@ -3311,10 +3875,13 @@ mod tests {
         series.options.selected_mode = Some(String::from("multiple"));
         let prop_option = option.clone();
         let state = ChartRenderState::new(option);
-        assert!(state.append_data(&ChartAppendData::scatter(
-            0,
-            [DataPoint::values([3.0, 4.0]), DataPoint::values([5.0, 6.0])],
-        )));
+        assert_eq!(
+            state.append_data(&ChartAppendData::scatter(
+                0,
+                [DataPoint::values([3.0, 4.0]), DataPoint::values([5.0, 6.0])],
+            )),
+            Ok(ChartCommandStatus::Applied)
+        );
         assert_eq!(
             match &state.option.borrow().series[0] {
                 Series::Scatter(series) => series.data.len(),
@@ -3345,6 +3912,49 @@ mod tests {
             series.data[2].extra.get("selected"),
             Some(&serde_json::json!(true))
         );
+    }
+
+    #[test]
+    fn append_data_reports_invalid_and_unsupported_targets_without_mutation() {
+        let bar =
+            ChartRenderState::new(ChartOption::new().push_series(Series::bar("Orders", [10.0])));
+        assert_eq!(
+            bar.append_data(&ChartAppendData::scatter(
+                0,
+                [DataPoint::values([1.0, 2.0])],
+            )),
+            Err(ChartError::UnsupportedOperation)
+        );
+        assert_eq!(
+            bar.append_data(&ChartAppendData::scatter(
+                9,
+                [DataPoint::values([1.0, 2.0])],
+            )),
+            Err(ChartError::InvalidTarget)
+        );
+
+        let dataset_scatter = ChartRenderState::new(
+            ChartOption::new()
+                .dataset(Dataset {
+                    source: vec![vec!["x".into(), "y".into()], vec![1.into(), 2.into()]],
+                    dimensions: vec!["x".into(), "y".into()],
+                    source_header: true,
+                    id: None,
+                    extra: Default::default(),
+                })
+                .push_series(Series::scatter("Dataset", [])),
+        );
+        assert_eq!(
+            dataset_scatter.append_data(&ChartAppendData::scatter(
+                0,
+                [DataPoint::values([3.0, 4.0])],
+            )),
+            Err(ChartError::UnsupportedOperation)
+        );
+        let Series::Scatter(source) = &dataset_scatter.source_option.borrow().series[0] else {
+            panic!("scatter")
+        };
+        assert!(source.data.is_empty());
     }
 
     #[test]

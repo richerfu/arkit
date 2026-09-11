@@ -4,7 +4,7 @@ use std::rc::{Rc, Weak};
 use arkit_animation_core::TimePoint;
 use arkit_arkui::NativeElementRef;
 
-use crate::AnimationHost;
+use crate::host::AnimationHost;
 
 type FrameSource = Rc<dyn Fn(TimePoint)>;
 

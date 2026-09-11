@@ -7,11 +7,11 @@
 //! share the same request gate, so a burst of native events cannot request the
 //! same data page more than once.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use arkit_prelude::dioxus_elements::event::ScrollData;
-use arkit_prelude::{use_hook, EventHandler};
+use arkit_prelude::{use_drop, use_hook, EventHandler};
 
 /// Externally controlled state for an incremental data source.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
@@ -69,14 +69,74 @@ impl LoadMoreGate {
 /// The controller is controlled by [`LoadMoreState`]. After requesting at a
 /// given `item_count`, it remains latched until the count changes or
 /// [`Self::reset`] is called. This prevents duplicate requests during the
-/// render between an event and the caller switching to `Loading`.
+/// render between an event and the caller switching to `Loading`. Retained
+/// clones read the latest render's count, state, preload window, and callback;
+/// all clones become inert when the owning hook unmounts.
 #[derive(Clone)]
 pub struct LoadMoreController {
-    gate: Rc<LoadMoreGate>,
+    shared: Rc<LoadMoreShared>,
+}
+
+type LoadMoreCallback = Rc<dyn Fn()>;
+
+#[derive(Clone)]
+struct LoadMoreSnapshot {
     item_count: u32,
     state: LoadMoreState,
     preload_items: u32,
-    on_load_more: EventHandler<()>,
+    on_load_more: Option<LoadMoreCallback>,
+}
+
+struct LoadMoreShared {
+    gate: LoadMoreGate,
+    latest: RefCell<LoadMoreSnapshot>,
+}
+
+impl LoadMoreShared {
+    fn new(
+        item_count: u32,
+        state: LoadMoreState,
+        preload_items: u32,
+        on_load_more: LoadMoreCallback,
+    ) -> Self {
+        let gate = LoadMoreGate::default();
+        gate.observe(state);
+        Self {
+            gate,
+            latest: RefCell::new(LoadMoreSnapshot {
+                item_count,
+                state,
+                preload_items,
+                on_load_more: Some(on_load_more),
+            }),
+        }
+    }
+
+    fn update(
+        &self,
+        item_count: u32,
+        state: LoadMoreState,
+        preload_items: u32,
+        on_load_more: LoadMoreCallback,
+    ) {
+        self.gate.observe(state);
+        *self.latest.borrow_mut() = LoadMoreSnapshot {
+            item_count,
+            state,
+            preload_items,
+            on_load_more: Some(on_load_more),
+        };
+    }
+
+    fn snapshot(&self) -> Option<LoadMoreSnapshot> {
+        let snapshot = self.latest.borrow();
+        snapshot.on_load_more.as_ref()?;
+        Some(snapshot.clone())
+    }
+
+    fn deactivate(&self) {
+        self.latest.borrow_mut().on_load_more = None;
+    }
 }
 
 impl LoadMoreController {
@@ -90,8 +150,11 @@ impl LoadMoreController {
     /// Loading starts when the last visible data item enters the configured
     /// preload window. Offset-only events and empty data sets are ignored.
     pub fn on_virtual_scroll(&self, data: ScrollData) {
-        if should_request_from_virtual_range(data, self.item_count, self.preload_items) {
-            self.request_if_ready();
+        let Some(snapshot) = self.shared.snapshot() else {
+            return;
+        };
+        if should_request_from_virtual_range(data, snapshot.item_count, snapshot.preload_items) {
+            self.request_snapshot(snapshot);
         }
     }
 
@@ -102,26 +165,50 @@ impl LoadMoreController {
     /// outside the native adapter callback (for example through the
     /// framework's UI-loop queue) to avoid renderer re-entry.
     pub fn on_virtual_item(&self, index: u32) {
-        if should_request_from_virtual_index(index, self.item_count, self.preload_items) {
-            self.request_if_ready();
+        let Some(snapshot) = self.shared.snapshot() else {
+            return;
+        };
+        if should_request_from_virtual_index(index, snapshot.item_count, snapshot.preload_items) {
+            self.request_snapshot(snapshot);
         }
     }
 
     /// Retry a failed request. Other states deliberately ignore this call.
     pub fn retry(&self) {
-        if self.gate.try_retry(self.item_count, self.state) {
-            self.on_load_more.call(());
+        let Some(snapshot) = self.shared.snapshot() else {
+            return;
+        };
+        if self
+            .shared
+            .gate
+            .try_retry(snapshot.item_count, snapshot.state)
+        {
+            snapshot
+                .on_load_more
+                .expect("active load-more snapshot lost its callback")();
         }
     }
 
     /// Re-arm the current item count after replacing or refreshing the data.
     pub fn reset(&self) {
-        self.gate.reset();
+        self.shared.gate.reset();
     }
 
     fn request_if_ready(&self) {
-        if self.gate.try_request(self.item_count, self.state) {
-            self.on_load_more.call(());
+        if let Some(snapshot) = self.shared.snapshot() {
+            self.request_snapshot(snapshot);
+        }
+    }
+
+    fn request_snapshot(&self, snapshot: LoadMoreSnapshot) {
+        if self
+            .shared
+            .gate
+            .try_request(snapshot.item_count, snapshot.state)
+        {
+            snapshot
+                .on_load_more
+                .expect("active load-more snapshot lost its callback")();
         }
     }
 }
@@ -137,15 +224,20 @@ pub fn use_load_more(
     preload_items: u32,
     on_load_more: EventHandler<()>,
 ) -> LoadMoreController {
-    let gate = use_hook(|| Rc::new(LoadMoreGate::default()));
-    gate.observe(state);
-    LoadMoreController {
-        gate,
-        item_count,
-        state,
-        preload_items,
-        on_load_more,
-    }
+    let callback: LoadMoreCallback = Rc::new(move || on_load_more.call(()));
+    let initial_callback = callback.clone();
+    let shared = use_hook(move || {
+        Rc::new(LoadMoreShared::new(
+            item_count,
+            state,
+            preload_items,
+            initial_callback,
+        ))
+    });
+    shared.update(item_count, state, preload_items, callback);
+    let cleanup = shared.clone();
+    use_drop(move || cleanup.deactivate());
+    LoadMoreController { shared }
 }
 
 fn should_request_from_virtual_range(
@@ -236,5 +328,89 @@ mod tests {
         gate.observe(LoadMoreState::Loading);
         gate.observe(LoadMoreState::Failed);
         assert!(gate.try_retry(20, LoadMoreState::Failed));
+    }
+
+    #[test]
+    fn retained_controller_reads_latest_count_state_and_callback() {
+        let first_calls = Rc::new(Cell::new(0));
+        let count_first = first_calls.clone();
+        let shared = Rc::new(LoadMoreShared::new(
+            10,
+            LoadMoreState::Idle,
+            0,
+            Rc::new(move || count_first.set(count_first.get() + 1)),
+        ));
+        let retained = LoadMoreController {
+            shared: shared.clone(),
+        };
+        let latest_calls = Rc::new(Cell::new(0));
+        let count_latest = latest_calls.clone();
+
+        shared.update(
+            20,
+            LoadMoreState::Loading,
+            0,
+            Rc::new(move || count_latest.set(count_latest.get() + 1)),
+        );
+        retained.on_virtual_item(19);
+        shared.update(20, LoadMoreState::NoMore, 0, Rc::new(|| {}));
+        retained.on_virtual_item(19);
+        let count_latest = latest_calls.clone();
+        shared.update(
+            20,
+            LoadMoreState::Idle,
+            0,
+            Rc::new(move || count_latest.set(count_latest.get() + 1)),
+        );
+        retained.on_virtual_item(9);
+        retained.on_virtual_item(19);
+
+        assert_eq!(first_calls.get(), 0);
+        assert_eq!(latest_calls.get(), 1);
+    }
+
+    #[test]
+    fn callback_runs_after_the_latest_snapshot_borrow_is_released() {
+        let shared = Rc::new(LoadMoreShared::new(
+            10,
+            LoadMoreState::Idle,
+            0,
+            Rc::new(|| {}),
+        ));
+        let deactivate = shared.clone();
+        shared.update(
+            10,
+            LoadMoreState::Idle,
+            0,
+            Rc::new(move || deactivate.deactivate()),
+        );
+        let controller = LoadMoreController {
+            shared: shared.clone(),
+        };
+
+        controller.reach_end();
+        assert!(shared.snapshot().is_none());
+    }
+
+    #[test]
+    fn retained_controller_is_inert_after_owner_deactivation() {
+        let calls = Rc::new(Cell::new(0));
+        let count_calls = calls.clone();
+        let shared = Rc::new(LoadMoreShared::new(
+            1,
+            LoadMoreState::Idle,
+            0,
+            Rc::new(move || count_calls.set(count_calls.get() + 1)),
+        ));
+        let retained = LoadMoreController {
+            shared: shared.clone(),
+        };
+
+        shared.deactivate();
+        retained.reach_end();
+        retained.on_virtual_item(0);
+        retained.retry();
+
+        assert_eq!(calls.get(), 0);
     }
 }

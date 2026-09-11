@@ -1,5 +1,4 @@
-use arkit::prelude::{CanvasColor, CanvasLineCap, CanvasLineJoin};
-use arkit::{CanvasRenderingContext2D, Path2D};
+use arkit::canvas::{CanvasColor, CanvasLineCap, CanvasLineJoin, CanvasRenderingContext2D, Path2D};
 use serde_json::Value;
 
 const TIGER_DATA: &str = include_str!("../assets/tiger.json");

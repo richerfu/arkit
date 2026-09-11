@@ -8,8 +8,8 @@
 //! `column`, `row`, `stack`, `flex`, `text`, `button`, `image`, ...
 //!
 //! Each element module exposes:
-//! - `TAG_NAME: &'static str` — the CamelCase ArkUI tag the renderer maps to a
-//!   native node (e.g. `"Column"`).
+//! - `TAG_NAME: &'static str` — the canonical lowercase ArkUI tag the
+//!   renderer maps to a native node (e.g. `"column"`).
 //! - `NAME_SPACE: Option<&'static str>` — always `Some("arkui")`.
 //! - `pub const` attribute descriptors of type
 //!   `(&'static str, Option<&'static str>, bool)` = `(name, namespace, volatile)`.

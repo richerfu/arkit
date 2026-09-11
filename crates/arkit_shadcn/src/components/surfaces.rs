@@ -332,51 +332,12 @@ impl From<&SonnerToast> for ToastIdentity {
     }
 }
 
-#[derive(Debug)]
-struct LegacyMessageSlot {
-    message: String,
-    revision: u32,
-}
-
 #[derive(Debug, Default)]
 struct SonnerState {
     dismissed: Vec<ToastIdentity>,
-    legacy_messages: Vec<LegacyMessageSlot>,
 }
 
 impl SonnerState {
-    fn reconcile_legacy_messages(&mut self, messages: Vec<String>) -> Vec<SonnerToast> {
-        let message_count = messages.len();
-        let mut toasts = Vec::with_capacity(message_count);
-
-        for (index, message) in messages.into_iter().enumerate() {
-            let revision = match self.legacy_messages.get_mut(index) {
-                Some(slot) if slot.message == message => slot.revision,
-                Some(slot) => {
-                    slot.message.clone_from(&message);
-                    slot.revision = slot
-                        .revision
-                        .checked_add(1)
-                        .expect("sonner legacy message revision space exhausted");
-                    slot.revision
-                }
-                None => {
-                    self.legacy_messages.push(LegacyMessageSlot {
-                        message: message.clone(),
-                        revision: 0,
-                    });
-                    0
-                }
-            };
-            toasts.push(
-                SonnerToast::new(u64::MAX.saturating_sub(index as u64), message).revision(revision),
-            );
-        }
-
-        self.legacy_messages.truncate(message_count);
-        toasts
-    }
-
     fn reconcile_dismissals(&mut self, live: &[ToastIdentity]) {
         self.dismissed.retain(|identity| live.contains(identity));
     }
@@ -406,8 +367,8 @@ fn callback_eq(left: &Option<Rc<dyn Fn()>>, right: &Option<Rc<dyn Fn()>>) -> boo
 /// Props for a standalone toast card.
 #[derive(Props, Clone, PartialEq)]
 pub struct ToastProps {
-    /// Primary line. Kept as `message` for compatibility with the old API.
-    pub message: String,
+    /// Primary line.
+    pub title: String,
     #[props(default)]
     pub description: Option<String>,
     #[props(default)]
@@ -505,7 +466,7 @@ pub fn Toast(props: ToastProps) -> Element {
     let pad_x = if is_minimal { 12.0 } else { spacing::MD };
     let title_weight = if is_minimal { 500_i32 } else { 600_i32 };
     let chip_width = if is_minimal {
-        Some(minimal_chip_width(&props.message, has_icon))
+        Some(minimal_chip_width(&props.title, has_icon))
     } else {
         None
     };
@@ -532,7 +493,7 @@ pub fn Toast(props: ToastProps) -> Element {
                 shadow: if show_shadow { "sm" },
                 clip: true,
                 hit_test_behavior: "default",
-                on_touch: move |event| {
+                ontouch: move |event| {
                     handle_toast_touch(
                         event,
                         &mut drag_start,
@@ -564,7 +525,7 @@ pub fn Toast(props: ToastProps) -> Element {
                     }
                 }
                 text {
-                    content: props.message,
+                    content: props.title,
                     font_size: typography::SM,
                     font_weight: title_weight,
                     font_color: palette.foreground,
@@ -597,7 +558,7 @@ pub fn Toast(props: ToastProps) -> Element {
             // testing on the card itself so ArkUI delivers touch sequences to
             // the swipe recognizer while the empty overlay remains inert.
             hit_test_behavior: if stacked_back { "none" } else { "default" },
-            on_touch: move |event| {
+            ontouch: move |event| {
                 handle_toast_touch(
                     event,
                     &mut drag_start,
@@ -636,7 +597,7 @@ pub fn Toast(props: ToastProps) -> Element {
                 justify_content: "center",
                 text {
                     width: "100%",
-                    content: props.message,
+                    content: props.title,
                     font_size: typography::SM,
                     font_weight: title_weight,
                     font_color: palette.foreground,
@@ -721,31 +682,12 @@ pub fn Toast(props: ToastProps) -> Element {
     }
 }
 
-/// Compatibility wrapper for the former destructive-only toast component.
-#[derive(Props, Clone, PartialEq)]
-pub struct ToastDestructiveProps {
-    pub message: String,
-}
-
-#[component]
-pub fn ToastDestructive(props: ToastDestructiveProps) -> Element {
-    rsx! {
-        Toast {
-            message: props.message,
-            variant: ToastVariant::Error,
-        }
-    }
-}
-
 /// Props for the viewport-level Sonner stack.
 #[derive(Props, Clone, PartialEq)]
 pub struct SonnerProps {
     /// Structured toast items, ordered oldest to newest.
     #[props(default)]
     pub toasts: Vec<SonnerToast>,
-    /// Legacy plain-message input. Prefer `toasts` for new call sites.
-    #[props(default)]
-    pub messages: Vec<String>,
     #[props(default)]
     pub position: SonnerPosition,
     /// Maximum number of collapsed notification cards to paint. Timers still
@@ -770,7 +712,6 @@ pub fn Sonner(props: SonnerProps) -> Element {
     let mut state_version = use_signal(|| 0_u64);
     let _ = state_version();
     let mut items = props.toasts;
-    items.extend(state.borrow_mut().reconcile_legacy_messages(props.messages));
     let live = items.iter().map(ToastIdentity::from).collect::<Vec<_>>();
     {
         let mut state = state.borrow_mut();
@@ -1607,7 +1548,7 @@ fn SonnerToastEntry(
                 exit_duration_ms: Some(TOAST_EXIT_MS),
                 distance: Some(TOAST_DISTANCE),
                 Toast {
-                    message: toast.title,
+                    title: toast.title,
                     description: toast.description,
                     variant: toast.variant,
                     appearance: toast.appearance,
@@ -2018,22 +1959,6 @@ mod tests {
 
         assert!(!state.is_dismissed(old));
         assert!(!state.is_dismissed(updated));
-    }
-
-    #[test]
-    fn replacing_a_legacy_message_advances_its_identity() {
-        let mut state = SonnerState::default();
-        let first = state.reconcile_legacy_messages(vec!["first".to_string()]);
-        let first_identity = ToastIdentity::from(&first[0]);
-        assert!(state.dismiss(first_identity));
-
-        let second = state.reconcile_legacy_messages(vec!["second".to_string()]);
-        let second_identity = ToastIdentity::from(&second[0]);
-        state.reconcile_dismissals(&[second_identity]);
-
-        assert_eq!(second_identity.id, first_identity.id);
-        assert_eq!(second_identity.revision, first_identity.revision + 1);
-        assert!(!state.is_dismissed(second_identity));
     }
 
     #[test]

@@ -49,33 +49,23 @@ impl ArkEventKind {
     }
 }
 
-/// Classify either an RSX attribute name or the stripped listener name passed
-/// by Dioxus to a renderer.
+/// Classify an RSX listener name passed by Dioxus to a renderer.
+///
+/// Canonical listener names use the RSX spelling: `onclick`, `onchange`,
+/// `onscroll`, `onarea`, and so on. Dioxus strips the leading `on` before
+/// handing a listener name to the renderer, so the compact spelling (`click`)
+/// resolves to the same identity.
+///
+/// The relation is generated from the listener declarations in
+/// [`crate::events`], which is also what defines the listener functions
+/// themselves — a name that exists there always classifies, and one that does
+/// not never will.
 pub fn classify_event_name(name: &str) -> Option<ArkEventKind> {
-    let name = name.strip_prefix("on").unwrap_or(name);
-    let name = name.strip_prefix('_').unwrap_or(name);
-    Some(match name {
-        "click" | "press" => ArkEventKind::Click,
-        "longpress" | "long_press" => ArkEventKind::LongPress,
-        "change" | "input" | "toggle" => ArkEventKind::Change,
-        "submit" => ArkEventKind::Submit,
-        "scroll" => ArkEventKind::Scroll,
-        "reachend" | "reach_end" => ArkEventKind::ReachEnd,
-        "swiperchange" | "swiper_change" | "swiper" => ArkEventKind::SwiperChange,
-        "refresh" => ArkEventKind::Refresh,
-        "area" | "area_change" | "layout" | "layout_change" => ArkEventKind::AreaChange,
-        "focus" => ArkEventKind::Focus,
-        "blur" => ArkEventKind::Blur,
-        "hover" => ArkEventKind::Hover,
-        "hovermove" | "hover_move" => ArkEventKind::HoverMove,
-        "dragstart" | "drag_start" => ArkEventKind::DragStart,
-        "dragmove" | "drag_move" => ArkEventKind::DragMove,
-        "dragend" | "drag_end" => ArkEventKind::DragEnd,
-        "dragleave" | "drag_leave" => ArkEventKind::DragLeave,
-        "dragenter" | "drag_enter" => ArkEventKind::DragEnter,
-        "touch" => ArkEventKind::Touch,
-        _ => return None,
-    })
+    crate::events::EVENT_KINDS
+        .iter()
+        .find_map(|(canonical, kind)| {
+            (*canonical == name || canonical.get("on".len()..) == Some(name)).then_some(*kind)
+        })
 }
 
 /// Typed payload carried by an [`ArkEventData`].
@@ -497,24 +487,57 @@ mod tests {
     use super::{classify_event_name, ArkEventKind};
 
     #[test]
-    fn event_aliases_share_one_semantic_identity() {
-        for name in ["onclick", "click", "on_press", "_press"] {
+    fn canonical_event_names_share_one_semantic_identity() {
+        for name in ["onclick", "click"] {
             assert_eq!(classify_event_name(name), Some(ArkEventKind::Click));
         }
-        for name in ["onlongpress", "longpress", "on_long_press", "_long_press"] {
+        for name in ["onlongpress", "longpress"] {
             assert_eq!(classify_event_name(name), Some(ArkEventKind::LongPress));
         }
-        for name in ["onfocus", "focus", "on_focus", "_focus"] {
+        for name in ["onfocus", "focus"] {
             assert_eq!(classify_event_name(name), Some(ArkEventKind::Focus));
         }
-        for name in ["onblur", "blur", "on_blur", "_blur"] {
+        for name in ["onblur", "blur"] {
             assert_eq!(classify_event_name(name), Some(ArkEventKind::Blur));
         }
-        for name in ["onreachend", "reachend", "on_reach_end", "_reach_end"] {
+        for name in ["onreachend", "reachend"] {
             assert_eq!(classify_event_name(name), Some(ArkEventKind::ReachEnd));
         }
         assert!(ArkEventKind::Click.bubbles());
         assert!(ArkEventKind::LongPress.bubbles());
         assert!(!ArkEventKind::Change.bubbles());
+    }
+
+    /// The classifier is generated from the listener declarations, so every
+    /// declared listener must resolve and no name may be declared twice.
+    #[test]
+    fn every_declared_listener_classifies_in_both_spellings() {
+        let mut seen = std::collections::HashSet::new();
+        assert!(!crate::events::EVENT_KINDS.is_empty());
+        for (canonical, kind) in crate::events::EVENT_KINDS {
+            assert!(canonical.starts_with("on"), "{canonical}");
+            assert!(seen.insert(*canonical), "duplicate listener {canonical}");
+            assert_eq!(classify_event_name(canonical), Some(*kind), "{canonical}");
+            let compact = &canonical["on".len()..];
+            assert_eq!(classify_event_name(compact), Some(*kind), "{compact}");
+        }
+    }
+
+    #[test]
+    fn historical_snake_case_aliases_are_rejected() {
+        for name in [
+            "on_press",
+            "_press",
+            "on_long_press",
+            "_long_press",
+            "on_focus",
+            "_focus",
+            "on_blur",
+            "_blur",
+            "on_reach_end",
+            "_reach_end",
+        ] {
+            assert_eq!(classify_event_name(name), None, "{name}");
+        }
     }
 }

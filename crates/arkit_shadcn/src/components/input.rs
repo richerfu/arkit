@@ -168,7 +168,7 @@ pub fn Input(props: InputProps) -> Element {
             padding_bottom: spacing::XXS,
             padding_left: spacing::MD,
             width: if let Some(width) = field_width { width },
-            on_change: move |evt| {
+            onchange: move |evt| {
                 if !disabled && !read_only {
                     if let Some(handler) = on_change {
                         handler.call(mode.sanitize(evt.data().string_value.clone()));
@@ -185,7 +185,7 @@ pub fn Input(props: InputProps) -> Element {
                     }
                 }
             },
-            on_focus: move |_| focus_request.set(false),
+            onfocus: move |_| focus_request.set(false),
         }
     };
 

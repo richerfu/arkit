@@ -5,6 +5,8 @@ pub type CanvasResult<T> = Result<T, CanvasError>;
 /// Typed failures for Canvas operations that throw on the web platform.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CanvasError {
+    /// One controller cannot target two mounted canvas instances.
+    ControllerAlreadyBound,
     /// Equivalent to the web platform's `IndexSizeError` for negative radii.
     NegativeRadius,
     /// Equivalent to `RangeError` for a round-rect radii sequence outside 1..=4.
@@ -38,6 +40,9 @@ pub enum CanvasError {
 impl fmt::Display for CanvasError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::ControllerAlreadyBound => {
+                formatter.write_str("canvas controller is already bound")
+            }
             Self::NegativeRadius => formatter.write_str("canvas radius must not be negative"),
             Self::InvalidRadiiCount => {
                 formatter.write_str("canvas round-rect requires one to four radii")

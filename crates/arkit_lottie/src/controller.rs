@@ -19,6 +19,27 @@ struct ControllerState {
     frame: LottieFrame,
 }
 
+pub(crate) struct LottieControllerLease {
+    controller: LottieController,
+    binding: u64,
+}
+
+impl LottieControllerLease {
+    pub(crate) fn controller(&self) -> &LottieController {
+        &self.controller
+    }
+
+    pub(crate) fn binding(&self) -> u64 {
+        self.binding
+    }
+}
+
+impl Drop for LottieControllerLease {
+    fn drop(&mut self) {
+        self.controller.unbind(self.binding);
+    }
+}
+
 /// Imperative playback handle for a mounted [`crate::LottiePlayer`].
 #[derive(Clone, Default)]
 pub struct LottieController {
@@ -112,8 +133,14 @@ impl LottieController {
         self.inner.borrow().binding.is_some()
     }
 
-    pub(crate) fn bind(&self, sender: Sender<WorkerMessage>) -> u64 {
+    pub(crate) fn bind(
+        &self,
+        sender: Sender<WorkerMessage>,
+    ) -> LottieResult<LottieControllerLease> {
         let mut state = self.inner.borrow_mut();
+        if state.binding.is_some() {
+            return Err(crate::LottieError::already_bound("LottieController::bind"));
+        }
         state.next_binding = state
             .next_binding
             .checked_add(1)
@@ -123,7 +150,11 @@ impl LottieController {
         state.status = LottieStatus::WaitingForSurface;
         state.composition = None;
         state.frame = LottieFrame::default();
-        id
+        drop(state);
+        Ok(LottieControllerLease {
+            controller: self.clone(),
+            binding: id,
+        })
     }
 
     pub(crate) fn update_status(&self, binding: u64, status: LottieStatus) {
@@ -202,5 +233,37 @@ impl std::fmt::Debug for LottieController {
 impl PartialEq for LottieController {
     fn eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.inner, &other.inner)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::LottieErrorKind;
+
+    #[test]
+    fn duplicate_binding_is_rejected_without_stealing_first_sender() {
+        let controller = LottieController::new();
+        let (first_sender, first_receiver) = std::sync::mpsc::channel();
+        let first = controller.bind(first_sender).unwrap();
+        let (second_sender, second_receiver) = std::sync::mpsc::channel();
+        let Err(error) = controller.bind(second_sender) else {
+            panic!("duplicate binding must fail")
+        };
+        assert_eq!(error.kind(), LottieErrorKind::AlreadyBound);
+
+        controller.play().unwrap();
+        assert!(matches!(
+            first_receiver.recv().unwrap(),
+            WorkerMessage::Playback(PlaybackCommand::Play)
+        ));
+        assert!(second_receiver.try_recv().is_err());
+
+        drop(first);
+        let (third_sender, _) = std::sync::mpsc::channel();
+        let rebound = controller.bind(third_sender).unwrap();
+        assert!(controller.is_mounted());
+        drop(rebound);
+        assert!(!controller.is_mounted());
     }
 }

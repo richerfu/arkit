@@ -3,11 +3,14 @@
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
-use arkit_dom::{MountEpochEvent, MountEpochSubscriber};
 use dioxus_core::{AttributeValue, IntoAttributeValue};
 use ohos_arkui_binding::api::node_custom_event::{IntOffset, IntSize};
 use ohos_arkui_binding::common::node::ArkUINode;
-use rustc_hash::{FxHashMap, FxHashSet};
+use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
+use rustc_hash::FxHashMap;
+
+use crate::animation_ownership::{AttributeOwner, AttributeOwnership, OwnershipClaimError};
+use crate::host::{MountEpochEvent, MountEpochSubscriber};
 
 pub(crate) type SharedNativeNode = Rc<RefCell<ArkUINode>>;
 
@@ -22,7 +25,7 @@ pub struct LayoutFramePx {
 
 impl LayoutFramePx {
     pub fn is_measured(self) -> bool {
-        self.width > 0.0 && self.height > 0.0
+        self.width.is_finite() && self.height.is_finite() && self.width > 0.0 && self.height > 0.0
     }
 }
 
@@ -41,6 +44,107 @@ pub struct NativeVisibility {
 pub struct MountedNodeLease {
     reference: NativeElementRef,
     epoch: u64,
+}
+
+/// Opaque identity for one animation host's one plan generation.
+///
+/// This is an internal cross-crate protocol used by `arkit_animation`; it is
+/// not an application-level native mutation capability.
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct AnimatedAttributeOwner(AttributeOwner);
+
+impl AnimatedAttributeOwner {
+    #[doc(hidden)]
+    pub const fn new(host: u64, claim: u64) -> Self {
+        Self(AttributeOwner { host, claim })
+    }
+}
+
+/// Failure to reserve native attribute ownership for an animation instance.
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AnimatedAttributeClaimError {
+    StaleLease,
+    ConflictingHost(ArkUINodeAttributeType),
+    DuplicateOwner(ArkUINodeAttributeType),
+}
+
+impl std::fmt::Display for AnimatedAttributeClaimError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::StaleLease => formatter.write_str("animation target lease is stale"),
+            Self::ConflictingHost(attribute) => write!(
+                formatter,
+                "native attribute {attribute:?} is reserved by a different animation host"
+            ),
+            Self::DuplicateOwner(attribute) => {
+                write!(
+                    formatter,
+                    "duplicate owner for native attribute {attribute:?}"
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for AnimatedAttributeClaimError {}
+
+/// Epoch-checked reservation for one animation plan's native attributes.
+///
+/// A reservation is initially inactive, so merely creating an idle animation
+/// does not suppress declarative renderer writes. The animation host activates
+/// it when playback begins and drops it at a terminal event. A later restart
+/// acquires a fresh generation. Dropping an active guard only enqueues a
+/// renderer replay; it never writes native state or re-enters the VirtualDom.
+#[doc(hidden)]
+pub struct AnimatedAttributeGuard {
+    reference: NativeElementRef,
+    epoch: u64,
+    owner: AnimatedAttributeOwner,
+    attrs: Box<[ArkUINodeAttributeType]>,
+    active: bool,
+}
+
+impl AnimatedAttributeGuard {
+    #[doc(hidden)]
+    pub fn activate(&mut self) -> bool {
+        let mut state = self.reference.state.borrow_mut();
+        if state.epoch != self.epoch || state.node.as_ref().and_then(Weak::upgrade).is_none() {
+            return false;
+        }
+        if self.active {
+            return true;
+        }
+        state.animated_attrs.activate(self.owner.0, &self.attrs);
+        self.active = true;
+        true
+    }
+}
+
+impl Drop for AnimatedAttributeGuard {
+    fn drop(&mut self) {
+        let (route, released) = {
+            let mut state = self.reference.state.borrow_mut();
+            if state.epoch != self.epoch {
+                return;
+            }
+            let released = state.animated_attrs.remove(self.owner.0, &self.attrs);
+            let route = (self.active && !released.is_empty())
+                .then(|| state.animation_restore_route.clone())
+                .flatten();
+            (route, released)
+        };
+        if let Some(route) = route {
+            route(
+                MountedNodeLease {
+                    reference: self.reference.clone(),
+                    epoch: self.epoch,
+                },
+                released,
+            );
+        }
+    }
 }
 
 impl std::fmt::Debug for MountedNodeLease {
@@ -134,36 +238,36 @@ impl MountedNodeLease {
         true
     }
 
-    /// Declare that the named native attributes are currently driven by an
-    /// animation on this element.
-    ///
-    /// The renderer keeps declarative values authoritative in `desired_attrs`
-    /// but skips native writes for declared names until the declaration is
-    /// cleared, so an animation and a rerender cannot fight each other.
-    /// Returns `false` when this lease is already stale (nothing declared).
-    pub fn declare_animated_attrs(&self, attrs: &[&str]) -> bool {
+    /// Reserve native attributes for one animation plan generation.
+    #[doc(hidden)]
+    pub fn claim_animated_attributes(
+        &self,
+        owner: AnimatedAttributeOwner,
+        attrs: &[ArkUINodeAttributeType],
+    ) -> Result<AnimatedAttributeGuard, AnimatedAttributeClaimError> {
         let mut state = self.reference.state.borrow_mut();
-        if state.epoch != self.epoch {
-            return false;
+        if state.epoch != self.epoch || state.node.as_ref().and_then(Weak::upgrade).is_none() {
+            return Err(AnimatedAttributeClaimError::StaleLease);
         }
         state
             .animated_attrs
-            .extend(attrs.iter().map(|name| name.to_string()));
-        true
-    }
-
-    /// Stop declaring animated attributes on this element.
-    ///
-    /// Returns `false` when this lease is already stale. After a successful
-    /// clear the renderer resumes native writes for the affected attributes
-    /// (with the declarative value, which is the steady state).
-    pub fn clear_animated_attrs(&self) -> bool {
-        let mut state = self.reference.state.borrow_mut();
-        if state.epoch != self.epoch {
-            return false;
-        }
-        state.animated_attrs.clear();
-        true
+            .claim(owner.0, attrs)
+            .map_err(|error| match error {
+                OwnershipClaimError::ConflictingHost(attribute) => {
+                    AnimatedAttributeClaimError::ConflictingHost(attribute)
+                }
+                OwnershipClaimError::DuplicateOwner(attribute) => {
+                    AnimatedAttributeClaimError::DuplicateOwner(attribute)
+                }
+            })?;
+        drop(state);
+        Ok(AnimatedAttributeGuard {
+            reference: self.reference.clone(),
+            epoch: self.epoch,
+            owner,
+            attrs: attrs.into(),
+            active: false,
+        })
     }
 }
 
@@ -189,23 +293,43 @@ pub enum NativeElementEvent {
 /// Only the renderer can construct this value. Event sinks may queue it and
 /// later consume it at a non-reentrant runtime boundary.
 #[doc(hidden)]
+enum NativeElementDeliveryKind {
+    Event {
+        reference: NativeElementRef,
+        event: NativeElementEvent,
+    },
+    Deferred(Box<dyn FnOnce()>),
+}
+
+#[doc(hidden)]
 pub struct NativeElementDelivery {
-    reference: NativeElementRef,
-    event: NativeElementEvent,
+    kind: NativeElementDeliveryKind,
 }
 
 impl NativeElementDelivery {
     pub(crate) fn new(reference: NativeElementRef, event: NativeElementEvent) -> Self {
-        Self { reference, event }
+        Self {
+            kind: NativeElementDeliveryKind::Event { reference, event },
+        }
+    }
+
+    pub(crate) fn deferred(callback: impl FnOnce() + 'static) -> Self {
+        Self {
+            kind: NativeElementDeliveryKind::Deferred(Box::new(callback)),
+        }
     }
 
     /// Deliver this renderer-created notification exactly once.
     pub fn deliver(self) {
-        self.reference.deliver(self.event);
+        match self.kind {
+            NativeElementDeliveryKind::Event { reference, event } => reference.deliver(event),
+            NativeElementDeliveryKind::Deferred(callback) => callback(),
+        }
     }
 }
 
 type NativeElementCallback = Rc<dyn Fn(NativeElementEvent)>;
+pub(crate) type AnimationRestoreRoute = Rc<dyn Fn(MountedNodeLease, Vec<ArkUINodeAttributeType>)>;
 
 struct NativeElementSubscriber {
     callback: NativeElementCallback,
@@ -219,13 +343,14 @@ struct NativeElementState {
     observe_layout: bool,
     observe_visibility: bool,
     layout: Option<LayoutFramePx>,
-    visibility: NativeVisibility,
+    visibility: Option<NativeVisibility>,
     native_teardowns: Vec<(u64, Box<dyn FnOnce()>)>,
-    /// Attribute names currently driven by an animation on this element. The
+    /// Native attributes currently driven by an animation on this element. The
     /// renderer keeps `desired_attrs` up to date but skips native writes for
     /// these names so a rerender cannot fight (and be fought by) the
     /// animation.
-    animated_attrs: FxHashSet<String>,
+    animated_attrs: AttributeOwnership<ArkUINodeAttributeType>,
+    animation_restore_route: Option<AnimationRestoreRoute>,
     next_subscription: u64,
     subscribers: FxHashMap<u64, NativeElementSubscriber>,
 }
@@ -260,15 +385,16 @@ impl IntoAttributeValue for NativeElementRef {
 }
 
 impl NativeElementRef {
-    /// Attribute names currently declared as animation-driven on this element.
-    pub(crate) fn animated_attrs(&self) -> FxHashSet<String> {
-        self.state.borrow().animated_attrs.clone()
+    /// Native attributes currently driven by an active animation.
+    pub(crate) fn animated_attrs(&self) -> Vec<ArkUINodeAttributeType> {
+        self.state
+            .borrow()
+            .animated_attrs
+            .active_attrs()
+            .copied()
+            .collect()
     }
 
-    /// Whether `name` is currently declared as animation-driven.
-    pub(crate) fn animates(&self, name: &str) -> bool {
-        self.state.borrow().animated_attrs.contains(name)
-    }
     pub fn new() -> Self {
         Self::default()
     }
@@ -356,10 +482,12 @@ impl NativeElementRef {
                     frame: layout,
                 });
             }
-            initial.push(NativeElementEvent::Visibility {
-                epoch: state.epoch,
-                visibility: state.visibility,
-            });
+            if let Some(visibility) = state.visibility {
+                initial.push(NativeElementEvent::Visibility {
+                    epoch: state.epoch,
+                    visibility,
+                });
+            }
             (id, initial)
         };
         for event in initial {
@@ -371,7 +499,11 @@ impl NativeElementRef {
         }
     }
 
-    pub(crate) fn bind(&self, node: &SharedNativeNode) -> Option<NativeElementEvent> {
+    pub(crate) fn bind(
+        &self,
+        node: &SharedNativeNode,
+        animation_restore_route: Option<AnimationRestoreRoute>,
+    ) -> Option<NativeElementEvent> {
         let native_handle = node.borrow().raw_handle();
         let (unchanged, previous_teardowns) = {
             let mut state = self.state.borrow_mut();
@@ -399,8 +531,9 @@ impl NativeElementRef {
                 .expect("arkit_arkui: native element epoch space exhausted");
             state.node = Some(Rc::downgrade(node));
             state.layout = None;
-            state.visibility = NativeVisibility::default();
+            state.visibility = None;
         }
+        state.animation_restore_route = animation_restore_route;
         // ArkUI child insertion can replace only the Rust `Rc` wrapper while
         // retaining the same native handle. Keep the current mounted wrapper
         // without invalidating leases for that ownership-neutral rewrap.
@@ -441,7 +574,8 @@ impl NativeElementRef {
         }
         state.node = None;
         state.layout = None;
-        state.visibility = NativeVisibility::default();
+        state.visibility = None;
+        state.animation_restore_route = None;
         state.epoch = state
             .epoch
             .checked_add(1)
@@ -481,7 +615,7 @@ impl NativeElementRef {
                 NativeElementEvent::Visibility { epoch, visibility }
                     if event_is_current && *epoch == state.epoch =>
                 {
-                    state.visibility = *visibility;
+                    state.visibility = Some(*visibility);
                 }
                 NativeElementEvent::Mounted(_)
                 | NativeElementEvent::Unmounted { .. }
@@ -543,7 +677,29 @@ impl Drop for NativeElementSubscription {
 
 #[cfg(test)]
 mod tests {
-    use super::NativeElementRef;
+    use super::{LayoutFramePx, NativeElementRef};
+
+    #[test]
+    fn measured_frame_requires_finite_positive_dimensions() {
+        assert!(LayoutFramePx {
+            width: 1.0,
+            height: 1.0,
+            ..Default::default()
+        }
+        .is_measured());
+        assert!(!LayoutFramePx {
+            width: f32::INFINITY,
+            height: 1.0,
+            ..Default::default()
+        }
+        .is_measured());
+        assert!(!LayoutFramePx {
+            width: 1.0,
+            height: f32::NAN,
+            ..Default::default()
+        }
+        .is_measured());
+    }
 
     #[test]
     fn native_observation_is_opt_in_and_sticky() {

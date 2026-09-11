@@ -27,8 +27,6 @@ lottie = ["dep:arkit_lottie"]
 lottie-network = ["lottie", "arkit_lottie/network"]
 lottie-expressions = ["lottie", "arkit_lottie/expressions"]
 markdown = ["shadcn", "arkit_shadcn/markdown"]
-# Convenience: Markdown fences use the Code pipeline when both are enabled.
-markdown-highlight = ["markdown", "code"]
 router = ["animation", "dep:arkit_router"]
 shadcn = ["animation", "i18n", "icon", "dep:arkit_shadcn"]
 # Embedded terminal (rio-vt + wgpu cell renderer).

@@ -43,8 +43,8 @@ pub(crate) struct MenuOverlayPassThroughRegion {
 
 impl MenuOverlayPassThroughRegion {
     pub(crate) fn from_frame(
-        frame: arkit_hooks::LayoutFrame,
-        overlay: arkit_hooks::LayoutFrame,
+        frame: arkit_arkui::LayoutFramePx,
+        overlay: arkit_arkui::LayoutFramePx,
     ) -> Option<Self> {
         if !frame.is_measured() {
             return None;
@@ -55,22 +55,23 @@ impl MenuOverlayPassThroughRegion {
             safe_area: Default::default(),
             scale: 0.0,
         });
-        let overlay_x = if overlay.is_measured() {
-            overlay.x
+        let measured_overlay = if overlay.is_measured() {
+            overlay
         } else {
-            0.0
+            Default::default()
         };
-        let overlay_y = if overlay.is_measured() {
-            overlay.y
-        } else {
-            0.0
-        };
+        let origin = arkit_arkui::LocalVpPoint::from_window_px(
+            arkit_arkui::WindowPxPoint::new(frame.x, frame.y),
+            measured_overlay,
+            scale,
+        )?;
+        let size = arkit_arkui::LogicalSizeVp::from_physical(frame.into(), scale)?;
 
         Some(Self {
-            x: ((frame.x - overlay_x) / scale).max(0.0),
-            y: ((frame.y - overlay_y) / scale).max(0.0),
-            width: (frame.width / scale).max(0.0),
-            height: (frame.height / scale).max(0.0),
+            x: origin.x.max(0.0),
+            y: origin.y.max(0.0),
+            width: size.width.max(0.0),
+            height: size.height.max(0.0),
         })
     }
 
@@ -85,35 +86,45 @@ impl MenuOverlayPassThroughRegion {
 
 impl MenuOverlayPlacement {
     pub(crate) fn from_trigger(
-        trigger: arkit_hooks::LayoutFrame,
+        trigger: arkit_arkui::LayoutFramePx,
         viewport: arkit_hooks::OverlayViewport,
         panel_width: f32,
         panel_height: f32,
         side_offset: f32,
     ) -> Self {
         let scale = super::floating_layer::viewport_scale(viewport);
-        let (overlay_x, overlay_y, viewport_width, viewport_height) =
-            super::floating_layer::overlay_metrics_vp(
-                viewport.frame,
-                scale,
-                panel_width,
-                panel_height,
-            );
-        let trigger_x = ((trigger.x - overlay_x).max(0.0)) / scale;
-        let trigger_y = ((trigger.y - overlay_y).max(0.0)) / scale;
+        let metrics = super::floating_layer::overlay_metrics_vp(
+            viewport.frame,
+            scale,
+            panel_width,
+            panel_height,
+        );
+        let trigger_origin = arkit_arkui::LocalVpPoint::from_window_px(
+            arkit_arkui::WindowPxPoint::new(trigger.x, trigger.y),
+            arkit_arkui::LayoutFramePx {
+                x: metrics.origin.x,
+                y: metrics.origin.y,
+                ..Default::default()
+            },
+            scale,
+        )
+        .unwrap_or_default();
+        let trigger_x = trigger_origin.x.max(0.0);
+        let trigger_y = trigger_origin.y.max(0.0);
         let trigger_height = trigger.height / scale;
         let edge = MENU_VIEWPORT_PADDING;
         let min_x = viewport.safe_area.left.max(0.0) + edge;
         let min_y = viewport.safe_area.top.max(0.0) + edge;
-        let max_x =
-            (viewport_width - viewport.safe_area.right.max(0.0) - panel_width - edge).max(min_x);
+        let max_x = (metrics.size.width - viewport.safe_area.right.max(0.0) - panel_width - edge)
+            .max(min_x);
         let trigger_bottom = trigger_y + trigger_height;
         let below_y = trigger_bottom + side_offset;
         let above_y = trigger_y - panel_height - side_offset;
         let max_y =
-            (viewport_height - viewport.safe_area.bottom.max(0.0) - panel_height - edge).max(min_y);
-        let below_fits =
-            below_y + panel_height <= viewport_height - viewport.safe_area.bottom.max(0.0) - edge;
+            (metrics.size.height - viewport.safe_area.bottom.max(0.0) - panel_height - edge)
+                .max(min_y);
+        let below_fits = below_y + panel_height
+            <= metrics.size.height - viewport.safe_area.bottom.max(0.0) - edge;
         let above_fits = above_y >= min_y;
         let y = if below_fits || !above_fits {
             below_y
@@ -138,7 +149,7 @@ impl MenuOverlayPlacement {
     /// Prefer the measured trigger root (shadcn-style). Ignore pointer target
     /// bounds — those often describe an inner label/icon, not the control.
     pub(crate) fn resolve(
-        trigger: arkit_hooks::LayoutFrame,
+        trigger: arkit_arkui::LayoutFramePx,
         viewport: arkit_hooks::OverlayViewport,
         panel_width: f32,
         panel_height: f32,
@@ -166,7 +177,7 @@ impl MenuOverlayPlacement {
         // treating them as physical when they match layout magnitude, else vp.
         let scale = super::floating_layer::viewport_scale(viewport);
         let (x, y) = cursor_to_physical(pointer.window_x, pointer.window_y, scale);
-        let cursor = arkit_hooks::LayoutFrame {
+        let cursor = arkit_arkui::LayoutFramePx {
             x,
             y,
             width: scale,

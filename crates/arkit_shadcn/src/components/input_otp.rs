@@ -9,9 +9,10 @@ use std::cell::Cell;
 
 use crate::icon::icon_placeholder;
 use crate::theme::*;
+use arkit_animation::engine::ExecutionPolicy;
 use arkit_animation::{
-    Animation, AnimationSelector, ExecutionPolicy, IterationCount, PropertyKeyframe, TargetName,
-    TimeSpan, Timeline, TimelinePosition, OPACITY,
+    Animation, AnimationSelector, IterationCount, PropertyKeyframe, TargetName, TimeSpan, Timeline,
+    TimelinePosition, OPACITY,
 };
 use arkit_prelude::*;
 
@@ -293,9 +294,9 @@ pub fn InputOtp(props: InputOtpProps) -> Element {
                 text_align: "center",
                 opacity: 0.01_f32,
                 enabled: !props.disabled,
-                on_focus: move |event| focused.set(event.data().focused),
-                on_blur: move |event| focused.set(event.data().focused),
-                on_change: move |event| {
+                onfocus: move |event| focused.set(event.data().focused),
+                onblur: move |event| focused.set(event.data().focused),
+                onchange: move |event| {
                     let next = sanitize_otp(&event.data().string_value, digits, props.mode);
                     if next == current_value {
                         return;

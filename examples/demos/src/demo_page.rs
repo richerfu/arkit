@@ -10,11 +10,23 @@ use arkit::router::RouteTransition;
 use crate::registry;
 use crate::Route;
 
+mod chart_contracts;
+mod regressions;
+use regressions::RegressionPage;
+pub(crate) use regressions::RegressionRootState;
+
 // Named `Demo` to match the `Route::Demo` variant: the `Routable` derive
 // renders each variant through a component of the same name.
 #[component]
 pub fn Demo(slug: String) -> Element {
     let known = registry::find_demo(&slug).is_some();
+
+    // Keep this diagnostic page free of a native transition wrapper. Its
+    // final two siblings deliberately exercise a renderer-root placeholder
+    // replacement while an already-mounted portal is active.
+    if slug == "regressions" {
+        return rsx! { RegressionPage {} };
+    }
 
     rsx! {
         RouteTransition::<Route> {

@@ -187,8 +187,8 @@ impl AvoidAreas {
 /// Root-content policy used by the Arkit application wrapper.
 ///
 /// Safe-area avoidance is not applied by default: business content fills the
-/// surface edge-to-edge and integrators opt in through [`crate::use_safe_area`]
-/// (or the `SafeArea` component) where their layout needs insets.
+/// surface edge-to-edge and integrators opt in through the `use_safe_area`
+/// hook (or the `SafeArea` component) where their layout needs insets.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SafeAreaPolicy {
     /// Let business content fill the XComponent surface. Window metrics and

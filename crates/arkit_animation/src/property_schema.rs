@@ -6,13 +6,13 @@ use arkit_animation_core::{
     PropertyName,
 };
 
+use crate::diagnostic::AnimationAdapterError;
 use crate::properties::{
     ASPECT_RATIO, BACKGROUND_COLOR, BLUR, BORDER_COLOR, BORDER_RADIUS, BORDER_WIDTH, BRIGHTNESS,
     CONTRAST, FONT_COLOR, FONT_SIZE, FOREGROUND_COLOR, GRAYSCALE, HEIGHT, INVERT, LETTER_SPACING,
     LINE_HEIGHT, OPACITY, POSITION_X, POSITION_Y, ROTATION, SATURATION, SCALE_X, SCALE_Y, SEPIA,
     TRANSLATE_X, TRANSLATE_Y, WIDTH,
 };
-use crate::AnimationAdapterError;
 
 #[derive(Default)]
 pub struct PropertySchema {

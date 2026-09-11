@@ -4,7 +4,8 @@ use oxc_index::IndexVec;
 
 use arkit_animation_core::{AdapterId, FrameBatch};
 
-use crate::{AnimationAdapterError, TargetAdapter};
+use crate::adapter::TargetAdapter;
+use crate::diagnostic::AnimationAdapterError;
 
 #[derive(Default)]
 pub struct AdapterRegistry {

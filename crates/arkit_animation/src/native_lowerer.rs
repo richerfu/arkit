@@ -6,7 +6,9 @@ use arkit_animation_core::{
     NativeSupport, TimeExtent,
 };
 
-use crate::{AnimationBackend, CapabilityRequirements, ExecutionPolicy, NativeCapability};
+use crate::native_capability::{
+    AnimationBackend, CapabilityRequirements, ExecutionPolicy, NativeCapability,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum UnsupportedFeature {

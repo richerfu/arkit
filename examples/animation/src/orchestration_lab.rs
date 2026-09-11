@@ -1,3 +1,4 @@
+use arkit::animation::engine::{CapabilityRequirements, NativeLowerer};
 use arkit::prelude::*;
 
 use crate::{
@@ -320,7 +321,7 @@ fn CapabilityDemo() -> Element {
         custom_easing: true,
         ..CapabilityRequirements::default()
     };
-    let report = arkit::animation::NativeLowerer
+    let report = NativeLowerer
         .lower(ExecutionPolicy::Auto, requirements)
         .expect("sampled backend supports the full requirement set");
     let metrics = AnimationWindowMetrics {

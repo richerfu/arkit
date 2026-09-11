@@ -20,18 +20,18 @@ pub struct ChartOption {
     pub y_axis: Vec<Axis>,
     pub radar: Vec<RadarCoordinate>,
     pub tooltip: Tooltip,
-    pub dataset: Option<Dataset>,
-    /// All ECharts dataset components. `dataset` remains the index-0 compatibility view.
+    /// All ECharts dataset components.
     pub datasets: Vec<Dataset>,
-    pub visual_map: Option<VisualMap>,
-    /// All ECharts visualMap components. `visual_map` remains the index-0 compatibility view.
+    /// All ECharts visualMap components.
     pub visual_maps: Vec<VisualMap>,
     pub data_zoom: Vec<DataZoom>,
     pub timeline: Option<Timeline>,
     /// Fully merged snapshots from ECharts `baseOption` + `options`.
     pub timeline_options: Vec<ChartOption>,
     pub brush: Option<BrushOptions>,
-    /// Raw responsive option rules from ECharts `baseOption + media`.
+    /// Parser-owned responsive recipe from ECharts `baseOption + media`.
+    /// Inspect it through [`MediaOptions`] accessors; construct composite
+    /// options through [`ChartOption::from_json_str`] or `from_json_value`.
     pub media: Option<MediaOptions>,
     /// ECharts global enter/update/state animation policy.
     pub animation: AnimationOptions,
@@ -51,9 +51,7 @@ impl Default for ChartOption {
             y_axis: vec![Axis::value()],
             radar: Vec::new(),
             tooltip: Tooltip::default(),
-            dataset: None,
             datasets: Vec::new(),
-            visual_map: None,
             visual_maps: Vec::new(),
             data_zoom: Vec::new(),
             timeline: None,
@@ -77,12 +75,19 @@ pub struct AnimationTiming {
 }
 
 impl AnimationTiming {
-    fn new(duration: u64, easing: &str) -> Self {
+    /// One enter/update/state animation timing with no delay.
+    pub fn new(duration: u64, easing: &str) -> Self {
         Self {
             duration,
             easing: easing.to_string(),
             delay: 0,
         }
+    }
+
+    /// Delay before the timing starts, in milliseconds.
+    pub fn with_delay(mut self, delay: u64) -> Self {
+        self.delay = delay;
+        self
     }
 }
 
@@ -104,6 +109,38 @@ impl Default for AnimationOptions {
             update: AnimationTiming::new(500, "cubicInOut"),
             state: AnimationTiming::new(300, "cubicOut"),
         }
+    }
+}
+
+impl AnimationOptions {
+    /// Enable or disable the global enter/update/state animation policy.
+    pub fn enabled(mut self, enabled: bool) -> Self {
+        self.enabled = enabled;
+        self
+    }
+
+    /// Element count above which charts render without animation.
+    pub fn threshold(mut self, threshold: usize) -> Self {
+        self.threshold = threshold;
+        self
+    }
+
+    /// Enter animation applied when a chart is first drawn.
+    pub fn initial(mut self, duration: u64, easing: &str) -> Self {
+        self.initial = AnimationTiming::new(duration, easing);
+        self
+    }
+
+    /// Animation applied to data updates.
+    pub fn update(mut self, duration: u64, easing: &str) -> Self {
+        self.update = AnimationTiming::new(duration, easing);
+        self
+    }
+
+    /// Animation applied to highlight/downplay state changes.
+    pub fn state(mut self, duration: u64, easing: &str) -> Self {
+        self.state = AnimationTiming::new(duration, easing);
+        self
     }
 }
 
@@ -155,6 +192,75 @@ impl ChartOption {
         self
     }
 
+    /// Append one grid, for charts that lay out multiple coordinate systems.
+    pub fn push_grid(mut self, grid: Grid) -> Self {
+        self.grid.push(grid);
+        self
+    }
+
+    /// Append one x axis, for charts that plot against more than one.
+    pub fn push_x_axis(mut self, axis: Axis) -> Self {
+        self.x_axis.push(axis);
+        self
+    }
+
+    /// Append one y axis, for charts that plot against more than one.
+    pub fn push_y_axis(mut self, axis: Axis) -> Self {
+        self.y_axis.push(axis);
+        self
+    }
+
+    pub fn radar(mut self, radar: RadarCoordinate) -> Self {
+        self.radar = vec![radar];
+        self
+    }
+
+    pub fn tooltip(mut self, tooltip: Tooltip) -> Self {
+        self.tooltip = tooltip;
+        self
+    }
+
+    pub fn dataset(mut self, dataset: Dataset) -> Self {
+        self.datasets.push(dataset);
+        self
+    }
+
+    pub fn visual_map(mut self, visual_map: VisualMap) -> Self {
+        self.visual_maps.push(visual_map);
+        self
+    }
+
+    pub fn timeline(mut self, timeline: Timeline) -> Self {
+        self.timeline = Some(timeline);
+        self
+    }
+
+    pub fn brush(mut self, brush: BrushOptions) -> Self {
+        self.brush = Some(brush);
+        self
+    }
+
+    pub fn media(mut self, media: MediaOptions) -> Self {
+        self.media = Some(media);
+        self
+    }
+
+    pub fn animation(mut self, animation: AnimationOptions) -> Self {
+        self.animation = animation;
+        self
+    }
+
+    pub fn visual_style(mut self, visual_style: VisualStyle) -> Self {
+        self.visual_style = visual_style;
+        self
+    }
+
+    /// Insert a raw ECharts option that the typed model does not cover.
+    pub fn extra(mut self, key: impl Into<String>, value: Value) -> Self {
+        self.extra.insert(key.into(), value);
+        self
+    }
+
     pub fn from_json_str(input: &str) -> Result<Self, ChartParseError> {
         crate::parser::parse_option_str(input)
     }
@@ -164,9 +270,6 @@ impl ChartOption {
     }
 
     pub(crate) fn visual_map_for_series(&self, series_index: usize) -> Option<&VisualMap> {
-        if self.visual_maps.is_empty() {
-            return self.visual_map.as_ref();
-        }
         self.visual_maps
             .iter()
             .find(|visual_map| {
@@ -227,9 +330,26 @@ impl ChartOption {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MediaOptions {
-    pub base_option: Value,
-    pub timeline_options: Vec<Value>,
-    pub rules: Vec<MediaRule>,
+    pub(crate) base_option: Value,
+    pub(crate) timeline_options: Vec<Value>,
+    pub(crate) rules: Vec<MediaRule>,
+    /// Raw datasets visible at parse time, used internally to distinguish a
+    /// later caller mutation from explicit timeline/media overrides.
+    pub(crate) initial_active_datasets: Vec<Dataset>,
+}
+
+impl MediaOptions {
+    pub fn base_option(&self) -> &Value {
+        &self.base_option
+    }
+
+    pub fn timeline_options(&self) -> &[Value] {
+        &self.timeline_options
+    }
+
+    pub fn rules(&self) -> &[MediaRule] {
+        &self.rules
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1578,9 +1698,7 @@ pub struct MapSeries {
 #[derive(Debug, Clone, PartialEq)]
 pub struct LineSegment {
     pub name: Option<String>,
-    pub from: (f64, f64),
-    pub to: (f64, f64),
-    /// Full ECharts `coords` path. `from`/`to` remain for typed API compatibility.
+    /// Full ECharts `coords` path.
     pub coords: Vec<(f64, f64)>,
     pub value: f64,
 }

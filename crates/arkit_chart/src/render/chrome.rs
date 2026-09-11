@@ -1510,8 +1510,8 @@ fn is_data_component(component: &str) -> bool {
 
 pub(super) fn draw_visual_map(canvas: &Canvas, option: &ChartOption, width: f32, height: f32) {
     let Some(visual_map) = option
-        .visual_map
-        .as_ref()
+        .visual_maps
+        .first()
         .filter(|visual_map| visual_map.show)
     else {
         return;

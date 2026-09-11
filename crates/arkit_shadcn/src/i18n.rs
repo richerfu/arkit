@@ -166,22 +166,27 @@ impl ComponentI18n {
         self.tr(messages::load_more_retry())
     }
 
+    #[cfg(feature = "markdown")]
     pub(crate) fn markdown_admonition_note(self) -> String {
         self.tr(messages::markdown_admonition_note())
     }
 
+    #[cfg(feature = "markdown")]
     pub(crate) fn markdown_admonition_tip(self) -> String {
         self.tr(messages::markdown_admonition_tip())
     }
 
+    #[cfg(feature = "markdown")]
     pub(crate) fn markdown_admonition_important(self) -> String {
         self.tr(messages::markdown_admonition_important())
     }
 
+    #[cfg(feature = "markdown")]
     pub(crate) fn markdown_admonition_warning(self) -> String {
         self.tr(messages::markdown_admonition_warning())
     }
 
+    #[cfg(feature = "markdown")]
     pub(crate) fn markdown_admonition_caution(self) -> String {
         self.tr(messages::markdown_admonition_caution())
     }

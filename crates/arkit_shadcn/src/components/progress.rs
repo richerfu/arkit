@@ -98,7 +98,7 @@ pub fn Progress(props: ProgressProps) -> Element {
             clip: true,
             hit_test_behavior: "transparent",
             row {
-                width: crate::styles::css_percent(current),
+                width: css_percent(current),
                 height: "100%",
                 background_color: indicator_color,
                 hit_test_behavior: "transparent",
@@ -127,6 +127,19 @@ fn non_negative_or(value: f32, fallback: f32) -> f32 {
         value
     } else {
         fallback
+    }
+}
+
+/// Convert a 0..=1 fraction into a CSS percentage width string.
+fn css_percent(fraction: f32) -> String {
+    let pct = (fraction * 100.0).clamp(0.0, 100.0);
+    if (pct - 100.0).abs() < 0.05 {
+        "100%".to_string()
+    } else if (pct - pct.round()).abs() < 0.05 {
+        format!("{}%", pct.round() as i32)
+    } else {
+        let s = format!("{pct:.4}");
+        format!("{}%", s.trim_end_matches('0').trim_end_matches('.'))
     }
 }
 

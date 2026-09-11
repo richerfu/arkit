@@ -6,11 +6,13 @@ use std::task::{Context, Poll, Waker};
 
 use crate::api::Timeline;
 use crate::callbacks::AnimationCallbacks;
-use crate::{AnimationHost, FrameDriver};
-use crate::{CapabilityRequirements, ExecutionPolicy, LoweringReport};
+use crate::frame_driver::FrameDriver;
+use crate::host::AnimationHost;
+use crate::native_capability::{CapabilityRequirements, ExecutionPolicy};
+use crate::native_lowerer::LoweringReport;
 use arkit_animation_core::{
-    AnimationInstanceSnapshot, AnimationOutcome, EngineCommand, EngineEvent, InstanceKey,
-    OutputSeek, PlaybackDirection, PlaybackRate, SeekMode, TimePoint, TimeSpan,
+    AnimationInstanceSnapshot, AnimationOutcome, AnimationRuntimeError, EngineCommand, EngineEvent,
+    InstanceKey, OutputSeek, PlaybackDirection, PlaybackRate, SeekMode, TimePoint, TimeSpan,
 };
 
 type SnapshotObserver = Rc<dyn Fn(AnimationInstanceSnapshot)>;
@@ -147,7 +149,11 @@ impl ControlsInner {
                     callback(progress);
                 }
             }
-            EngineEvent::Render { .. } => invoke(&callbacks.render),
+            EngineEvent::Render { at, .. } => {
+                if let Some(callback) = &callbacks.render {
+                    callback(at);
+                }
+            }
             EngineEvent::Loop {
                 completed_iterations,
                 ..
@@ -172,6 +178,12 @@ impl ControlsInner {
                     callback();
                 }
             }
+            EngineEvent::Error { error, .. } => match &callbacks.error {
+                Some(callback) => callback(error),
+                // Errors must never be silently swallowed: without an
+                // application observer they still reach the device log.
+                None => ohos_hilog_binding::error(format!("animation runtime error: {error:?}")),
+            },
             EngineEvent::RefreshRequested { .. } => {
                 let source = self.source.borrow().clone();
                 if let Err(error) = self.host.refresh_timeline(
@@ -279,6 +291,34 @@ fn invoke(callback: &Option<Rc<dyn Fn()>>) {
     }
 }
 
+/// Imperative handle over one animation instance.
+///
+/// The surface follows four naming and return conventions:
+///
+/// - **Playback verbs** ([`play`](Self::play), [`pause`](Self::pause),
+///   [`resume`](Self::resume), [`restart`](Self::restart),
+///   [`reverse`](Self::reverse), [`complete`](Self::complete),
+///   [`cancel`](Self::cancel), [`reset`](Self::reset),
+///   [`revert`](Self::revert), [`refresh`](Self::refresh)) are bare verbs and
+///   return `()`.
+/// - **Parameter mutations** carry a `set_` prefix
+///   ([`set_playback_rate`](Self::set_playback_rate),
+///   [`set_alternate`](Self::set_alternate),
+///   [`set_timeline`](Self::set_timeline)). [`stretch`](Self::stretch) is the
+///   one exception: it rescales the existing timeline instead of replacing a
+///   parameter, so it reads as an action, not a setter.
+/// - **Queries** return `Option`, or `bool` for predicates
+///   ([`snapshot`](Self::snapshot), [`direction`](Self::direction),
+///   [`lowering_report`](Self::lowering_report), [`is_ready`](Self::is_ready)).
+/// - **Observers** are named `on_<event>` after the engine event they mirror,
+///   and the last registration wins.
+///
+/// Commands are queued onto the engine and return `()`. Before the instance is
+/// attached — the usual situation on the first render after
+/// [`use_animation`](crate::use_animation) — a command is a no-op rather than an
+/// error; use [`is_ready`](Self::is_ready) when a caller must know. Runtime
+/// errors are never surfaced by these methods: observe them with
+/// [`on_error`](Self::on_error), and they are logged when unobserved.
 #[derive(Clone)]
 pub struct AnimationControls {
     pub(crate) inner: Rc<ControlsInner>,
@@ -463,7 +503,8 @@ impl AnimationControls {
         self.inner.callbacks.borrow_mut().before_update = Some(Rc::new(callback));
     }
 
-    pub fn on_render(&self, callback: impl Fn() + 'static) {
+    /// Called after the instance rendered a frame, with that frame's time.
+    pub fn on_render(&self, callback: impl Fn(TimePoint) + 'static) {
         self.inner.callbacks.borrow_mut().render = Some(Rc::new(callback));
     }
 
@@ -481,5 +522,13 @@ impl AnimationControls {
 
     pub fn on_pause(&self, callback: impl Fn() + 'static) {
         self.inner.callbacks.borrow_mut().pause = Some(Rc::new(callback));
+    }
+
+    /// Called when the engine reports a runtime error for this instance.
+    ///
+    /// Without an observer these errors still reach the device log, so a
+    /// rejected command never disappears silently.
+    pub fn on_error(&self, callback: impl Fn(AnimationRuntimeError) + 'static) {
+        self.inner.callbacks.borrow_mut().error = Some(Rc::new(callback));
     }
 }

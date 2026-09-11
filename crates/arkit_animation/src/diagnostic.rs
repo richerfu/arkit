@@ -5,6 +5,7 @@ use arkit_animation_core::{
     AdapterId, AdapterPropertyId, AdapterTargetId, PropertyName, SourceTarget, TargetName,
     ValueError,
 };
+use arkit_arkui::AnimatedAttributeClaimError;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AnimationAdapterError {
@@ -29,6 +30,7 @@ pub enum AnimationAdapterError {
     UnsupportedValue {
         property: AdapterPropertyId,
     },
+    AttributeClaim(AnimatedAttributeClaimError),
 }
 
 impl Display for AnimationAdapterError {
@@ -42,6 +44,12 @@ impl Error for AnimationAdapterError {}
 impl From<ValueError> for AnimationAdapterError {
     fn from(value: ValueError) -> Self {
         Self::Value(value)
+    }
+}
+
+impl From<AnimatedAttributeClaimError> for AnimationAdapterError {
+    fn from(value: AnimatedAttributeClaimError) -> Self {
+        Self::AttributeClaim(value)
     }
 }
 

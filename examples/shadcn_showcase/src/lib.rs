@@ -20,8 +20,8 @@ use arkit::shadcn::components::{
     CalendarYearRange, Card, CardContent, CardFooter, CardHeader, Carousel,
     CarouselControlsPlacement, CarouselIndicatorVariant, CarouselStyle, Checkbox, Code,
     Collapsible, ContextMenu, DatePicker, Dialog, DialogFooter, DialogHeader, DropdownMenu, Field,
-    FieldContent, FieldDescription, FieldError, FieldGroup, FieldOrientation, FieldSeparator,
-    FieldSet, FieldTitle, Form, FormItem, Guide, GuideSide, GuideStep, GuideTarget, HoverCard,
+    FieldContent, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldOrientation,
+    FieldSeparator, FieldSet, FieldTitle, FloatingSide, Guide, GuideStep, GuideTarget, HoverCard,
     Index, IndexBarSlot, IndexHeaderContext, IndexItemContext, IndexItemSpec, InfiniteScroll,
     Input, InputMode, InputOtp, InputOtpMode, InputOtpSeparator, Label, LoadMoreIndicator,
     LoadMoreState, Markdown, MenuEntry, Menubar, MenubarMenuSpec, MultiSlider, Popover, Progress,
@@ -1861,7 +1861,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
             column {
                 width: "100%",
                 Calendar {
-                    selected: calendar_selected(),
+                    selected_dates: calendar_selected().into_iter().collect(),
                     year_range: CalendarYearRange::new(1900, 2100),
                     plugins: vec![lunar_calendar_plugin, memo_calendar_plugin],
                     on_day_press: move |date| calendar_selected.set(Some(date)),
@@ -2755,15 +2755,19 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         text_align: "start",
                     }
                     v_gap { height: spacing::XXL }
-                    Form {
-                        submit_label: "Save changes".to_string(),
-                        on_submit: move |_| {
-                            form_attempted.set(true);
-                            let valid = form_name().trim().chars().count() >= 2
-                                && is_valid_email(form_email().as_str())
-                                && form_terms_accepted();
-                            form_status.set(Some(valid));
-                        },
+                    column {
+                        width: "100%",
+                        align_items: "start",
+                        background_color: theme.colors.card,
+                        foreground_color: theme.colors.card_foreground,
+                        border_width: 1.0,
+                        border_color: theme.colors.border,
+                        border_radius: theme.radii.xl,
+                        shadow: "sm",
+                        padding_top: spacing::XXL,
+                        padding_right: spacing::XXL,
+                        padding_bottom: spacing::XXL,
+                        padding_left: spacing::XXL,
                         FieldSet {
                             arkit_shadcn::components::FieldLegend {
                                 content: "Profile".to_string(),
@@ -2774,11 +2778,13 @@ fn ComponentDemo(slug: &'static str) -> Element {
                             }
                             v_gap { height: spacing::XL }
                             FieldGroup {
-                                FormItem {
-                                    label: "Display name".to_string(),
-                                    required: true,
-                                    description: Some("Use the name your teammates know you by.".to_string()),
-                                    error: if form_name_invalid { Some("Enter at least two characters.".to_string()) } else { None },
+                                Field {
+                                    invalid: form_name_invalid,
+                                    FieldLabel {
+                                        content: "Display name".to_string(),
+                                        required: true,
+                                        invalid: form_name_invalid,
+                                    }
                                     Input {
                                         value: Some(form_name()),
                                         placeholder: Some("Your name".to_string()),
@@ -2789,12 +2795,21 @@ fn ComponentDemo(slug: &'static str) -> Element {
                                             form_status.set(None);
                                         },
                                     }
+                                    FieldDescription {
+                                        content: "Use the name your teammates know you by.".to_string(),
+                                        inset: false,
+                                    }
+                                    if form_name_invalid {
+                                        FieldError { message: Some("Enter at least two characters.".to_string()) }
+                                    }
                                 }
-                                FormItem {
-                                    label: "Email address".to_string(),
-                                    required: true,
-                                    description: Some("We only use this for account and security updates.".to_string()),
-                                    error: if form_email_invalid { Some("Enter a valid email address.".to_string()) } else { None },
+                                Field {
+                                    invalid: form_email_invalid,
+                                    FieldLabel {
+                                        content: "Email address".to_string(),
+                                        required: true,
+                                        invalid: form_email_invalid,
+                                    }
                                     Input {
                                         value: Some(form_email()),
                                         placeholder: Some("name@example.com".to_string()),
@@ -2805,10 +2820,18 @@ fn ComponentDemo(slug: &'static str) -> Element {
                                             form_status.set(None);
                                         },
                                     }
+                                    FieldDescription {
+                                        content: "We only use this for account and security updates.".to_string(),
+                                        inset: false,
+                                    }
+                                    if form_email_invalid {
+                                        FieldError { message: Some("Enter a valid email address.".to_string()) }
+                                    }
                                 }
-                                FormItem {
-                                    label: "Bio".to_string(),
-                                    description: Some("Keep it short. You can change this anytime.".to_string()),
+                                Field {
+                                    FieldLabel {
+                                        content: "Bio".to_string(),
+                                    }
                                     Textarea {
                                         value: Some(form_bio()),
                                         placeholder: Some("Tell people a little about yourself.".to_string()),
@@ -2818,6 +2841,10 @@ fn ComponentDemo(slug: &'static str) -> Element {
                                             form_bio.set(value);
                                             form_status.set(None);
                                         },
+                                    }
+                                    FieldDescription {
+                                        content: "Keep it short. You can change this anytime.".to_string(),
+                                        inset: false,
                                     }
                                 }
                             }
@@ -2903,6 +2930,21 @@ fn ComponentDemo(slug: &'static str) -> Element {
                                 }
                             }
                         }
+                        row {
+                            width: "100%",
+                            Button {
+                                variant: ButtonVariant::Default,
+                                width: "100%",
+                                onclick: move |_| {
+                                    form_attempted.set(true);
+                                    let valid = form_name().trim().chars().count() >= 2
+                                        && is_valid_email(form_email().as_str())
+                                        && form_terms_accepted();
+                                    form_status.set(Some(valid));
+                                },
+                                "Save changes"
+                            }
+                        }
                     }
                 }
             }
@@ -2917,19 +2959,19 @@ fn ComponentDemo(slug: &'static str) -> Element {
                             "Your workspace",
                             "This summary keeps the active project and its recent activity in one place.",
                         )
-                        .side(GuideSide::Bottom),
+                        .side(FloatingSide::Bottom),
                         GuideStep::new(
                             "guide-search",
                             "Find anything",
                             "Search across components, examples, and documentation without leaving the page.",
                         )
-                        .side(GuideSide::Bottom),
+                        .side(FloatingSide::Bottom),
                         GuideStep::new(
                             "guide-settings",
                             "Tune the experience",
                             "Open preferences to change appearance, notifications, and workspace defaults.",
                         )
-                        .side(GuideSide::Top),
+                        .side(FloatingSide::Top),
                     ],
                     open: Some(guide_open()),
                     step: Some(guide_step()),
@@ -5431,12 +5473,35 @@ fn RefreshVirtualListDemo(
         reset_controller.reset()
     }));
 
-    let mut item_keys: Vec<u64> = (0..u64::from(item_count)).collect();
-    item_keys.push(u64::MAX - load_more_state_key(state));
+    #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+    enum ItemId {
+        Row(u32),
+        Footer,
+    }
+    #[derive(Clone, Copy, PartialEq)]
+    enum ItemRevision {
+        Row { data: u64, theme: Theme },
+        Footer { state: LoadMoreState, theme: Theme },
+    }
+    let mut stamps = (0..item_count)
+        .map(|index| {
+            VirtualItemStamp::new(
+                ItemId::Row(index),
+                ItemRevision::Row {
+                    data: data_revision,
+                    theme,
+                },
+            )
+        })
+        .collect::<Vec<_>>();
+    stamps.push(VirtualItemStamp::new(
+        ItemId::Footer,
+        ItemRevision::Footer { state, theme },
+    ));
     let item_controller = controller.clone();
     let footer_controller = controller.clone();
     let runtime = arkit::use_runtime_handle();
-    let source = use_virtual_source_items_keyed(VirtualKind::List, item_keys, move |index| {
+    let source = use_virtual_items(VirtualKind::List, stamps, move |index| {
         if index < item_count {
             let visible_controller = item_controller.clone();
             runtime.queue_ui(move || visible_controller.on_virtual_item(index));
@@ -5471,7 +5536,7 @@ fn RefreshVirtualListDemo(
 
 #[component]
 fn ShowcaseVirtualListHost(
-    source: VirtualSource,
+    source: VirtualItems,
     on_scroll: EventHandler<dioxus_elements::event::ScrollData>,
 ) -> Element {
     rsx! {
@@ -5483,15 +5548,6 @@ fn ShowcaseVirtualListHost(
             list_cached_count: 6_i32,
             onscroll: move |event| on_scroll.call(*event.data()),
         }
-    }
-}
-
-fn load_more_state_key(state: LoadMoreState) -> u64 {
-    match state {
-        LoadMoreState::Idle => 0,
-        LoadMoreState::Loading => 1,
-        LoadMoreState::Failed => 2,
-        LoadMoreState::NoMore => 3,
     }
 }
 
@@ -5692,7 +5748,7 @@ fn index_city_items() -> Vec<IndexItemSpec> {
     ]
     .into_iter()
     .map(|(index, title, description)| {
-        IndexItemSpec::new(index, title).with_description(description)
+        IndexItemSpec::new(format!("city:{title}"), index, title).with_description(description)
     })
     .collect()
 }
@@ -5703,10 +5759,11 @@ fn index_contact_items(count: usize) -> Vec<IndexItemSpec> {
         'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
     ];
     let mut items = Vec::with_capacity(count);
-    items.push(IndexItemSpec::new("#", "*Starred").with_description("favorites"));
-    items.push(IndexItemSpec::new("", "@support").with_description("symbol"));
-    items.push(IndexItemSpec::new("", "10086").with_description("hotline"));
-    items.push(IndexItemSpec::new("", "12306").with_description("rail"));
+    items
+        .push(IndexItemSpec::new("special:starred", "#", "*Starred").with_description("favorites"));
+    items.push(IndexItemSpec::new("special:support", "", "@support").with_description("symbol"));
+    items.push(IndexItemSpec::new("special:10086", "", "10086").with_description("hotline"));
+    items.push(IndexItemSpec::new("special:12306", "", "12306").with_description("rail"));
     let remaining = count.saturating_sub(items.len());
     let per = (remaining / LETTERS.len()).max(1);
     for (letter_index, letter) in LETTERS.iter().enumerate() {
@@ -5716,8 +5773,12 @@ fn index_contact_items(count: usize) -> Vec<IndexItemSpec> {
             }
             let serial = letter_index * per + n;
             items.push(
-                IndexItemSpec::new(letter.to_string(), format!("{letter}lex {serial:03}"))
-                    .with_description(format!("+86 138 {serial:04}")),
+                IndexItemSpec::new(
+                    format!("contact:{serial}"),
+                    letter.to_string(),
+                    format!("{letter}lex {serial:03}"),
+                )
+                .with_description(format!("+86 138 {serial:04}")),
             );
         }
     }

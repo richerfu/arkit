@@ -22,20 +22,37 @@ rsx! { ECharts { option: option() } }
 
 批量更新领域数据后一次生成 option，避免同一业务 tick 连续创建多份中间配置。
 
+## 动画时序
+
+```rust
+ChartOption::new()
+    .animation(
+        AnimationOptions::default()
+            .initial(900, "cubicInOut")
+            .update(800, "cubicInOut"),
+    )
+    .push_series(Series::line("值", values()))
+```
+
+`initial` 是首次绘制的进场动画，`update` 是数据更新的过渡，`state` 是 highlight / downplay 的状态切换。`AnimationTiming::new(duration, easing).with_delay(ms)` 单独构造某一档时序。元素数超过 `threshold` 时按 `enabled` 策略整体跳过动画。
+
 ## appendData
 
 ```rust
-controller.append_data(ChartAppendData::scatter(
+let status = controller.append_data(ChartAppendData::scatter(
     0,
     [DataPoint::values([12.0, 36.0])],
-));
+))?;
 ```
 
 当前增量限制：
 
 - 只支持 scatter 和 lines。
 - series index 必须指向匹配类型。
+- dataset 驱动的 scatter 必须通过受控 option 更新，不能用 appendData 改写来源语义。
 - 其他 series 使用受控 option 更新。
+
+调用返回 `Result<ChartCommandStatus, ChartError>`。未绑定/未 ready、index 错误和不支持的 series 不再静默丢弃；生产者应显式处理错误，卸载后停止推送。
 
 不要手工复制 renderer 内部 data，再同时 append 和替换 option；选定一个所有权路径。
 

@@ -10,6 +10,7 @@ mod load_more;
 mod node;
 mod overlay;
 mod safe_area;
+mod virtual_diff;
 mod virtual_list;
 mod virtual_range;
 
@@ -31,7 +32,7 @@ pub use arkit_runtime::{
     ApplicationLifecycleState, ApplicationLifecycleSubscription, EdgeInsets, SafeAreaPolicy,
     WindowMetrics, WindowMetricsHandle, WindowMetricsSubscription,
 };
-pub use layout::{use_layout_frame, use_layout_size, LayoutFrame, LayoutSize};
+pub use layout::{use_layout_frame, use_layout_size};
 pub use lifecycle::{
     use_app_foreground, use_application_lifecycle, use_application_lifecycle_event,
     use_component_lifecycle, use_component_visibility, ComponentLifecycleState,
@@ -44,5 +45,6 @@ pub use overlay::{
 pub use safe_area::{
     use_safe_area, use_safe_area_policy, use_window_metrics, SafeArea, SafeAreaEdges, SafeAreaProps,
 };
-pub use virtual_list::{use_virtual_source, use_virtual_source_items_keyed, VirtualSourceItem};
+pub use virtual_diff::VirtualItemStamp;
+pub use virtual_list::{use_virtual_items, use_virtual_source, VirtualItems, VirtualSourceItem};
 pub use virtual_range::{use_virtual_range, VirtualVisibleRange};

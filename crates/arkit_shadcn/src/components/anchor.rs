@@ -31,9 +31,9 @@ struct ScrollJump {
 /// Anchor 共享状态。经 `use_context_provider` 只提供一次，任何可变状态
 /// 都通过内部可变性访问（dioxus 0.7 的 context 不传播更新）。
 struct AnchorInner {
-    frames: Rc<RefCell<Vec<(String, arkit_hooks::LayoutFrame)>>>,
+    frames: Rc<RefCell<Vec<(String, arkit_arkui::LayoutFramePx)>>>,
     revision: Signal<u64>,
-    scroll_frame: Signal<arkit_hooks::LayoutFrame>,
+    scroll_frame: Signal<arkit_arkui::LayoutFramePx>,
     position: Signal<f32>,
     command: Signal<Option<ScrollJump>>,
     active: Memo<Option<String>>,
@@ -51,7 +51,7 @@ impl AnchorInner {
             .max(f32::EPSILON)
     }
 
-    fn update_section(&self, id: &str, frame: arkit_hooks::LayoutFrame) {
+    fn update_section(&self, id: &str, frame: arkit_arkui::LayoutFramePx) {
         let mut frames = self.frames.borrow_mut();
         if let Some((_, current)) = frames.iter_mut().find(|(registered, _)| registered == id) {
             if *current == frame {
@@ -147,12 +147,12 @@ pub fn use_anchor() -> Option<AnchorContext> {
 /// 所有帧均为窗口相对物理像素；`position_px` 是滚动视口顶部相对内容
 /// 顶部的偏移。
 fn active_section(
-    sections: &[(String, arkit_hooks::LayoutFrame)],
-    scroll: arkit_hooks::LayoutFrame,
+    sections: &[(String, arkit_arkui::LayoutFramePx)],
+    scroll: arkit_arkui::LayoutFramePx,
     position_px: f32,
     threshold_px: f32,
 ) -> Option<String> {
-    let measured: Vec<&(String, arkit_hooks::LayoutFrame)> = sections
+    let measured: Vec<&(String, arkit_arkui::LayoutFramePx)> = sections
         .iter()
         .filter(|(_, frame)| frame.is_measured())
         .collect();
@@ -225,7 +225,7 @@ pub fn Anchor(props: AnchorProps) -> Element {
 
     let frames = use_hook(|| Rc::new(RefCell::new(Vec::new())));
     let revision = use_signal(|| 0u64);
-    let scroll_frame = use_signal(arkit_hooks::LayoutFrame::default);
+    let scroll_frame = use_signal(arkit_arkui::LayoutFramePx::default);
     let position = use_signal(|| 0.0f32);
     let command = use_signal(|| None::<ScrollJump>);
     let threshold_vp = props.active_threshold;
@@ -396,10 +396,10 @@ pub fn AnchorItem(props: AnchorItemProps) -> Element {
 #[cfg(test)]
 mod tests {
     use super::active_section;
-    use arkit_hooks::LayoutFrame;
+    use arkit_arkui::LayoutFramePx;
 
-    fn frame(y: f32, height: f32) -> LayoutFrame {
-        LayoutFrame {
+    fn frame(y: f32, height: f32) -> LayoutFramePx {
+        LayoutFramePx {
             x: 0.0,
             y,
             width: 400.0,
@@ -460,13 +460,13 @@ mod tests {
 
     #[test]
     fn unmeasured_frames_yield_none() {
-        let sections = vec![("intro".to_string(), LayoutFrame::default())];
+        let sections = vec![("intro".to_string(), LayoutFramePx::default())];
         assert_eq!(
             active_section(&sections, frame(100.0, 600.0), 450.0, 0.0),
             None
         );
         assert_eq!(
-            active_section(&[], LayoutFrame::default(), 450.0, 0.0),
+            active_section(&[], LayoutFramePx::default(), 450.0, 0.0),
             None
         );
     }

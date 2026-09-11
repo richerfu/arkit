@@ -87,15 +87,21 @@ async fn create_webview_with_retry(
 }
 
 /// Maps a dioxus layout frame (physical px) onto the plugin style (vp).
-fn style_from_frame(frame: LayoutFrame, scale: f32) -> WebviewStyle {
-    WebviewStyle {
-        x: Some(Either::A(f64::from(frame.x / scale))),
-        y: Some(Either::A(f64::from(frame.y / scale))),
-        width: Some(Either::A(f64::from(frame.width / scale))),
-        height: Some(Either::A(f64::from(frame.height / scale))),
+fn style_from_frame(frame: LayoutFramePx, scale: f32) -> Option<WebviewStyle> {
+    let origin = LocalVpPoint::from_window_px(
+        WindowPxPoint::new(frame.x, frame.y),
+        LayoutFramePx::default(),
+        scale,
+    )?;
+    let size = LogicalSizeVp::from_physical(frame.into(), scale)?;
+    Some(WebviewStyle {
+        x: Some(Either::A(f64::from(origin.x))),
+        y: Some(Either::A(f64::from(origin.y))),
+        width: Some(Either::A(f64::from(size.width))),
+        height: Some(Either::A(f64::from(size.height))),
         visible: None,
         background_color: Some("#FFFFFFFF".to_string()),
-    }
+    })
 }
 
 #[component]
@@ -336,7 +342,6 @@ pub fn WebviewPage() -> Element {
             // The page area: its measured dioxus frame becomes the WebView
             // style, so the plugin surface lands exactly on this rectangle.
             WebviewArea {
-                runtime: runtime.clone(),
                 created,
             }
         }
@@ -344,9 +349,9 @@ pub fn WebviewPage() -> Element {
 }
 
 #[component]
-fn WebviewArea(runtime: RuntimeHandle, created: Signal<bool>) -> Element {
+fn WebviewArea(created: Signal<bool>) -> Element {
     let node_ref = use_native_element_ref();
-    let scale = runtime.scale();
+    let scale = use_window_metrics().scale;
     let commands = dioxus_hooks::use_coroutine_handle::<WebviewCommand>();
     let created_sig = created;
 
@@ -356,7 +361,9 @@ fn WebviewArea(runtime: RuntimeHandle, created: Signal<bool>) -> Element {
         if !frame.is_measured() || *created_sig.read() {
             return;
         }
-        commands.send(WebviewCommand::Create(style_from_frame(frame, scale)));
+        if let Some(style) = style_from_frame(frame, scale) {
+            commands.send(WebviewCommand::Create(style));
+        }
     });
 
     rsx! {

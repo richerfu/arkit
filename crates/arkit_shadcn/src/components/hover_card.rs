@@ -31,7 +31,7 @@ pub fn HoverCard(
     let theme = use_theme();
     let viewport = arkit_hooks::use_overlay_viewport();
     let trigger_ref = arkit_hooks::use_native_element_ref();
-    let trigger_frame = use_signal(arkit_hooks::LayoutFrame::default);
+    let trigger_frame = use_signal(arkit_arkui::LayoutFramePx::default);
     arkit_hooks::use_layout_frame(trigger_ref.clone(), move |frame| {
         let mut trigger_frame = trigger_frame;
         trigger_frame.set(frame);
@@ -84,7 +84,7 @@ pub fn HoverCard(
         row {
             native_ref: trigger_ref,
             onclick: move |_| set_open.call(!current),
-            on_hover: move |evt| {
+            onhover: move |evt| {
                 if evt.data().is_hovering {
                     show_card.call(());
                 } else {

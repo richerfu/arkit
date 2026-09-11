@@ -27,8 +27,6 @@ const GUIDE_DEFAULT_BACKDROP: u32 = 0xA6000000;
 ///
 /// The panel automatically flips to the opposite side when the preferred side
 /// does not have enough room.
-pub type GuideSide = FloatingSide;
-
 /// One guide step and the target it describes.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GuideStep {
@@ -36,7 +34,7 @@ pub struct GuideStep {
     pub target: String,
     pub title: String,
     pub description: String,
-    pub side: GuideSide,
+    pub side: FloatingSide,
 }
 
 impl GuideStep {
@@ -49,11 +47,11 @@ impl GuideStep {
             target: target.into(),
             title: title.into(),
             description: description.into(),
-            side: GuideSide::Bottom,
+            side: FloatingSide::Bottom,
         }
     }
 
-    pub const fn side(mut self, side: GuideSide) -> Self {
+    pub const fn side(mut self, side: FloatingSide) -> Self {
         self.side = side;
         self
     }
@@ -263,7 +261,7 @@ pub fn GuideTarget(
 
 #[derive(Clone)]
 struct GuideRegistry {
-    frames: Rc<RefCell<Vec<(String, arkit_hooks::LayoutFrame)>>>,
+    frames: Rc<RefCell<Vec<(String, arkit_arkui::LayoutFramePx)>>>,
     revision: Signal<u64>,
 }
 
@@ -279,7 +277,7 @@ impl GuideRegistry {
         (self.revision)()
     }
 
-    fn frame(&self, id: &str) -> Option<arkit_hooks::LayoutFrame> {
+    fn frame(&self, id: &str) -> Option<arkit_arkui::LayoutFramePx> {
         self.frames
             .borrow()
             .iter()
@@ -287,7 +285,7 @@ impl GuideRegistry {
             .map(|(_, frame)| *frame)
     }
 
-    fn update(&self, id: &str, frame: arkit_hooks::LayoutFrame) {
+    fn update(&self, id: &str, frame: arkit_arkui::LayoutFramePx) {
         let mut frames = self.frames.borrow_mut();
         if let Some((_, current)) = frames.iter_mut().find(|(registered, _)| registered == id) {
             if *current == frame {
@@ -348,10 +346,10 @@ struct GuideGeometry {
 
 impl GuideGeometry {
     fn resolve(
-        target: arkit_hooks::LayoutFrame,
+        target: arkit_arkui::LayoutFramePx,
         viewport: arkit_hooks::OverlayViewport,
         style: GuideStyle,
-        preferred_side: GuideSide,
+        preferred_side: FloatingSide,
     ) -> Option<Self> {
         if !target.is_measured() {
             return None;
@@ -430,19 +428,19 @@ impl GuideGeometry {
         );
 
         let (raw_x, raw_y) = match side {
-            GuideSide::Top => (
+            FloatingSide::Top => (
                 spotlight.x + (spotlight.width - panel_width) / 2.0,
                 spotlight.y - side_offset - panel_height,
             ),
-            GuideSide::Bottom => (
+            FloatingSide::Bottom => (
                 spotlight.x + (spotlight.width - panel_width) / 2.0,
                 spotlight.bottom() + side_offset,
             ),
-            GuideSide::Left => (
+            FloatingSide::Left => (
                 spotlight.x - side_offset - panel_width,
                 spotlight.y + (spotlight.height - panel_height) / 2.0,
             ),
-            GuideSide::Right => (
+            FloatingSide::Right => (
                 spotlight.right() + side_offset,
                 spotlight.y + (spotlight.height - panel_height) / 2.0,
             ),
@@ -463,48 +461,48 @@ impl GuideGeometry {
 }
 
 fn resolve_side(
-    preferred: GuideSide,
+    preferred: FloatingSide,
     spotlight: GuideRect,
     panel_width: f32,
     panel_height: f32,
     offset: f32,
     bounds: GuideRect,
-) -> GuideSide {
+) -> FloatingSide {
     let top = spotlight.y - bounds.y;
     let bottom = bounds.bottom() - spotlight.bottom();
     let left = spotlight.x - bounds.x;
     let right = bounds.right() - spotlight.right();
     let fits = |side| match side {
-        GuideSide::Top => top >= panel_height + offset,
-        GuideSide::Bottom => bottom >= panel_height + offset,
-        GuideSide::Left => left >= panel_width + offset,
-        GuideSide::Right => right >= panel_width + offset,
+        FloatingSide::Top => top >= panel_height + offset,
+        FloatingSide::Bottom => bottom >= panel_height + offset,
+        FloatingSide::Left => left >= panel_width + offset,
+        FloatingSide::Right => right >= panel_width + offset,
     };
     if fits(preferred) {
         return preferred;
     }
     let opposite = match preferred {
-        GuideSide::Top => GuideSide::Bottom,
-        GuideSide::Bottom => GuideSide::Top,
-        GuideSide::Left => GuideSide::Right,
-        GuideSide::Right => GuideSide::Left,
+        FloatingSide::Top => FloatingSide::Bottom,
+        FloatingSide::Bottom => FloatingSide::Top,
+        FloatingSide::Left => FloatingSide::Right,
+        FloatingSide::Right => FloatingSide::Left,
     };
     if fits(opposite) {
         return opposite;
     }
     match preferred {
-        GuideSide::Top | GuideSide::Bottom => {
+        FloatingSide::Top | FloatingSide::Bottom => {
             if bottom >= top {
-                GuideSide::Bottom
+                FloatingSide::Bottom
             } else {
-                GuideSide::Top
+                FloatingSide::Top
             }
         }
-        GuideSide::Left | GuideSide::Right => {
+        FloatingSide::Left | FloatingSide::Right => {
             if right >= left {
-                GuideSide::Right
+                FloatingSide::Right
             } else {
-                GuideSide::Left
+                FloatingSide::Left
             }
         }
     }
@@ -516,7 +514,7 @@ struct GuideOverlaySnapshot {
     step: Option<GuideStep>,
     current_step: usize,
     total_steps: usize,
-    target_frame: Option<arkit_hooks::LayoutFrame>,
+    target_frame: Option<arkit_arkui::LayoutFramePx>,
     viewport: arkit_hooks::OverlayViewport,
     labels: GuideLabels,
     style: GuideStyle,
@@ -746,8 +744,8 @@ mod tests {
             height: 40.0,
         };
         assert_eq!(
-            resolve_side(GuideSide::Bottom, target, 280.0, 160.0, 12.0, bounds),
-            GuideSide::Top
+            resolve_side(FloatingSide::Bottom, target, 280.0, 160.0, 12.0, bounds),
+            FloatingSide::Top
         );
     }
 
@@ -766,15 +764,15 @@ mod tests {
             height: 48.0,
         };
         assert_eq!(
-            resolve_side(GuideSide::Bottom, target, 280.0, 160.0, 12.0, bounds),
-            GuideSide::Bottom
+            resolve_side(FloatingSide::Bottom, target, 280.0, 160.0, 12.0, bounds),
+            FloatingSide::Bottom
         );
     }
 
     #[test]
     fn converts_physical_target_frame_into_overlay_vp_geometry() {
         let viewport = arkit_hooks::OverlayViewport {
-            frame: arkit_hooks::LayoutFrame {
+            frame: arkit_arkui::LayoutFramePx {
                 x: 10.0,
                 y: 20.0,
                 width: 800.0,
@@ -783,7 +781,7 @@ mod tests {
             safe_area: arkit_runtime::EdgeInsets::default(),
             scale: 2.0,
         };
-        let target = arkit_hooks::LayoutFrame {
+        let target = arkit_arkui::LayoutFramePx {
             x: 110.0,
             y: 220.0,
             width: 100.0,
@@ -798,7 +796,7 @@ mod tests {
                 estimated_panel_height: 100.0,
                 ..GuideStyle::default()
             },
-            GuideSide::Bottom,
+            FloatingSide::Bottom,
         )
         .expect("measured target should resolve");
 

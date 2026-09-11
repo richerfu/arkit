@@ -151,7 +151,7 @@ fn BottomSheetPanel(props: BottomSheetPanelProps) -> Element {
             background_color: theme.colors.card,
             shadow: "sm",
             clip: true,
-            on_touch: move |evt| {
+            ontouch: move |evt| {
                 let Some(pointer) = evt.data().pointer else {
                     return;
                 };
@@ -288,7 +288,7 @@ pub fn BottomSheetTextInput(
             font_size: typography::XL,
             font_color: theme.colors.foreground,
             line_height: 25.0,
-            on_change: move |evt| {
+            onchange: move |evt| {
                 if let Some(handler) = on_change {
                     handler.call(evt.data().string_value.clone());
                 }

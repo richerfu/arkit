@@ -56,7 +56,7 @@ use_application_lifecycle_event(move |event, state| {
 ```rust
 let reference = use_native_element_ref();
 let component = use_component_lifecycle(reference.clone());
-let should_run = use_app_foreground() && component.is_visible();
+let should_run = use_app_foreground() && component.is_known_visible();
 
 use_effect(use_reactive(&should_run, move |active| {
     player.set_active(active);
@@ -70,7 +70,7 @@ rsx! {
 }
 ```
 
-快照包含 `visible` 和 ArkUI 上报的 `visible_fraction`；`use_component_visibility(reference)` 是布尔简写。同一精确元素的多个订阅共享 renderer 的 native event route，卸载时按 RAII token 清理。
+状态明确区分 `Unmounted`、已挂载但尚未收到平台观测的 `Unknown`、`Hidden` 和 `Visible { fraction }`。有限动画可自行决定是否在 `Unknown` 阶段先完成初始化；持续或高功耗工作通常应等待 `is_known_visible()`。`use_component_visibility(reference)` 是严格的布尔简写，只在平台已经确认可见时返回 `true`，不会把 `Unknown` 当成可见。同一精确元素的多个订阅共享 renderer 的 native event route，卸载时按 RAII token 清理。
 
 组件创建和销毁已经由 scope 生命周期完整表达，因此不再增加一套重复的 `on_create`/`on_destroy` API：首次 `use_effect` 负责创建或订阅，`use_drop` 负责销毁；展示/隐藏由上述组件生命周期 Hook 补齐。
 

@@ -275,10 +275,10 @@ fn ScrollDemo() -> Element {
                 selected_color: "#FF4F46E5",
                 track_color: "#FFCBD5E1",
                 block_color: "#FF312E81",
-                on_change: {
+                onchange: {
                     let observer = observer.clone();
                     let clock = clock.clone();
-                    move |event| {
+                    move |event: dioxus_core::Event<dioxus_elements::event::ChangeData>| {
                         drive_scroll(&observer, &clock, event.data().float_value);
                     }
                 }

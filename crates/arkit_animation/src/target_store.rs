@@ -6,7 +6,8 @@ use arkit_animation_core::{
 };
 use arkit_arkui::MountedNodeLease;
 
-use crate::{AnimationAdapterError, AnimationTargetBinding, TargetVisualState};
+use crate::diagnostic::AnimationAdapterError;
+use crate::target::{AnimationTargetBinding, TargetVisualState};
 
 #[derive(Default)]
 pub struct TargetStore {

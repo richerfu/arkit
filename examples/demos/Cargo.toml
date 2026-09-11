@@ -55,12 +55,5 @@ shadcn_showcase = { path = "../shadcn_showcase" }
 terminal_example = { path = "../terminal" }
 webview_example = { path = "../webview" }
 
-[features]
-# Use arkit_terminal's pure-Rust stub instead of building libghostty-vt.
-# Lets host-side type-checks (`ohrs cargo -- check --features terminal-stub`)
-# run without a working Zig toolchain; production builds omit this feature so
-# the real VT engine is linked.
-terminal-stub = ["arkit_terminal/stub"]
-
 [build-dependencies]
 napi-build-ohos.workspace = true

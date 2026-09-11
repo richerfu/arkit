@@ -6,15 +6,20 @@
 //! attachment and detachment. ArkUI then requests only visible items.
 
 use std::cell::{Cell, RefCell};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 use std::rc::Rc;
 
 use arkit_prelude::{dioxus_core, use_effect, use_hook, use_reactive, Element};
+use dioxus_core::{AttributeValue, IntoAttributeValue};
 use ohos_arkui_binding::common::error::ArkUIResult;
 
 use arkit_arkui::{
     MountItem, OwnedNativeNode, RenderItem, VirtualItemMount, VirtualKind, VirtualSource,
+};
+
+use crate::virtual_diff::{
+    validate_virtual_item_ids, virtual_item_updates, VirtualItemStamp, VirtualItemUpdate,
 };
 
 type RsxRenderItem = Rc<dyn Fn(u32) -> Element>;
@@ -94,7 +99,12 @@ fn virtual_rsx_item_root(props: VirtualRsxItemProps) -> Element {
     render_item(props.index.get())
 }
 
-/// Create a true virtual List, Grid, or WaterFlow.
+/// Create a manually controlled virtual List, Grid, or WaterFlow.
+///
+/// `initial_count` is used only to create the source. Later backing-data
+/// changes must be paired explicitly with [`VirtualSource`] insert/remove/
+/// move/reload operations. Use [`use_virtual_items`] when a stamp snapshot
+/// should be the single authority for these mutations.
 ///
 /// The callback can return either an RSX [`Element`] or an
 /// [`ArkUIResult<OwnedNativeNode>`]. Each visible RSX item owns a small Dioxus subtree
@@ -131,15 +141,23 @@ fn virtual_rsx_item_root(props: VirtualRsxItemProps) -> Element {
 #[track_caller]
 pub fn use_virtual_source<I>(
     kind: VirtualKind,
-    total_count: u32,
+    initial_count: u32,
     render_item: impl Fn(u32) -> I + 'static,
 ) -> VirtualSource
 where
     I: VirtualSourceItem,
 {
-    let source = I::use_source(kind, total_count, Rc::new(render_item));
-    use_virtual_source_count(source.clone(), total_count);
-    source
+    use_fixed_virtual_kind(kind, "use_virtual_source");
+    I::use_source(kind, initial_count, Rc::new(render_item))
+}
+
+fn use_fixed_virtual_kind(kind: VirtualKind, hook: &'static str) {
+    let initial = use_hook(|| Rc::new(Cell::new(kind)));
+    assert_eq!(
+        initial.get(),
+        kind,
+        "{hook} cannot change VirtualKind during one hook lifetime"
+    );
 }
 
 struct VirtualRsxItemOwner {
@@ -194,312 +212,190 @@ fn rsx_mount_item(
     })
 }
 
-fn use_virtual_source_count(source: VirtualSource, total_count: u32) {
-    // Count changes mutate ArkUI and may synchronously emit adapter events.
-    // Defer them until after Dioxus commits the render that supplied the new
-    // callback and backing data. Grow/shrink is applied as a tail insert or
-    // remove so existing rows (and their scroll anchor) are never rebuilt.
-    let previous = use_hook(|| std::cell::Cell::new(total_count));
-    use_effect(use_reactive((&total_count,), move |(next_total,)| {
-        let previous_total = previous.replace(next_total);
-        if next_total == previous_total {
-            return;
-        }
-        let result = if next_total > previous_total {
-            source.insert_items(previous_total, next_total - previous_total)
-        } else {
-            source.remove_items(next_total, previous_total - next_total)
-        };
-        if let Err(error) = result {
-            ohos_hilog_binding::error(format!(
-                "arkit_hooks: virtual adapter count update failed: {error}"
-            ));
-        }
-    }));
+/// A high-level virtual-items binding with data mutations owned by its hook.
+///
+/// Assign this value to a container's `virtual_source` attribute. It purposely
+/// does not expose [`VirtualSource`]'s manual insert/remove/reload methods, so a
+/// caller cannot mutate the adapter independently of the stamps passed to
+/// [`use_virtual_items`].
+#[derive(Clone, PartialEq, Eq)]
+pub struct VirtualItems {
+    source: VirtualSource,
 }
 
-/// Create a virtual adapter with item-local invalidation.
+impl IntoAttributeValue for VirtualItems {
+    fn into_value(self) -> AttributeValue {
+        self.source.into_value()
+    }
+}
+
+/// Create a virtual adapter driven by stable identities and visual revisions.
 ///
-/// `item_keys[index]` must cover every visual input for that item. Equal-size
-/// updates reload only the changed contiguous runs. Unique keys also allow
-/// structural inserts, removals, and moves to preserve unaffected native rows
-/// and their item-local state. Keeping distant changes separate is important
-/// for selection updates: reloading the entire range between the previous and
-/// next selection can disturb a List's scroll anchor.
+/// `id` is the item's stable identity. Structural changes are derived solely
+/// from IDs, preserving item-local state across moves while that item remains
+/// retained by the adapter. `revision` covers every visual input captured by
+/// `render_item`; changing it reloads that same item without changing its
+/// identity. IDs must be unique within each snapshot; duplicates are rejected
+/// as a programmer error before the adapter mutates.
 #[track_caller]
-pub fn use_virtual_source_items_keyed<K, I>(
+pub fn use_virtual_items<Id, Revision, I>(
     kind: VirtualKind,
-    item_keys: Vec<K>,
+    stamps: Vec<VirtualItemStamp<Id, Revision>>,
     render_item: impl Fn(u32) -> I + 'static,
-) -> VirtualSource
+) -> VirtualItems
 where
-    K: Clone + Eq + Hash + 'static,
+    Id: Clone + Eq + Hash + 'static,
+    Revision: Clone + PartialEq + 'static,
     I: VirtualSourceItem,
 {
-    let total_count = item_keys.len() as u32;
+    use_fixed_virtual_kind(kind, "use_virtual_items");
+    if let Err(error) = validate_virtual_item_ids(&stamps) {
+        panic!("use_virtual_items requires unique item IDs: {error}");
+    }
+    let token_state = use_hook(|| Rc::new(RefCell::new(StableItemTokens::new())));
+    let item_ids = token_state.borrow_mut().resolve(&stamps);
+    let total_count = u32::try_from(stamps.len()).expect("virtual item count exceeds u32");
     let source = I::use_source(kind, total_count, Rc::new(render_item));
-    use_virtual_item_keys(source.clone(), item_keys);
-    source
+    use_virtual_item_stamps(source.clone(), stamps, item_ids, token_state);
+    VirtualItems { source }
 }
 
-fn use_virtual_item_keys<K>(source: VirtualSource, item_keys: Vec<K>)
+struct StableItemTokens<Id> {
+    current: HashMap<Id, u32>,
+    next: u32,
+}
+
+impl<Id> StableItemTokens<Id>
 where
-    K: Clone + Eq + Hash + 'static,
+    Id: Clone + Eq + Hash,
 {
-    let previous_item_keys = use_hook(|| Rc::new(RefCell::new(item_keys.clone())));
-    let effect_previous_item_keys = previous_item_keys.clone();
-
-    use_effect(use_reactive((&item_keys,), move |(next_item_keys,)| {
-        let previous_item_keys = effect_previous_item_keys.borrow().clone();
-
-        let updates = keyed_item_updates(&previous_item_keys, &next_item_keys);
-        if updates.is_empty() {
-            return;
-        }
-        for update in updates {
-            let result = match update {
-                KeyedItemUpdate::Insert { start, count } => source.insert_items(start, count),
-                KeyedItemUpdate::Remove { start, count } => source.remove_items(start, count),
-                KeyedItemUpdate::Move { from, to } => source.move_item(from, to),
-                KeyedItemUpdate::Reload { start, count } => source.reload_items(start, count),
-                KeyedItemUpdate::Reset => reset_virtual_items(&source, next_item_keys.len()),
-            };
-            if let Err(error) = result {
-                ohos_hilog_binding::error(format!(
-                    "arkit_hooks: item-keyed virtual adapter update failed: {error}"
-                ));
-                if let Err(reset_error) = reset_virtual_items(&source, next_item_keys.len()) {
-                    ohos_hilog_binding::error(format!(
-                        "arkit_hooks: virtual adapter recovery failed: {reset_error}"
-                    ));
-                }
-                break;
-            }
-        }
-        *effect_previous_item_keys.borrow_mut() = next_item_keys;
-    }));
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum KeyedItemUpdate {
-    Insert { start: u32, count: u32 },
-    Remove { start: u32, count: u32 },
-    Move { from: u32, to: u32 },
-    Reload { start: u32, count: u32 },
-    Reset,
-}
-
-fn keyed_item_updates<K>(previous: &[K], next: &[K]) -> Vec<KeyedItemUpdate>
-where
-    K: Clone + Eq + Hash,
-{
-    if previous == next {
-        return Vec::new();
-    }
-    if !keys_are_unique(previous) || !keys_are_unique(next) {
-        if previous.len() == next.len() {
-            return changed_item_ranges(previous, next)
-                .into_iter()
-                .map(|(start, count)| KeyedItemUpdate::Reload { start, count })
-                .collect();
-        }
-        return vec![KeyedItemUpdate::Reset];
-    }
-
-    let next_keys = next.iter().collect::<HashSet<_>>();
-    let mut current = previous.to_vec();
-    let mut updates = Vec::new();
-
-    let mut absent_ranges = Vec::new();
-    let mut range_start = None;
-    for (index, key) in current.iter().enumerate() {
-        if !next_keys.contains(key) {
-            range_start.get_or_insert(index);
-        } else if let Some(start) = range_start.take() {
-            absent_ranges.push((start, index - start));
+    fn new() -> Self {
+        Self {
+            current: HashMap::new(),
+            next: 0,
         }
     }
-    if let Some(start) = range_start {
-        absent_ranges.push((start, current.len() - start));
-    }
-    for (start, count) in absent_ranges.into_iter().rev() {
-        current.drain(start..start + count);
-        updates.push(KeyedItemUpdate::Remove {
-            start: start as u32,
-            count: count as u32,
-        });
-    }
 
-    let mut target = 0;
-    while target < next.len() {
-        if current.get(target) == Some(&next[target]) {
-            target += 1;
-            continue;
-        }
-        if let Some(offset) = current[target..]
-            .iter()
-            .position(|key| key == &next[target])
-        {
-            let from = target + offset;
-            let key = current.remove(from);
-            current.insert(target, key);
-            updates.push(KeyedItemUpdate::Move {
-                from: from as u32,
-                to: target as u32,
+    fn resolve<Revision>(&mut self, stamps: &[VirtualItemStamp<Id, Revision>]) -> Vec<u32> {
+        let mut item_ids = Vec::with_capacity(stamps.len());
+        for stamp in stamps {
+            let token = self.current.get(&stamp.id).copied().unwrap_or_else(|| {
+                let token = self.next;
+                self.next = self
+                    .next
+                    .checked_add(1)
+                    .expect("virtual item identity token space exhausted");
+                self.current.insert(stamp.id.clone(), token);
+                token
             });
-            target += 1;
-            continue;
+            item_ids.push(token);
         }
-
-        let start = target;
-        while target < next.len() && !current[target.min(current.len())..].contains(&next[target]) {
-            current.insert(target, next[target].clone());
-            target += 1;
-        }
-        updates.push(KeyedItemUpdate::Insert {
-            start: start as u32,
-            count: (target - start) as u32,
-        });
+        item_ids
     }
 
-    if current.len() > next.len() {
-        let start = next.len();
-        let count = current.len() - start;
-        current.truncate(start);
-        updates.push(KeyedItemUpdate::Remove {
-            start: start as u32,
-            count: count as u32,
-        });
+    fn commit<Revision>(&mut self, stamps: &[VirtualItemStamp<Id, Revision>]) {
+        let retained = stamps.iter().map(|stamp| &stamp.id).collect::<HashSet<_>>();
+        self.current.retain(|id, _| retained.contains(id));
     }
-    debug_assert!(current == next);
-    updates
 }
 
-fn keys_are_unique<K>(keys: &[K]) -> bool
-where
-    K: Eq + Hash,
+fn use_virtual_item_stamps<Id, Revision>(
+    source: VirtualSource,
+    stamps: Vec<VirtualItemStamp<Id, Revision>>,
+    item_ids: Vec<u32>,
+    token_state: Rc<RefCell<StableItemTokens<Id>>>,
+) where
+    Id: Clone + Eq + Hash + 'static,
+    Revision: Clone + PartialEq + 'static,
 {
-    let mut unique = HashSet::with_capacity(keys.len());
-    keys.iter().all(|key| unique.insert(key))
+    let initial_source = source.clone();
+    let initial_stamps = stamps.clone();
+    let initial_item_ids = item_ids.clone();
+    let previous_stamps = use_hook(move || {
+        initial_source.set_stable_item_ids(initial_item_ids);
+        Rc::new(RefCell::new(initial_stamps))
+    });
+    let effect_previous_stamps = previous_stamps.clone();
+
+    use_effect(use_reactive(
+        (&stamps, &item_ids),
+        move |(next_stamps, next_item_ids)| {
+            let previous_stamps = effect_previous_stamps.borrow().clone();
+            source.begin_stable_item_update(next_item_ids);
+
+            let updates =
+                virtual_item_updates(&previous_stamps, &next_stamps).unwrap_or_else(|error| {
+                    panic!("use_virtual_items requires unique item IDs: {error}")
+                });
+            let mut revision_updates = Vec::new();
+            let mut recovered_by_reset = false;
+            let mut unrecoverable = None;
+            for update in updates {
+                let result = match update {
+                    VirtualItemUpdate::Insert { start, count } => source.insert_items(start, count),
+                    VirtualItemUpdate::Remove { start, count } => source.remove_items(start, count),
+                    VirtualItemUpdate::Move { from, to } => source.move_item(from, to),
+                    VirtualItemUpdate::Reload { .. } => {
+                        revision_updates.push(update);
+                        continue;
+                    }
+                };
+                if let Err(error) = result {
+                    ohos_hilog_binding::error(format!(
+                        "arkit_hooks: virtual-items adapter update failed: {error}"
+                    ));
+                    match reset_virtual_items(&source, next_stamps.len()) {
+                        Ok(()) => recovered_by_reset = true,
+                        Err(reset_error) => {
+                            unrecoverable = Some(format!(
+                                "virtual adapter update failed ({error}) and recovery failed ({reset_error})"
+                            ));
+                        }
+                    }
+                    break;
+                }
+            }
+            if let Err(error) = source.finish_stable_item_update() {
+                unrecoverable = Some(format!(
+                    "virtual adapter could not finish its identity update: {error}"
+                ));
+            }
+            if unrecoverable.is_none() && !recovered_by_reset {
+                for update in revision_updates {
+                    let VirtualItemUpdate::Reload { start, count } = update else {
+                        unreachable!("only reload updates are deferred")
+                    };
+                    if let Err(error) = source.reload_items_preserving_mounted_state(start, count) {
+                        ohos_hilog_binding::error(format!(
+                            "arkit_hooks: virtual item revision reload failed: {error}"
+                        ));
+                        match reset_virtual_items(&source, next_stamps.len()) {
+                            Ok(()) => break,
+                            Err(reset_error) => {
+                                unrecoverable = Some(format!(
+                                    "virtual item reload failed ({error}) and recovery failed ({reset_error})"
+                                ));
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            if let Some(error) = unrecoverable {
+                panic!("use_virtual_items entered an unrecoverable state: {error}");
+            }
+            token_state.borrow_mut().commit(&next_stamps);
+            *effect_previous_stamps.borrow_mut() = next_stamps;
+        },
+    ));
 }
 
 fn reset_virtual_items(source: &VirtualSource, next_len: usize) -> ArkUIResult<()> {
-    let next_total = next_len as u32;
+    let next_total = u32::try_from(next_len).expect("virtual item count exceeds u32");
     if source.total_count() == next_total {
         source.reload_all_items()
     } else {
         source.set_total_count(next_total)?;
         source.reload_all_items()
-    }
-}
-
-fn changed_item_ranges<K: PartialEq>(previous: &[K], next: &[K]) -> Vec<(u32, u32)> {
-    debug_assert_eq!(previous.len(), next.len());
-    let mut ranges = Vec::new();
-    let mut start = None;
-    for (index, (previous, next)) in previous.iter().zip(next).enumerate() {
-        if previous != next {
-            start.get_or_insert(index);
-        } else if let Some(range_start) = start.take() {
-            ranges.push((range_start as u32, (index - range_start) as u32));
-        }
-    }
-    if let Some(range_start) = start {
-        ranges.push((range_start as u32, (previous.len() - range_start) as u32));
-    }
-    ranges
-}
-
-#[cfg(test)]
-mod item_key_tests {
-    use super::{changed_item_ranges, keyed_item_updates, KeyedItemUpdate};
-
-    #[test]
-    fn item_key_diff_keeps_distant_changes_separate() {
-        let previous = [0, 1, 2, 3, 4, 5, 6];
-        let next = [9, 1, 8, 7, 4, 5, 0];
-        assert_eq!(
-            changed_item_ranges(&previous, &next),
-            vec![(0, 1), (2, 2), (6, 1)]
-        );
-    }
-
-    #[test]
-    fn unchanged_item_keys_do_not_reload_rows() {
-        assert!(changed_item_ranges(&[1, 2, 3], &[1, 2, 3]).is_empty());
-    }
-
-    #[test]
-    fn adjacent_changes_keep_the_reload_range_tight() {
-        assert_eq!(
-            changed_item_ranges(&[1, 2, 3, 4, 5], &[1, 8, 9, 4, 5]),
-            vec![(1, 2)]
-        );
-    }
-
-    #[test]
-    fn moving_selection_reloads_only_previous_and_next_rows() {
-        assert_eq!(
-            changed_item_ranges(
-                &[false, true, false, false, false, false],
-                &[false, false, false, false, false, true],
-            ),
-            vec![(1, 1), (5, 1)]
-        );
-    }
-
-    #[test]
-    fn expanding_a_group_inserts_only_its_members() {
-        assert_eq!(
-            keyed_item_updates(
-                &["section", "group-a", "group-b"],
-                &["section", "group-a", "a-1", "a-2", "group-b"]
-            ),
-            vec![KeyedItemUpdate::Insert { start: 2, count: 2 }]
-        );
-    }
-
-    #[test]
-    fn collapsing_a_group_removes_only_its_members() {
-        assert_eq!(
-            keyed_item_updates(
-                &["section", "group-a", "a-1", "a-2", "group-b"],
-                &["section", "group-a", "group-b"]
-            ),
-            vec![KeyedItemUpdate::Remove { start: 2, count: 2 }]
-        );
-    }
-
-    #[test]
-    fn changing_expanded_group_preserves_both_group_rows() {
-        assert_eq!(
-            keyed_item_updates(
-                &["section", "group-a", "a-1", "a-2", "group-b", "group-c"],
-                &["section", "group-a", "group-b", "b-1", "b-2", "group-c"],
-            ),
-            vec![
-                KeyedItemUpdate::Remove { start: 2, count: 2 },
-                KeyedItemUpdate::Insert { start: 3, count: 2 },
-            ]
-        );
-    }
-
-    #[test]
-    fn reordering_unique_keys_moves_existing_rows() {
-        assert_eq!(
-            keyed_item_updates(&["a", "b", "c", "d"], &["a", "c", "d", "b"]),
-            vec![
-                KeyedItemUpdate::Move { from: 2, to: 1 },
-                KeyedItemUpdate::Move { from: 3, to: 2 },
-            ]
-        );
-    }
-
-    #[test]
-    fn duplicate_keys_keep_item_local_reload_semantics() {
-        assert_eq!(
-            keyed_item_updates(&[false, true, false], &[false, false, true]),
-            vec![KeyedItemUpdate::Reload { start: 1, count: 2 }]
-        );
     }
 }

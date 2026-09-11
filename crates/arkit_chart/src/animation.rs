@@ -304,9 +304,9 @@ fn collapse_series(series: &mut Series) {
         }
         Series::Lines(series) => {
             for line in &mut series.data {
-                let origin = line.coords.first().copied().unwrap_or(line.from);
-                line.from = origin;
-                line.to = origin;
+                let Some(origin) = line.coords.first().copied() else {
+                    continue;
+                };
                 for point in &mut line.coords {
                     *point = origin;
                 }
@@ -808,8 +808,6 @@ fn apply_series_transition(
             for (index, (target, output)) in target.data.iter().zip(&mut output.data).enumerate() {
                 let source_line = source.and_then(|source| source.data.get(index));
                 if let Some(source_line) = source_line {
-                    output.from = lerp_point(source_line.from, target.from, progress);
-                    output.to = lerp_point(source_line.to, target.to, progress);
                     output.value = lerp(source_line.value, target.value, progress);
                     for (point_index, (target_point, output_point)) in
                         target.coords.iter().zip(&mut output.coords).enumerate()
@@ -819,9 +817,9 @@ fn apply_series_transition(
                         }
                     }
                 } else if source.is_none() {
-                    let origin = target.coords.first().copied().unwrap_or(target.from);
-                    output.from = lerp_point(origin, target.from, progress);
-                    output.to = lerp_point(origin, target.to, progress);
+                    let Some(origin) = target.coords.first().copied() else {
+                        continue;
+                    };
                     output.value = lerp(0.0, target.value, progress);
                     for (target_point, output_point) in target.coords.iter().zip(&mut output.coords)
                     {

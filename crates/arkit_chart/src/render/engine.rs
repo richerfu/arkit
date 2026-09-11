@@ -16,16 +16,13 @@ use super::hit::{rect_hit, HitRegion};
 use super::layout::grid_plot;
 use super::series;
 use super::surface::fill_rect;
-use super::viewport::{initial_windows, ZoomWindow};
+#[cfg(test)]
+use super::viewport::initial_windows;
+use super::viewport::ZoomWindow;
 use crate::model::{ChartEvent, ChartOption, DataPoint, Series};
 
-pub fn hit_test(
-    option: &ChartOption,
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-) -> Option<ChartEvent> {
+#[cfg(test)]
+fn hit_test(option: &ChartOption, x: f32, y: f32, width: f32, height: f32) -> Option<ChartEvent> {
     hit_test_with_hidden(
         option,
         x,

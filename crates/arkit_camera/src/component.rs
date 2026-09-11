@@ -5,6 +5,7 @@ use arkit_hooks::{use_app_foreground, use_mounted_node, use_native_element_ref};
 use arkit_prelude::*;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
+use crate::controller::CameraControllerLease;
 use crate::native::UiEvent;
 use crate::surface::SurfaceRegistration;
 use crate::worker::{WorkerCommand, WorkerHandle};
@@ -19,6 +20,46 @@ struct ComponentRuntime {
     worker: RefCell<Option<WorkerHandle>>,
     receiver: RefCell<Option<UnboundedReceiver<UiEvent>>>,
     events: UnboundedSender<UiEvent>,
+}
+
+#[derive(Default)]
+struct ControllerBindingSlot {
+    attempted: Option<CameraController>,
+    lease: Option<CameraControllerLease>,
+}
+
+impl ControllerBindingSlot {
+    fn reconcile(
+        &mut self,
+        controller: Option<CameraController>,
+        sender: Option<std::sync::mpsc::Sender<WorkerCommand>>,
+    ) -> Option<CameraError> {
+        if self.attempted.as_ref() == controller.as_ref() {
+            return None;
+        }
+
+        self.lease.take();
+        self.attempted = controller.clone();
+        let (Some(controller), Some(sender)) = (controller, sender) else {
+            return None;
+        };
+        match controller.bind(sender) {
+            Ok(lease) => {
+                self.lease = Some(lease);
+                None
+            }
+            Err(error) => Some(error),
+        }
+    }
+
+    fn active(&self) -> Option<&CameraControllerLease> {
+        self.lease.as_ref()
+    }
+
+    fn clear(&mut self) {
+        self.lease.take();
+        self.attempted = None;
+    }
 }
 
 impl ComponentRuntime {
@@ -125,7 +166,7 @@ pub fn CameraPreview(props: CameraPreviewProps) -> Element {
     let effective_active = props.active && app_foreground;
     let surface_registration = use_hook(|| Rc::new(RefCell::new(None::<SurfaceRegistration>)));
     let registered_node = use_hook(|| Rc::new(Cell::new(None::<u64>)));
-    let controller_binding = use_hook(|| Rc::new(RefCell::new(None::<(CameraController, u64)>)));
+    let controller_binding = use_hook(|| Rc::new(RefCell::new(ControllerBindingSlot::default())));
     let status_handler = use_hook(|| Rc::new(Cell::new(None::<EventHandler<CameraStatus>>)));
     let capabilities_handler =
         use_hook(|| Rc::new(Cell::new(None::<EventHandler<CameraCapabilities>>)));
@@ -144,26 +185,11 @@ pub fn CameraPreview(props: CameraPreviewProps) -> Element {
     scan_handler.set(props.on_scan);
     error_handler.set(props.on_error);
 
-    let controller_changed = {
-        let binding = controller_binding.borrow();
-        match (binding.as_ref(), props.controller.as_ref()) {
-            (Some((current, _)), Some(next)) => current != next,
-            (None, None) => false,
-            _ => true,
-        }
-    };
-    if controller_changed {
-        if let Some((controller, binding)) = controller_binding.borrow_mut().take() {
-            controller.unbind(binding);
-        }
-        if let (Some(controller), Some(sender)) =
-            (props.controller.clone(), runtime.command_sender())
-        {
-            let binding = controller.bind(sender);
-            controller_binding
-                .borrow_mut()
-                .replace((controller, binding));
-        }
+    if let Some(error) = controller_binding
+        .borrow_mut()
+        .reconcile(props.controller.clone(), runtime.command_sender())
+    {
+        runtime.emit_error(error);
     }
 
     let receiver_slot = use_hook(|| Rc::new(RefCell::new(runtime.take_receiver())));
@@ -176,6 +202,10 @@ pub fn CameraPreview(props: CameraPreviewProps) -> Element {
     #[cfg(feature = "scan")]
     let events_scan = scan_handler.clone();
     let events_error = error_handler.clone();
+    // ComponentRuntime and its worker are created once by `use_hook` and are
+    // never replaced before `use_drop`. Worker events therefore belong to this
+    // component/native surface, not to a controller lease: after a controller
+    // prop swap, queued events intentionally update the current controller.
     let _event_task = use_future(move || {
         let receiver = receiver_slot.borrow_mut().take();
         let events_controller = events_controller.clone();
@@ -196,8 +226,8 @@ pub fn CameraPreview(props: CameraPreviewProps) -> Element {
                     UiEvent::Status(status) => {
                         let controller = events_controller
                             .borrow()
-                            .as_ref()
-                            .map(|(controller, binding)| (controller.clone(), *binding));
+                            .active()
+                            .map(|lease| (lease.controller().clone(), lease.binding()));
                         if let Some((controller, binding)) = controller {
                             controller.update_status(binding, status.clone());
                         }
@@ -208,8 +238,8 @@ pub fn CameraPreview(props: CameraPreviewProps) -> Element {
                     UiEvent::Capabilities(capabilities) => {
                         let controller = events_controller
                             .borrow()
-                            .as_ref()
-                            .map(|(controller, binding)| (controller.clone(), *binding));
+                            .active()
+                            .map(|lease| (lease.controller().clone(), lease.binding()));
                         if let Some((controller, binding)) = controller {
                             controller.update_capabilities(binding, capabilities.clone());
                         }
@@ -220,8 +250,8 @@ pub fn CameraPreview(props: CameraPreviewProps) -> Element {
                     UiEvent::Controls(controls) => {
                         let controller = events_controller
                             .borrow()
-                            .as_ref()
-                            .map(|(controller, binding)| (controller.clone(), *binding));
+                            .active()
+                            .map(|lease| (lease.controller().clone(), lease.binding()));
                         if let Some((controller, binding)) = controller {
                             controller.update_controls(binding, controls.clone());
                         }
@@ -334,9 +364,7 @@ pub fn CameraPreview(props: CameraPreviewProps) -> Element {
     let drop_runtime = runtime.clone();
     use_drop(move || {
         drop_registration.borrow_mut().take();
-        if let Some((controller, binding)) = drop_binding.borrow_mut().take() {
-            controller.unbind(binding);
-        }
+        drop_binding.borrow_mut().clear();
         drop_runtime.shutdown();
     });
 
@@ -348,5 +376,39 @@ pub fn CameraPreview(props: CameraPreviewProps) -> Element {
             height: height,
             background_color: "#FF000000",
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::CameraErrorKind;
+
+    #[test]
+    fn duplicate_binding_attempt_is_reported_once_and_controller_change_recovers() {
+        let occupied = CameraController::new();
+        let (occupied_sender, _) = std::sync::mpsc::channel();
+        let occupied_lease = occupied.bind(occupied_sender).unwrap();
+        let (component_sender, _) = std::sync::mpsc::channel();
+        let mut slot = ControllerBindingSlot::default();
+
+        let first = slot.reconcile(Some(occupied.clone()), Some(component_sender.clone()));
+        let rerender = slot.reconcile(Some(occupied.clone()), Some(component_sender.clone()));
+        assert_eq!(first.unwrap().kind(), CameraErrorKind::AlreadyBound);
+        assert!(
+            rerender.is_none(),
+            "the same failed attempt must not repeat"
+        );
+        assert!(slot.active().is_none());
+
+        let replacement = CameraController::new();
+        assert!(slot
+            .reconcile(Some(replacement.clone()), Some(component_sender))
+            .is_none());
+        assert!(slot.active().is_some());
+        assert!(replacement.is_mounted());
+        assert!(occupied.is_mounted());
+
+        drop(occupied_lease);
     }
 }

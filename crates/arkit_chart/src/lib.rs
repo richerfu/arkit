@@ -14,7 +14,10 @@ mod registry;
 mod render;
 mod state;
 
-pub use component::{ChartController, ECharts, EChartsProps};
+pub use arkit_arkui::{LocalVpPoint, LogicalSizeVp};
+pub use component::{
+    ChartCommandStatus, ChartController, ChartError, ChartSnapshot, ECharts, EChartsProps,
+};
 pub use model::{
     AnimationOptions, AnimationTiming, Axis, AxisLabelStyle, AxisLine, AxisOrientation,
     AxisPointer, AxisTick, AxisType, BasicSeries, BrushArea, BrushOptions, ChartAction,
@@ -30,7 +33,6 @@ pub use model::{
     VisualStyle,
 };
 pub use registry::{register_map, register_map_str, unregister_map, MapRegistrationError};
-pub use render::hit_test;
 
 #[cfg(test)]
 mod tests {
@@ -94,8 +96,6 @@ mod tests {
                 "lines",
                 vec![LineSegment {
                     name: Some(String::from("route")),
-                    from: (0.0, 0.0),
-                    to: (1.0, 1.0),
                     coords: vec![(0.0, 0.0), (1.0, 1.0)],
                     value: 1.0,
                 }],

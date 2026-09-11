@@ -147,7 +147,7 @@ impl RuntimeHandle {
     /// The facade creates opaque container handles in the ArkTS session tree
     /// (`create_container`) and composes handle-owned FrameNodes; WebView
     /// surfaces can be adopted under a container through
-    /// [`WebviewCreateRequest::parent_node`]. Like [`Self::webview`], it is
+    /// [`crate::WebviewCreateRequest::parent_node`]. Like [`Self::webview`], it is
     /// created lazily over the Ability-session bridge.
     #[cfg(feature = "webview")]
     pub fn node(&self) -> napi_ohos::Result<openharmony_ability::NodeSurface> {

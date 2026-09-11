@@ -24,6 +24,27 @@ struct ControllerState {
     controls: Option<CameraControls>,
 }
 
+pub(crate) struct CameraControllerLease {
+    controller: CameraController,
+    binding: u64,
+}
+
+impl CameraControllerLease {
+    pub(crate) fn controller(&self) -> &CameraController {
+        &self.controller
+    }
+
+    pub(crate) fn binding(&self) -> u64 {
+        self.binding
+    }
+}
+
+impl Drop for CameraControllerLease {
+    fn drop(&mut self) {
+        self.controller.unbind(self.binding);
+    }
+}
+
 /// Imperative handle for a mounted [`crate::CameraPreview`].
 #[derive(Clone, Default)]
 pub struct CameraController {
@@ -155,8 +176,14 @@ impl CameraController {
         self.inner.borrow().binding.is_some()
     }
 
-    pub(crate) fn bind(&self, sender: Sender<WorkerCommand>) -> u64 {
+    pub(crate) fn bind(
+        &self,
+        sender: Sender<WorkerCommand>,
+    ) -> CameraResult<CameraControllerLease> {
         let mut state = self.inner.borrow_mut();
+        if state.binding.is_some() {
+            return Err(CameraError::already_bound("CameraController::bind"));
+        }
         state.next_binding = state
             .next_binding
             .checked_add(1)
@@ -166,7 +193,11 @@ impl CameraController {
         state.status = CameraStatus::WaitingForSurface;
         state.capabilities = None;
         state.controls = None;
-        id
+        drop(state);
+        Ok(CameraControllerLease {
+            controller: self.clone(),
+            binding: id,
+        })
     }
 
     pub(crate) fn update_status(&self, binding: u64, status: CameraStatus) {
@@ -256,5 +287,44 @@ impl std::fmt::Debug for CameraController {
 impl PartialEq for CameraController {
     fn eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.inner, &other.inner)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn duplicate_binding_is_rejected_without_stealing_first_sender() {
+        let controller = CameraController::new();
+        let (first_sender, first_receiver) = std::sync::mpsc::channel();
+        let first = controller.bind(first_sender).unwrap();
+        let (second_sender, second_receiver) = std::sync::mpsc::channel();
+        let Err(error) = controller.bind(second_sender) else {
+            panic!("duplicate binding must fail")
+        };
+        assert_eq!(error.kind(), crate::CameraErrorKind::AlreadyBound);
+
+        controller
+            .inner
+            .borrow()
+            .binding
+            .as_ref()
+            .unwrap()
+            .sender
+            .send(WorkerCommand::Shutdown)
+            .unwrap();
+        assert!(matches!(
+            first_receiver.recv().unwrap(),
+            WorkerCommand::Shutdown
+        ));
+        assert!(second_receiver.try_recv().is_err());
+
+        drop(first);
+        let (third_sender, _) = std::sync::mpsc::channel();
+        let rebound = controller.bind(third_sender).unwrap();
+        assert!(controller.is_mounted());
+        drop(rebound);
+        assert!(!controller.is_mounted());
     }
 }

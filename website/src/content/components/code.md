@@ -9,12 +9,11 @@ description: "独立的语法高亮代码块，底层用 tree-sitter。"
 
 ## Feature 关系
 
-| Feature              | 作用                                  |
-| -------------------- | ------------------------------------- |
-| `code`               | `Code` 组件、高亮引擎、语言注册 API   |
-| `markdown`           | CommonMark 文档渲染（围栏默认同等宽） |
-| `markdown` + `code`  | Markdown 围栏块走 `Code` 管线         |
-| `markdown-highlight` | 便捷别名 = `markdown` + `code`        |
+| Feature             | 作用                                  |
+| ------------------- | ------------------------------------- |
+| `code`              | `Code` 组件、高亮引擎、语言注册 API   |
+| `markdown`          | CommonMark 文档渲染（围栏默认同等宽） |
+| `markdown` + `code` | Markdown 围栏块走 `Code` 管线         |
 
 ## Props
 

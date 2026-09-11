@@ -399,7 +399,7 @@ fn SliderTrack(props: SliderTrackProps) -> Element {
             height: native_height.max(style.touch_target),
             alignment: "top-start",
             enabled: !disabled,
-            on_layout: move |event| {
+            onarea: move |event| {
                 let frame = event.data().frame;
                 if !frame.is_measured() {
                     return;
@@ -415,7 +415,7 @@ fn SliderTrack(props: SliderTrackProps) -> Element {
                     measured_length.set(length);
                 }
             },
-            on_touch: move |event| {
+            ontouch: move |event| {
                 if disabled {
                     return;
                 }

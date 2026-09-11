@@ -5,13 +5,14 @@ use arkit_animation_core::{
     Easing, LayoutId, LayoutNodeId, Length, TargetName, TimeSpan, TimelinePosition, TransformValue,
     Vec2, Vec3, WindowMetrics,
 };
-use arkit_hooks::LayoutFrame;
+use arkit_arkui::LayoutFramePx;
 use arkit_prelude::*;
 use oxc_index::IndexVec;
 use rustc_hash::FxHashMap;
 
+use crate::api::{Animation, Timeline};
 use crate::properties::{SCALE_X, SCALE_Y, TRANSLATE_X, TRANSLATE_Y};
-use crate::{Animation, AnimationSelector, Timeline};
+use crate::selector::AnimationSelector;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LayoutMountState {
@@ -25,10 +26,10 @@ pub enum LayoutMountState {
 pub struct LayoutNode {
     pub id: LayoutId,
     pub parent: Option<LayoutNodeId>,
-    pub frame: LayoutFrame,
+    pub frame: LayoutFramePx,
     pub transform: TransformValue,
     pub visible: bool,
-    pub clip: Option<LayoutFrame>,
+    pub clip: Option<LayoutFramePx>,
     pub z_order: i32,
     pub mount_state: LayoutMountState,
 }
@@ -215,7 +216,7 @@ struct LayoutRegistryContext {
 #[derive(Debug, Clone)]
 struct RegisteredLayoutNode {
     parent: Option<LayoutId>,
-    frame: LayoutFrame,
+    frame: LayoutFramePx,
     visible: bool,
     z_order: i32,
 }
@@ -391,7 +392,7 @@ fn compute_deltas(old: &LayoutSnapshot, new: &LayoutSnapshot) -> Vec<LayoutDelta
     deltas
 }
 
-fn inverse_transform(old: LayoutFrame, new: LayoutFrame) -> TransformValue {
+fn inverse_transform(old: LayoutFramePx, new: LayoutFramePx) -> TransformValue {
     let scale_x = if new.width.abs() <= f32::EPSILON {
         1.0
     } else {
@@ -417,7 +418,7 @@ fn inverse_transform(old: LayoutFrame, new: LayoutFrame) -> TransformValue {
 mod tests {
     use super::*;
 
-    fn node(id: &'static str, parent: Option<LayoutNodeId>, frame: LayoutFrame) -> LayoutNode {
+    fn node(id: &'static str, parent: Option<LayoutNodeId>, frame: LayoutFramePx) -> LayoutNode {
         LayoutNode {
             id: LayoutId::owned(id),
             parent,
@@ -433,32 +434,32 @@ mod tests {
     #[test]
     fn detects_reorder_resize_enter_exit_and_reparent() {
         let mut old = LayoutSnapshot::new(WindowMetrics::default(), 1);
-        let root = old.push(node("root", None, LayoutFrame::default()));
+        let root = old.push(node("root", None, LayoutFramePx::default()));
         old.push(node(
             "moving",
             Some(root),
-            LayoutFrame {
+            LayoutFramePx {
                 x: 10.0,
                 y: 20.0,
                 width: 50.0,
                 height: 40.0,
             },
         ));
-        old.push(node("leaving", Some(root), LayoutFrame::default()));
+        old.push(node("leaving", Some(root), LayoutFramePx::default()));
         let mut new = LayoutSnapshot::new(WindowMetrics::default(), 2);
-        let new_root = new.push(node("root", None, LayoutFrame::default()));
-        let parent = new.push(node("parent", Some(new_root), LayoutFrame::default()));
+        let new_root = new.push(node("root", None, LayoutFramePx::default()));
+        let parent = new.push(node("parent", Some(new_root), LayoutFramePx::default()));
         new.push(node(
             "moving",
             Some(parent),
-            LayoutFrame {
+            LayoutFramePx {
                 x: 30.0,
                 y: 10.0,
                 width: 100.0,
                 height: 20.0,
             },
         ));
-        new.push(node("entering", Some(new_root), LayoutFrame::default()));
+        new.push(node("entering", Some(new_root), LayoutFramePx::default()));
         let deltas = compute_deltas(&old, &new);
         assert!(deltas
             .iter()

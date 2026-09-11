@@ -246,7 +246,7 @@ fn TimelinePlanReadout(controls: AnimationControls) -> Element {
 fn TimelineRuntimeMetrics(controls: AnimationControls, last_event: String) -> Element {
     let snapshot = use_animation_snapshot(&controls);
     let render_count = use_signal(|| 0_u64);
-    controls.on_render(move || {
+    controls.on_render(move |_at| {
         let mut render_count = render_count;
         render_count += 1;
     });

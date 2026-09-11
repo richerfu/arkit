@@ -1,4 +1,9 @@
 //! Normalization helpers for ECharts JSON values retained by the model.
+//!
+//! "Compat" here means *ECharts option compatibility*: these read values out
+//! of the raw option maps (`extra`) exactly the way ECharts does, including
+//! its `"50%"`-style lengths and `[x, y]` pairs. It is not a
+//! backwards-compatibility layer.
 
 use std::collections::BTreeMap;
 

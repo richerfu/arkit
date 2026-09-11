@@ -3,10 +3,11 @@ use std::rc::Rc;
 use std::time::Instant;
 
 #[cfg(feature = "scan")]
+use arkit_animation::engine::ExecutionPolicy;
+#[cfg(feature = "scan")]
 use arkit_animation::{
-    Animation, AnimationSelector, Composition, Easing, ExecutionPolicy, IterationCount, Length,
-    Modifier, PropertyKeyframe, TargetName, TimeSpan, Timeline, TimelinePosition, OPACITY,
-    TRANSLATE_Y,
+    Animation, AnimationSelector, Composition, Easing, IterationCount, Length, Modifier,
+    PropertyKeyframe, TargetName, TimeSpan, Timeline, TimelinePosition, OPACITY, TRANSLATE_Y,
 };
 use arkit_prelude::*;
 

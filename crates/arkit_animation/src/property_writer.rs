@@ -3,7 +3,57 @@ use ohos_arkui_binding::common::attribute::ArkUINodeAttributeItem;
 use ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
 use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
 
-use crate::{AnimationAdapterError, AnimationTargetBinding};
+use crate::diagnostic::AnimationAdapterError;
+use crate::target::AnimationTargetBinding;
+
+/// Canonical native slot written by an animation property.
+///
+/// Ownership and writes share this mapping so aliases and compound x/y
+/// properties cannot silently acquire different renderer locks.
+pub(crate) fn native_attribute(property_name: &str) -> Option<ArkUINodeAttributeType> {
+    Some(match property_name {
+        "opacity" => ArkUINodeAttributeType::Opacity,
+        "translate_x" | "translate_y" => ArkUINodeAttributeType::Translate,
+        "position_x" | "position_y" => ArkUINodeAttributeType::Position,
+        "scale_x" | "scale_y" => ArkUINodeAttributeType::Scale,
+        "rotation" => ArkUINodeAttributeType::Rotate,
+        "background_color" => ArkUINodeAttributeType::BackgroundColor,
+        "font_color" => ArkUINodeAttributeType::FontColor,
+        "border_color" => ArkUINodeAttributeType::BorderColor,
+        "foreground_color" => ArkUINodeAttributeType::ForegroundColor,
+        "border_radius" => ArkUINodeAttributeType::BorderRadius,
+        "border_width" => ArkUINodeAttributeType::BorderWidth,
+        "blur" => ArkUINodeAttributeType::Blur,
+        "width" => ArkUINodeAttributeType::Width,
+        "height" => ArkUINodeAttributeType::Height,
+        "font_size" => ArkUINodeAttributeType::FontSize,
+        "line_height" => ArkUINodeAttributeType::TextLineHeight,
+        "letter_spacing" => ArkUINodeAttributeType::TextLetterSpacing,
+        "brightness" => ArkUINodeAttributeType::Brightness,
+        "saturation" => ArkUINodeAttributeType::Saturation,
+        "grayscale" => ArkUINodeAttributeType::GrayScale,
+        "invert" => ArkUINodeAttributeType::Invert,
+        "sepia" => ArkUINodeAttributeType::Sepia,
+        "contrast" => ArkUINodeAttributeType::Contrast,
+        "aspect_ratio" => ArkUINodeAttributeType::AspectRatio,
+        _ => return None,
+    })
+}
+
+pub(crate) fn ownership_attributes(property_name: &str) -> Option<Vec<ArkUINodeAttributeType>> {
+    let attribute = native_attribute(property_name)?;
+    Some(match attribute {
+        ArkUINodeAttributeType::Width => vec![
+            ArkUINodeAttributeType::Width,
+            ArkUINodeAttributeType::WidthPercent,
+        ],
+        ArkUINodeAttributeType::Height => vec![
+            ArkUINodeAttributeType::Height,
+            ArkUINodeAttributeType::HeightPercent,
+        ],
+        _ => vec![attribute],
+    })
+}
 
 pub(crate) fn write(
     binding: &mut AnimationTargetBinding,
@@ -74,43 +124,13 @@ pub(crate) fn write(
         };
         binding.visual.scale[1] = *value;
     }
-    let (attribute, item) = match property_name {
-        "opacity" => (ArkUINodeAttributeType::Opacity, item),
-        "translate_x" | "translate_y" => (
-            ArkUINodeAttributeType::Translate,
-            binding.visual.translate.to_vec().into(),
-        ),
-        "position_x" | "position_y" => (
-            ArkUINodeAttributeType::Position,
-            binding.visual.position.to_vec().into(),
-        ),
-        "scale_x" | "scale_y" => (
-            ArkUINodeAttributeType::Scale,
-            binding.visual.scale.to_vec().into(),
-        ),
-        "rotation" => (ArkUINodeAttributeType::Rotate, item),
-        "background_color" => (ArkUINodeAttributeType::BackgroundColor, item),
-        "font_color" => (ArkUINodeAttributeType::FontColor, item),
-        "border_color" => (ArkUINodeAttributeType::BorderColor, item),
-        "foreground_color" => (ArkUINodeAttributeType::ForegroundColor, item),
-        "border_radius" => (ArkUINodeAttributeType::BorderRadius, item),
-        "border_width" => (ArkUINodeAttributeType::BorderWidth, item),
-        "blur" => (ArkUINodeAttributeType::Blur, item),
-        "width" => (ArkUINodeAttributeType::Width, item),
-        "height" => (ArkUINodeAttributeType::Height, item),
-        "font_size" => (ArkUINodeAttributeType::FontSize, item),
-        "line_height" => (ArkUINodeAttributeType::TextLineHeight, item),
-        "letter_spacing" => (ArkUINodeAttributeType::TextLetterSpacing, item),
-        "brightness" => (ArkUINodeAttributeType::Brightness, item),
-        "saturation" => (ArkUINodeAttributeType::Saturation, item),
-        "grayscale" => (ArkUINodeAttributeType::GrayScale, item),
-        "invert" => (ArkUINodeAttributeType::Invert, item),
-        "sepia" => (ArkUINodeAttributeType::Sepia, item),
-        "contrast" => (ArkUINodeAttributeType::Contrast, item),
-        "aspect_ratio" => (ArkUINodeAttributeType::AspectRatio, item),
-        _ => {
-            return Err(AnimationAdapterError::UnsupportedValue { property });
-        }
+    let attribute = native_attribute(property_name)
+        .ok_or(AnimationAdapterError::UnsupportedValue { property })?;
+    let item = match attribute {
+        ArkUINodeAttributeType::Translate => binding.visual.translate.to_vec().into(),
+        ArkUINodeAttributeType::Position => binding.visual.position.to_vec().into(),
+        ArkUINodeAttributeType::Scale => binding.visual.scale.to_vec().into(),
+        _ => item,
     };
     let node = binding.node.clone();
     // SAFETY: this writes one renderer-compatible visual attribute to the
