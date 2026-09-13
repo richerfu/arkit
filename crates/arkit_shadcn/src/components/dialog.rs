@@ -137,7 +137,7 @@ pub fn Dialog(
     dialog_portal(current, panel, close)
 }
 
-/// Dialog header — start-aligned `native:text-xl` title and `native:text-base`
+/// Dialog header — start-aligned `text-lg` title and `text-sm`
 /// muted description with `gap-1.5` spacing.
 #[component]
 pub fn DialogHeader(title: String, description: Option<String>) -> Element {
@@ -154,10 +154,10 @@ pub fn DialogHeader(title: String, description: Option<String>) -> Element {
                     layout_weight: 1.0,
                     text {
                         width: "100%",
-                        font_size: typography::XL,
+                        font_size: typography::LG,
                         font_weight: 600_i32,
                         font_color: theme.colors.foreground,
-                        line_height: 20.0,
+                        line_height: 24.0,
                         text_align: "start",
                         "{title}"
                     }
@@ -172,7 +172,7 @@ pub fn DialogHeader(title: String, description: Option<String>) -> Element {
                     text {
                         width: "100%",
                         margin_top: spacing::XS,
-                        font_size: typography::MD,
+                        font_size: typography::SM,
                         font_color: theme.colors.muted_foreground,
                         line_height: 20.0,
                         text_align: "start",

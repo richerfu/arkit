@@ -32,7 +32,7 @@ pub use arkit_runtime::{
     ApplicationLifecycleState, ApplicationLifecycleSubscription, EdgeInsets, SafeAreaPolicy,
     WindowMetrics, WindowMetricsHandle, WindowMetricsSubscription,
 };
-pub use layout::{use_layout_frame, use_layout_size};
+pub use layout::{current_layout_frame, use_layout_frame, use_layout_size};
 pub use lifecycle::{
     use_app_foreground, use_application_lifecycle, use_application_lifecycle_event,
     use_component_lifecycle, use_component_visibility, ComponentLifecycleState,

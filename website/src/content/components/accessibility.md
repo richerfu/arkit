@@ -9,7 +9,7 @@ description: "触控反馈、焦点和文案：在真机上怎么做得更好用
 
 ## 触控目标
 
-按钮、菜单 action、Toast 关闭等主要触控目标保持至少约 40–48vp。小图标可以视觉上是 16vp，但外层 hit area 必须更大。
+默认控件高度对齐 shadcn New York：Button / Input / Select 为 36vp，紧凑尺寸 32vp。小图标视觉上是 16vp，外层 hit area 跟控件高度走。需要更大点击区域时用 `ButtonSize::Lg` 或传入 `height`。
 
 ## 文本与状态
 

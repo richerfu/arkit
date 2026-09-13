@@ -3145,19 +3145,19 @@ fn extract_pointer_payload(event: &ArkNativeEvent) -> Option<PointerPayload> {
 fn extract_layout_payload(node: &NodeRef) -> Option<LayoutPayload> {
     let n = node.borrow();
     let size = n.layout_size().ok()?;
-    // Prefer layout position (window, no graphic translate). Translate-inclusive
-    // coords accumulate ancestor matrix offsets and mis-anchor floating panels
-    // (Select same-width start align was ~48vp too far right on device).
-    let position = n
-        .layout_position_in_window()
-        .or_else(|_| n.position_with_translate_in_window())
-        .ok()?;
-    Some(LayoutPayload {
+    // Window layout position only. `position_with_translate_in_window` folds in
+    // ancestor graphic matrices (page MountTransition, overlay SlideUp) and
+    // mis-anchors floating panels — Select was ~48vp too far right on device.
+    // If the window query fails this frame, skip the event and keep the last
+    // good frame instead of publishing a translated one.
+    let position = n.layout_position_in_window().ok()?;
+    let payload = LayoutPayload {
         x: position.x as f32,
         y: position.y as f32,
         width: size.width as f32,
         height: size.height as f32,
-    })
+    };
+    payload.is_measured().then_some(payload)
 }
 
 /// Map an rsx event name (+ the component tag, for kind-specific events) to the

@@ -3,7 +3,7 @@
 //! The sheet is mounted through a root-projected portal, so it is not
 //! clipped by the page or showcase canvas. Its native presentation mirrors the
 //! React Native Reusables sheet: optional dismissible backdrop and drag
-//! indicator, rounded top corners, 60vp header, safe-area-aware body padding,
+//! indicator, rounded top corners, 48vp header, safe-area-aware body padding,
 //! and pan-down dismissal.
 
 use super::motion::{AnimatedModal, OVERLAY_ENTER_MS, OVERLAY_EXIT_MS, SHEET_DISTANCE};
@@ -12,7 +12,7 @@ use crate::icon::icon_placeholder;
 use crate::theme::*;
 use arkit_prelude::*;
 
-const BOTTOM_SHEET_HEADER_HEIGHT: f32 = 60.0;
+const BOTTOM_SHEET_HEADER_HEIGHT: f32 = 48.0;
 const BOTTOM_SHEET_HANDLE_HEIGHT: f32 = 24.0;
 const BOTTOM_SHEET_MIN_HEIGHT: f32 = 240.0;
 const BOTTOM_SHEET_DRAG_DISMISS_THRESHOLD: f32 = 72.0;
@@ -221,18 +221,18 @@ fn BottomSheetPanel(props: BottomSheetPanelProps) -> Element {
                         layout_weight: 1.0,
                         text {
                             width: "100%",
-                            font_size: typography::XL,
-                            font_weight: 700_i32,
+                            font_size: typography::LG,
+                            font_weight: 600_i32,
                             font_color: theme.colors.foreground,
-                            line_height: 25.0,
+                            line_height: 24.0,
                             text_align: "center",
                             "{props.title}"
                         }
                     }
                     button {
                         button_type: "normal",
-                        width: 48.0,
-                        height: 48.0,
+                        width: control::ICON_SM,
+                        height: control::ICON_SM,
                         padding: 0.0,
                         background_color: "#00000000",
                         border_width: 0.0,
@@ -243,7 +243,7 @@ fn BottomSheetPanel(props: BottomSheetPanelProps) -> Element {
                         focus_on_touch: false,
                         alignment: "center",
                         onclick: move |_| on_close.call(()),
-                        {icon_placeholder("x", 24.0, theme.colors.muted_foreground)}
+                        {icon_placeholder("x", 16.0, theme.colors.muted_foreground)}
                     }
                 }
             }
@@ -259,7 +259,7 @@ fn BottomSheetPanel(props: BottomSheetPanelProps) -> Element {
     }
 }
 
-/// The 56vp, `text-xl` input used by the native RNR bottom-sheet forms.
+/// Compact single-line input used inside bottom-sheet forms.
 #[component]
 pub fn BottomSheetTextInput(
     placeholder: Option<String>,
@@ -275,7 +275,7 @@ pub fn BottomSheetTextInput(
             placeholder_color: theme.colors.muted_foreground,
             caret_color: theme.colors.primary,
             width: "100%",
-            height: 56.0,
+            height: control::HEIGHT,
             padding_top: spacing::XXS,
             padding_right: spacing::MD,
             padding_bottom: spacing::XXS,
@@ -285,9 +285,9 @@ pub fn BottomSheetTextInput(
             border_style: ARKUI_BORDER_STYLE_SOLID,
             border_radius: theme.radii.md,
             background_color: theme.colors.background,
-            font_size: typography::XL,
+            font_size: typography::SM,
             font_color: theme.colors.foreground,
-            line_height: 25.0,
+            line_height: 20.0,
             onchange: move |evt| {
                 if let Some(handler) = on_change {
                     handler.call(evt.data().string_value.clone());

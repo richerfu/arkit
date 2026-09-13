@@ -7,7 +7,8 @@
 //! callers.
 
 use super::floating_layer::{
-    trigger_width_vp, FloatingAlign, FloatingPanelPlacement, FloatingSide, FLOATING_CAPTURE_COLOR,
+    trigger_frame_for_anchor, trigger_width_vp, FloatingAlign, FloatingPanelPlacement,
+    FloatingSide, FLOATING_CAPTURE_COLOR,
 };
 use super::motion::{OverlayPresence, FLOATING_DISTANCE, FLOATING_ENTER_MS, FLOATING_EXIT_MS};
 use crate::{i18n::use_component_i18n, theme::*};
@@ -15,9 +16,9 @@ use arkit_prelude::*;
 
 const SELECT_PANEL_FALLBACK_WIDTH: f32 = 180.0;
 const SELECT_PANEL_SIDE_OFFSET: f32 = spacing::XXS;
-const SELECT_PANEL_HEADER_HEIGHT: f32 = 32.0;
-const SELECT_PANEL_SCROLL_HEIGHT: f32 = 208.0;
-const SELECT_OPTION_HEIGHT: f32 = 36.0;
+const SELECT_PANEL_HEADER_HEIGHT: f32 = 28.0;
+const SELECT_PANEL_SCROLL_HEIGHT: f32 = 192.0;
+const SELECT_OPTION_HEIGHT: f32 = control::HEIGHT_SM;
 const SELECT_TEXT_MAX_LINES: i32 = 1;
 const SELECT_TEXT_OVERFLOW_ELLIPSIS: &str = "ellipsis";
 
@@ -84,7 +85,11 @@ pub fn Select(
     let count = options.len();
     let has_panel_label = label.as_deref() != Some("");
 
-    let frame = *trigger_frame.read();
+    let frame = if current_open {
+        trigger_frame_for_anchor(&trigger_ref, *trigger_frame.read())
+    } else {
+        *trigger_frame.read()
+    };
     let panel_width = trigger_width_vp(frame, viewport, SELECT_PANEL_FALLBACK_WIDTH);
     let panel_height = select_panel_estimated_height(count, has_panel_label);
     let placement = FloatingPanelPlacement::resolve(
@@ -105,18 +110,17 @@ pub fn Select(
             onclick: move |_| set_open.call(!current_open),
             row {
                 width: "100%",
-                height: 40.0,
+                height: control::HEIGHT,
                 background_color: colors.background,
-                padding_top: 8.0,
+                padding_top: 0.0,
                 padding_right: spacing::MD,
-                padding_bottom: 8.0,
+                padding_bottom: 0.0,
                 padding_left: spacing::MD,
                 align_items: "center",
                 justify_content: "space_between",
                 border_radius: md,
                 border_width: 1.0,
                 border_color: colors.border,
-                shadow: "sm",
                 row {
                     layout_weight: 1.0,
                     clip: true,
@@ -214,9 +218,9 @@ fn select_overlay_content(content: SelectOverlayContent) -> Element {
                 if let Some(label) = label {
                     row {
                         width: "100%",
-                        padding_top: 8.0,
+                        padding_top: 6.0,
                         padding_right: spacing::SM,
-                        padding_bottom: 8.0,
+                        padding_bottom: 6.0,
                         padding_left: spacing::SM,
                         text {
                             font_size: typography::XS,
@@ -275,9 +279,9 @@ fn select_option_row(
             height: SELECT_OPTION_HEIGHT,
             align_items: "center",
             justify_content: "space_between",
-            padding_top: 8.0,
+            padding_top: 6.0,
             padding_right: spacing::SM,
-            padding_bottom: 8.0,
+            padding_bottom: 6.0,
             padding_left: spacing::SM,
             border_radius: theme.radii.sm,
             background_color: if active { colors.accent } else { 0x00000000 },

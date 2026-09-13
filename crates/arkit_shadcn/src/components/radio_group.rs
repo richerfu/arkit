@@ -74,7 +74,7 @@ pub fn RadioGroup(props: RadioGroupProps) -> Element {
             let mut local = local;
             let click_value = option.clone();
             let label_color = theme.colors.foreground;
-            let top_margin = if index == 0 { 0.0 } else { spacing::MD };
+            let top_margin = if index == 0 { 0.0 } else { spacing::SM };
             let row = rsx! {
                 row {
                     width: "100%",

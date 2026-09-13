@@ -4,7 +4,7 @@
 //! `rsx!`. Preserves the original variants (`Default`, `Secondary`, `Outline`,
 //! `Ghost`, `Destructive`, `Link`), sizes (`Default`, `Sm`, `Lg`, `Icon`), and
 //! per-variant/size style computations (height, padding, text size, background,
-//! foreground, border, shadow).
+//! foreground, border). Default density follows shadcn New York (`h-9` / 36vp).
 
 use crate::theme::*;
 use arkit_prelude::*;
@@ -16,16 +16,16 @@ const TRANSPARENT: u32 = 0x00000000;
 /// Button visual variant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ButtonVariant {
-    /// `bg-primary text-primary_foreground shadow-sm`.
+    /// `bg-primary text-primary_foreground`.
     #[default]
     Default,
-    /// `bg-secondary text-secondary_foreground shadow-sm`.
+    /// `bg-secondary text-secondary_foreground`.
     Secondary,
-    /// `border border-border bg-background shadow-sm`.
+    /// `border border-border bg-background`.
     Outline,
     /// No background, no shadow.
     Ghost,
-    /// `bg-destructive text-destructive_foreground shadow-sm`.
+    /// `bg-destructive text-destructive_foreground`.
     Destructive,
     /// No background, no shadow, primary-colored text.
     Link,
@@ -34,14 +34,14 @@ pub enum ButtonVariant {
 /// Button size.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ButtonSize {
-    /// Native `h-12 px-5 py-3`, 48px tall, `text-base`.
+    /// shadcn New York `h-9 px-4`, 36vp tall, `text-sm`.
     #[default]
     Default,
-    /// `h-9 px-3`, 36px tall, `text-base` on native text.
+    /// `h-8 px-3`, 32vp tall, `text-xs`.
     Sm,
-    /// Native `h-14 px-8`, 56px tall, `text-lg`.
+    /// `h-10 px-6`, 40vp tall, `text-sm`.
     Lg,
-    /// 40x40 square, no padding.
+    /// 36×36 square, no padding (`size-9`).
     Icon,
 }
 
@@ -65,28 +65,28 @@ struct ButtonVariantStyle {
 fn size_style(size: ButtonSize) -> ButtonSizeStyle {
     match size {
         ButtonSize::Default => ButtonSizeStyle {
-            height: 48.0,
+            height: control::HEIGHT,
             width: None,
-            padding: [12.0, 20.0, 12.0, 20.0],
-            text_size: typography::MD,
+            padding: [0.0, 16.0, 0.0, 16.0],
+            text_size: typography::SM,
         },
         ButtonSize::Sm => ButtonSizeStyle {
-            height: 36.0,
+            height: control::HEIGHT_SM,
             width: None,
             padding: [0.0, 12.0, 0.0, 12.0],
-            text_size: typography::MD,
+            text_size: typography::XS,
         },
         ButtonSize::Lg => ButtonSizeStyle {
-            height: 56.0,
+            height: control::HEIGHT_LG,
             width: None,
-            padding: [0.0, 32.0, 0.0, 32.0],
-            text_size: typography::LG,
+            padding: [0.0, 24.0, 0.0, 24.0],
+            text_size: typography::SM,
         },
         ButtonSize::Icon => ButtonSizeStyle {
-            height: 40.0,
-            width: Some(40.0),
+            height: control::ICON,
+            width: Some(control::ICON),
             padding: [0.0, 0.0, 0.0, 0.0],
-            text_size: typography::MD,
+            text_size: typography::SM,
         },
     }
 }
@@ -98,21 +98,21 @@ fn variant_style(variant: ButtonVariant, theme: &Theme) -> ButtonVariantStyle {
             foreground: theme.colors.primary_foreground,
             border_width: 0.0,
             border_color: TRANSPARENT,
-            shadow: true,
+            shadow: false,
         },
         ButtonVariant::Secondary => ButtonVariantStyle {
             background: theme.colors.secondary,
             foreground: theme.colors.secondary_foreground,
             border_width: 0.0,
             border_color: TRANSPARENT,
-            shadow: true,
+            shadow: false,
         },
         ButtonVariant::Outline => ButtonVariantStyle {
             background: theme.colors.background,
             foreground: theme.colors.foreground,
             border_width: 1.0,
             border_color: theme.colors.border,
-            shadow: true,
+            shadow: false,
         },
         ButtonVariant::Ghost => ButtonVariantStyle {
             background: TRANSPARENT,
@@ -126,7 +126,7 @@ fn variant_style(variant: ButtonVariant, theme: &Theme) -> ButtonVariantStyle {
             foreground: theme.colors.destructive_foreground,
             border_width: 0.0,
             border_color: TRANSPARENT,
-            shadow: true,
+            shadow: false,
         },
         ButtonVariant::Link => ButtonVariantStyle {
             background: TRANSPARENT,
@@ -154,8 +154,8 @@ pub struct ButtonProps {
     pub disabled: Option<bool>,
     /// CSS width (`"100%"`, `"48%"`, `"120"`). When unset, size defaults apply.
     pub width: Option<String>,
-    /// Override the variant's default elevation. Passing `false` keeps the
-    /// shadcn geometry and colors while rendering a flat mobile surface.
+    /// Override elevation. New York variants are flat by default; pass `true`
+    /// to opt into a small drop shadow.
     #[props(default)]
     pub shadow: Option<bool>,
     /// Exact reference forwarded to the button's native root.
@@ -217,6 +217,46 @@ pub fn Button(props: ButtonProps) -> Element {
                 justify_content: "center",
                 {props.children}
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{control, size_style, typography, variant_style, ButtonSize, ButtonVariant, Theme};
+
+    #[test]
+    fn new_york_sizes_match_control_tokens() {
+        let default = size_style(ButtonSize::Default);
+        assert_eq!(default.height, control::HEIGHT);
+        assert_eq!(default.text_size, typography::SM);
+        assert_eq!(default.padding, [0.0, 16.0, 0.0, 16.0]);
+
+        let sm = size_style(ButtonSize::Sm);
+        assert_eq!(sm.height, control::HEIGHT_SM);
+        assert_eq!(sm.text_size, typography::XS);
+
+        let lg = size_style(ButtonSize::Lg);
+        assert_eq!(lg.height, control::HEIGHT_LG);
+        assert_eq!(lg.text_size, typography::SM);
+
+        let icon = size_style(ButtonSize::Icon);
+        assert_eq!(icon.height, control::ICON);
+        assert_eq!(icon.width, Some(control::ICON));
+    }
+
+    #[test]
+    fn filled_variants_are_flat() {
+        let theme = Theme::default();
+        for variant in [
+            ButtonVariant::Default,
+            ButtonVariant::Secondary,
+            ButtonVariant::Outline,
+            ButtonVariant::Destructive,
+            ButtonVariant::Ghost,
+            ButtonVariant::Link,
+        ] {
+            assert!(!variant_style(variant, &theme).shadow);
         }
     }
 }

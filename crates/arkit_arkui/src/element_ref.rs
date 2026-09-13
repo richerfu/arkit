@@ -176,16 +176,20 @@ impl MountedNodeLease {
         let node = self.reference.node_for_epoch(self.epoch)?;
         let node = node.borrow();
         let IntSize { width, height } = node.layout_size().ok()?;
-        let IntOffset { x, y } = node
-            .layout_position_in_window()
-            .or_else(|_| node.position_with_translate_in_window())
-            .ok()?;
-        Some(LayoutFramePx {
+        if width <= 0 || height <= 0 {
+            return None;
+        }
+        // Same contract as the area-change path: window layout position only.
+        // Translate-inclusive coordinates accumulate ancestor matrices and
+        // shift trigger-anchored overlays.
+        let IntOffset { x, y } = node.layout_position_in_window().ok()?;
+        let frame = LayoutFramePx {
             x: x as f32,
             y: y as f32,
             width: width as f32,
             height: height as f32,
-        })
+        };
+        frame.is_measured().then_some(frame)
     }
 
     /// Execute an advanced native operation after validating the mount epoch.

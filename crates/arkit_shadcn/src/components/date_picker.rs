@@ -127,11 +127,11 @@ pub fn DatePicker(props: DatePickerProps) -> Element {
             row {
                 align_items: "center",
                 justify_content: "center",
-                {icon_placeholder("calendar", 21.0, theme.colors.foreground)}
-                row { width: spacing::MD }
+                {icon_placeholder("calendar", 16.0, theme.colors.foreground)}
+                row { width: spacing::SM }
                 text {
                     content: label,
-                    font_size: typography::MD,
+                    font_size: typography::SM,
                     font_weight: 500_i32,
                     font_color: theme.colors.foreground,
                     line_height: 20.0,

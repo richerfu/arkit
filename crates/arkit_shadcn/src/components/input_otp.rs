@@ -4,6 +4,7 @@
 //! keyboard suggestions, and one-time-code autofill behave as one field. The
 //! visible slots are a presentation layer over that input, matching shadcn's
 //! grouped-slot composition without splitting input state across native nodes.
+//! Default slots are 40vp squares (`h-10`), matching shadcn Input OTP.
 
 use std::cell::Cell;
 
@@ -18,8 +19,8 @@ use arkit_prelude::*;
 
 use super::ARKUI_BORDER_STYLE_SOLID;
 
-const DEFAULT_CELL_SIZE: f32 = 48.0;
-const MIN_CELL_SIZE: f32 = 44.0;
+const DEFAULT_CELL_SIZE: f32 = control::HEIGHT_LG;
+const MIN_CELL_SIZE: f32 = control::HEIGHT;
 const DEFAULT_SEPARATOR_WIDTH: f32 = 28.0;
 const NATIVE_INPUT_TYPE_NORMAL: &str = "text";
 const NATIVE_INPUT_TYPE_NUMBER: &str = "number";
@@ -78,7 +79,7 @@ pub enum InputOtpSeparator {
 /// Optional mobile slot styling overrides.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct InputOtpStyle {
-    /// Square slot size. Values below 44vp are raised to the mobile touch target.
+    /// Square slot size. Values below 36vp are raised to the default control height.
     pub cell_size: f32,
     /// Width reserved for a separator between groups.
     pub separator_width: f32,
@@ -236,7 +237,7 @@ pub fn InputOtp(props: InputOtpProps) -> Element {
                 if let Some(displayed) = displayed {
                     text {
                         content: displayed,
-                        font_size: typography::LG,
+                        font_size: typography::MD,
                         font_weight: 500_i32,
                         font_color: foreground,
                         line_height: 24.0,
@@ -285,7 +286,7 @@ pub fn InputOtp(props: InputOtpProps) -> Element {
                 width: total_width,
                 height: cell_size,
                 padding: 0.0,
-                font_size: typography::LG,
+                font_size: typography::MD,
                 font_color: "#00000000",
                 caret_color: "#00000000",
                 background_color: "#00000000",
@@ -410,6 +411,7 @@ fn otp_group_edges(index: usize, digits: usize, group_size: usize) -> (bool, boo
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::theme::control;
 
     #[test]
     fn numeric_input_filters_and_truncates_pasted_content() {
@@ -447,7 +449,7 @@ mod tests {
     #[test]
     fn mobile_defaults_use_native_numeric_input() {
         let style = InputOtpStyle::default();
-        assert_eq!(style.cell_size, 48.0);
+        assert_eq!(style.cell_size, control::HEIGHT_LG);
         assert_eq!(InputOtpMode::default().native_input_type(), "number");
         assert_eq!(InputOtpMode::default().native_input_filter(), "[0-9]");
         assert_eq!(

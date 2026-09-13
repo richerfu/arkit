@@ -25,7 +25,7 @@ fn paint_or_hit_fill(color: u32) -> u32 {
 }
 
 /// Toggle visual variant. `Default` is borderless; `Outline` adds an input
-/// border and a small shadow.
+/// border.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ToggleVariant {
     #[default]
@@ -64,17 +64,17 @@ pub(crate) struct ToggleSurfaceStyle {
 
 pub(crate) fn toggle_default_size() -> ToggleSizeStyle {
     ToggleSizeStyle {
-        height: 40.0,
+        height: control::HEIGHT,
         width: None,
-        padding: [8.0, 10.0, 8.0, 10.0],
+        padding: [0.0, 10.0, 0.0, 10.0],
         icon_size: 16.0,
     }
 }
 
 pub(crate) fn toggle_icon_size() -> ToggleSizeStyle {
     ToggleSizeStyle {
-        height: 40.0,
-        width: Some(40.0),
+        height: control::ICON,
+        width: Some(control::ICON),
         padding: [0.0, 0.0, 0.0, 0.0],
         icon_size: 16.0,
     }
@@ -115,7 +115,7 @@ pub(crate) fn toggle_visual_style(
                 theme.colors.foreground
             },
             border_color: theme.colors.input,
-            shadow: true,
+            shadow: false,
         },
     }
 }

@@ -26,21 +26,21 @@ pub fn Home() -> Element {
                     width: "100%",
                     align_items: "start",
                     justify_content: "start",
-                    padding_top: 36.0,
-                    padding_right: 20.0,
-                    padding_bottom: 56.0,
-                    padding_left: 20.0,
+                    padding_top: 20.0,
+                    padding_right: 16.0,
+                    padding_bottom: 32.0,
+                    padding_left: 16.0,
 
                     text {
-                        font_size: 34.0,
+                        font_size: 28.0,
                         font_weight: 700,
                         font_color: TITLE_COLOR,
                         "Arkit Demos"
                     }
                     text {
-                        margin_top: 6.0,
-                        font_size: 14.0,
-                        line_height: 20.0,
+                        margin_top: 4.0,
+                        font_size: 13.0,
+                        line_height: 18.0,
                         font_color: CAPTION_COLOR,
                         "15 个示例统一入口 — 点击进入对应页面"
                     }
@@ -50,9 +50,9 @@ pub fn Home() -> Element {
                             width: "100%",
                             align_items: "start",
                             justify_content: "start",
-                            margin_top: 30.0,
+                            margin_top: 20.0,
                             text {
-                                font_size: 13.0,
+                                font_size: 12.0,
                                 font_weight: 600,
                                 font_color: GROUP_COLOR,
                                 "{group.title}"
@@ -61,7 +61,7 @@ pub fn Home() -> Element {
                                 width: "100%",
                                 align_items: "start",
                                 justify_content: "start",
-                                margin_top: 8.0,
+                                margin_top: 6.0,
                                 for (index, spec) in group.demos.iter().enumerate() {
                                     DemoRow {
                                         spec: *spec,
@@ -93,11 +93,11 @@ fn DemoRow(spec: DemoSpec, first: bool, last: bool, on_select: EventHandler<Stri
     rsx! {
         row {
             width: "100%",
-            height: 68.0,
+            height: 56.0,
             align_items: "center",
             justify_content: "start",
-            padding_right: 14.0,
-            padding_left: 14.0,
+            padding_right: 12.0,
+            padding_left: 12.0,
             background_color: ROW_BACKGROUND,
             border_width: border_width,
             border_color: ROW_BORDER,
@@ -112,10 +112,10 @@ fn DemoRow(spec: DemoSpec, first: bool, last: bool, on_select: EventHandler<Stri
                 justify_content: "center",
                 text {
                     content: spec.name.to_string(),
-                    font_size: 16.0,
+                    font_size: 15.0,
                     font_weight: 500,
                     font_color: TITLE_COLOR,
-                    line_height: 22.0,
+                    line_height: 20.0,
                     max_lines: 1_i32,
                     text_overflow: "ellipsis",
                 }
@@ -129,7 +129,7 @@ fn DemoRow(spec: DemoSpec, first: bool, last: bool, on_select: EventHandler<Stri
                     text_overflow: "ellipsis",
                 }
             }
-            {icon_placeholder("chevron-right", 20.0, ROW_ICON)}
+            {icon_placeholder("chevron-right", 16.0, ROW_ICON)}
         }
     }
 }

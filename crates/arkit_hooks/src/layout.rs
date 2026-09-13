@@ -37,7 +37,7 @@ fn use_layout_event<T: Copy + 'static>(
     use_native_element_events(reference, move |event| {
         let frame = match event {
             Some(NativeElementEvent::Mounted(lease)) => lease.layout_frame_px(),
-            Some(NativeElementEvent::Layout { frame, .. }) => Some(frame),
+            Some(NativeElementEvent::Layout { frame, .. }) => frame.is_measured().then_some(frame),
             None | Some(NativeElementEvent::Unmounted { .. }) => {
                 last.borrow_mut().take();
                 None
@@ -72,6 +72,18 @@ pub fn use_layout_size(reference: NativeElementRef, on_change: impl Fn(LayoutSiz
 #[track_caller]
 pub fn use_layout_frame(reference: NativeElementRef, on_change: impl Fn(LayoutFramePx) + 'static) {
     use_layout_event(reference, Rc::new(on_change), |frame| frame, frame_close);
+}
+
+/// Live window-relative frame for a mounted element, if it has been measured.
+///
+/// Overlay anchors should prefer this over the last `use_layout_frame` sample:
+/// area-change events can lag a scroll by a frame, so a tap immediately after
+/// scrolling would otherwise open against a stale trigger rect.
+pub fn current_layout_frame(reference: &NativeElementRef) -> Option<LayoutFramePx> {
+    reference
+        .current()
+        .and_then(|lease| lease.layout_frame_px())
+        .filter(|frame| frame.is_measured())
 }
 
 #[cfg(test)]

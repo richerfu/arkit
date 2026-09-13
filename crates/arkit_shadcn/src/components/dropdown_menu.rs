@@ -5,6 +5,7 @@
 //! the trigger's parent layout and trigger children remain ordinary shadcn
 //! buttons.
 
+use crate::components::floating_layer::trigger_frame_for_anchor;
 use crate::components::menu_common::{
     menu_closed_panel_height, menu_overlay_content, MenuEntry, MenuOverlayPlacement, MenuStyle,
 };
@@ -60,8 +61,13 @@ pub fn DropdownMenu(
     });
 
     let panel_height = menu_closed_panel_height(&items);
+    let frame = if current_open {
+        trigger_frame_for_anchor(&trigger_ref, *trigger_frame.read())
+    } else {
+        *trigger_frame.read()
+    };
     let placement = MenuOverlayPlacement::resolve(
-        *trigger_frame.read(),
+        frame,
         viewport,
         style.width,
         panel_height,

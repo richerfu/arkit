@@ -19,7 +19,7 @@ use super::motion::ExpandPresence;
 pub(crate) const TRANSPARENT: u32 = 0x00000000;
 const MENU_PANEL_HORIZONTAL_PADDING: f32 = spacing::XXS * 2.0;
 const MENU_PANEL_VERTICAL_PADDING: f32 = spacing::XXS * 2.0;
-const MENU_ROW_HEIGHT: f32 = 38.0;
+const MENU_ROW_HEIGHT: f32 = control::HEIGHT_SM;
 const MENU_SEPARATOR_HEIGHT: f32 = 9.0;
 const MENU_TEXT_MAX_LINES: i32 = 1;
 const MENU_TEXT_OVERFLOW_ELLIPSIS: &str = "ellipsis";
@@ -60,11 +60,11 @@ impl MenuOverlayPassThroughRegion {
         } else {
             Default::default()
         };
-        let origin = arkit_arkui::LocalVpPoint::from_window_px(
+        let origin = super::floating_layer::overlay_local_vp(
             arkit_arkui::WindowPxPoint::new(frame.x, frame.y),
-            measured_overlay,
+            arkit_arkui::WindowPxPoint::new(measured_overlay.x, measured_overlay.y),
             scale,
-        )?;
+        );
         let size = arkit_arkui::LogicalSizeVp::from_physical(frame.into(), scale)?;
 
         Some(Self {
@@ -99,18 +99,13 @@ impl MenuOverlayPlacement {
             panel_width,
             panel_height,
         );
-        let trigger_origin = arkit_arkui::LocalVpPoint::from_window_px(
+        let trigger_origin = super::floating_layer::overlay_local_vp(
             arkit_arkui::WindowPxPoint::new(trigger.x, trigger.y),
-            arkit_arkui::LayoutFramePx {
-                x: metrics.origin.x,
-                y: metrics.origin.y,
-                ..Default::default()
-            },
+            metrics.origin,
             scale,
-        )
-        .unwrap_or_default();
-        let trigger_x = trigger_origin.x.max(0.0);
-        let trigger_y = trigger_origin.y.max(0.0);
+        );
+        let trigger_x = trigger_origin.x;
+        let trigger_y = trigger_origin.y;
         let trigger_height = trigger.height / scale;
         let edge = MENU_VIEWPORT_PADDING;
         let min_x = viewport.safe_area.left.max(0.0) + edge;
@@ -1062,10 +1057,10 @@ fn menu_item_text(content: String, color: u32, weight: i32) -> Element {
             clip: true,
             text {
                 width: "100%",
-                font_size: typography::LG,
+                font_size: typography::SM,
                 font_weight: weight,
                 font_color: color,
-                line_height: 22.0,
+                line_height: 20.0,
                 max_lines: MENU_TEXT_MAX_LINES,
                 text_overflow: MENU_TEXT_OVERFLOW_ELLIPSIS,
                 {content}
@@ -1081,10 +1076,10 @@ fn menu_label_text(content: String, color: u32) -> Element {
             clip: true,
             text {
                 width: "100%",
-                font_size: typography::MD,
+                font_size: typography::XS,
                 font_weight: 600_i32,
                 font_color: color,
-                line_height: 20.0,
+                line_height: 16.0,
                 max_lines: MENU_TEXT_MAX_LINES,
                 text_overflow: MENU_TEXT_OVERFLOW_ELLIPSIS,
                 {content}

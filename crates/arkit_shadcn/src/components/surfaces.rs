@@ -3,7 +3,7 @@
 //! `Sonner` owns the viewport-level stack while callers own the toast data.
 //! The default presentation is mobile-first: a bottom-center **overlapping**
 //! notification stack inset from the horizontal edges and the system safe
-//! area, 40vp action targets, swipe-to-dismiss, and vertical scroll to cycle
+//! area, compact 32vp action targets, swipe-to-dismiss, and vertical scroll to cycle
 //! the front toast. Call sites can also request a compact minimal toast that
 //! skips notification chrome.
 
@@ -26,14 +26,14 @@ use super::floating_layer::{ALIGN_TOP, HIT_TEST_DEFAULT, HIT_TEST_NONE};
 
 const DEFAULT_DURATION_MS: u64 = 4_000;
 const DEFAULT_MAX_WIDTH: f32 = 420.0;
-const DEFAULT_MIN_HEIGHT: f32 = 64.0;
-const MINIMAL_MIN_HEIGHT: f32 = 36.0;
+const DEFAULT_MIN_HEIGHT: f32 = 52.0;
+const MINIMAL_MIN_HEIGHT: f32 = 32.0;
 const MINIMAL_MAX_WIDTH: f32 = 240.0;
 const MINIMAL_MIN_WIDTH: f32 = 96.0;
-const TOAST_ICON_SIZE: f32 = 20.0;
+const TOAST_ICON_SIZE: f32 = 16.0;
 const MINIMAL_ICON_SIZE: f32 = 14.0;
-const TOAST_ACTION_HEIGHT: f32 = 40.0;
-const TOAST_CLOSE_SIZE: f32 = 40.0;
+const TOAST_ACTION_HEIGHT: f32 = 32.0;
+const TOAST_CLOSE_SIZE: f32 = 32.0;
 const SWIPE_DISMISS_THRESHOLD: f32 = 56.0;
 const HORIZONTAL_SWIPE_DISMISS_THRESHOLD: f32 = 72.0;
 const STACK_EXPAND_THRESHOLD: f32 = 40.0;

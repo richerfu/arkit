@@ -1,10 +1,9 @@
 //! Input — shadcn-style single-line text input.
 //!
 //! Migrated from the original Elm builder API to dioxus 0.7 `#[component]` +
-//! `rsx!`. Mirrors React Native Reusables native styling: 48px-tall
-//! `TextInput` with an
+//! `rsx!`. Matches shadcn New York: 36vp-tall `TextInput` with an
 //! input-surface shell (1px `input` border, `md` radius, `background` fill),
-//! `lg` font size, and a translucent `muted_foreground` placeholder.
+//! `text-sm` (14vp), and a translucent `muted_foreground` placeholder.
 
 use crate::theme::*;
 use arkit_prelude::*;
@@ -13,10 +12,10 @@ use super::ARKUI_BORDER_STYLE_SOLID;
 use crate::icon::icon_placeholder;
 
 const NUMBER_INPUT_FILTER: &str = "[0-9]";
-const PASSWORD_ICON_BUTTON_SIZE: f32 = 36.0;
-const PASSWORD_ICON_SIZE: f32 = 18.0;
-const PASSWORD_ICON_INSET: f32 = 6.0;
-const PASSWORD_TRAILING_PADDING: f32 = 48.0;
+const PASSWORD_ICON_BUTTON_SIZE: f32 = 28.0;
+const PASSWORD_ICON_SIZE: f32 = 16.0;
+const PASSWORD_ICON_INSET: f32 = 4.0;
+const PASSWORD_TRAILING_PADDING: f32 = 32.0;
 
 /// Input semantics and native keyboard profile.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -124,7 +123,7 @@ pub fn Input(props: InputProps) -> Element {
     let value = value.map(|value| mode.sanitize(value));
     let input_type = mode.native_input_type(password_is_visible);
     let input_filter = mode.native_input_filter();
-    let field_height = height.unwrap_or(48.0);
+    let field_height = height.unwrap_or(control::HEIGHT);
     let field_width = width.clone();
     let icon_name = if password_is_visible {
         "eye-off"
@@ -145,9 +144,9 @@ pub fn Input(props: InputProps) -> Element {
             } else {
                 theme.colors.primary
             },
-            font_size: typography::LG,
+            font_size: typography::SM,
             font_color: theme.colors.foreground,
-            line_height: 22.5,
+            line_height: 20.0,
             height: field_height,
             border_style: ARKUI_BORDER_STYLE_SOLID,
             border_width: 1.0,

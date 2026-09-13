@@ -60,19 +60,18 @@ pub fn Combobox(
         column {
             align_items: "start",
             row {
-                height: 40.0,
+                height: control::HEIGHT,
                 width: "100%",
                 background_color: colors.background,
-                padding_top: 8.0,
+                padding_top: 0.0,
                 padding_right: spacing::MD,
-                padding_bottom: 8.0,
+                padding_bottom: 0.0,
                 padding_left: spacing::MD,
                 align_items: "center",
                 justify_content: "space_between",
                 border_radius: md,
                 border_width: 1.0,
                 border_color: colors.border,
-                shadow: "sm",
                 onclick: move |_: dioxus_core::Event<_>| {
                     set_open.call(!current_open);
                 },
@@ -102,9 +101,9 @@ pub fn Combobox(
                     shadow: "sm",
                     if let Some(label) = panel_label {
                         row {
-                            padding_top: 8.0,
+                            padding_top: 6.0,
                             padding_right: spacing::SM,
-                            padding_bottom: 8.0,
+                            padding_bottom: 6.0,
                             padding_left: spacing::SM,
                             text {
                                 font_size: typography::XS,
@@ -129,12 +128,12 @@ pub fn Combobox(
                                 rsx! {
                                     row {
                                         width: "100%",
-                                        height: 36.0,
+                                        height: control::HEIGHT_SM,
                                         align_items: "center",
                                         justify_content: "space_between",
-                                        padding_top: 8.0,
+                                        padding_top: 6.0,
                                         padding_right: spacing::SM,
-                                        padding_bottom: 8.0,
+                                        padding_bottom: 6.0,
                                         padding_left: spacing::SM,
                                         border_radius: sm,
                                         background_color: if active { colors.accent } else { 0x00000000 },

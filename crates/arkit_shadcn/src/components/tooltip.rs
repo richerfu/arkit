@@ -4,17 +4,19 @@
 //! Migrated from the legacy Elm builder API. The trigger opens the tooltip on
 //! hover (`on_hover`) and toggles it on click; the panel renders through the app
 //! root-projected portal so parent layout cannot clip it. Panel styling preserved:
-//! `px-3 py-1.5`, `md` radius, 1px border, `popover` background,
-//! `popover_foreground` text at native text-base size. Anchored above the
+//! `px-2.5 py-1`, `md` radius, 1px border, `popover` background,
+//! `popover_foreground` text at `text-xs`. Anchored above the
 //! trigger.
 
-use super::floating_layer::{FloatingAlign, FloatingPanelPlacement, FloatingSide};
+use super::floating_layer::{
+    trigger_frame_for_anchor, FloatingAlign, FloatingPanelPlacement, FloatingSide,
+};
 use super::motion::{OverlayPresence, FLOATING_ENTER_MS, FLOATING_EXIT_MS};
 use crate::theme::*;
 use arkit_prelude::*;
 use dioxus_core_macro::component;
 
-const TOOLTIP_ESTIMATED_HEIGHT: f32 = 36.0;
+const TOOLTIP_ESTIMATED_HEIGHT: f32 = 28.0;
 
 /// Hover/tap tooltip.
 #[component]
@@ -40,7 +42,7 @@ pub fn Tooltip(
         None => *internal.read(),
     };
     let controlled = open.is_some();
-    let panel_width = ((content.chars().count() as f32 * 7.0) + 24.0).clamp(80.0, 240.0);
+    let panel_width = ((content.chars().count() as f32 * 6.5) + 20.0).clamp(72.0, 240.0);
 
     let set_open = EventHandler::new(move |next: bool| {
         if !controlled {
@@ -68,8 +70,13 @@ pub fn Tooltip(
         }
     });
 
+    let frame = if current {
+        trigger_frame_for_anchor(&trigger_ref, *trigger_frame.read())
+    } else {
+        *trigger_frame.read()
+    };
     let placement = FloatingPanelPlacement::resolve(
-        *trigger_frame.read(),
+        frame,
         viewport,
         panel_width,
         TOOLTIP_ESTIMATED_HEIGHT,
@@ -122,10 +129,10 @@ fn tooltip_overlay_content(
                 align_items: "center",
                 justify_content: "center",
                 hit_test_behavior: "default",
-                padding_top: 6.0,
-                padding_right: 12.0,
-                padding_bottom: 6.0,
-                padding_left: 12.0,
+                padding_top: 4.0,
+                padding_right: 10.0,
+                padding_bottom: 4.0,
+                padding_left: 10.0,
                 border_radius: theme.radii.md,
                 border_width: 1.0,
                 border_color: theme.colors.border,
@@ -133,9 +140,9 @@ fn tooltip_overlay_content(
                 shadow: super::floating_layer::SHADOW_SM,
                 text {
                     content: content,
-                    font_size: typography::MD,
+                    font_size: typography::XS,
                     font_color: theme.colors.popover_foreground,
-                    line_height: 20.0,
+                    line_height: 16.0,
                     max_lines: 1,
                 }
             }

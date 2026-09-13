@@ -128,18 +128,13 @@ impl FloatingPanelPlacement {
 
         // Trigger layout frames are physical / window-space; convert into the
         // overlay-local vp space used by ArkUI width/position attributes.
-        let trigger_origin = arkit_arkui::LocalVpPoint::from_window_px(
+        let trigger_origin = overlay_local_vp(
             arkit_arkui::WindowPxPoint::new(trigger.x, trigger.y),
-            arkit_arkui::LayoutFramePx {
-                x: metrics.origin.x,
-                y: metrics.origin.y,
-                ..Default::default()
-            },
+            metrics.origin,
             scale,
-        )
-        .unwrap_or_default();
-        let trigger_x = trigger_origin.x.max(0.0);
-        let trigger_y = trigger_origin.y.max(0.0);
+        );
+        let trigger_x = trigger_origin.x;
+        let trigger_y = trigger_origin.y;
         let trigger_width = trigger.width / scale;
         let trigger_height = trigger.height / scale;
 
@@ -193,6 +188,44 @@ fn clamp_preserving_start(raw_x: f32, min_x: f32, max_x: f32, align: FloatingAli
         }
         FloatingAlign::Center | FloatingAlign::End => raw_x.clamp(min_x, max_x),
     }
+}
+
+/// Convert a window-space point into overlay-local vp.
+///
+/// `content_rect` (used as overlay origin) can lag the native portal frame. If
+/// subtracting it puts the trigger well outside the portal, the origin is in a
+/// different space than the trigger — fall back to window/scale so the panel
+/// does not clamp to (0,0).
+pub(crate) fn overlay_local_vp(
+    window: arkit_arkui::WindowPxPoint,
+    overlay_origin: arkit_arkui::WindowPxPoint,
+    scale: f32,
+) -> arkit_arkui::LocalVpPoint {
+    let scale = scale.max(f32::EPSILON);
+    let overlay_frame = arkit_arkui::LayoutFramePx {
+        x: overlay_origin.x,
+        y: overlay_origin.y,
+        ..Default::default()
+    };
+    let local = arkit_arkui::LocalVpPoint::from_window_px(window, overlay_frame, scale)
+        .unwrap_or_default();
+    if local.x >= -1.0 && local.y >= -1.0 {
+        return local;
+    }
+    arkit_arkui::LocalVpPoint::from_window_px(
+        window,
+        arkit_arkui::LayoutFramePx::default(),
+        scale,
+    )
+    .unwrap_or(local)
+}
+
+/// Prefer a live native window frame over the last area-change sample.
+pub(crate) fn trigger_frame_for_anchor(
+    reference: &arkit_arkui::NativeElementRef,
+    cached: arkit_arkui::LayoutFramePx,
+) -> arkit_arkui::LayoutFramePx {
+    arkit_hooks::current_layout_frame(reference).unwrap_or(cached)
 }
 
 pub(crate) fn viewport_scale(viewport: arkit_hooks::OverlayViewport) -> f32 {
@@ -510,6 +543,86 @@ mod tests {
         );
         assert!((placement.x - (100.0 / 3.0)).abs() < 0.01);
         assert!((placement.y - (200.0 / 3.0 + 120.0 / 3.0 + 4.0)).abs() < 0.01);
+    }
+
+    /// Pre-fix conversion: subtract overlay origin then clamp negatives to 0.
+    fn legacy_overlay_local_vp(
+        window: arkit_arkui::WindowPxPoint,
+        overlay_origin: arkit_arkui::WindowPxPoint,
+        scale: f32,
+    ) -> arkit_arkui::LocalVpPoint {
+        let local = arkit_arkui::LocalVpPoint::from_window_px(
+            window,
+            arkit_arkui::LayoutFramePx {
+                x: overlay_origin.x,
+                y: overlay_origin.y,
+                ..Default::default()
+            },
+            scale,
+        )
+        .unwrap_or_default();
+        arkit_arkui::LocalVpPoint::new(local.x.max(0.0), local.y.max(0.0))
+    }
+
+    #[test]
+    fn before_fix_mismatched_origin_pinned_trigger_to_zero() {
+        let window = arkit_arkui::WindowPxPoint::new(80.0, 120.0);
+        let mismatched_origin = arkit_arkui::WindowPxPoint::new(0.0, 400.0);
+        let old = legacy_overlay_local_vp(window, mismatched_origin, 1.0);
+        let new = overlay_local_vp(window, mismatched_origin, 1.0);
+        assert_eq!(old.x, 80.0);
+        assert_eq!(old.y, 0.0);
+        assert!((new.x - 80.0).abs() < 0.01);
+        assert!((new.y - 120.0).abs() < 0.01);
+        assert!((new.y - old.y).abs() > 50.0);
+    }
+
+    #[test]
+    fn overlay_local_falls_back_when_origin_is_not_in_trigger_space() {
+        let window = arkit_arkui::WindowPxPoint::new(80.0, 120.0);
+        let mismatched_origin = arkit_arkui::WindowPxPoint::new(0.0, 400.0);
+        let local = overlay_local_vp(window, mismatched_origin, 1.0);
+        assert!((local.x - 80.0).abs() < 0.01);
+        assert!((local.y - 120.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn overlay_local_keeps_matching_origin() {
+        let window = arkit_arkui::WindowPxPoint::new(105.0, 105.0);
+        let origin = arkit_arkui::WindowPxPoint::new(70.0, 35.0);
+        let local = overlay_local_vp(window, origin, 3.5);
+        assert!((local.x - 10.0).abs() < 0.01);
+        assert!((local.y - 20.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn mismatched_overlay_origin_does_not_pin_panel_to_zero() {
+        let viewport = arkit_hooks::OverlayViewport {
+            frame: arkit_arkui::LayoutFramePx {
+                x: 0.0,
+                y: 400.0,
+                width: 400.0,
+                height: 800.0,
+            },
+            safe_area: arkit_hooks::EdgeInsets::default(),
+            scale: 1.0,
+        };
+        let placement = FloatingPanelPlacement::from_trigger(
+            arkit_arkui::LayoutFramePx {
+                x: 80.0,
+                y: 120.0,
+                width: 200.0,
+                height: 40.0,
+            },
+            viewport,
+            200.0,
+            100.0,
+            FloatingSide::Bottom,
+            FloatingAlign::Start,
+            4.0,
+        );
+        assert!((placement.x - 80.0).abs() < 0.5);
+        assert!((placement.y - (120.0 + 40.0 + 4.0)).abs() < 0.5);
     }
 
     #[test]

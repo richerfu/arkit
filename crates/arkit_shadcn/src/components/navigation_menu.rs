@@ -1,7 +1,7 @@
 //! NavigationMenu — shadcn-style horizontal navigation menu.
 //!
 //! Migrated from the original Elm builder API to dioxus 0.7 `#[component]` +
-//! `rsx!`. [`NavigationMenu`] renders a `shadow-sm` column with `SM` padding,
+//! `rsx!`. [`NavigationMenu`] renders a bordered column with `SM` padding,
 //! 1px `border`, `lg` radius, `background` fill, containing a row of items.
 //! [`NavigationItem`] renders a `Ghost`/`Secondary` button depending on the
 //! active state.
@@ -30,7 +30,6 @@ pub fn NavigationMenu(props: NavigationMenuProps) -> Element {
             border_width: 1.0,
             border_color: theme.colors.border,
             background_color: theme.colors.background,
-            shadow: "sm",
             row {
                 {props.children}
             }
