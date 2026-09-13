@@ -8,7 +8,9 @@
 //! `spacing::LG` padding, `md` radius, 1px border, `popover`/`border` tokens,
 //! small outer shadow, start-aligned content. Anchored below the trigger.
 
-use super::floating_layer::{FloatingAlign, FloatingPanelPlacement, FloatingSide};
+use super::floating_layer::{
+    trigger_frame_for_anchor, FloatingAlign, FloatingPanelPlacement, FloatingSide,
+};
 use super::motion::{OverlayPresence, FLOATING_ENTER_MS, FLOATING_EXIT_MS};
 use crate::theme::*;
 use arkit_prelude::*;
@@ -70,8 +72,13 @@ pub fn HoverCard(
         }
     });
 
+    let frame = if current {
+        trigger_frame_for_anchor(&trigger_ref, *trigger_frame.read())
+    } else {
+        *trigger_frame.read()
+    };
     let placement = FloatingPanelPlacement::resolve(
-        *trigger_frame.read(),
+        frame,
         viewport,
         panel_width,
         HOVER_CARD_ESTIMATED_HEIGHT,

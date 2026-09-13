@@ -65,7 +65,7 @@ pub fn AlertDialog(
                     width: "100%",
                     text {
                         width: "100%",
-                        font_size: typography::XL,
+                        font_size: typography::LG,
                         font_weight: 600,
                         font_color: theme.colors.foreground,
                         line_height: 24.0,
@@ -75,7 +75,7 @@ pub fn AlertDialog(
                     text {
                         width: "100%",
                         margin_top: spacing::SM,
-                        font_size: typography::MD,
+                        font_size: typography::SM,
                         font_color: theme.colors.muted_foreground,
                         line_height: 20.0,
                         text_align: "start",

@@ -30,7 +30,8 @@ pub fn Breadcrumb(props: BreadcrumbProps) -> Element {
                 rsx! {
                     text {
                         content: content,
-                        font_size: typography::MD,
+                        font_size: typography::SM,
+                        font_weight: 500,
                         font_color: theme.colors.foreground,
                         line_height: 20.0,
                     }

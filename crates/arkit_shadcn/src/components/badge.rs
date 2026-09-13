@@ -13,7 +13,7 @@ const BADGE_ICON_SIZE: f32 = 12.0;
 const BADGE_VERTICAL_PADDING: f32 = 2.0;
 const BADGE_ICON_GAP: f32 = 4.0;
 const BADGE_TEXT_LINE_HEIGHT: f32 = 16.0;
-const BADGE_MIN_HEIGHT: f32 = 22.0;
+const BADGE_MIN_HEIGHT: f32 = 20.0;
 
 /// Badge visual variant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

@@ -23,7 +23,7 @@ const LIGHT_SELECTION: u32 = 0xFF0284C7;
 const DARK_SELECTION: u32 = 0xFF0EA5E9;
 const CALENDAR_PADDING: f32 = 12.0;
 const DAY_SIZE: f32 = 36.0;
-const WEEK_ROW_HEIGHT: f32 = 40.0;
+const WEEK_ROW_HEIGHT: f32 = 36.0;
 const PICKER_COLUMN_COUNT: usize = 3;
 const PICKER_ROW_COUNT: usize = 4;
 const PICKER_BACK_ROW_HEIGHT: f32 = 44.0;
@@ -426,7 +426,7 @@ pub fn Calendar(props: CalendarProps) -> Element {
             padding_left: CALENDAR_PADDING,
             row {
                 width: "100%",
-                height: 40.0,
+                height: 36.0,
                 align_items: "center",
                 CalendarNavigationButton {
                     icon: "chevron-left".to_string(),
@@ -603,10 +603,10 @@ fn CalendarHeaderButton(label: String, expanded: bool, onclick: EventHandler<()>
                 justify_content: "center",
                 text {
                     content: label,
-                    font_size: typography::MD,
+                    font_size: typography::SM,
                     font_weight: 500_i32,
                     font_color: theme.colors.card_foreground,
-                    line_height: 24.0,
+                    line_height: 20.0,
                 }
                 row { width: spacing::XXS }
                 {icon_placeholder(

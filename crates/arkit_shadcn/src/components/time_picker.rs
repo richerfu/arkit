@@ -237,11 +237,11 @@ pub fn TimePicker(props: TimePickerProps) -> Element {
             row {
                 align_items: "center",
                 justify_content: "center",
-                {icon_placeholder("clock", 21.0, trigger_color)}
-                row { width: spacing::MD }
+                {icon_placeholder("clock", 16.0, trigger_color)}
+                row { width: spacing::SM }
                 text {
                     content: trigger_label,
-                    font_size: typography::MD,
+                    font_size: typography::SM,
                     font_weight: 500_i32,
                     font_color: trigger_color,
                     line_height: 20.0,
@@ -261,11 +261,11 @@ pub fn TimePicker(props: TimePickerProps) -> Element {
                 text {
                     content: title,
                     width: "100%",
-                    font_size: typography::LG,
+                    font_size: typography::MD,
                     font_weight: 600_i32,
                     font_color: theme.colors.foreground,
                     text_align: "center",
-                    line_height: 24.0,
+                    line_height: 20.0,
                 }
                 row { height: spacing::LG }
                 row {

@@ -189,7 +189,7 @@ do_build() {
 do_sign() {
   UNSIGNED=$(find "$APP/entry/build" -name "*-unsigned.hap" -path "*outputs*" 2>/dev/null | head -1 || true)
   SIGNED=$(find "$APP/entry/build" -name "*-signed.hap" -path "*outputs*" 2>/dev/null | head -1 || true)
-  if [ -n "$SIGNED" ]; then
+  if [ -n "$SIGNED" ] && { [ -z "$UNSIGNED" ] || [ "$SIGNED" -nt "$UNSIGNED" ]; }; then
     return 0
   fi
   [ -n "$UNSIGNED" ] || return 0
@@ -228,6 +228,7 @@ case "$ACTION" in
   all)
     sync_shell
     do_build
+    do_sign
     do_install
     do_start
     echo ">> deployed demos (libdemos.so). tail logs: $0 log"

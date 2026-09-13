@@ -31,5 +31,5 @@ pub mod prelude {
         self, use_theme, use_theme_provider, with_alpha, ColorTokens, RadiusTokens, Theme,
         ThemeMode, ThemePreset, ThemeProvider,
     };
-    pub use crate::theme::{color, radius, spacing, typography};
+    pub use crate::theme::{color, control, radius, spacing, typography};
 }

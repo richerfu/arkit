@@ -2,7 +2,7 @@
 //!
 //! Migrated from the original Elm builder API to dioxus 0.7 `#[component]` +
 //! `rsx!`. Preserves the original rounded card surface (`card` background,
-//! `border`, `sm` radius, clipped), the `40.0`-tall header row with a bottom
+//! `border`, `sm` radius, clipped), the `36.0`-tall header row with a bottom
 //! separator, and the `8.0`-padded body cells with `SM` text.
 //!
 //! The row separators use ArkUI's four-side border vector so only the bottom
@@ -31,7 +31,7 @@ pub fn Table(props: TableProps) -> Element {
             rsx! {
                 row {
                     layout_weight: 1.0,
-                    height: 40.0,
+                    height: control::HEIGHT,
                     align_items: "center",
                     padding_top: 0.0,
                     padding_right: 8.0,

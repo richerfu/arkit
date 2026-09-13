@@ -47,7 +47,7 @@ pub fn Field(props: FieldProps) -> Element {
             column {
                 width: "100%",
                 align_items: "start",
-                margin_bottom: spacing::XL,
+                margin_bottom: spacing::LG,
                 opacity: if props.disabled { 0.5 } else { 1.0 },
                 foreground_color: foreground,
                 {props.children}
@@ -58,7 +58,7 @@ pub fn Field(props: FieldProps) -> Element {
                 width: "100%",
                 align_items: "center",
                 justify_content: "space_between",
-                margin_bottom: spacing::XL,
+                margin_bottom: spacing::LG,
                 opacity: if props.disabled { 0.5 } else { 1.0 },
                 foreground_color: foreground,
                 {props.children}
@@ -270,7 +270,7 @@ pub struct FieldLegendProps {
 pub fn FieldLegend(props: FieldLegendProps) -> Element {
     let theme = use_theme();
     let (font_size, font_weight, line_height) = match props.variant {
-        FieldLegendVariant::Legend => (typography::LG, 600_i32, 24.0),
+        FieldLegendVariant::Legend => (typography::MD, 600_i32, 20.0),
         FieldLegendVariant::Label => (typography::SM, 500_i32, 20.0),
     };
 
@@ -306,7 +306,7 @@ pub fn FieldSeparator(props: FieldSeparatorProps) -> Element {
             width: "100%",
             align_items: "center",
             margin_top: spacing::XXS,
-            margin_bottom: spacing::XL,
+            margin_bottom: spacing::LG,
             row {
                 layout_weight: 1.0,
                 height: 1.0,

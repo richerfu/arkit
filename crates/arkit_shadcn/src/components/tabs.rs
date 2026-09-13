@@ -1,10 +1,10 @@
 //! Tabs — shadcn-style tabbed navigation.
 //!
 //! Migrated from the original Elm builder API to dioxus 0.7 `#[component]` +
-//! `rsx!`. Preserves the original tabs-list surface (`muted` background, `lg`
-//! radius, `36.0` height, `3.0` padding), the trigger styling (`30.0` height,
-//! `md` radius, transparent border, active = `background`), and the
-//! visibility-toggled panel stack.
+//! `rsx!`. The tabs list fills its parent width with equal-weight triggers.
+//! List surface is `muted` at `36.0` height with `3.0` padding; active trigger
+//! uses `background` fill, `md` radius, and a transparent border. Panels stay
+//! mounted and toggle visibility.
 
 use crate::theme::*;
 use arkit_prelude::*;
@@ -26,8 +26,9 @@ pub fn TabsList(props: TabsListProps) -> Element {
     let theme = use_theme();
     rsx! {
         row {
+            width: "100%",
             align_items: "center",
-            justify_content: "center",
+            justify_content: "start",
             padding: TABS_LIST_PADDING,
             height: TABS_LIST_HEIGHT,
             border_radius: theme.radii.lg,
@@ -58,6 +59,7 @@ pub fn TabsTrigger(props: TabsTriggerProps) -> Element {
     let on_press = props.on_press;
     rsx! {
         row {
+            layout_weight: 1.0,
             height: TABS_TRIGGER_HEIGHT,
             align_items: "center",
             justify_content: "center",

@@ -509,6 +509,24 @@ pub mod typography {
     pub const XXL: f32 = 24.0;
 }
 
+/// Interactive control geometry aligned with shadcn/ui New York.
+///
+/// Values are vp (1vp ≈ 1 CSS px at the ArkUI baseline). The previous
+/// React Native Reusables defaults (`h-12` / 48vp) read as oversized on
+/// HarmonyOS; these tokens match the web New York density.
+pub mod control {
+    /// Default control height (`h-9`).
+    pub const HEIGHT: f32 = 36.0;
+    /// Compact control height (`h-8`).
+    pub const HEIGHT_SM: f32 = 32.0;
+    /// Large control height (`h-10`).
+    pub const HEIGHT_LG: f32 = 40.0;
+    /// Icon-only square (`size-9`).
+    pub const ICON: f32 = 36.0;
+    /// Compact icon square (`size-8`).
+    pub const ICON_SM: f32 = 32.0;
+}
+
 /// Theme provider component. Mount near the app root to seed the dioxus
 /// context consumed by [`use_theme`]. The theme is held in a `Signal<Theme>`
 /// so descendants re-skin reactively when the provider's theme signal is
@@ -537,6 +555,10 @@ mod tests {
         assert_eq!(theme.colors.foreground, color::FOREGROUND);
         assert_eq!(theme.colors.primary_track, color::PRIMARY_TRACK);
         assert_eq!(theme.radii.md, radius::MD);
+        assert_eq!(control::HEIGHT, 36.0);
+        assert_eq!(control::HEIGHT_SM, 32.0);
+        assert_eq!(control::HEIGHT_LG, 40.0);
+        assert_eq!(control::ICON, 36.0);
     }
 
     #[test]

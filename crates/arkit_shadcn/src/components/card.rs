@@ -2,7 +2,7 @@
 //!
 //! Migrated from the original Elm builder API to dioxus 0.7 `#[component]` +
 //! `rsx!`. Mirrors React Native Reusables: the card shell owns only surface
-//! styling, while Header/Content/Footer own their own `p-6` padding.
+//! styling, while Header/Content/Footer own their own `p-4` padding.
 
 use crate::theme::*;
 use arkit_prelude::*;
@@ -52,7 +52,7 @@ pub struct CardHeaderProps {
     pub description: String,
 }
 
-/// Card header — `p-6` with title and muted description stacked at `space-y-1.5`.
+/// Card header — `p-4` with title and muted description stacked at `space-y-1`.
 #[component]
 pub fn CardHeader(props: CardHeaderProps) -> Element {
     let theme = use_theme();
@@ -63,19 +63,19 @@ pub fn CardHeader(props: CardHeaderProps) -> Element {
             column {
                 width: "100%",
                 align_items: "start",
-                padding_top: spacing::XXL,
-                padding_right: spacing::XXL,
-                padding_bottom: spacing::XXL,
-                padding_left: spacing::XXL,
+                padding_top: spacing::LG,
+                padding_right: spacing::LG,
+                padding_bottom: spacing::LG,
+                padding_left: spacing::LG,
                 row {
                     width: "100%",
                     justify_content: "start",
                     text {
                         content: props.title.clone(),
-                        font_size: typography::XXL,
+                        font_size: typography::MD,
                         font_weight: 600,
                         font_color: theme.colors.card_foreground,
-                        line_height: 24.0,
+                        line_height: 20.0,
                         text_letter_spacing: -0.35,
                         text_align: "start",
                     }
@@ -103,17 +103,17 @@ pub struct CardTitleProps {
     pub content: String,
 }
 
-/// Standalone card title — `text-2xl font-semibold leading-none tracking-tight`.
+/// Standalone card title — `text-base font-semibold leading-none tracking-tight`.
 #[component]
 pub fn CardTitle(props: CardTitleProps) -> Element {
     let theme = use_theme();
     rsx! {
         text {
             content: props.content.clone(),
-            font_size: typography::XXL,
+            font_size: typography::MD,
             font_weight: 600,
             font_color: theme.colors.card_foreground,
-            line_height: 24.0,
+            line_height: 20.0,
             text_letter_spacing: -0.35,
             text_align: "start",
         }
@@ -147,7 +147,7 @@ pub struct CardContentProps {
     pub children: Element,
 }
 
-/// Card content region — `p-6 pt-0`.
+/// Card content region — `p-4 pt-0`.
 #[component]
 pub fn CardContent(props: CardContentProps) -> Element {
     rsx! {
@@ -155,9 +155,9 @@ pub fn CardContent(props: CardContentProps) -> Element {
             width: "100%",
             align_items: "start",
             padding_top: 0.0,
-            padding_right: spacing::XXL,
-            padding_bottom: spacing::XXL,
-            padding_left: spacing::XXL,
+            padding_right: spacing::LG,
+            padding_bottom: spacing::LG,
+            padding_left: spacing::LG,
             row {
                 width: "100%",
                 justify_content: "start",
@@ -173,7 +173,7 @@ pub struct CardFooterProps {
     pub children: Element,
 }
 
-/// Card footer — `flex-row items-center p-6 pt-0`.
+/// Card footer — `flex-row items-center p-4 pt-0`.
 #[component]
 pub fn CardFooter(props: CardFooterProps) -> Element {
     rsx! {
@@ -182,9 +182,9 @@ pub fn CardFooter(props: CardFooterProps) -> Element {
             align_items: "center",
             justify_content: "start",
             padding_top: 0.0,
-            padding_right: spacing::XXL,
-            padding_bottom: spacing::XXL,
-            padding_left: spacing::XXL,
+            padding_right: spacing::LG,
+            padding_bottom: spacing::LG,
+            padding_left: spacing::LG,
             {props.children}
         }
     }

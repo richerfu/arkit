@@ -5,7 +5,7 @@
 //! beside its content. [`SidebarItem`] renders a `Ghost`/`Secondary` button
 //! depending on the active state.
 
-use super::button::{Button, ButtonVariant};
+use super::button::{Button, ButtonSize, ButtonVariant};
 use crate::theme::*;
 use arkit_prelude::*;
 
@@ -31,7 +31,6 @@ pub fn Sidebar(props: SidebarProps) -> Element {
                 border_width: 1.0,
                 border_color: theme.colors.border,
                 border_radius: theme.radii.md,
-                shadow: "sm",
                 {props.sidebar}
             }
             {props.children}
@@ -62,6 +61,8 @@ pub fn SidebarItem(props: SidebarItemProps) -> Element {
     rsx! {
         Button {
             variant: variant,
+            size: ButtonSize::Sm,
+            width: Some("100%".into()),
             onclick: move |_| {
                 if let Some(handler) = onclick {
                     handler.call(());

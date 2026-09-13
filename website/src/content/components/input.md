@@ -50,7 +50,7 @@ Input {
 | `placeholder` | `Option<String>`               | `None`  | 占位文案                        |
 | `value`       | `Option<String>`               | `None`  | 受控值                          |
 | `mode`        | `InputMode`                    | `Text`  | `Text`、`Password` 或 `Number`  |
-| `height`      | `Option<f32>`                  | `48`    | 固定高度 vp                     |
+| `height`      | `Option<f32>`                  | `36`    | 固定高度 vp                     |
 | `width`       | `Option<String>`               | `None`  | CSS 宽度（`"100%"` 表示占满）   |
 | `invalid`     | `bool`                         | `false` | 校验失败时使用 destructive 边框 |
 | `disabled`    | `bool`                         | `false` | 禁止编辑，保留尺寸              |

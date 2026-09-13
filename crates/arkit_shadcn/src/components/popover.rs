@@ -9,7 +9,8 @@
 //! outer shadow, and start-aligned content.
 
 use super::floating_layer::{
-    FloatingAlign, FloatingPanelPlacement, FloatingSide, FLOATING_CAPTURE_COLOR,
+    trigger_frame_for_anchor, FloatingAlign, FloatingPanelPlacement, FloatingSide,
+    FLOATING_CAPTURE_COLOR,
 };
 use super::motion::{OverlayPresence, FLOATING_ENTER_MS, FLOATING_EXIT_MS};
 use crate::theme::*;
@@ -62,8 +63,13 @@ pub fn Popover(
         }
     });
 
+    let frame = if current {
+        trigger_frame_for_anchor(&trigger_ref, *trigger_frame.read())
+    } else {
+        *trigger_frame.read()
+    };
     let placement = FloatingPanelPlacement::resolve(
-        *trigger_frame.read(),
+        frame,
         viewport,
         panel_width,
         POPOVER_ESTIMATED_HEIGHT,

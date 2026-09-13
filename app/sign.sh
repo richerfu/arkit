@@ -7,7 +7,7 @@
 # 用法: ./sign.sh <unsigned.hap> <signed.hap>
 set -euo pipefail
 
-JAVA="/Applications/DevEco-Studio.app/Contents/jbr/Contents/Home/bin/java"
+JAVA="${JAVA:-/Applications/DevEco-Studio.app/Contents/jbr/Contents/Home/bin/java}"
 KEYTOOL="$(command -v keytool)"
 SDK_LIB="/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/toolchains/lib"
 HAP_SIGN_TOOL="$SDK_LIB/hap-sign-tool.jar"

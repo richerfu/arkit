@@ -2,7 +2,7 @@
 //!
 //! Migrated from the original Elm builder API to dioxus 0.7 `#[component]` +
 //! `rsx!`. Preserves the original styling: input-surface shell with a
-//! transparent fill, `[SM, MD, SM, MD]` padding, `md` font size, 64px height,
+//! background fill, `[SM, MD, SM, MD]` padding, `text-sm`, 64vp min height,
 //! and a translucent `muted_foreground` placeholder.
 
 use crate::theme::*;
@@ -47,7 +47,7 @@ pub fn Textarea(props: TextareaProps) -> Element {
             placeholder: if let Some(p) = props.placeholder { p },
             placeholder_color: with_alpha(theme.colors.muted_foreground, 0x80),
             caret_color: theme.colors.primary,
-            font_size: typography::MD,
+            font_size: typography::SM,
             font_color: theme.colors.foreground,
             line_height: 20.0,
             height: props.height.unwrap_or(64.0),
@@ -55,7 +55,7 @@ pub fn Textarea(props: TextareaProps) -> Element {
             border_width: 1.0,
             border_color: if props.invalid { theme.colors.destructive } else { theme.colors.input },
             border_radius: theme.radii.md,
-            background_color: "#00000000",
+            background_color: theme.colors.background,
             opacity: if disabled { 0.5 } else { 1.0 },
             enabled: !disabled,
             focusable: true,

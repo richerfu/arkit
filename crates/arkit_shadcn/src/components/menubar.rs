@@ -127,13 +127,12 @@ pub fn Menubar(
         row {
             native_ref: menubar_ref,
             padding: spacing::XXS,
-            height: 36.0,
+            height: control::HEIGHT,
             align_items: "center",
             border_radius: md,
             border_width: 1.0,
             border_color: border,
             background_color: background,
-            shadow: "sm",
             for (index, spec) in menus.iter().enumerate() {
                 MenubarMenu {
                     index,
@@ -190,7 +189,7 @@ fn MenubarMenu(
 
     rsx! {
         row {
-            native_ref: trigger_ref,
+            native_ref: trigger_ref.clone(),
             margin_left: if index > 0 { spacing::XXS } else { 0.0 },
             height: 28.0,
             align_items: "center",
@@ -202,6 +201,9 @@ fn MenubarMenu(
             border_radius: trigger_radius,
             background_color: if active { active_background } else { MENUBAR_ITEM_TRANSPARENT },
             onclick: move |_| {
+                if let Some(frame) = arkit_hooks::current_layout_frame(&trigger_ref) {
+                    on_trigger_frame.call((index, frame));
+                }
                 if active {
                     on_active_change.call(None);
                 } else {

@@ -9,8 +9,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use super::floating_layer::{
-    viewport_scale, FloatingSide, FLOATING_CAPTURE_COLOR, HIT_TEST_DEFAULT, HIT_TEST_NONE,
-    SHADOW_SM,
+    overlay_local_vp, viewport_scale, FloatingSide, FLOATING_CAPTURE_COLOR, HIT_TEST_DEFAULT,
+    HIT_TEST_NONE, SHADOW_SM,
 };
 use super::{Button, ButtonSize, ButtonVariant};
 use crate::i18n::use_component_i18n;
@@ -381,9 +381,14 @@ impl GuideGeometry {
         .max(1.0);
 
         let padding = finite_non_negative(style.spotlight_padding);
+        let local = overlay_local_vp(
+            arkit_arkui::WindowPxPoint::new(target.x, target.y),
+            arkit_arkui::WindowPxPoint::new(overlay_x, overlay_y),
+            scale,
+        );
         let target_rect = GuideRect {
-            x: (target.x - overlay_x) / scale,
-            y: (target.y - overlay_y) / scale,
+            x: local.x,
+            y: local.y,
             width: (target.width / scale).max(0.0),
             height: (target.height / scale).max(0.0),
         };

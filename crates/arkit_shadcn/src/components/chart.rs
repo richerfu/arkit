@@ -48,7 +48,7 @@ pub fn Chart(props: ChartProps) -> Element {
                 .cloned()
                 .unwrap_or_else(|| i18n.chart_series(idx + 1));
             let pct = format!("{percent:.0}%");
-            let margin_top = if idx == 0 { 0.0 } else { spacing::XXL };
+            let margin_top = if idx == 0 { 0.0 } else { spacing::LG };
             rsx! {
                 row {
                     width: "100%",
@@ -67,7 +67,7 @@ pub fn Chart(props: ChartProps) -> Element {
                             }
                             text {
                                 content: pct,
-                                font_size: typography::MD,
+                                font_size: typography::SM,
                                 font_color: theme.colors.foreground,
                                 line_height: 20.0,
                             }
@@ -99,9 +99,9 @@ pub fn Chart(props: ChartProps) -> Element {
             border_radius: theme.radii.xl,
             shadow: "sm",
             padding_top: 0.0,
-            padding_right: spacing::XXL,
+            padding_right: spacing::LG,
             padding_bottom: 0.0,
-            padding_left: spacing::XXL,
+            padding_left: spacing::LG,
             {rows.into_iter()}
         }
     }
@@ -130,19 +130,19 @@ pub fn ChartCard(props: ChartCardProps) -> Element {
             border_radius: theme.radii.xl,
             shadow: "sm",
             padding_top: 0.0,
-            padding_right: spacing::XXL,
+            padding_right: spacing::LG,
             padding_bottom: 0.0,
-            padding_left: spacing::XXL,
+            padding_left: spacing::LG,
             text {
                 content: title,
-                font_size: typography::LG,
+                font_size: typography::MD,
                 font_weight: 600,
                 font_color: theme.colors.foreground,
                 line_height: 20.0,
             }
             row {
                 width: "100%",
-                margin_top: spacing::XXL,
+                margin_top: spacing::SM,
                 Chart {
                     values: props.values,
                     series_labels: props.series_labels,

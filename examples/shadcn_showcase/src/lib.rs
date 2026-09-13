@@ -38,8 +38,11 @@ use arkit::shadcn::theme::{
 };
 use arkit_calendar_icu::{use_chinese_lunar_plugin, ChineseLunarOptions};
 
-const HOME_HEADER_HEIGHT: f32 = 80.0;
-const DETAIL_HEADER_HEIGHT: f32 = 48.0;
+const HOME_HEADER_HEIGHT: f32 = 56.0;
+const DETAIL_HEADER_HEIGHT: f32 = 44.0;
+const CATALOG_MAX_WIDTH: f32 = 512.0;
+const HEADER_ICON_BUTTON: f32 = 36.0;
+const HEADER_ICON_SIZE: f32 = 16.0;
 const TRACKING_TIGHT: f32 = -0.35;
 const MARKDOWN_STREAM_INTERVAL_MS: u64 = 500;
 const WATERMARK_IMAGE_SAMPLE: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="840" height="472" viewBox="0 0 840 472">
@@ -588,7 +591,7 @@ fn resolve_theme(mode: ThemeMode, preset: ThemePreset, custom: bool) -> Theme {
     } else {
         Theme::preset(preset, mode)
     };
-    theme.with_colors(theme.colors.with_surface(theme.colors.secondary))
+    theme
 }
 
 fn custom_theme_colors(mode: ThemeMode) -> ColorTokens {
@@ -647,61 +650,65 @@ fn HomeView(
         .collect::<Vec<_>>();
 
     rsx! {
-        NavBar {
-            title: "Arkit".to_string(),
-            back: false,
-            mode,
-            preset,
-            custom,
-            open: theme_menu_open,
-            language_open: language_menu_open,
-            on_back: move |_| {},
-            on_open: on_theme_menu_open,
-            on_language_open: on_language_menu_open,
-            on_mode,
-            on_preset,
-            on_custom,
-        }
-        RouteProvider {
-            column {
-                width: "100%",
-                background_color: theme.colors.background,
-                align_items: "center",
-                justify_content: "start",
-                padding_top: spacing::LG,
-                padding_right: spacing::LG,
-                padding_bottom: spacing::XXL,
-                padding_left: spacing::LG,
+        column {
+            width: "100%",
+            height: "100%",
+            background_color: theme.colors.background,
+            NavBar {
+                title: "Arkit".to_string(),
+                back: false,
+                mode,
+                preset,
+                custom,
+                open: theme_menu_open,
+                language_open: language_menu_open,
+                on_back: move |_| {},
+                on_open: on_theme_menu_open,
+                on_language_open: on_language_menu_open,
+                on_mode,
+                on_preset,
+                on_custom,
+            }
+            RouteProvider {
                 column {
                     width: "100%",
-                    max_width_constraint: 512.0,
-                    align_items: "start",
+                    align_items: "center",
                     justify_content: "start",
-                    Input {
-                        placeholder: Some("Search UI...".to_string()),
-                        value: Some(query),
+                    padding_top: spacing::MD,
+                    padding_right: spacing::LG,
+                    padding_bottom: spacing::XXL,
+                    padding_left: spacing::LG,
+                    column {
                         width: "100%",
-                        on_change: move |value| on_query.call(value),
-                    }
-                    row { height: spacing::LG }
-                    if items.is_empty() {
-                        Card {
-                            CardHeader {
-                                title: "No component found".to_string(),
-                                description: "Try a different keyword".to_string(),
-                            }
-                        }
-                    } else {
-                        column {
+                        max_width_constraint: CATALOG_MAX_WIDTH,
+                        align_items: "start",
+                        justify_content: "start",
+                        Input {
+                            placeholder: Some("Search UI...".to_string()),
+                            value: Some(query),
                             width: "100%",
-                            align_items: "start",
-                            justify_content: "start",
-                            for (index, item) in items.iter().enumerate() {
-                                ComponentListItem {
-                                    spec: *item,
-                                    first: index == 0,
-                                    last: index + 1 == items.len(),
-                                    on_select,
+                            on_change: move |value| on_query.call(value),
+                        }
+                        row { height: spacing::SM }
+                        if items.is_empty() {
+                            Card {
+                                CardHeader {
+                                    title: "No component found".to_string(),
+                                    description: "Try a different keyword".to_string(),
+                                }
+                            }
+                        } else {
+                            column {
+                                width: "100%",
+                                align_items: "start",
+                                justify_content: "start",
+                                for (index, item) in items.iter().enumerate() {
+                                    ComponentListItem {
+                                        spec: *item,
+                                        first: index == 0,
+                                        last: index + 1 == items.len(),
+                                        on_select,
+                                    }
                                 }
                             }
                         }
@@ -727,24 +734,30 @@ fn DetailView(
     on_preset: EventHandler<ThemePreset>,
     on_custom: EventHandler<bool>,
 ) -> Element {
+    let theme = arkit_shadcn::theme::use_theme();
     rsx! {
-        NavBar {
-            title: component_title(slug),
-            back: true,
-            mode,
-            preset,
-            custom,
-            open: theme_menu_open,
-            language_open: language_menu_open,
-            on_back,
-            on_open: on_theme_menu_open,
-            on_language_open: on_language_menu_open,
-            on_mode,
-            on_preset,
-            on_custom,
-        }
-        DemoCanvas {
-            slug,
+        column {
+            width: "100%",
+            height: "100%",
+            background_color: theme.colors.background,
+            NavBar {
+                title: component_title(slug),
+                back: true,
+                mode,
+                preset,
+                custom,
+                open: theme_menu_open,
+                language_open: language_menu_open,
+                on_back,
+                on_open: on_theme_menu_open,
+                on_language_open: on_language_menu_open,
+                on_mode,
+                on_preset,
+                on_custom,
+            }
+            DemoCanvas {
+                slug,
+            }
         }
     }
 }
@@ -766,9 +779,9 @@ fn NavBar(
     on_custom: EventHandler<bool>,
 ) -> Element {
     let theme = arkit_shadcn::theme::use_theme();
-    let title_size = if back { 17.0 } else { 34.0 };
-    let title_weight = if back { 500 } else { 700 };
-    let title_line_height = if back { 22.0 } else { 40.0 };
+    let title_size = if back { 16.0 } else { 24.0 };
+    let title_weight = if back { 600 } else { 700 };
+    let title_line_height = if back { 22.0 } else { 28.0 };
     let header_height = if back {
         DETAIL_HEADER_HEIGHT
     } else {
@@ -780,21 +793,24 @@ fn NavBar(
             width: "100%",
             height: header_height,
             background_color: theme.colors.background,
-            padding_top: if back { 4.0 } else { 18.0 },
+            padding_top: if back { 4.0 } else { 8.0 },
             padding_right: spacing::LG,
-            padding_bottom: if back { 4.0 } else { 6.0 },
+            padding_bottom: if back { 4.0 } else { 8.0 },
             padding_left: spacing::LG,
-            align_items: if back { "center" } else { "bottom" },
+            align_items: "center",
+            border_width: "0,0,1,0",
+            border_color: theme.colors.border,
+            border_style: "solid",
             row {
                 layout_weight: 1.0,
-                align_items: if back { "center" } else { "bottom" },
+                align_items: "center",
                 clip: true,
                 if back {
                     Button {
                         variant: ButtonVariant::Ghost,
                         size: ButtonSize::Icon,
                         onclick: move |_| on_back.call(()),
-                        {icon_placeholder("chevron-left", 20.0, theme.colors.foreground)}
+                        {icon_placeholder("chevron-left", 18.0, theme.colors.foreground)}
                     }
                     row { width: spacing::SM }
                 }
@@ -864,15 +880,15 @@ fn LanguageMenu(open: bool, on_open: EventHandler<bool>) -> Element {
             trigger_capture: Some(false),
             width: Some(176.0),
             row {
-                width: 40.0,
-                height: 40.0,
+                width: HEADER_ICON_BUTTON,
+                height: HEADER_ICON_BUTTON,
                 align_items: "center",
                 justify_content: "center",
                 border_radius: theme.radii.md,
                 border_width: 1.0,
                 border_color: theme.colors.border,
                 background_color: theme.colors.background,
-                {icon_placeholder("languages", 18.0, theme.colors.foreground)}
+                {icon_placeholder("languages", HEADER_ICON_SIZE, theme.colors.foreground)}
             }
         }
     }
@@ -951,15 +967,15 @@ fn ThemeMenu(
             on_open_change: Some(on_open),
             trigger_capture: Some(false),
             row {
-                width: 40.0,
-                height: 40.0,
+                width: HEADER_ICON_BUTTON,
+                height: HEADER_ICON_BUTTON,
                 align_items: "center",
                 justify_content: "center",
                 border_radius: theme.radii.md,
                 border_width: 1.0,
                 border_color: theme.colors.border,
                 background_color: theme.colors.background,
-                {icon_placeholder(icon, 18.0, theme.colors.foreground)}
+                {icon_placeholder(icon, HEADER_ICON_SIZE, theme.colors.foreground)}
             }
         }
     }
@@ -986,13 +1002,13 @@ fn ComponentListItem(
     rsx! {
         row {
             width: "100%",
-            height: 56.0,
+            height: 44.0,
             align_items: "center",
             justify_content: "space_between",
             padding_top: 0.0,
-            padding_right: 6.0,
+            padding_right: spacing::SM,
             padding_bottom: 0.0,
-            padding_left: spacing::LG,
+            padding_left: spacing::MD,
             background_color: row_background,
             border_width: border_width,
             border_color: row_border,
@@ -1002,15 +1018,15 @@ fn ComponentListItem(
             onclick: move |_| on_select.call(spec.slug),
             text {
                 content: spec.name.to_string(),
-                font_size: typography::XL,
-                font_weight: 400_i32,
+                font_size: typography::SM,
+                font_weight: 500_i32,
                 font_color: theme.colors.foreground,
-                line_height: 24.0,
+                line_height: 20.0,
             }
             row {
                 layout_weight: 1.0,
             }
-            {icon_placeholder("chevron-right", 24.0, icon_color)}
+            {icon_placeholder("chevron-right", 16.0, icon_color)}
         }
     }
 }
@@ -1018,54 +1034,35 @@ fn ComponentListItem(
 #[component]
 fn DemoCanvas(slug: &'static str) -> Element {
     let theme = arkit_shadcn::theme::use_theme();
-    if slug == "refresh-load-more" {
-        return rsx! {
-            column {
-                width: "100%",
-                layout_weight: 1.0,
-                background_color: theme.colors.surface,
-                ComponentDemo { slug }
-            }
-        };
-    }
     let policy = demo_canvas_policy(slug);
-    let bottom_padding = if slug == "bottom-navigation" {
-        policy.padding[2]
-    } else {
-        policy.padding[2] + spacing::XXL
-    };
+    let catalog = !policy.full_bleed;
+    let pad = policy.padding;
+    let fill = policy.fill_height;
 
-    if policy.fill_height {
-        rsx! {
-            RouteProvider {
+    rsx! {
+        RouteProvider {
+            if catalog {
                 column {
                     width: "100%",
-                    height: "100%",
-                    background_color: theme.colors.surface,
-                    align_items: if policy.center_x { "center" } else { "start" },
+                    height: if fill { "100%" },
+                    layout_weight: if fill { 1.0 },
+                    background_color: theme.colors.background,
+                    align_items: "center",
                     justify_content: if policy.center_y { "center" } else { "start" },
-                    padding_top: policy.padding[0],
-                    padding_right: policy.padding[1],
-                    padding_bottom: bottom_padding,
-                    padding_left: policy.padding[3],
-                    ComponentDemo { slug }
+                    padding_top: pad[0],
+                    padding_right: pad[1],
+                    padding_bottom: pad[2],
+                    padding_left: pad[3],
+                    column {
+                        width: "100%",
+                        height: if fill { "100%" },
+                        max_width_constraint: CATALOG_MAX_WIDTH,
+                        align_items: "stretch",
+                        ComponentDemo { slug }
+                    }
                 }
-            }
-        }
-    } else {
-        rsx! {
-            RouteProvider {
-                column {
-                    width: "100%",
-                    background_color: theme.colors.surface,
-                    align_items: if policy.center_x { "center" } else { "start" },
-                    justify_content: if policy.center_y { "center" } else { "start" },
-                    padding_top: policy.padding[0],
-                    padding_right: policy.padding[1],
-                    padding_bottom: bottom_padding,
-                    padding_left: policy.padding[3],
-                    ComponentDemo { slug }
-                }
+            } else {
+                ComponentDemo { slug }
             }
         }
     }
@@ -1073,134 +1070,48 @@ fn DemoCanvas(slug: &'static str) -> Element {
 
 #[derive(Clone, Copy)]
 struct DemoCanvasPolicy {
-    center_x: bool,
     center_y: bool,
     fill_height: bool,
+    full_bleed: bool,
     padding: [f32; 4],
+}
+
+fn catalog_canvas() -> DemoCanvasPolicy {
+    DemoCanvasPolicy {
+        center_y: false,
+        fill_height: false,
+        full_bleed: false,
+        padding: [spacing::LG, spacing::LG, spacing::XXL, spacing::LG],
+    }
 }
 
 fn demo_canvas_policy(slug: &str) -> DemoCanvasPolicy {
     match slug {
-        "button" | "select" | "text" => DemoCanvasPolicy {
-            center_x: true,
-            center_y: true,
+        "bottom-navigation" | "refresh-load-more" => DemoCanvasPolicy {
+            center_y: false,
             fill_height: true,
+            full_bleed: true,
             padding: [0.0, 0.0, 0.0, 0.0],
-        },
-        "aspect-ratio" => DemoCanvasPolicy {
-            center_x: false,
-            center_y: true,
-            fill_height: true,
-            padding: [0.0, spacing::LG, 0.0, spacing::LG],
-        },
-        "accordion" | "timeline" => DemoCanvasPolicy {
-            center_x: true,
-            center_y: false,
-            fill_height: false,
-            padding: [0.0, spacing::LG, 0.0, spacing::LG],
-        },
-        "calendar" => DemoCanvasPolicy {
-            center_x: false,
-            center_y: false,
-            fill_height: false,
-            padding: [spacing::LG, spacing::LG, spacing::LG, spacing::LG],
-        },
-        "carousel" => DemoCanvasPolicy {
-            center_x: true,
-            center_y: false,
-            fill_height: false,
-            padding: [spacing::LG, spacing::LG, spacing::LG, spacing::LG],
-        },
-        "bottom-navigation" => DemoCanvasPolicy {
-            center_x: false,
-            center_y: false,
-            fill_height: true,
-            padding: [0.0, 0.0, 0.0, 0.0],
-        },
-        "context-menu" | "dropdown-menu" => DemoCanvasPolicy {
-            center_x: true,
-            center_y: false,
-            fill_height: true,
-            padding: [spacing::LG, spacing::LG, spacing::LG, spacing::LG],
-        },
-        "menubar" => DemoCanvasPolicy {
-            center_x: true,
-            center_y: false,
-            fill_height: true,
-            padding: [spacing::MD, spacing::MD, spacing::MD, spacing::MD],
-        },
-        "alert" | "tabs" => DemoCanvasPolicy {
-            center_x: false,
-            center_y: false,
-            fill_height: true,
-            padding: [spacing::LG, spacing::LG, spacing::LG, spacing::LG],
-        },
-        "slider" => DemoCanvasPolicy {
-            center_x: false,
-            center_y: false,
-            fill_height: false,
-            padding: [spacing::XXL, spacing::LG, spacing::XXL, spacing::LG],
-        },
-        "form" => DemoCanvasPolicy {
-            center_x: false,
-            center_y: false,
-            fill_height: false,
-            padding: [spacing::XXL, spacing::LG, spacing::XXL, spacing::LG],
-        },
-        "guide" => DemoCanvasPolicy {
-            center_x: true,
-            center_y: true,
-            fill_height: true,
-            padding: [spacing::LG, spacing::LG, spacing::LG, spacing::LG],
-        },
-        "anchor" => DemoCanvasPolicy {
-            center_x: false,
-            center_y: false,
-            fill_height: false,
-            padding: [spacing::LG, spacing::LG, spacing::XXL, spacing::LG],
         },
         "index" => DemoCanvasPolicy {
-            center_x: false,
             center_y: false,
             fill_height: true,
+            full_bleed: false,
             padding: [spacing::LG, spacing::LG, spacing::LG, spacing::LG],
         },
-        "refresh-load-more" => DemoCanvasPolicy {
-            center_x: false,
-            center_y: false,
-            fill_height: true,
-            padding: [0.0, 0.0, 0.0, 0.0],
-        },
-        "sonner" => DemoCanvasPolicy {
-            center_x: false,
-            center_y: false,
-            fill_height: true,
-            padding: [spacing::XXL, spacing::LG, spacing::XXL, spacing::LG],
-        },
-        "input-otp" | "secure-keyboard" => DemoCanvasPolicy {
-            center_x: false,
-            center_y: false,
-            fill_height: true,
-            padding: [spacing::XXL, spacing::LG, spacing::XXL, spacing::LG],
-        },
-        "code" | "markdown" => DemoCanvasPolicy {
-            center_x: true,
-            center_y: false,
-            fill_height: false,
-            padding: [spacing::XXL, spacing::LG, spacing::XXL, spacing::LG],
-        },
-        "watermark" => DemoCanvasPolicy {
-            center_x: true,
-            center_y: false,
-            fill_height: false,
-            padding: [spacing::XXL, spacing::LG, spacing::XXL, spacing::LG],
-        },
-        _ => DemoCanvasPolicy {
-            center_x: true,
+        "guide" => DemoCanvasPolicy {
             center_y: true,
             fill_height: true,
+            full_bleed: false,
             padding: [spacing::LG, spacing::LG, spacing::LG, spacing::LG],
         },
+        "sonner" | "input-otp" | "secure-keyboard" => DemoCanvasPolicy {
+            center_y: false,
+            fill_height: true,
+            full_bleed: false,
+            padding: [spacing::LG, spacing::LG, spacing::XXL, spacing::LG],
+        },
+        _ => catalog_canvas(),
     }
 }
 
@@ -1264,7 +1175,6 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let memo_calendar_plugin = CalendarPlugin::decorator(memo_renderer)
         .with_day_event(memo_event)
         .with_layout(CalendarPluginLayout::default());
-    let mut page = use_signal(|| 1_i32);
     let mut dialog_open = use_signal(|| false);
     let mut dialog_name = use_signal(|| "Pedro Duarte".to_string());
     let mut dialog_username = use_signal(|| "@peduarte".to_string());
@@ -1419,7 +1329,6 @@ fn ComponentDemo(slug: &'static str) -> Element {
     });
 
     let theme = arkit_shadcn::theme::use_theme();
-    let on_page = EventHandler::new(move |value: i32| page.set(value.max(1)));
     let form_name_invalid = form_attempted() && form_name().trim().chars().count() < 2;
     let form_email_invalid = form_attempted() && !is_valid_email(form_email().as_str());
     let form_terms_invalid = form_attempted() && !form_terms_accepted();
@@ -1491,6 +1400,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
         },
         "alert-dialog" => rsx! {
             column {
+                width: "100%",
                 align_items: "start",
                 demo_mode_label {
                     title: "Controlled".to_string(),
@@ -1671,13 +1581,25 @@ fn ComponentDemo(slug: &'static str) -> Element {
             }
         },
         "avatar" => rsx! {
-            row {
-                align_items: "center",
-                justify_content: "start",
-                {demo_avatar("https://github.com/mrzachnugent.png", "ZN", true, None)}
-                h_gap { width: 48.0 }
-                {demo_avatar("https://github.com/shadcn.png", "CN", true, Some(theme.radii.lg))}
-                h_gap { width: 48.0 }
+            column {
+                width: "100%",
+                align_items: "start",
+                demo_mode_label {
+                    title: "Fallback".to_string(),
+                    detail: Some("Initials when the image is missing.".to_string()),
+                }
+                row {
+                    align_items: "center",
+                    justify_content: "start",
+                    {demo_avatar("https://github.com/mrzachnugent.png", "ZN", true, None)}
+                    h_gap { width: spacing::MD }
+                    {demo_avatar("https://github.com/shadcn.png", "CN", true, Some(theme.radii.lg))}
+                }
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Group".to_string(),
+                    detail: Some("Overlapping stack.".to_string()),
+                }
                 row {
                     align_items: "center",
                     justify_content: "start",
@@ -1690,36 +1612,39 @@ fn ComponentDemo(slug: &'static str) -> Element {
             }
         },
         "badge" => rsx! {
-            fixed_width {
-                width: 384.0,
-                column {
-                    width: 384.0,
-                    align_items: "start",
-                    row {
-                        align_self: "start",
-                        align_items: "center",
-                        justify_content: "start",
-                        Badge { content: "Badge".to_string() }
-                        h_gap { width: spacing::SM }
-                        Badge { content: "Secondary".to_string(), variant: BadgeVariant::Secondary }
-                        h_gap { width: spacing::SM }
-                        Badge { content: "Destructive".to_string(), variant: BadgeVariant::Destructive }
-                        h_gap { width: spacing::SM }
-                        Badge { content: "Outline".to_string(), variant: BadgeVariant::Outline }
-                    }
-                    v_gap { height: spacing::SM }
-                    row {
-                        align_self: "start",
-                        align_items: "center",
-                        justify_content: "start",
-                        Badge { content: "Verified".to_string(), icon: Some("badge-check".to_string()), icon_colors: Some((0xFF3B82F6u32, 0xFFFFFFFFu32)) }
-                        h_gap { width: spacing::SM }
-                        Badge { content: "8".to_string(), pill: Some(true) }
-                        h_gap { width: spacing::SM }
-                        Badge { content: "99".to_string(), variant: BadgeVariant::Destructive, pill: Some(true) }
-                        h_gap { width: spacing::SM }
-                        Badge { content: "20+".to_string(), variant: BadgeVariant::Outline, pill: Some(true) }
-                    }
+            column {
+                width: "100%",
+                align_items: "start",
+                demo_mode_label {
+                    title: "Variants".to_string(),
+                    detail: Some("Default, secondary, destructive, outline.".to_string()),
+                }
+                row {
+                    align_items: "center",
+                    justify_content: "start",
+                    Badge { content: "Badge".to_string() }
+                    h_gap { width: spacing::SM }
+                    Badge { content: "Secondary".to_string(), variant: BadgeVariant::Secondary }
+                    h_gap { width: spacing::SM }
+                    Badge { content: "Destructive".to_string(), variant: BadgeVariant::Destructive }
+                    h_gap { width: spacing::SM }
+                    Badge { content: "Outline".to_string(), variant: BadgeVariant::Outline }
+                }
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Status".to_string(),
+                    detail: Some("Icon and pill counts.".to_string()),
+                }
+                row {
+                    align_items: "center",
+                    justify_content: "start",
+                    Badge { content: "Verified".to_string(), icon: Some("badge-check".to_string()), icon_colors: Some((0xFF3B82F6u32, 0xFFFFFFFFu32)) }
+                    h_gap { width: spacing::SM }
+                    Badge { content: "8".to_string(), pill: Some(true) }
+                    h_gap { width: spacing::SM }
+                    Badge { content: "99".to_string(), variant: BadgeVariant::Destructive, pill: Some(true) }
+                    h_gap { width: spacing::SM }
+                    Badge { content: "20+".to_string(), variant: BadgeVariant::Outline, pill: Some(true) }
                 }
             }
         },
@@ -1773,6 +1698,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
         }
         "bottom-sheet" => rsx! {
             column {
+                width: "100%",
                 align_items: "start",
                 demo_mode_label {
                     title: "Controlled".to_string(),
@@ -1837,24 +1763,40 @@ fn ComponentDemo(slug: &'static str) -> Element {
         "button" => rsx! {
             column {
                 width: "100%",
-                height: "100%",
-                align_items: "center",
-                justify_content: "center",
-                Button { onclick: move |_| {}, "Default" }
-                v_gap { height: spacing::XL }
-                Button { variant: ButtonVariant::Destructive, onclick: move |_| {}, "Destructive" }
-                v_gap { height: spacing::XL }
-                Button { variant: ButtonVariant::Destructive, disabled: Some(true), onclick: move |_| {}, "Destructive disabled" }
-                v_gap { height: spacing::XL }
-                Button { variant: ButtonVariant::Secondary, onclick: move |_| {}, "Secondary" }
-                v_gap { height: spacing::XL }
-                Button { variant: ButtonVariant::Outline, size: ButtonSize::Lg, onclick: move |_| {}, "Outline lg" }
-                v_gap { height: spacing::XL }
-                Button { variant: ButtonVariant::Outline, size: ButtonSize::Sm, onclick: move |_| {}, "Outline sm" }
-                v_gap { height: spacing::XL }
-                Button { variant: ButtonVariant::Ghost, onclick: move |_| {}, "Ghost" }
-                v_gap { height: spacing::XL }
-                Button { variant: ButtonVariant::Link, size: ButtonSize::Sm, onclick: move |_| {}, "Link sm" }
+                align_items: "start",
+                demo_mode_label {
+                    title: "Variants".to_string(),
+                    detail: Some("Default, secondary, outline, ghost, link, destructive.".to_string()),
+                }
+                Button { width: "100%", onclick: move |_| {}, "Default" }
+                v_gap { height: spacing::SM }
+                Button { width: "100%", variant: ButtonVariant::Secondary, onclick: move |_| {}, "Secondary" }
+                v_gap { height: spacing::SM }
+                Button { width: "100%", variant: ButtonVariant::Outline, onclick: move |_| {}, "Outline" }
+                v_gap { height: spacing::SM }
+                Button { width: "100%", variant: ButtonVariant::Ghost, onclick: move |_| {}, "Ghost" }
+                v_gap { height: spacing::SM }
+                Button { width: "100%", variant: ButtonVariant::Link, onclick: move |_| {}, "Link" }
+                v_gap { height: spacing::SM }
+                Button { width: "100%", variant: ButtonVariant::Destructive, onclick: move |_| {}, "Destructive" }
+                v_gap { height: spacing::SM }
+                Button { width: "100%", variant: ButtonVariant::Destructive, disabled: Some(true), onclick: move |_| {}, "Disabled" }
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Sizes".to_string(),
+                    detail: Some("Default 36vp, Sm 32vp, Lg 40vp, Icon 36×36.".to_string()),
+                }
+                Button { width: "100%", size: ButtonSize::Sm, onclick: move |_| {}, "Small" }
+                v_gap { height: spacing::SM }
+                Button { width: "100%", onclick: move |_| {}, "Default" }
+                v_gap { height: spacing::SM }
+                Button { width: "100%", size: ButtonSize::Lg, onclick: move |_| {}, "Large" }
+                v_gap { height: spacing::SM }
+                Button {
+                    size: ButtonSize::Icon,
+                    onclick: move |_| {},
+                    {icon_placeholder("plus", 16.0, theme.colors.primary_foreground)}
+                }
             }
         },
         "calendar" => rsx! {
@@ -1891,8 +1833,8 @@ fn ComponentDemo(slug: &'static str) -> Element {
             }
         },
         "card" => rsx! {
-            fixed_width {
-                width: 384.0,
+            column {
+                width: "100%",
                 Card {
                     CardHeader {
                         title: "Card Title".to_string(),
@@ -2010,11 +1952,9 @@ fn ComponentDemo(slug: &'static str) -> Element {
             let overlay_slides_uc = make_overlay_slides();
 
             rsx! {
-                fixed_width {
-                    width: 336.0,
-                    column {
-                        width: "100%",
-                        demo_mode_label {
+                column {
+                    width: "100%",
+                    demo_mode_label {
                             title: "Controlled".to_string(),
                             detail: Some(format!(
                                 "index = {}, overlay = {}",
@@ -2069,16 +2009,14 @@ fn ComponentDemo(slug: &'static str) -> Element {
                                 carousel_uc_note.set(format!("on_change = {index}"));
                             },
                         }
-                    }
                 }
             }
         }
         "checkbox" => rsx! {
-            fixed_width {
-                width: 384.0,
-                column {
-                    width: "100%",
-                    demo_mode_label {
+            column {
+                width: "100%",
+                align_items: "start",
+                demo_mode_label {
                         title: "Controlled".to_string(),
                         detail: Some(format!(
                             "a={}, b={}, card={}",
@@ -2092,13 +2030,13 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         checked: Some(checkbox_first()),
                         on_change: Some(EventHandler::new(move |value| checkbox_first.set(value))),
                     }
-                    v_gap { height: spacing::LG }
+                    v_gap { height: spacing::SM }
                     Checkbox {
                         label: Some("Marketing emails".to_string()),
                         checked: Some(checkbox_second()),
                         on_change: Some(EventHandler::new(move |value| checkbox_second.set(value))),
                     }
-                    v_gap { height: spacing::LG }
+                    v_gap { height: spacing::MD }
                     row {
                         width: "100%",
                         align_items: "start",
@@ -2143,7 +2081,6 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         default_checked: Some(false),
                         disabled: Some(true),
                     }
-                }
             }
         },
         "collapsible" => rsx! {
@@ -2278,6 +2215,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
         },
         "date-picker" => rsx! {
             column {
+                width: "100%",
                 align_items: "start",
                 demo_mode_label {
                     title: "Controlled".to_string(),
@@ -2317,6 +2255,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
         },
         "time-picker" => rsx! {
             column {
+                width: "100%",
                 align_items: "start",
                 demo_mode_label {
                     title: "Controlled · 24 hour".to_string(),
@@ -2613,6 +2552,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
         }
         "dialog" => rsx! {
             column {
+                width: "100%",
                 align_items: "start",
                 demo_mode_label {
                     title: "Controlled".to_string(),
@@ -3528,17 +3468,25 @@ fn ComponentDemo(slug: &'static str) -> Element {
             }
         },
         "label" => rsx! {
-            row {
-                align_items: "center",
-                justify_content: "start",
-                onclick: move |_| toggle_pressed.set(!toggle_pressed()),
-                Checkbox {
-                    label: None,
-                    checked: Some(toggle_pressed()),
-                    on_change: Some(EventHandler::new(move |value| toggle_pressed.set(value))),
+            column {
+                width: "100%",
+                align_items: "start",
+                demo_mode_label {
+                    title: "With control".to_string(),
+                    detail: Some("Tap the label or the checkbox.".to_string()),
                 }
-                h_gap { width: spacing::SM }
-                Label { content: "Accept terms and conditions".to_string() }
+                row {
+                    align_items: "center",
+                    justify_content: "start",
+                    onclick: move |_| toggle_pressed.set(!toggle_pressed()),
+                    Checkbox {
+                        label: None,
+                        checked: Some(toggle_pressed()),
+                        on_change: Some(EventHandler::new(move |value| toggle_pressed.set(value))),
+                    }
+                    h_gap { width: spacing::SM }
+                    Label { content: "Accept terms and conditions".to_string() }
+                }
             }
         },
         "layout" => rsx! {
@@ -3794,6 +3742,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
         },
         "popover" => rsx! {
             column {
+                width: "100%",
                 align_items: "start",
                 demo_mode_label {
                     title: "Controlled".to_string(),
@@ -4009,6 +3958,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
         "select" => rsx! {
             column {
                 width: "100%",
+                align_items: "start",
                 demo_mode_label {
                     title: "Controlled".to_string(),
                     detail: Some(format!(
@@ -4017,38 +3967,48 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         select_open()
                     )),
                 }
-                {select_carousel(
-                    page(),
-                    selected_fruit(),
-                    select_open(),
-                    on_page,
-                    EventHandler::new(move |value| selected_fruit.set(value)),
-                    EventHandler::new(move |value| select_open.set(value)),
-                )}
+                Select {
+                    options: vec![
+                        "Apple".to_string(),
+                        "Banana".to_string(),
+                        "Blueberry".to_string(),
+                        "Grapes".to_string(),
+                        "Pineapple".to_string(),
+                    ],
+                    selected: Some(selected_fruit()),
+                    default_selected: "Apple".to_string(),
+                    open: Some(select_open()),
+                    default_open: false,
+                    on_open_change: Some(EventHandler::new(move |value| select_open.set(value))),
+                    on_select: Some(EventHandler::new(move |value| selected_fruit.set(value))),
+                }
                 {demo_mode_divider()}
                 demo_mode_label {
-                    title: "Uncontrolled".to_string(),
+                    title: "Uncontrolled · long list".to_string(),
                     detail: Some(format!("{} | {}", select_uc_note(), select_open_uc_note())),
                 }
-                fixed_width {
-                    width: 180.0,
-                    Select {
-                        options: vec![
-                            "Apple".to_string(),
-                            "Banana".to_string(),
-                            "Blueberry".to_string(),
-                            "Grapes".to_string(),
-                            "Pineapple".to_string(),
-                        ],
-                        default_selected: "Apple".to_string(),
-                        default_open: false,
-                        on_select: Some(EventHandler::new(move |value| {
-                            select_uc_note.set(format!("on_select = {value}"));
-                        })),
-                        on_open_change: Some(EventHandler::new(move |open| {
-                            select_open_uc_note.set(format!("on_open_change = {open}"));
-                        })),
-                    }
+                Select {
+                    options: vec![
+                        "Apple".to_string(),
+                        "Banana".to_string(),
+                        "Blueberry".to_string(),
+                        "Grapes".to_string(),
+                        "Pineapple".to_string(),
+                        "Cherry".to_string(),
+                        "Strawberry".to_string(),
+                        "Orange".to_string(),
+                        "Lemon".to_string(),
+                        "Kiwi".to_string(),
+                        "Mango".to_string(),
+                    ],
+                    default_selected: "Apple".to_string(),
+                    default_open: false,
+                    on_select: Some(EventHandler::new(move |value| {
+                        select_uc_note.set(format!("on_select = {value}"));
+                    })),
+                    on_open_change: Some(EventHandler::new(move |open| {
+                        select_open_uc_note.set(format!("on_open_change = {open}"));
+                    })),
                 }
             }
         },
@@ -4695,51 +4655,49 @@ fn ComponentDemo(slug: &'static str) -> Element {
             }
         },
         "spinner" => rsx! {
-            fixed_width {
-                width: 320.0,
-                column {
-                    width: "100%",
+            column {
+                width: "100%",
+                align_items: "start",
+                demo_mode_label {
+                    title: "Sizes".to_string(),
+                    detail: Some("Default, 24, and 32.".to_string()),
+                }
+                row {
                     align_items: "center",
+                    justify_content: "start",
+                    Spinner {}
+                    h_gap { width: spacing::XL }
+                    Spinner {
+                        size: 24.0,
+                        color: Some(theme.colors.primary),
+                        icon: Some("refresh-cw".to_string()),
+                    }
+                    h_gap { width: spacing::XL }
+                    Spinner { size: 32.0, color: Some(theme.colors.destructive) }
+                }
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Button".to_string(),
+                    detail: Some("Loading state.".to_string()),
+                }
+                Button {
+                    disabled: Some(true),
+                    onclick: move |_| {},
+                    Spinner { color: Some(theme.colors.primary_foreground) }
+                    h_gap { width: spacing::SM }
                     text {
-                        content: "Sizes".to_string(),
+                        content: "Please wait".to_string(),
                         font_size: typography::SM,
                         font_weight: 500_i32,
-                        font_color: theme.colors.foreground,
+                        font_color: theme.colors.primary_foreground,
                         line_height: 20.0,
-                    }
-                    v_gap { height: spacing::LG }
-                    row {
-                        align_items: "center",
-                        justify_content: "center",
-                        Spinner {}
-                        h_gap { width: spacing::XXL }
-                        Spinner {
-                            size: 24.0,
-                            color: Some(theme.colors.primary),
-                            icon: Some("refresh-cw".to_string()),
-                        }
-                        h_gap { width: spacing::XXL }
-                        Spinner { size: 32.0, color: Some(theme.colors.destructive) }
-                    }
-                    v_gap { height: spacing::XXL }
-                    Button {
-                        disabled: Some(true),
-                        onclick: move |_| {},
-                        Spinner { color: Some(theme.colors.primary_foreground) }
-                        h_gap { width: spacing::SM }
-                        text {
-                            content: "Please wait".to_string(),
-                            font_size: typography::MD,
-                            font_weight: 500_i32,
-                            font_color: theme.colors.primary_foreground,
-                            line_height: 20.0,
-                        }
                     }
                 }
             }
         },
         "switch" => rsx! {
             column {
+                width: "100%",
                 align_items: "start",
                 demo_mode_label {
                     title: "Controlled".to_string(),
@@ -4775,7 +4733,6 @@ fn ComponentDemo(slug: &'static str) -> Element {
         "tabs" => rsx! {
             column {
                 width: "100%",
-                max_width_constraint: 384.0,
                 demo_mode_label {
                     title: "Controlled".to_string(),
                     detail: Some(format!("active = {}", tabs_active())),
@@ -4830,7 +4787,58 @@ fn ComponentDemo(slug: &'static str) -> Element {
             }
         },
         "text" => rsx! {
-            {text_carousel(page(), on_page)}
+            column {
+                width: "100%",
+                align_items: "start",
+                demo_mode_label {
+                    title: "Body".to_string(),
+                    detail: Some("Default text-foreground.".to_string()),
+                }
+                Text { content: "Hello, world!".to_string() }
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Scale".to_string(),
+                    detail: Some("H1, H2, lead, large, p, blockquote.".to_string()),
+                }
+                Text { content: "The Rainbow Forest".to_string(), variant: TextVariant::H1 }
+                v_gap { height: spacing::SM }
+                Text {
+                    content: "Once upon a time, in a magical forest, there lived a curious rabbit named Whiskers.".to_string(),
+                    variant: TextVariant::P,
+                }
+                v_gap { height: spacing::MD }
+                Text { content: "Whiskers' Discovery".to_string(), variant: TextVariant::H2 }
+                Text {
+                    content: "One day, while hopping through the forest, Whiskers stumbled upon a mysterious rainbow-colored flower.".to_string(),
+                    variant: TextVariant::P,
+                }
+                Text {
+                    content: "\"Oh, what a wonderful discovery!\" exclaimed Whiskers.".to_string(),
+                    variant: TextVariant::Blockquote,
+                }
+                v_gap { height: spacing::MD }
+                Text { content: "The Colorful Transformation".to_string(), variant: TextVariant::H3 }
+                v_gap { height: spacing::XXS }
+                Text {
+                    content: "The animals were amazed and decided to plant more of these flowers to make their home even more magical.".to_string(),
+                    variant: TextVariant::Lead,
+                }
+                v_gap { height: spacing::SM }
+                Text {
+                    content: "The moral of the story is: embrace the magic of discovery.".to_string(),
+                    variant: TextVariant::Large,
+                }
+                {demo_mode_divider()}
+                demo_mode_label {
+                    title: "Color".to_string(),
+                    detail: Some("Inherited and overridden.".to_string()),
+                }
+                colored_text_row { label: "Inherited from Parent:".to_string(), chip: "text-emerald-500".to_string(), color: 0xFF10B981u32 }
+                v_gap { height: spacing::SM }
+                colored_text_row { label: "Overridden:".to_string(), chip: "text-purple-500".to_string(), color: 0xFFA855F7u32 }
+                v_gap { height: spacing::SM }
+                colored_text_row { label: "Inherited from NestedParent:".to_string(), chip: "text-sky-500".to_string(), color: 0xFF0EA5E9u32 }
+            }
         },
         "textarea" => rsx! {
             fixed_width {
@@ -4861,6 +4869,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
         },
         "toggle" => rsx! {
             column {
+                width: "100%",
                 align_items: "start",
                 demo_mode_label {
                     title: "Controlled".to_string(),
@@ -4891,6 +4900,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
         },
         "toggle-group" => rsx! {
             column {
+                width: "100%",
                 align_items: "start",
                 demo_mode_label {
                     title: "Controlled".to_string(),
@@ -4921,6 +4931,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
         },
         "tooltip" => rsx! {
             column {
+                width: "100%",
                 align_items: "start",
                 demo_mode_label {
                     title: "Controlled".to_string(),
@@ -5838,9 +5849,9 @@ fn demo_mode_divider() -> Element {
     rsx! {
         column {
             width: "100%",
-            v_gap { height: spacing::XL }
+            v_gap { height: spacing::MD }
             Separator {}
-            v_gap { height: spacing::XL }
+            v_gap { height: spacing::MD }
         }
     }
 }
@@ -6043,221 +6054,6 @@ fn popover_form_row(label: String, value: String) -> Element {
             }
         }
     }
-}
-
-fn carousel_frame(
-    page: i32,
-    count: i32,
-    preview: Element,
-    on_page: EventHandler<i32>,
-    reserve_bottom_controls: bool,
-) -> Element {
-    let current = page.clamp(1, count);
-    let prev_disabled = current == 1;
-    let next_disabled = current == count;
-
-    rsx! {
-        stack {
-            width: "100%",
-            height: "100%",
-            row {
-                width: "100%",
-                height: "100%",
-                align_items: "center",
-                justify_content: "center",
-                padding_bottom: if reserve_bottom_controls { 48.0 + spacing::LG } else { 0.0 },
-                {preview}
-            }
-            column {
-                width: "100%",
-                height: "100%",
-                align_items: "center",
-                justify_content: "end",
-                hit_test_behavior: "transparent",
-                row {
-                    width: "100%",
-                    height: 48.0,
-                    align_items: "center",
-                    justify_content: "center",
-                    margin_bottom: spacing::LG,
-                    padding_left: spacing::LG,
-                    padding_right: spacing::LG,
-                    carousel_button {
-                        icon: "chevron-left".to_string(),
-                        disabled: prev_disabled,
-                        onclick: move |_| on_page.call((current - 1).max(1)),
-                    }
-                    h_gap { width: spacing::SM }
-                    carousel_button {
-                        icon: "chevron-right".to_string(),
-                        disabled: next_disabled,
-                        onclick: move |_| on_page.call((current + 1).min(count)),
-                    }
-                }
-            }
-        }
-    }
-}
-
-#[component]
-fn carousel_button(icon: String, disabled: bool, onclick: EventHandler<()>) -> Element {
-    let theme = arkit_shadcn::theme::use_theme();
-    rsx! {
-        row {
-            width: 40.0,
-            height: 40.0,
-            align_items: "center",
-            justify_content: "center",
-            background_color: theme.colors.background,
-            border_radius: theme.radii.md,
-            border_width: 1.0,
-            border_color: theme.colors.border,
-            border_style: "solid",
-            clip: true,
-            opacity: if disabled { 0.5 } else { 1.0 },
-            shadow: "sm",
-            onclick: move |_| {
-                if !disabled {
-                    onclick.call(());
-                }
-            },
-            {icon_placeholder(icon.as_str(), 18.0, theme.colors.foreground)}
-        }
-    }
-}
-
-fn select_carousel(
-    page: i32,
-    selected: String,
-    open: bool,
-    on_page: EventHandler<i32>,
-    on_select: EventHandler<String>,
-    on_open: EventHandler<bool>,
-) -> Element {
-    let default_items = vec!["Apple", "Banana", "Blueberry", "Grapes", "Pineapple"];
-    let scrollable_items = vec![
-        "Apple",
-        "Banana",
-        "Blueberry",
-        "Grapes",
-        "Pineapple",
-        "Cherry",
-        "Strawberry",
-        "Orange",
-        "Lemon",
-        "Kiwi",
-        "Mango",
-        "Pomegranate",
-        "Watermelon",
-        "Peach",
-        "Pear",
-        "Plum",
-        "Raspberry",
-        "Tangerine",
-    ];
-
-    let count = 2;
-    let options = if page.clamp(1, count) == 2 {
-        scrollable_items
-    } else {
-        default_items
-    }
-    .into_iter()
-    .map(ToString::to_string)
-    .collect::<Vec<_>>();
-
-    carousel_frame(
-        page,
-        count,
-        rsx! {
-            fixed_width {
-                width: 180.0,
-                Select {
-                    options,
-                    selected: Some(selected),
-                    default_selected: "Apple".to_string(),
-                    open: Some(open),
-                    default_open: false,
-                    on_open_change: Some(on_open),
-                    on_select: Some(on_select),
-                }
-            }
-        },
-        on_page,
-        true,
-    )
-}
-
-fn text_carousel(page: i32, on_page: EventHandler<i32>) -> Element {
-    let current = page.clamp(1, 3);
-    let preview = match current {
-        2 => rsx! {
-            fixed_width {
-                width: 512.0,
-                scroll {
-                    width: "100%",
-                    height: "100%",
-                    column {
-                        width: "100%",
-                        padding_top: spacing::XXL,
-                        padding_right: spacing::XXL,
-                        padding_bottom: 72.0,
-                        padding_left: spacing::XXL,
-                        Text { content: "The Rainbow Forest Adventure".to_string(), variant: TextVariant::H1 }
-                        v_gap { height: 12.0 }
-                        Text { content: "Once upon a time, in a magical forest, there lived a curious rabbit named Whiskers. Whiskers loved exploring and discovering new things every day.".to_string(), variant: TextVariant::P }
-                        v_gap { height: spacing::XXL }
-                        Text { content: "Whiskers' Discovery".to_string(), variant: TextVariant::H2 }
-                        Text { content: "One day, while hopping through the forest, Whiskers stumbled upon a mysterious rainbow-colored flower. The flower had the power to make the forest come alive with vibrant colors and happy creatures.".to_string(), variant: TextVariant::P }
-                        Text { content: "\"Oh, what a wonderful discovery!\" exclaimed Whiskers. \"I must share this magic with all my forest friends!\"".to_string(), variant: TextVariant::Blockquote }
-                        v_gap { height: 32.0 }
-                        Text { content: "The Colorful Transformation".to_string(), variant: TextVariant::H3 }
-                        v_gap { height: 4.0 }
-                        Text { content: "Whiskers excitedly gathered all the animals in the forest and showed them the magical rainbow flower. The animals were amazed and decided to plant more of these flowers to make their home even more magical.".to_string(), variant: TextVariant::P }
-                        v_gap { height: 12.0 }
-                        Text { content: "As the rainbow flowers bloomed, the entire forest transformed into a kaleidoscope of colors. Birds chirped in harmony, butterflies danced in the air, and even the trees swayed to the rhythm of the wind.".to_string(), variant: TextVariant::P }
-                        v_gap { height: spacing::XXL }
-                        Text { content: "The Enchanted Celebration".to_string(), variant: TextVariant::H3 }
-                        v_gap { height: 4.0 }
-                        Text { content: "The animals decided to celebrate their enchanted forest with a grand feast. They gathered nuts, berries, and fruits from the colorful trees and shared stories of their adventures. The joyous laughter echoed through the Rainbow Forest.".to_string(), variant: TextVariant::P }
-                        v_gap { height: 12.0 }
-                        Text { content: "And so, the Rainbow Forest became a place of wonder and happiness, where Whiskers and all the animals lived together in harmony.".to_string(), variant: TextVariant::Lead }
-                        v_gap { height: spacing::XXL }
-                        Text { content: "The Never-ending Magic".to_string(), variant: TextVariant::H3 }
-                        v_gap { height: 4.0 }
-                        Text { content: "The magic of the rainbow flowers continued to spread, reaching other parts of the world. Soon, forests everywhere became vibrant and alive, thanks to the discovery of Whiskers and the enchanted Rainbow Forest.".to_string(), variant: TextVariant::P }
-                        v_gap { height: 12.0 }
-                        Text { content: "The moral of the story is: embrace the magic of discovery, share joy with others, and watch as the world transforms into a colorful and beautiful place.".to_string(), variant: TextVariant::Large }
-                        v_gap { height: spacing::XXL }
-                    }
-                }
-            }
-        },
-        3 => rsx! {
-            fixed_width {
-                width: 352.0,
-                column {
-                    align_items: "center",
-                    row {
-                        Text { content: "Default:".to_string() }
-                        h_gap { width: 4.0 }
-                        Text { content: "text-foreground".to_string(), variant: TextVariant::Code }
-                    }
-                    v_gap { height: spacing::SM }
-                    colored_text_row { label: "Inherited from Parent:".to_string(), chip: "text-emerald-500".to_string(), color: 0xFF10B981u32 }
-                    v_gap { height: spacing::SM }
-                    colored_text_row { label: "Overridden:".to_string(), chip: "text-purple-500".to_string(), color: 0xFFA855F7u32 }
-                    v_gap { height: spacing::SM }
-                    colored_text_row { label: "Inherited from NestedParent:".to_string(), chip: "text-sky-500".to_string(), color: 0xFF0EA5E9u32 }
-                }
-            }
-        },
-        _ => rsx! {
-            Text { content: "Hello, world!".to_string() }
-        },
-    };
-
-    carousel_frame(page, 3, preview, on_page, false)
 }
 
 #[component]

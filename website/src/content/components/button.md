@@ -25,7 +25,7 @@ Button {
 | Prop       | 类型               | 说明                                                  |
 | ---------- | ------------------ | ----------------------------------------------------- |
 | `variant`  | `ButtonVariant`    | Default、Secondary、Outline、Ghost、Destructive、Link |
-| `size`     | `ButtonSize`       | Default 48vp、Sm 36vp、Lg 56vp、Icon 40×40vp          |
+| `size`     | `ButtonSize`       | Default 36vp、Sm 32vp、Lg 40vp、Icon 36×36vp          |
 | `disabled` | `Option<bool>`     | 禁止 native event，并降低透明度                       |
 | `width`    | `Option<String>`   | CSS 宽度（`"100%"`、`"120"`）；未设时走 size 默认     |
 | `onclick`  | `EventHandler<()>` | 点击回调                                              |

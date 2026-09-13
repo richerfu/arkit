@@ -4,6 +4,7 @@
 //! native ArkUI long-press recognizer; ordinary taps remain available to its
 //! child content. The menu panel renders through a root-projected portal.
 
+use crate::components::floating_layer::trigger_frame_for_anchor;
 use crate::components::menu_common::{
     menu_closed_panel_height, menu_overlay_content, MenuEntry, MenuOverlayPlacement, MenuStyle,
 };
@@ -59,9 +60,14 @@ pub fn ContextMenu(
     });
 
     let panel_height = menu_closed_panel_height(&items);
+    let trigger_anchor = if current_open {
+        trigger_frame_for_anchor(&trigger_ref, *trigger_frame.read())
+    } else {
+        *trigger_frame.read()
+    };
     let placement = (*cursor_placement.read()).unwrap_or_else(|| {
         MenuOverlayPlacement::resolve(
-            *trigger_frame.read(),
+            trigger_anchor,
             viewport,
             style.width,
             panel_height,
@@ -71,13 +77,13 @@ pub fn ContextMenu(
 
     rsx! {
         row {
-            native_ref: trigger_ref,
+            native_ref: trigger_ref.clone(),
             onlongpress: move |evt: dioxus_core::Event<dioxus_elements::event::ClickData>| {
                 if current_open {
                     dismiss.call(());
                     return;
                 }
-                let frame = *trigger_frame.read();
+                let frame = trigger_frame_for_anchor(&trigger_ref, *trigger_frame.read());
                 let placement = evt
                     .data()
                     .pointer

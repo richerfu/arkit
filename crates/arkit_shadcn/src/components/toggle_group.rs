@@ -2,7 +2,7 @@
 //!
 //! Migrated from the original Elm builder API to dioxus 0.7 `#[component]` +
 //! `rsx!`. Preserves the original outline-variant shell (rounded, clipped,
-//! small shadow) and items, single/multiple selection, and the text/icon item
+//! no default elevation) and items, single/multiple selection, and the text/icon item
 //! variants. Reuses the shared toggle helpers from [`super::toggle`].
 
 use crate::theme::*;
@@ -38,7 +38,7 @@ pub struct ToggleGroupProps {
     /// Optional exact item height override for compact toolbars.
     #[props(default)]
     pub height: Option<f32>,
-    /// Override the outline group's default small elevation.
+    /// Opt into a small drop shadow. The default New York group is flat.
     #[props(default)]
     pub shadow: Option<bool>,
     #[props(default)]
@@ -61,7 +61,7 @@ pub fn ToggleGroup(props: ToggleGroupProps) -> Element {
     let multi = props.multi;
     let icons = props.icons;
     let stretched = props.width.is_some();
-    let group_shadow = props.shadow.unwrap_or(true);
+    let group_shadow = props.shadow.unwrap_or(false);
     let on_change = props.on_change;
     let mut size_style = if icons {
         toggle_icon_size()

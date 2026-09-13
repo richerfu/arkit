@@ -12,7 +12,7 @@ use arkit_prelude::*;
 use super::ARKUI_BORDER_STYLE_SOLID;
 
 const TRANSPARENT: u32 = 0x00000000;
-const MIN_TOUCH_TARGET: f32 = 40.0;
+const MIN_TOUCH_TARGET: f32 = control::ICON;
 
 /// Placement of the navigation and indicator row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -94,11 +94,11 @@ impl Default for CarouselStyle {
             viewport_radius: None,
             viewport_shadow: true,
             controls_background: None,
-            controls_height: 48.0,
+            controls_height: control::HEIGHT_LG,
             controls_gap: spacing::SM,
             navigation_background: None,
             navigation_foreground: None,
-            navigation_size: 40.0,
+            navigation_size: control::ICON,
             navigation_disabled_opacity: 0.32,
             indicator_active_color: None,
             indicator_inactive_color: None,
@@ -602,7 +602,7 @@ fn CarouselNavigationButton(
             border_radius: theme.radii.full,
             opacity: if disabled { style.navigation_disabled_opacity } else { 1.0 },
             onclick: move |_| onclick.call(()),
-            {icon_placeholder(icon.as_str(), 20.0, style.navigation_foreground)}
+            {icon_placeholder(icon.as_str(), 16.0, style.navigation_foreground)}
         }
     }
 }
@@ -612,6 +612,7 @@ mod tests {
     use super::{
         next_index, normalized_index, previous_index, CarouselStyle, CarouselTransitionCurve,
     };
+    use crate::theme::control;
 
     #[test]
     fn selection_is_clamped_to_available_slides() {
@@ -632,8 +633,8 @@ mod tests {
     #[test]
     fn style_and_transition_defaults_are_mobile_sized() {
         let style = CarouselStyle::default();
-        assert!(style.navigation_size >= 40.0);
-        assert!(style.controls_height >= 40.0);
+        assert!(style.navigation_size >= control::ICON);
+        assert!(style.controls_height >= control::HEIGHT_LG);
         assert_eq!(CarouselTransitionCurve::Smooth.arkui_value(), 11);
     }
 }
