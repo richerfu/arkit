@@ -13,7 +13,7 @@
 use crate::theme::*;
 use arkit_prelude::*;
 
-use super::floating_layer::FLOATING_CAPTURE_COLOR;
+use super::floating_layer::{FloatingAlign, FLOATING_CAPTURE_COLOR};
 use super::motion::ExpandPresence;
 
 pub(crate) const TRANSPARENT: u32 = 0x00000000;
@@ -82,6 +82,7 @@ impl MenuOverlayPlacement {
         viewport: arkit_hooks::OverlayViewport,
         panel_width: f32,
         panel_height: f32,
+        align: FloatingAlign,
         side_offset: f32,
     ) -> Self {
         let scale = super::floating_layer::viewport_scale(viewport);
@@ -98,6 +99,7 @@ impl MenuOverlayPlacement {
         );
         let trigger_x = trigger_origin.x;
         let trigger_y = trigger_origin.y;
+        let trigger_width = trigger.width / scale;
         let trigger_height = trigger.height / scale;
         let edge = MENU_VIEWPORT_PADDING;
         let min_x = viewport.safe_area.left.max(0.0) + edge;
@@ -119,16 +121,14 @@ impl MenuOverlayPlacement {
             above_y
         };
 
-        let x = if trigger_x < min_x {
-            min_x
-        } else if trigger_x > max_x {
-            max_x
-        } else {
-            trigger_x
+        let raw_x = match align {
+            FloatingAlign::Start => trigger_x,
+            FloatingAlign::Center => trigger_x + ((trigger_width - panel_width) / 2.0),
+            FloatingAlign::End => trigger_x + trigger_width - panel_width,
         };
 
         Self {
-            x,
+            x: raw_x.clamp(min_x, max_x),
             y: y.clamp(min_y, max_y),
         }
     }
@@ -140,10 +140,18 @@ impl MenuOverlayPlacement {
         viewport: arkit_hooks::OverlayViewport,
         panel_width: f32,
         panel_height: f32,
+        align: FloatingAlign,
         side_offset: f32,
     ) -> Self {
         if trigger.is_measured() {
-            Self::from_trigger(trigger, viewport, panel_width, panel_height, side_offset)
+            Self::from_trigger(
+                trigger,
+                viewport,
+                panel_width,
+                panel_height,
+                align,
+                side_offset,
+            )
         } else {
             Self::fallback(viewport)
         }
@@ -674,20 +682,9 @@ pub(crate) fn menu_overlay_content(
                 }
             }
             column {
-                width: "100%",
-                layout_weight: 1.0,
-                align_items: "start",
-                padding_top: backdrop_top_padding,
-                background_color: FLOATING_CAPTURE_COLOR,
-                hit_test_behavior: "default",
-                onclick: move |_| on_dismiss.call(()),
-                // Keep horizontal anchor via absolute position (margin_left was
-                // sensitive to intermediate row shrink-wrapping).
-                column {
-                    position: format!("{left},0"),
-                    onclick: move |evt| evt.stop_propagation(),
-                    {menu_content(style, &theme, on_dismiss, &entries, top, navigation)}
-                }
+                position: format!("{left},{top}"),
+                onclick: move |evt| evt.stop_propagation(),
+                {menu_content(style, &theme, on_dismiss, &entries, top, navigation)}
             }
         }
     }
@@ -1297,7 +1294,14 @@ mod tests {
     #[test]
     fn menu_and_pass_through_share_the_portal_coordinate_space() {
         let viewport = pc_viewport();
-        let placement = MenuOverlayPlacement::from_trigger(trigger(), viewport, 100.0, 80.0, 4.0);
+        let placement = MenuOverlayPlacement::from_trigger(
+            trigger(),
+            viewport,
+            100.0,
+            80.0,
+            FloatingAlign::Start,
+            4.0,
+        );
         let pass_through = MenuOverlayPassThroughRegion::from_frame(trigger(), viewport).unwrap();
 
         assert!((placement.x - 100.0).abs() < 0.01);
@@ -1320,5 +1324,66 @@ mod tests {
 
         assert!((placement.x - 100.0).abs() < 0.01);
         assert!((placement.y - 100.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn centered_dropdown_uses_portal_local_coordinates() {
+        let viewport = arkit_hooks::OverlayViewport {
+            frame: arkit_arkui::LayoutFramePx {
+                x: 0.0,
+                y: 124.0,
+                width: 1260.0,
+                height: 2505.0,
+            },
+            safe_area: arkit_hooks::EdgeInsets::default(),
+            scale: 3.25,
+        };
+        let placement = MenuOverlayPlacement::from_trigger(
+            arkit_arkui::LayoutFramePx {
+                x: 510.0,
+                y: 467.0,
+                width: 240.0,
+                height: 117.0,
+            },
+            viewport,
+            288.0,
+            300.0,
+            FloatingAlign::Center,
+            spacing::XXS,
+        );
+
+        let window_x = viewport.frame.x + placement.x * viewport.scale;
+        let window_y = viewport.frame.y + placement.y * viewport.scale;
+        assert!((window_x - 162.0).abs() < 0.5);
+        assert!((window_y - 597.0).abs() < 0.5);
+    }
+
+    #[test]
+    fn start_aligned_menu_keeps_trigger_edge_when_space_allows() {
+        let viewport = arkit_hooks::OverlayViewport {
+            frame: arkit_arkui::LayoutFramePx {
+                x: 0.0,
+                y: 100.0,
+                width: 1200.0,
+                height: 2200.0,
+            },
+            safe_area: arkit_hooks::EdgeInsets::default(),
+            scale: 3.0,
+        };
+        let placement = MenuOverlayPlacement::from_trigger(
+            arkit_arkui::LayoutFramePx {
+                x: 300.0,
+                y: 400.0,
+                width: 180.0,
+                height: 90.0,
+            },
+            viewport,
+            224.0,
+            180.0,
+            FloatingAlign::Start,
+            spacing::SM,
+        );
+
+        assert!((placement.x - 100.0).abs() < 0.5);
     }
 }

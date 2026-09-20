@@ -9,6 +9,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::components::floating_layer::FloatingAlign;
 use crate::components::menu_common::{
     menu_closed_panel_height, menu_overlay_content, MenuEntry, MenuOverlayPassThroughRegion,
     MenuOverlayPlacement, MenuStyle,
@@ -142,6 +143,7 @@ pub fn Menubar(
             viewport,
             style.width,
             panel_height,
+            FloatingAlign::Start,
             style.side_offset_vp,
         );
         placement.x = (placement.x + MENU_PANEL_ALIGN_OFFSET)
