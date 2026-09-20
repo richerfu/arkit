@@ -20,12 +20,15 @@ pub(crate) const TRANSPARENT: u32 = 0x00000000;
 const MENU_PANEL_HORIZONTAL_PADDING: f32 = spacing::XXS * 2.0;
 const MENU_PANEL_VERTICAL_PADDING: f32 = spacing::XXS * 2.0;
 const MENU_ROW_HEIGHT: f32 = control::HEIGHT_SM;
+const MENU_ROW_HORIZONTAL_PADDING: f32 = spacing::SM;
+const MENU_ROW_VERTICAL_PADDING: f32 = spacing::XS;
 const MENU_SEPARATOR_HEIGHT: f32 = 9.0;
 const MENU_TEXT_MAX_LINES: i32 = 1;
 const MENU_TEXT_OVERFLOW_ELLIPSIS: &str = "ellipsis";
+const MENU_TEXT_LINE_HEIGHT: f32 = 20.0;
 const MENU_TRAILING_GAP: f32 = spacing::SM;
 const MENU_VIEWPORT_PADDING: f32 = spacing::LG;
-const MENU_ICON_SIZE: f32 = 14.0;
+const MENU_ICON_SIZE: f32 = 16.0;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct MenuOverlayPlacement {
@@ -737,10 +740,10 @@ fn MenuItemSurface(
             align_self: "start",
             align_items: "center",
             justify_content: "start",
-            padding_top: 8.0,
-            padding_right: 8.0,
-            padding_bottom: 8.0,
-            padding_left: 8.0,
+            padding_top: MENU_ROW_VERTICAL_PADDING,
+            padding_right: MENU_ROW_HORIZONTAL_PADDING,
+            padding_bottom: MENU_ROW_VERTICAL_PADDING,
+            padding_left: MENU_ROW_HORIZONTAL_PADDING,
             border_radius: radius,
             clip: true,
             background_color: if !disabled && (hovering() || focused()) {
@@ -936,9 +939,9 @@ fn render_submenu_entry(
                     align_items: "center",
                     justify_content: "center",
                     margin_left: MENU_TRAILING_GAP,
-                    width: 18.0,
-                    height: 18.0,
-                    {crate::icon::icon_placeholder(chevron, 18.0, colors.foreground)}
+                    width: MENU_ICON_SIZE,
+                    height: MENU_ICON_SIZE,
+                    {crate::icon::icon_placeholder(chevron, MENU_ICON_SIZE, colors.foreground)}
                 }
             }
             ExpandPresence {
@@ -1118,10 +1121,10 @@ fn render_label_entry(
             align_self: "start",
             align_items: "center",
             justify_content: "start",
-            padding_top: 6.0,
-            padding_right: 8.0,
-            padding_bottom: 6.0,
-            padding_left: 8.0,
+            padding_top: MENU_ROW_VERTICAL_PADDING,
+            padding_right: MENU_ROW_HORIZONTAL_PADDING,
+            padding_bottom: MENU_ROW_VERTICAL_PADDING,
+            padding_left: MENU_ROW_HORIZONTAL_PADDING,
             border_radius: sm,
             clip: true,
             background_color: TRANSPARENT,
@@ -1159,13 +1162,15 @@ fn menu_item_text(content: String, color: u32, weight: i32) -> Element {
     rsx! {
         row {
             layout_weight: 1.0,
+            height: MENU_TEXT_LINE_HEIGHT,
+            align_items: "center",
             clip: true,
             text {
                 width: "100%",
                 font_size: typography::SM,
                 font_weight: weight,
                 font_color: color,
-                line_height: 20.0,
+                line_height: MENU_TEXT_LINE_HEIGHT,
                 max_lines: MENU_TEXT_MAX_LINES,
                 text_overflow: MENU_TEXT_OVERFLOW_ELLIPSIS,
                 {content}
@@ -1178,13 +1183,15 @@ fn menu_label_text(content: String, color: u32) -> Element {
     rsx! {
         row {
             layout_weight: 1.0,
+            height: MENU_TEXT_LINE_HEIGHT,
+            align_items: "center",
             clip: true,
             text {
                 width: "100%",
-                font_size: typography::XS,
-                font_weight: 600_i32,
+                font_size: typography::SM,
+                font_weight: 500_i32,
                 font_color: color,
-                line_height: 16.0,
+                line_height: MENU_TEXT_LINE_HEIGHT,
                 max_lines: MENU_TEXT_MAX_LINES,
                 text_overflow: MENU_TEXT_OVERFLOW_ELLIPSIS,
                 {content}
@@ -1224,10 +1231,12 @@ fn menu_icon_leading_slot(name: String, color: u32) -> Element {
 fn menu_leading_slot(child: Element) -> Element {
     rsx! {
         row {
-            margin_right: 8.0,
+            height: MENU_TEXT_LINE_HEIGHT,
+            align_items: "center",
+            margin_right: spacing::SM,
             row {
-                width: 16.0,
-                height: 16.0,
+                width: MENU_ICON_SIZE,
+                height: MENU_ICON_SIZE,
                 align_items: "center",
                 justify_content: "center",
                 {child}
@@ -1324,6 +1333,15 @@ mod tests {
 
         assert!((placement.x - 100.0).abs() < 0.01);
         assert!((placement.y - 100.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn menu_row_content_box_matches_text_and_icon_metrics() {
+        let content_height = MENU_ROW_HEIGHT - MENU_ROW_VERTICAL_PADDING * 2.0;
+
+        assert_eq!(content_height, MENU_TEXT_LINE_HEIGHT);
+        assert_eq!(MENU_ICON_SIZE, 16.0);
+        assert!(MENU_ICON_SIZE <= content_height);
     }
 
     #[test]
