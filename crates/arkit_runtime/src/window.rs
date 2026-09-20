@@ -111,6 +111,34 @@ impl Default for WindowMetrics {
 }
 
 impl WindowMetrics {
+    /// Current content width in ArkUI virtual pixels (vp).
+    ///
+    /// The measured Arkit content rect is authoritative. Before the root's
+    /// first layout pass, fall back to the host window rect so responsive
+    /// components can still choose a useful initial layout.
+    pub fn content_width_vp(self) -> f32 {
+        self.content_size_vp().0
+    }
+
+    /// Current content height in ArkUI virtual pixels (vp).
+    pub fn content_height_vp(self) -> f32 {
+        self.content_size_vp().1
+    }
+
+    /// Current content size in ArkUI virtual pixels (vp).
+    pub fn content_size_vp(self) -> (f32, f32) {
+        let rect = if self.content_rect.is_empty() {
+            self.window_rect
+        } else {
+            self.content_rect
+        };
+        let scale = normalized_scale(self.scale);
+        (
+            rect.width.max(0) as f32 / scale,
+            rect.height.max(0) as f32 / scale,
+        )
+    }
+
     pub(crate) fn from_app(app: &OpenHarmonyApp, keyboard_height_px: Option<i32>) -> Self {
         let scale = normalized_scale(app.scale());
         let content_rect = PhysicalRect::from(app.content_rect());
@@ -543,5 +571,39 @@ mod tests {
 
         assert!(handle.report_content_rect(expected));
         assert_eq!(observed.get(), expected);
+    }
+
+    #[test]
+    fn content_size_is_reported_in_vp() {
+        let metrics = WindowMetrics {
+            content_rect: PhysicalRect {
+                left: 40,
+                top: 60,
+                width: 1680,
+                height: 1200,
+            },
+            scale: 2.0,
+            ..WindowMetrics::default()
+        };
+
+        assert_eq!(metrics.content_size_vp(), (840.0, 600.0));
+        assert_eq!(metrics.content_width_vp(), 840.0);
+        assert_eq!(metrics.content_height_vp(), 600.0);
+    }
+
+    #[test]
+    fn content_size_falls_back_to_window_before_root_layout() {
+        let metrics = WindowMetrics {
+            window_rect: PhysicalRect {
+                left: 0,
+                top: 0,
+                width: 1200,
+                height: 800,
+            },
+            scale: 2.0,
+            ..WindowMetrics::default()
+        };
+
+        assert_eq!(metrics.content_size_vp(), (600.0, 400.0));
     }
 }

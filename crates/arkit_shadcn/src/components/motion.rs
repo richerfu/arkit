@@ -170,6 +170,7 @@ pub(crate) fn AnimatedModal(
                 }
                 column {
                     width: "100%",
+                    align_items: "center",
                     clip: false,
                     hit_test_behavior: "transparent",
                     PresenceTransition {

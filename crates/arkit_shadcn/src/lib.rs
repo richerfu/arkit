@@ -32,4 +32,8 @@ pub mod prelude {
         ThemeMode, ThemePreset, ThemeProvider,
     };
     pub use crate::theme::{color, control, radius, spacing, typography};
+    pub use arkit_hooks::{
+        use_adaptive_config_provider, use_adaptive_layout, AdaptiveConfig, AdaptiveLayout,
+        AdaptiveMode, AdaptiveProvider, AdaptiveStyle, AdaptiveView, DEFAULT_PC_MIN_WIDTH,
+    };
 }

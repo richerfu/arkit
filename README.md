@@ -31,6 +31,48 @@ fn app() -> Element {
 
 The complete runnable version is in [examples/counter](examples/counter/src/lib.rs).
 
+## Adaptive Phone and PC layouts
+
+Arkit resolves adaptive styles from the current application-window width, so
+freeform and split-screen windows can change style without relying on the
+physical device category. `Auto` switches to the PC style at 840vp by default;
+applications can override the mode or breakpoint for a subtree.
+
+```rust
+use arkit::prelude::*;
+
+#[component]
+fn App() -> Element {
+    rsx! {
+        AdaptiveProvider {
+            config: AdaptiveConfig::new(AdaptiveMode::Auto)
+                .with_pc_min_width(840.0),
+            ResponsiveContent {}
+        }
+    }
+}
+
+#[component]
+fn ResponsiveContent() -> Element {
+    let layout = use_adaptive_layout();
+
+    rsx! {
+        column {
+            padding: layout.select(16.0, 32.0),
+            AdaptiveView {
+                phone: rsx! { text { "Phone navigation" } },
+                pc: rsx! { text { "PC navigation" } },
+            }
+        }
+    }
+}
+```
+
+Use `AdaptiveMode::Phone` or `AdaptiveMode::Pc` to provide an explicit user or
+application preference. Components without a structural difference can read
+`use_adaptive_layout()` and select only the affected dimensions or interaction
+states.
+
 Applications can register their own openharmony-ability bridge plugins
 (`BridgePlugin` facades) through `#[entry(plugins = [...])]` or by taking an
 `OpenHarmonyApp` handle in the entry function — see [examples/plugins](examples/plugins/src/lib.rs) and the [getting-started guide](website/src/content/docs/getting-started.md).

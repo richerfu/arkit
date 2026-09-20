@@ -41,6 +41,8 @@ use arkit_calendar_icu::{use_chinese_lunar_plugin, ChineseLunarOptions};
 const HOME_HEADER_HEIGHT: f32 = 56.0;
 const DETAIL_HEADER_HEIGHT: f32 = 44.0;
 const CATALOG_MAX_WIDTH: f32 = 512.0;
+const PC_CATALOG_MAX_WIDTH: f32 = 1200.0;
+const PC_DEMO_MAX_WIDTH: f32 = 640.0;
 const HEADER_ICON_BUTTON: f32 = 36.0;
 const HEADER_ICON_SIZE: f32 = 16.0;
 const TRACKING_TIGHT: f32 = -0.35;
@@ -407,6 +409,8 @@ struct ShowcaseState {
     custom: Signal<bool>,
     theme_menu_open: Signal<bool>,
     language_menu_open: Signal<bool>,
+    layout_menu_open: Signal<bool>,
+    adaptive_mode: Signal<AdaptiveMode>,
     query: Signal<String>,
 }
 
@@ -419,6 +423,8 @@ pub fn ShadcnShowcasePage() -> Element {
         custom: use_signal(|| false),
         theme_menu_open: use_signal(|| false),
         language_menu_open: use_signal(|| false),
+        layout_menu_open: use_signal(|| false),
+        adaptive_mode: use_signal(|| AdaptiveMode::Auto),
         query: use_signal(String::new),
     };
     use_context_provider(|| state);
@@ -426,9 +432,12 @@ pub fn ShadcnShowcasePage() -> Element {
     let theme = resolve_theme((state.mode)(), (state.preset)(), (state.custom)());
 
     rsx! {
-        ThemeProvider {
-            theme,
-            MemoryRouter::<Route> {}
+        AdaptiveProvider {
+            config: AdaptiveConfig::new((state.adaptive_mode)()),
+            ThemeProvider {
+                theme,
+                MemoryRouter::<Route> {}
+            }
         }
     }
 }
@@ -439,6 +448,7 @@ fn ShowcaseShell() -> Element {
     let state = use_context::<ShowcaseState>();
     let navigator = use_navigator();
     let mut language_menu_open = state.language_menu_open;
+    let mut layout_menu_open = state.layout_menu_open;
     let mut theme_menu_open = state.theme_menu_open;
 
     let scoped_back_press = dioxus_hooks::use_callback(move |()| {
@@ -448,6 +458,10 @@ fn ShowcaseShell() -> Element {
         }
         if theme_menu_open() {
             theme_menu_open.set(false);
+            return true;
+        }
+        if layout_menu_open() {
+            layout_menu_open.set(false);
             return true;
         }
         if navigator.can_go_back() {
@@ -473,6 +487,7 @@ fn Home() -> Element {
     let mut custom = state.custom;
     let mut theme_menu_open = state.theme_menu_open;
     let mut language_menu_open = state.language_menu_open;
+    let mut layout_menu_open = state.layout_menu_open;
     let route_key = "home";
 
     rsx! {
@@ -498,12 +513,14 @@ fn Home() -> Element {
                     theme_menu_open.set(value);
                     if value {
                         language_menu_open.set(false);
+                        layout_menu_open.set(false);
                     }
                 },
                 on_language_menu_open: move |value| {
                     language_menu_open.set(value);
                     if value {
                         theme_menu_open.set(false);
+                        layout_menu_open.set(false);
                     }
                 },
                 on_mode: move |value| {
@@ -533,6 +550,7 @@ fn Detail(slug: String) -> Element {
     let mut custom = state.custom;
     let mut theme_menu_open = state.theme_menu_open;
     let mut language_menu_open = state.language_menu_open;
+    let mut layout_menu_open = state.layout_menu_open;
     let slug = COMPONENTS
         .iter()
         .find(|item| item.slug == slug)
@@ -557,12 +575,14 @@ fn Detail(slug: String) -> Element {
                     theme_menu_open.set(value);
                     if value {
                         language_menu_open.set(false);
+                        layout_menu_open.set(false);
                     }
                 },
                 on_language_menu_open: move |value| {
                     language_menu_open.set(value);
                     if value {
                         theme_menu_open.set(false);
+                        layout_menu_open.set(false);
                     }
                 },
                 on_mode: move |value| {
@@ -584,14 +604,13 @@ fn Detail(slug: String) -> Element {
 }
 
 fn resolve_theme(mode: ThemeMode, preset: ThemePreset, custom: bool) -> Theme {
-    let theme = if custom {
+    if custom {
         Theme::custom(custom_theme_colors(mode))
             .with_mode(mode)
             .with_radius(RadiusTokens::from_base(10.0))
     } else {
         Theme::preset(preset, mode)
-    };
-    theme
+    }
 }
 
 fn custom_theme_colors(mode: ThemeMode) -> ColorTokens {
@@ -642,12 +661,22 @@ fn HomeView(
     on_custom: EventHandler<bool>,
 ) -> Element {
     let theme = arkit_shadcn::theme::use_theme();
+    let adaptive = use_adaptive_layout();
     let q = query.to_ascii_lowercase();
     let items = COMPONENTS
         .iter()
         .copied()
         .filter(|item| q.is_empty() || item.name.to_ascii_lowercase().contains(&q))
         .collect::<Vec<_>>();
+    let pc = adaptive.is_pc();
+    let columns = if adaptive.width_vp >= 1280.0 { 3 } else { 2 };
+    let rows = items.len().div_ceil(columns);
+    let grid_height = rows as f32 * 48.0 + rows.saturating_sub(1) as f32 * spacing::SM;
+    let grid_columns = if columns == 3 {
+        "1fr 1fr 1fr"
+    } else {
+        "1fr 1fr"
+    };
 
     rsx! {
         column {
@@ -674,13 +703,13 @@ fn HomeView(
                     width: "100%",
                     align_items: "center",
                     justify_content: "start",
-                    padding_top: spacing::MD,
-                    padding_right: spacing::LG,
+                    padding_top: adaptive.select(spacing::MD, spacing::XL),
+                    padding_right: adaptive.select(spacing::LG, spacing::XXL),
                     padding_bottom: spacing::XXL,
-                    padding_left: spacing::LG,
+                    padding_left: adaptive.select(spacing::LG, spacing::XXL),
                     column {
                         width: "100%",
-                        max_width_constraint: CATALOG_MAX_WIDTH,
+                        max_width_constraint: adaptive.select(CATALOG_MAX_WIDTH, PC_CATALOG_MAX_WIDTH),
                         align_items: "start",
                         justify_content: "start",
                         Input {
@@ -697,6 +726,25 @@ fn HomeView(
                                     description: "Try a different keyword".to_string(),
                                 }
                             }
+                        } else if pc {
+                            grid {
+                                width: "100%",
+                                height: grid_height,
+                                grid_column_template: grid_columns,
+                                grid_column_gap: spacing::SM,
+                                grid_row_gap: spacing::SM,
+                                for item in items {
+                                    griditem {
+                                        ComponentListItem {
+                                            spec: item,
+                                            first: true,
+                                            last: true,
+                                            standalone: true,
+                                            on_select,
+                                        }
+                                    }
+                                }
+                            }
                         } else {
                             column {
                                 width: "100%",
@@ -707,6 +755,7 @@ fn HomeView(
                                         spec: *item,
                                         first: index == 0,
                                         last: index + 1 == items.len(),
+                                        standalone: false,
                                         on_select,
                                     }
                                 }
@@ -830,6 +879,8 @@ fn NavBar(
                     }
                 }
             }
+            LayoutMenu {}
+            row { width: spacing::SM }
             ThemeMenu {
                 mode,
                 preset,
@@ -846,6 +897,101 @@ fn NavBar(
                 on_open: on_language_open,
             }
         }
+    }
+}
+
+#[component]
+fn LayoutMenu() -> Element {
+    let theme = arkit_shadcn::theme::use_theme();
+    let adaptive = use_adaptive_layout();
+    let state = use_context::<ShowcaseState>();
+    let mut adaptive_mode = state.adaptive_mode;
+    let mut layout_menu_open = state.layout_menu_open;
+    let mut theme_menu_open = state.theme_menu_open;
+    let mut language_menu_open = state.language_menu_open;
+    let selected = adaptive_mode_key(adaptive_mode()).to_string();
+    let items = vec![
+        MenuEntry::label("Layout"),
+        MenuEntry::radio(
+            "Auto",
+            "auto",
+            selected.clone(),
+            EventHandler::new(move |_| adaptive_mode.set(AdaptiveMode::Auto)),
+        )
+        .close_on_select(),
+        MenuEntry::radio(
+            "Phone",
+            "phone",
+            selected.clone(),
+            EventHandler::new(move |_| adaptive_mode.set(AdaptiveMode::Phone)),
+        )
+        .close_on_select(),
+        MenuEntry::radio(
+            "PC",
+            "pc",
+            selected,
+            EventHandler::new(move |_| adaptive_mode.set(AdaptiveMode::Pc)),
+        )
+        .close_on_select(),
+    ];
+    let mode_label = match adaptive.mode {
+        AdaptiveMode::Auto => "Auto",
+        AdaptiveMode::Phone => "Phone",
+        AdaptiveMode::Pc => "PC",
+    };
+    let style_label = if adaptive.is_pc() { "PC" } else { "Phone" };
+    let icon = if adaptive.is_pc() {
+        "monitor"
+    } else {
+        "smartphone"
+    };
+
+    rsx! {
+        DropdownMenu {
+            items,
+            open: Some(layout_menu_open()),
+            default_open: false,
+            on_open_change: Some(EventHandler::new(move |value| {
+                layout_menu_open.set(value);
+                if value {
+                    theme_menu_open.set(false);
+                    language_menu_open.set(false);
+                }
+            })),
+            trigger_capture: Some(false),
+            width: Some(176.0),
+            row {
+                width: adaptive.select(HEADER_ICON_BUTTON, 116.0),
+                height: HEADER_ICON_BUTTON,
+                align_items: "center",
+                justify_content: "center",
+                padding_right: if adaptive.is_pc() { spacing::SM } else { 0.0 },
+                padding_left: if adaptive.is_pc() { spacing::SM } else { 0.0 },
+                border_radius: theme.radii.md,
+                border_width: 1.0,
+                border_color: theme.colors.border,
+                background_color: theme.colors.background,
+                {icon_placeholder(icon, HEADER_ICON_SIZE, theme.colors.foreground)}
+                if adaptive.is_pc() {
+                    row { width: spacing::XS }
+                    text {
+                        content: format!("{mode_label} · {style_label}"),
+                        font_size: typography::XS,
+                        font_weight: 500_i32,
+                        font_color: theme.colors.foreground,
+                        max_lines: 1_i32,
+                    }
+                }
+            }
+        }
+    }
+}
+
+const fn adaptive_mode_key(mode: AdaptiveMode) -> &'static str {
+    match mode {
+        AdaptiveMode::Auto => "auto",
+        AdaptiveMode::Phone => "phone",
+        AdaptiveMode::Pc => "pc",
     }
 }
 
@@ -986,35 +1132,46 @@ fn ComponentListItem(
     spec: ComponentSpec,
     first: bool,
     last: bool,
+    standalone: bool,
     on_select: EventHandler<&'static str>,
 ) -> Element {
     let theme = arkit_shadcn::theme::use_theme();
+    let adaptive = use_adaptive_layout();
+    let mut hovering = use_signal(|| false);
     let radius = theme.radii.lg;
-    let top_radius = if first { radius } else { 0.0 };
-    let bottom_radius = if last { radius } else { 0.0 };
+    let top_radius = if first || standalone { radius } else { 0.0 };
+    let bottom_radius = if last || standalone { radius } else { 0.0 };
     let radius_value = format!("{top_radius},{top_radius},{bottom_radius},{bottom_radius}");
-    let bottom_border = if last { 1.0 } else { 0.0 };
+    let bottom_border = if last || standalone { 1.0 } else { 0.0 };
     let border_width = format!("1,1,{bottom_border},1");
     let row_background = arkit_shadcn::theme::with_alpha(theme.colors.secondary, 0x66);
+    let hover_background = arkit_shadcn::theme::with_alpha(theme.colors.secondary, 0xCC);
     let row_border = arkit_shadcn::theme::with_alpha(theme.colors.foreground, 0x0D);
     let icon_color = arkit_shadcn::theme::with_alpha(theme.colors.foreground, 0x80);
 
     rsx! {
         row {
             width: "100%",
-            height: 44.0,
+            height: if standalone { 48.0 } else { 44.0 },
             align_items: "center",
             justify_content: "space_between",
             padding_top: 0.0,
             padding_right: spacing::SM,
             padding_bottom: 0.0,
             padding_left: spacing::MD,
-            background_color: row_background,
+            background_color: if adaptive.is_pc() && hovering() { hover_background } else { row_background },
             border_width: border_width,
             border_color: row_border,
             border_style: "solid",
             border_radius: radius_value,
             clip: true,
+            focusable: adaptive.is_pc(),
+            focus_on_touch: false,
+            onhover: move |event| {
+                if adaptive.is_pc() {
+                    hovering.set(event.data().is_hovering);
+                }
+            },
             onclick: move |_| on_select.call(spec.slug),
             text {
                 content: spec.name.to_string(),
@@ -1034,6 +1191,7 @@ fn ComponentListItem(
 #[component]
 fn DemoCanvas(slug: &'static str) -> Element {
     let theme = arkit_shadcn::theme::use_theme();
+    let adaptive = use_adaptive_layout();
     let policy = demo_canvas_policy(slug);
     let catalog = !policy.full_bleed;
     let pad = policy.padding;
@@ -1056,7 +1214,7 @@ fn DemoCanvas(slug: &'static str) -> Element {
                     column {
                         width: "100%",
                         height: if fill { "100%" },
-                        max_width_constraint: CATALOG_MAX_WIDTH,
+                        max_width_constraint: adaptive.select(CATALOG_MAX_WIDTH, PC_DEMO_MAX_WIDTH),
                         align_items: "stretch",
                         ComponentDemo { slug }
                     }

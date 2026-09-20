@@ -57,14 +57,15 @@ pub mod native {
 // --- Hooks (exact refs / portals / virtualization) ---
 pub use arkit_hooks as hooks;
 pub use arkit_hooks::{
-    current_layout_frame, use_app_foreground, use_application_lifecycle,
-    use_application_lifecycle_event, use_component_lifecycle, use_component_visibility,
-    use_layout_frame, use_layout_size, use_load_more, use_mounted_node, use_native_element_ref,
-    use_overlay_viewport, use_safe_area,
-    use_safe_area_policy, use_virtual_items, use_virtual_range, use_virtual_source,
-    use_window_metrics, ComponentLifecycleState, LoadMoreController, LoadMoreState, ModalPortal,
-    ModalPresentation, OverlayLayer, OverlayViewport, Portal, SafeArea, SafeAreaEdges,
-    SafeAreaProps, VirtualItemStamp, VirtualItems, VirtualSourceItem, VirtualVisibleRange,
+    current_layout_frame, use_adaptive_config_provider, use_adaptive_layout, use_app_foreground,
+    use_application_lifecycle, use_application_lifecycle_event, use_component_lifecycle,
+    use_component_visibility, use_layout_frame, use_layout_size, use_load_more, use_mounted_node,
+    use_native_element_ref, use_overlay_viewport, use_safe_area, use_safe_area_policy,
+    use_virtual_items, use_virtual_range, use_virtual_source, use_window_metrics, AdaptiveConfig,
+    AdaptiveLayout, AdaptiveMode, AdaptiveProvider, AdaptiveStyle, AdaptiveView,
+    ComponentLifecycleState, LoadMoreController, LoadMoreState, ModalPortal, ModalPresentation,
+    OverlayLayer, OverlayViewport, Portal, SafeArea, SafeAreaEdges, SafeAreaProps,
+    VirtualItemStamp, VirtualItems, VirtualSourceItem, VirtualVisibleRange, DEFAULT_PC_MIN_WIDTH,
 };
 
 // --- i18n ---
@@ -315,15 +316,16 @@ pub mod prelude {
 
     // Exact-element, portal, and virtual-source hooks.
     pub use crate::{
-        current_layout_frame, use_app_foreground, use_application_lifecycle,
-        use_application_lifecycle_event, use_component_lifecycle, use_component_visibility,
-        use_layout_frame, use_layout_size, use_load_more, use_mounted_node, use_native_element_ref,
-        use_overlay_viewport,
+        current_layout_frame, use_adaptive_config_provider, use_adaptive_layout,
+        use_app_foreground, use_application_lifecycle, use_application_lifecycle_event,
+        use_component_lifecycle, use_component_visibility, use_layout_frame, use_layout_size,
+        use_load_more, use_mounted_node, use_native_element_ref, use_overlay_viewport,
         use_safe_area, use_safe_area_policy, use_virtual_items, use_virtual_range,
-        use_virtual_source, use_window_metrics, ComponentLifecycleState, LoadMoreController,
+        use_virtual_source, use_window_metrics, AdaptiveConfig, AdaptiveLayout, AdaptiveMode,
+        AdaptiveProvider, AdaptiveStyle, AdaptiveView, ComponentLifecycleState, LoadMoreController,
         LoadMoreState, ModalPortal, ModalPresentation, OverlayLayer, OverlayViewport, Portal,
         SafeArea, SafeAreaEdges, SafeAreaProps, VirtualItemStamp, VirtualItems, VirtualSourceItem,
-        VirtualVisibleRange,
+        VirtualVisibleRange, DEFAULT_PC_MIN_WIDTH,
     };
 
     #[cfg(feature = "i18n")]

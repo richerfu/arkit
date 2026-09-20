@@ -138,6 +138,15 @@ fn variant_style(variant: ButtonVariant, theme: &Theme) -> ButtonVariantStyle {
     }
 }
 
+fn hover_background(variant: ButtonVariant, theme: &Theme, background: u32) -> u32 {
+    match variant {
+        ButtonVariant::Default | ButtonVariant::Destructive => with_alpha(background, 0xE6),
+        ButtonVariant::Secondary => with_alpha(background, 0xCC),
+        ButtonVariant::Outline | ButtonVariant::Ghost => theme.colors.accent,
+        ButtonVariant::Link => TRANSPARENT,
+    }
+}
+
 /// Props for [`Button`].
 #[derive(Props, Clone, PartialEq)]
 pub struct ButtonProps {
@@ -179,11 +188,18 @@ pub struct ButtonProps {
 #[component]
 pub fn Button(props: ButtonProps) -> Element {
     let theme = use_theme();
+    let adaptive = arkit_hooks::use_adaptive_layout();
+    let mut hovering = use_signal(|| false);
     let vs = variant_style(props.variant, &theme);
     let ss = size_style(props.size);
     let disabled = props.disabled.unwrap_or(false);
     let shadow = props.shadow.unwrap_or(vs.shadow);
     let onclick = props.onclick;
+    let background = if adaptive.is_pc() && hovering() && !disabled {
+        hover_background(props.variant, &theme, vs.background)
+    } else {
+        vs.background
+    };
 
     rsx! {
         button {
@@ -209,7 +225,7 @@ pub fn Button(props: ButtonProps) -> Element {
             font_weight: 500,
             font_color: vs.foreground,
             foreground_color: vs.foreground,
-            background_color: vs.background,
+            background_color: background,
             border_style: ARKUI_BORDER_STYLE_SOLID,
             border_width: vs.border_width,
             border_color: vs.border_color,
@@ -219,6 +235,11 @@ pub fn Button(props: ButtonProps) -> Element {
             shadow: if shadow { "sm" },
             opacity: if disabled { 0.5 } else { 1.0 },
             enabled: !disabled,
+            onhover: move |event| {
+                if adaptive.is_pc() && !disabled {
+                    hovering.set(event.data().is_hovering);
+                }
+            },
             onclick: move |_| {
                 if !disabled {
                     if let Some(handler) = onclick {

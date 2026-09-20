@@ -30,6 +30,7 @@ pub fn Sheet(
     children: Element,
 ) -> Element {
     let theme = use_theme();
+    let adaptive = arkit_hooks::use_adaptive_layout();
     let mut internal = use_signal(|| default_open.unwrap_or(false));
     let current = match open {
         Some(v) => v,
@@ -72,7 +73,8 @@ pub fn Sheet(
                 onclick: move |evt| { evt.stop_propagation(); },
                 accessibility_role: "dialog",
                 accessibility_text: title.clone(),
-                width: SHEET_WIDTH,
+                width: if adaptive.is_pc() { format!("{SHEET_WIDTH}") } else { "100%".to_string() },
+                max_width: if adaptive.is_pc() { SHEET_WIDTH },
                 height: "100%",
                 padding_top: spacing::XXL,
                 padding_right: spacing::XXL,

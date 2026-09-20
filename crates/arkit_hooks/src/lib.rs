@@ -4,6 +4,7 @@
 //! [`NativeElementRef`], assign it to one RSX element's `native_ref` attribute,
 //! and pass the same handle to layout, lifecycle, or advanced-node hooks.
 
+mod adaptive;
 mod layout;
 mod lifecycle;
 mod load_more;
@@ -23,6 +24,10 @@ pub fn use_runtime_context_providers() {
     safe_area::use_window_metrics_provider();
 }
 
+pub use adaptive::{
+    use_adaptive_config_provider, use_adaptive_layout, AdaptiveConfig, AdaptiveLayout,
+    AdaptiveMode, AdaptiveProvider, AdaptiveStyle, AdaptiveView, DEFAULT_PC_MIN_WIDTH,
+};
 pub use arkit_arkui::{
     MountedNodeLease, NativeElementEvent, NativeElementRef, NativeElementSubscription,
     NativeVisibility,

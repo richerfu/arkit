@@ -15,6 +15,7 @@ use arkit_prelude::*;
 const BOTTOM_SHEET_HEADER_HEIGHT: f32 = 48.0;
 const BOTTOM_SHEET_HANDLE_HEIGHT: f32 = 24.0;
 const BOTTOM_SHEET_MIN_HEIGHT: f32 = 240.0;
+const BOTTOM_SHEET_PC_MAX_WIDTH: f32 = 640.0;
 const BOTTOM_SHEET_DRAG_DISMISS_THRESHOLD: f32 = 72.0;
 
 fn bottom_sheet_backdrop(theme: Theme) -> u32 {
@@ -128,6 +129,7 @@ impl PartialEq for BottomSheetPanelProps {
 #[allow(non_snake_case)]
 fn BottomSheetPanel(props: BottomSheetPanelProps) -> Element {
     let theme = use_theme();
+    let adaptive = arkit_hooks::use_adaptive_layout();
     let safe_area = arkit_hooks::use_safe_area();
     let mut drag_start = use_signal(|| None::<f32>);
     let mut drag_offset = use_signal(|| 0.0_f32);
@@ -145,6 +147,8 @@ fn BottomSheetPanel(props: BottomSheetPanelProps) -> Element {
             width: "100%",
             accessibility_role: "dialog",
             accessibility_text: props.title.clone(),
+            max_width: if adaptive.is_pc() { BOTTOM_SHEET_PC_MAX_WIDTH },
+            align_self: if adaptive.is_pc() { "center" },
             constraint_size: format!("0,100000,{BOTTOM_SHEET_MIN_HEIGHT},100000"),
             border_radius: top_radius,
             border_width: "1,1,0,1",
