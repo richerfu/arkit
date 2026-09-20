@@ -53,6 +53,11 @@ pub const DEMO_GROUPS: &[DemoGroup] = &[
         title: "框架能力",
         demos: &[
             DemoSpec {
+                slug: "accessibility",
+                name: "无障碍验收",
+                description: "基础节点、自定义控件与 shadcn 语义和动作",
+            },
+            DemoSpec {
                 slug: "regressions",
                 name: "重构回归验收",
                 description: "keyed 移动、文本合并、Portal 分层与 dataset 对照",
