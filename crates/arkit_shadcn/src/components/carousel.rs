@@ -169,6 +169,9 @@ impl CarouselStyle {
 pub struct CarouselProps {
     /// One root element per page.
     pub slides: Vec<Element>,
+    /// Name announced for the carousel viewport.
+    #[props(default)]
+    pub accessibility_label: Option<String>,
     /// Controlled active page. When `Some`, the caller owns selection state.
     #[props(default)]
     pub index: Option<usize>,
@@ -273,6 +276,9 @@ pub fn Carousel(props: CarouselProps) -> Element {
         rsx! {
             column {
                 key: "{index}",
+                accessibility_role: "group",
+                accessibility_text: format!("Slide {} of {slide_count}", index + 1),
+                accessibility_mode: if index == active_index { "auto" } else { "disabled_for_descendants" },
                 width: "100%",
                 height: "100%",
                 align_items: "center",
@@ -329,6 +335,13 @@ pub fn Carousel(props: CarouselProps) -> Element {
     let viewport = rsx! {
         swiper {
             width: "100%",
+            accessibility_role: "swiper",
+            accessibility_text: if let Some(label) = props.accessibility_label.clone() { label },
+            accessibility_group: true,
+            accessibility_value_min: 1,
+            accessibility_value_max: slide_count.max(1) as i32,
+            accessibility_value_current: (active_index + 1) as i32,
+            accessibility_value_text: format!("Slide {} of {}", active_index + 1, slide_count.max(1)),
             height: props.height.max(1.0),
             swiper_index: active_index_i32,
             swiper_swipe_to_index: active_index_i32,
@@ -517,13 +530,18 @@ fn render_controls(
                     rsx! {
                         row {
                             key: "{index}",
+                            accessibility_role: "tab",
+                            accessibility_text: format!("Slide {} of {slide_count}", index + 1),
+                            accessibility_group: true,
+                            accessibility_actions: "click",
+                            accessibility_selected: selected,
                             width: (visual_width + 20.0).max(MIN_TOUCH_TARGET),
                             height: style.controls_height,
                             margin_left: if index == 0 { 0.0 } else { style.indicator_gap },
                             align_items: "center",
                             justify_content: "center",
-                            focusable: false,
-                            focus_on_touch: false,
+                            focusable: true,
+                            focus_on_touch: true,
                             onclick: move |_| on_select.call(index),
                             row {
                                 width: visual_width,
@@ -551,6 +569,7 @@ fn render_controls(
             if show_navigation {
                 CarouselNavigationButton {
                     icon: "chevron-left".to_string(),
+                    accessibility_label: "Previous slide".to_string(),
                     disabled: previous_disabled,
                     style,
                     onclick: move |_| on_previous.call(()),
@@ -565,6 +584,7 @@ fn render_controls(
             if show_navigation {
                 CarouselNavigationButton {
                     icon: "chevron-right".to_string(),
+                    accessibility_label: "Next slide".to_string(),
                     disabled: next_disabled,
                     style,
                     onclick: move |_| on_next.call(()),
@@ -577,6 +597,7 @@ fn render_controls(
 #[component]
 fn CarouselNavigationButton(
     icon: String,
+    accessibility_label: String,
     disabled: bool,
     style: ResolvedCarouselStyle,
     onclick: EventHandler<()>,
@@ -585,8 +606,10 @@ fn CarouselNavigationButton(
     rsx! {
         button {
             button_type: "normal",
-            focusable: false,
-            focus_on_touch: false,
+            accessibility_text: accessibility_label,
+            accessibility_disabled: disabled,
+            focusable: !disabled,
+            focus_on_touch: true,
             enabled: !disabled,
             width: style.navigation_size,
             height: style.navigation_size,

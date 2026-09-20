@@ -161,6 +161,16 @@ pub struct ButtonProps {
     /// Exact reference forwarded to the button's native root.
     #[props(default)]
     pub native_ref: Option<arkit_arkui::NativeElementRef>,
+    /// Explicit accessible name. Required for icon-only buttons because an
+    /// arbitrary child tree cannot be converted into a reliable name.
+    #[props(default)]
+    pub accessibility_label: Option<String>,
+    /// Optional usage hint announced after the button name.
+    #[props(default)]
+    pub accessibility_description: Option<String>,
+    /// Marks the button as the currently selected navigation/action item.
+    #[props(default)]
+    pub accessibility_selected: Option<bool>,
     pub onclick: Option<EventHandler<()>>,
     pub children: Element,
 }
@@ -179,8 +189,12 @@ pub fn Button(props: ButtonProps) -> Element {
         button {
             native_ref: props.native_ref,
             button_type: "normal",
-            focusable: false,
-            focus_on_touch: false,
+            accessibility_text: if let Some(label) = props.accessibility_label { label },
+            accessibility_description: if let Some(description) = props.accessibility_description { description },
+            accessibility_disabled: disabled,
+            accessibility_selected: props.accessibility_selected.unwrap_or(false),
+            focusable: !disabled,
+            focus_on_touch: true,
             height: props.height.unwrap_or(ss.height),
             width: if let Some(w) = props.width {
                 w

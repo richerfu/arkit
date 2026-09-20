@@ -22,6 +22,7 @@ pub fn NavigationMenu(props: NavigationMenuProps) -> Element {
     let theme = use_theme();
     rsx! {
         column {
+            accessibility_role: "menu",
             padding_top: spacing::SM,
             padding_right: spacing::SM,
             padding_bottom: spacing::SM,
@@ -60,6 +61,8 @@ pub fn NavigationItem(props: NavigationItemProps) -> Element {
     rsx! {
         Button {
             variant: variant,
+            accessibility_label: title.clone(),
+            accessibility_selected: active,
             onclick: move |_| {
                 if let Some(handler) = onclick {
                     handler.call(());

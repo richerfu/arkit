@@ -1585,7 +1585,13 @@ fn render_text_run(
         (true, Some(destination), Some(handler)) => rsx! {
             text {
                 key: "{key}",
-                content: flat,
+                content: flat.clone(),
+                accessibility_role: "link",
+                accessibility_text: flat.clone(),
+                accessibility_description: destination.clone(),
+                accessibility_actions: "click",
+                focusable: true,
+                focus_on_touch: true,
                 width: "100%",
                 font_size: metrics.font_size,
                 font_weight,
@@ -1628,7 +1634,13 @@ fn render_text_run(
         (false, Some(destination), Some(handler)) => rsx! {
             text {
                 key: "{key}",
-                content: flat,
+                content: flat.clone(),
+                accessibility_role: "link",
+                accessibility_text: flat.clone(),
+                accessibility_description: destination.clone(),
+                accessibility_actions: "click",
+                focusable: true,
+                focus_on_touch: true,
                 width: "100%",
                 font_size: metrics.font_size,
                 font_weight,
@@ -1702,7 +1714,13 @@ fn render_text_span(
             rsx! {
                 text {
                     key: "{key}",
-                    content,
+                    content: content.clone(),
+                    accessibility_role: "link",
+                    accessibility_text: content.clone(),
+                    accessibility_description: destination.clone(),
+                    accessibility_actions: "click",
+                    focusable: true,
+                    focus_on_touch: true,
                     width: "100%",
                     font_size,
                     font_family: "monospace",
@@ -1746,7 +1764,13 @@ fn render_text_span(
             rsx! {
                 text {
                     key: "{key}",
-                    content,
+                    content: content.clone(),
+                    accessibility_role: "link",
+                    accessibility_text: content.clone(),
+                    accessibility_description: destination.clone(),
+                    accessibility_actions: "click",
+                    focusable: true,
+                    focus_on_touch: true,
                     width: "100%",
                     font_size,
                     font_weight,
@@ -1777,18 +1801,26 @@ fn render_text_span(
 fn render_image_span(
     source: &Arc<str>,
     _title: &Arc<str>,
-    _alt: &Arc<str>,
+    alt: &Arc<str>,
     link: Option<&Arc<str>>,
     style: &MarkdownStyle,
     on_link_click: Option<EventHandler<String>>,
     key: String,
 ) -> Element {
     let source = source.to_string();
+    let alt = alt.to_string();
     if let (Some(link), Some(handler)) = (link, on_link_click) {
         let destination = link.to_string();
         rsx! {
             column {
                 key: "{key}",
+                accessibility_role: "link",
+                accessibility_text: alt.clone(),
+                accessibility_description: destination.clone(),
+                accessibility_group: true,
+                accessibility_actions: "click",
+                focusable: true,
+                focus_on_touch: true,
                 width: "100%",
                 height: style.image_height,
                 border_radius: style.radius,
@@ -1796,6 +1828,8 @@ fn render_image_span(
                 onclick: move |_| handler.call(destination.clone()),
                 image {
                     src: source,
+                    accessibility_role: "image",
+                    accessibility_text: alt.clone(),
                     width: "100%",
                     height: "100%",
                     object_fit: "cover",
@@ -1812,6 +1846,8 @@ fn render_image_span(
                 clip: true,
                 image {
                     src: source,
+                    accessibility_role: "image",
+                    accessibility_text: alt,
                     width: "100%",
                     height: "100%",
                     object_fit: "cover",

@@ -26,6 +26,7 @@ pub fn TabsList(props: TabsListProps) -> Element {
     let theme = use_theme();
     rsx! {
         row {
+            accessibility_role: "tablist",
             width: "100%",
             align_items: "center",
             justify_content: "start",
@@ -59,6 +60,12 @@ pub fn TabsTrigger(props: TabsTriggerProps) -> Element {
     let on_press = props.on_press;
     rsx! {
         row {
+            accessibility_role: "tab",
+            accessibility_text: props.label.clone(),
+            accessibility_group: true,
+            accessibility_actions: "click",
+            accessibility_selected: props.active,
+            focusable: true,
             layout_weight: 1.0,
             height: TABS_TRIGGER_HEIGHT,
             align_items: "center",
@@ -96,6 +103,8 @@ pub struct TabsContentProps {
 pub fn TabsContent(props: TabsContentProps) -> Element {
     rsx! {
         column {
+            accessibility_role: "group",
+            accessibility_mode: if props.active { "auto" } else { "disabled_for_descendants" },
             width: "100%",
             visibility: if props.active { "visible" } else { "none" },
             {props.children}

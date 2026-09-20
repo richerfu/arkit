@@ -48,12 +48,16 @@ pub fn Pagination(props: PaginationProps) -> Element {
 
     // Prev button (ghost).
     let prev_target = (current - 1).max(1);
+    let previous_disabled = current == 1;
     let on_prev = on_page_change;
     items.push(rsx! {
         button {
             button_type: "normal",
-            focusable: false,
-            focus_on_touch: false,
+            accessibility_text: previous_label.clone(),
+            accessibility_disabled: previous_disabled,
+            focusable: !previous_disabled,
+            focus_on_touch: true,
+            enabled: !previous_disabled,
             background_color: TRANSPARENT,
             border_style: ARKUI_BORDER_STYLE_SOLID,
             border_width: 0.0,
@@ -112,8 +116,10 @@ pub fn Pagination(props: PaginationProps) -> Element {
         items.push(rsx! {
             button {
                 button_type: "normal",
-                focusable: false,
-                focus_on_touch: false,
+                accessibility_text: format!("Page {number}"),
+                accessibility_selected: is_active,
+                focusable: true,
+                focus_on_touch: true,
                 width: control::ICON,
                 height: control::ICON,
                 padding_top: 0.0,
@@ -142,12 +148,16 @@ pub fn Pagination(props: PaginationProps) -> Element {
 
     // Next button (ghost).
     let next_target = (current + 1).min(total_pages);
+    let next_disabled = current == total_pages;
     let on_next = on_page_change;
     items.push(rsx! {
         button {
             button_type: "normal",
-            focusable: false,
-            focus_on_touch: false,
+            accessibility_text: next_label.clone(),
+            accessibility_disabled: next_disabled,
+            focusable: !next_disabled,
+            focus_on_touch: true,
+            enabled: !next_disabled,
             background_color: TRANSPARENT,
             border_style: ARKUI_BORDER_STYLE_SOLID,
             border_width: 0.0,
@@ -185,6 +195,7 @@ pub fn Pagination(props: PaginationProps) -> Element {
     rsx! {
         row {
             width: "100%",
+            accessibility_role: "list",
             align_items: "center",
             {inlined.into_iter()}
         }

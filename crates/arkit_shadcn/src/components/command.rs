@@ -40,6 +40,8 @@ pub fn Command(
             padding_bottom: spacing::XXS,
             padding_left: spacing::XXS,
             textinput {
+                accessibility_role: "searchbox",
+                accessibility_text: placeholder.clone(),
                 value: query.clone(),
                 placeholder,
                 placeholder_color: with_alpha(colors.muted_foreground, 0x80),
@@ -71,6 +73,11 @@ pub fn Command(
                     rsx! {
                         if passes {
                             row {
+                                accessibility_role: "button",
+                                accessibility_text: option.clone(),
+                                accessibility_group: true,
+                                accessibility_actions: "click",
+                                focusable: true,
                                 width: "100%",
                                 height: 32.0,
                                 align_items: "center",

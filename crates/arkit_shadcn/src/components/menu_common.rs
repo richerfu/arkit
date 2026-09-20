@@ -550,6 +550,7 @@ fn MenuContentPanel(
 
     rsx! {
         column {
+            accessibility_role: "menu",
             width: style.width,
             align_self: "start",
             align_items: "start",
@@ -727,6 +728,13 @@ fn render_action_entry(
 
     rsx! {
         row {
+            accessibility_role: "menuitem",
+            accessibility_text: title.clone(),
+            accessibility_group: true,
+            accessibility_actions: "click",
+            accessibility_disabled: disabled,
+            focusable: !disabled,
+            enabled: !disabled,
             width: min_width,
             height: MENU_ROW_HEIGHT,
             align_self: "start",
@@ -759,7 +767,7 @@ fn render_action_entry(
                 } else if inset || reserve_leading_slot {
                     {menu_empty_leading_slot()}
                 }
-                {menu_item_text(title, title_color, 400)}
+                {menu_item_text(title.clone(), title_color, 400)}
             }
             if let Some(shortcut) = shortcut {
                 {menu_trailing_text(shortcut, colors.muted_foreground)}
@@ -809,6 +817,13 @@ fn render_submenu_entry(
             align_self: "start",
             align_items: "start",
             row {
+                accessibility_role: "menuitem",
+                accessibility_text: title.clone(),
+                accessibility_description: if submenu_open { "Expanded submenu" } else { "Collapsed submenu" },
+                accessibility_group: true,
+                accessibility_actions: "click",
+                accessibility_selected: submenu_open,
+                focusable: true,
                 width: min_width,
                 height: MENU_ROW_HEIGHT,
                 align_self: "start",
@@ -835,7 +850,7 @@ fn render_submenu_entry(
                     } else if inset || reserve_leading_slot {
                         {menu_empty_leading_slot()}
                     }
-                    {menu_item_text(title, colors.popover_foreground, 400)}
+                    {menu_item_text(title.clone(), colors.popover_foreground, 400)}
                 }
                 row {
                     align_items: "center",
@@ -900,6 +915,12 @@ fn render_checkbox_entry(
 
     rsx! {
         row {
+            accessibility_role: "checkbox",
+            accessibility_text: title.clone(),
+            accessibility_group: true,
+            accessibility_actions: "click",
+            accessibility_checked: checked,
+            focusable: true,
             width: min_width,
             height: MENU_ROW_HEIGHT,
             align_self: "start",
@@ -928,7 +949,7 @@ fn render_checkbox_entry(
                         {arkit_icon::icon_with_stroke("check", 16.0, colors.foreground, 3.0)}
                     }
                 })}
-                {menu_item_text(title, colors.popover_foreground, 400)}
+                {menu_item_text(title.clone(), colors.popover_foreground, 400)}
             }
             if let Some(shortcut) = shortcut {
                 {menu_trailing_text(shortcut, colors.muted_foreground)}
@@ -955,6 +976,13 @@ fn render_radio_entry(
 
     rsx! {
         row {
+            accessibility_role: "radio",
+            accessibility_text: title.clone(),
+            accessibility_group: true,
+            accessibility_actions: "click",
+            accessibility_checked: selected,
+            accessibility_selected: selected,
+            focusable: true,
             width: min_width,
             height: MENU_ROW_HEIGHT,
             align_self: "start",
@@ -988,7 +1016,7 @@ fn render_radio_entry(
                         }
                     }
                 })}
-                {menu_item_text(title, colors.popover_foreground, 400)}
+                {menu_item_text(title.clone(), colors.popover_foreground, 400)}
             }
         }
     }
@@ -1008,6 +1036,9 @@ fn render_label_entry(
 
     rsx! {
         row {
+            accessibility_role: "heading",
+            accessibility_text: title.clone(),
+            accessibility_group: true,
             width: min_width,
             height: 32.0,
             align_self: "start",
@@ -1028,7 +1059,7 @@ fn render_label_entry(
                 if inset || reserve_leading_slot {
                     {menu_empty_leading_slot()}
                 }
-                {menu_label_text(title, colors.foreground)}
+                {menu_label_text(title.clone(), colors.foreground)}
             }
         }
     }

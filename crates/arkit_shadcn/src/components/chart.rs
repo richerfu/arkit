@@ -52,6 +52,13 @@ pub fn Chart(props: ChartProps) -> Element {
             rsx! {
                 row {
                     width: "100%",
+                    accessibility_role: "progress",
+                    accessibility_text: label.clone(),
+                    accessibility_value_min: 0,
+                    accessibility_value_max: 100,
+                    accessibility_value_current: percent.round() as i32,
+                    accessibility_value_text: pct.clone(),
+                    accessibility_group: true,
                     margin_top: margin_top,
                     column {
                         width: "100%",
@@ -60,13 +67,13 @@ pub fn Chart(props: ChartProps) -> Element {
                             align_items: "center",
                             justify_content: "space_between",
                             text {
-                                content: label,
+                                content: label.clone(),
                                 font_size: typography::SM,
                                 font_color: theme.colors.muted_foreground,
                                 line_height: 20.0,
                             }
                             text {
-                                content: pct,
+                                content: pct.clone(),
                                 font_size: typography::SM,
                                 font_color: theme.colors.foreground,
                                 line_height: 20.0,
@@ -93,6 +100,7 @@ pub fn Chart(props: ChartProps) -> Element {
     rsx! {
         column {
             width: "100%",
+            accessibility_role: "list",
             background_color: theme.colors.card,
             border_width: 1.0,
             border_color: theme.colors.border,
@@ -124,6 +132,8 @@ pub fn ChartCard(props: ChartCardProps) -> Element {
     rsx! {
         column {
             width: "100%",
+            accessibility_role: "group",
+            accessibility_text: title.clone(),
             background_color: theme.colors.card,
             border_width: 1.0,
             border_color: theme.colors.border,
@@ -134,7 +144,7 @@ pub fn ChartCard(props: ChartCardProps) -> Element {
             padding_bottom: 0.0,
             padding_left: spacing::LG,
             text {
-                content: title,
+                content: title.clone(),
                 font_size: typography::MD,
                 font_weight: 600,
                 font_color: theme.colors.foreground,

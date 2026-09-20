@@ -99,6 +99,7 @@ pub fn ToggleGroup(props: ToggleGroupProps) -> Element {
                 width: if stretched { Some("100%".into()) } else { None },
                 background: Some(0x00000000),
             },
+            option.clone(),
             move || {
                 let next = if multi {
                     let mut v = current_selected.clone();
@@ -159,6 +160,7 @@ pub fn ToggleGroup(props: ToggleGroupProps) -> Element {
 
     rsx! {
         row {
+            accessibility_role: "group",
             width: if let Some(width) = props.width { width },
             align_items: "center",
             justify_content: "start",

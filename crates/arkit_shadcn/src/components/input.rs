@@ -61,6 +61,14 @@ impl InputMode {
 /// Props for [`Input`].
 #[derive(Props, Clone, PartialEq)]
 pub struct InputProps {
+    /// Accessible field name. Placeholder text is not a durable replacement.
+    #[props(default)]
+    pub accessibility_label: Option<String>,
+    #[props(default)]
+    pub accessibility_description: Option<String>,
+    /// Accessible name for the password visibility button.
+    #[props(default = "Toggle password visibility".to_string())]
+    pub password_toggle_label: String,
     pub placeholder: Option<String>,
     pub value: Option<String>,
     /// Text, password, or digits-only input behavior.
@@ -112,6 +120,9 @@ pub fn Input(props: InputProps) -> Element {
         click_to_focus,
         on_change,
         on_click,
+        accessibility_label,
+        accessibility_description,
+        password_toggle_label,
     } = props;
     let theme = use_theme();
     let mut password_visible = use_signal(|| false);
@@ -133,6 +144,10 @@ pub fn Input(props: InputProps) -> Element {
 
     let field = rsx! {
         textinput {
+            accessibility_role: "text_input",
+            accessibility_text: if let Some(label) = accessibility_label { label },
+            accessibility_description: if let Some(description) = accessibility_description { description },
+            accessibility_disabled: disabled,
             value: if let Some(value) = value { value },
             placeholder: if let Some(placeholder) = placeholder { placeholder },
             input_type,
@@ -206,6 +221,9 @@ pub fn Input(props: InputProps) -> Element {
                 justify_content: "end",
                 hit_test_behavior: "transparent",
                 button {
+                    accessibility_text: password_toggle_label,
+                    accessibility_description: if password_is_visible { "Hide password" } else { "Show password" },
+                    accessibility_disabled: disabled,
                     button_type: "normal",
                     width: PASSWORD_ICON_BUTTON_SIZE,
                     height: PASSWORD_ICON_BUTTON_SIZE,
@@ -215,8 +233,8 @@ pub fn Input(props: InputProps) -> Element {
                     border_style: ARKUI_BORDER_STYLE_SOLID,
                     border_radius: theme.radii.sm,
                     clip: true,
-                    focusable: false,
-                    focus_on_touch: false,
+                    focusable: !disabled,
+                    focus_on_touch: true,
                     alignment: "center",
                     opacity: if disabled { 0.5 } else { 1.0 },
                     enabled: !disabled,

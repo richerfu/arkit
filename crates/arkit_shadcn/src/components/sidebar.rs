@@ -26,6 +26,7 @@ pub fn Sidebar(props: SidebarProps) -> Element {
         row {
             width: "100%",
             column {
+                accessibility_role: "list",
                 width: SIDEBAR_WIDTH,
                 background_color: theme.colors.popover,
                 border_width: 1.0,
@@ -63,6 +64,8 @@ pub fn SidebarItem(props: SidebarItemProps) -> Element {
             variant: variant,
             size: ButtonSize::Sm,
             width: Some("100%".into()),
+            accessibility_label: title.clone(),
+            accessibility_selected: active,
             onclick: move |_| {
                 if let Some(handler) = onclick {
                     handler.call(());

@@ -33,6 +33,7 @@ pub fn Skeleton(props: SkeletonProps) -> Element {
     let fill = with_alpha(theme.colors.primary, SKELETON_PRIMARY_ALPHA);
     rsx! {
         row {
+            accessibility_mode: "disabled_for_descendants",
             width: props.width,
             height: props.height,
             background_color: fill,

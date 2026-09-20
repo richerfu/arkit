@@ -387,6 +387,8 @@ pub fn AnchorItem(props: AnchorItemProps) -> Element {
         Button {
             variant: variant,
             width: "100%",
+            accessibility_label: title.clone(),
+            accessibility_selected: active,
             onclick: on_press,
             "{title}"
         }

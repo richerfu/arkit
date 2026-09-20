@@ -19,6 +19,9 @@ const CHECKBOX_ICON_SIZE: f32 = 16.0;
 #[derive(Props, Clone, PartialEq)]
 pub struct CheckboxProps {
     pub label: Option<String>,
+    /// Accessible name used when the visual label is absent or insufficient.
+    #[props(default)]
+    pub accessibility_label: Option<String>,
     pub checked: Option<bool>,
     pub default_checked: Option<bool>,
     pub checked_color: Option<u32>,
@@ -37,6 +40,10 @@ pub fn Checkbox(props: CheckboxProps) -> Element {
     let disabled = props.disabled.unwrap_or(false);
     let on_change = props.on_change;
     let label = props.label.clone();
+    let accessibility_label = props
+        .accessibility_label
+        .clone()
+        .or_else(|| props.label.clone());
     let toggle = EventHandler::new(move |_: ()| {
         if disabled {
             return;
@@ -53,6 +60,15 @@ pub fn Checkbox(props: CheckboxProps) -> Element {
 
     rsx! {
         row {
+            accessibility_role: "checkbox",
+            accessibility_text: if let Some(label) = accessibility_label { label },
+            accessibility_group: true,
+            accessibility_actions: "click",
+            accessibility_checked: current,
+            accessibility_disabled: disabled,
+            focusable: !disabled,
+            focus_on_touch: true,
+            enabled: !disabled,
             align_items: "center",
             justify_content: "start",
             opacity: if disabled { 0.5 } else { 1.0 },

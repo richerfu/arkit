@@ -163,6 +163,13 @@ enum ItemMainAxis {
     Fixed(f32),
 }
 
+#[derive(Clone)]
+struct TimelineAccessibility {
+    label: String,
+    description: Option<String>,
+    selected: bool,
+}
+
 fn item_main_axis(orientation: TimelineOrientation, item_min_width: Option<f32>) -> ItemMainAxis {
     match orientation {
         TimelineOrientation::Horizontal => item_min_width
@@ -421,6 +428,15 @@ pub fn TimelineItem(props: TimelineItemProps) -> Element {
     let min_width = ctx.and_then(|ctx| (ctx.item_min_width)());
     let axis = item_main_axis(orientation, min_width);
     let completed = item_completed(props.step, active_step, props.completed);
+    let accessibility = TimelineAccessibility {
+        label: props
+            .title
+            .clone()
+            .or_else(|| props.date.clone())
+            .unwrap_or_else(|| format!("Timeline step {}", props.step)),
+        description: props.description.clone(),
+        selected: props.step == active_step,
+    };
     let rail_complete = separator_completed(props.step, active_step);
     let last = props.last;
     let indicator_size = if props.indicator_size.is_finite() && props.indicator_size > 0.0 {
@@ -515,6 +531,14 @@ pub fn TimelineItem(props: TimelineItemProps) -> Element {
             rsx! {
                 row {
                     width: "100%",
+                    accessibility_role: if interactive { "button" } else { "group" },
+                    accessibility_text: accessibility.label.clone(),
+                    accessibility_description: if let Some(description) = accessibility.description.clone() { description },
+                    accessibility_group: true,
+                    accessibility_actions: if interactive { "click" } else { "" },
+                    accessibility_selected: accessibility.selected,
+                    focusable: interactive,
+                    focus_on_touch: interactive,
                     align_items: "start",
                     background_color: if interactive { HIT_FILL } else { 0x0000_0000 },
                     onclick: move |_| on_press.call(()),
@@ -563,7 +587,15 @@ pub fn TimelineItem(props: TimelineItemProps) -> Element {
                 ItemMainAxis::Fixed(width) => Some(width),
                 ItemMainAxis::Flex => None,
             };
-            horizontal_item_frame(width, item_height, justify, interactive, on_press, content)
+            horizontal_item_frame(
+                width,
+                item_height,
+                justify,
+                interactive,
+                accessibility,
+                on_press,
+                content,
+            )
         }
     }
 }
@@ -573,6 +605,7 @@ fn horizontal_item_frame(
     height: f32,
     justify: &'static str,
     interactive: bool,
+    accessibility: TimelineAccessibility,
     on_press: EventHandler<()>,
     content: Element,
 ) -> Element {
@@ -582,6 +615,14 @@ fn horizontal_item_frame(
         (Some(width), true) => rsx! {
             column {
                 width,
+                accessibility_role: if interactive { "button" } else { "group" },
+                accessibility_text: accessibility.label.clone(),
+                accessibility_description: if let Some(description) = accessibility.description.clone() { description },
+                accessibility_group: true,
+                accessibility_actions: if interactive { "click" } else { "" },
+                accessibility_selected: accessibility.selected,
+                focusable: interactive,
+                focus_on_touch: interactive,
                 height,
                 align_self: "stretch",
                 align_items: "start",
@@ -594,6 +635,14 @@ fn horizontal_item_frame(
         (Some(width), false) => rsx! {
             column {
                 width,
+                accessibility_role: if interactive { "button" } else { "group" },
+                accessibility_text: accessibility.label.clone(),
+                accessibility_description: if let Some(description) = accessibility.description.clone() { description },
+                accessibility_group: true,
+                accessibility_actions: if interactive { "click" } else { "" },
+                accessibility_selected: accessibility.selected,
+                focusable: interactive,
+                focus_on_touch: interactive,
                 align_self: "stretch",
                 align_items: "start",
                 justify_content: justify,
@@ -605,6 +654,14 @@ fn horizontal_item_frame(
         (None, true) => rsx! {
             column {
                 layout_weight: 1.0,
+                accessibility_role: if interactive { "button" } else { "group" },
+                accessibility_text: accessibility.label.clone(),
+                accessibility_description: if let Some(description) = accessibility.description.clone() { description },
+                accessibility_group: true,
+                accessibility_actions: if interactive { "click" } else { "" },
+                accessibility_selected: accessibility.selected,
+                focusable: interactive,
+                focus_on_touch: interactive,
                 height,
                 align_self: "stretch",
                 align_items: "start",
@@ -617,6 +674,14 @@ fn horizontal_item_frame(
         (None, false) => rsx! {
             column {
                 layout_weight: 1.0,
+                accessibility_role: if interactive { "button" } else { "group" },
+                accessibility_text: accessibility.label,
+                accessibility_description: if let Some(description) = accessibility.description { description },
+                accessibility_group: true,
+                accessibility_actions: if interactive { "click" } else { "" },
+                accessibility_selected: accessibility.selected,
+                focusable: interactive,
+                focus_on_touch: interactive,
                 align_self: "stretch",
                 align_items: "start",
                 justify_content: justify,

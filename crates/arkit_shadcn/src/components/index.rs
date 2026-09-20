@@ -391,6 +391,7 @@ pub fn Index(props: IndexProps) -> Element {
             }
             FlatKind::Item(item_index) => {
                 let item = list_items[item_index].clone();
+                let item_label = item.title.clone();
                 let group = list_keys
                     .get(item_index)
                     .cloned()
@@ -407,6 +408,12 @@ pub fn Index(props: IndexProps) -> Element {
                 rsx! {
                     column {
                         width: "100%",
+                        accessibility_role: "button",
+                        accessibility_text: item_label,
+                        accessibility_group: true,
+                        accessibility_actions: "click",
+                        focusable: true,
+                        focus_on_touch: true,
                         background_color: row_bg,
                         onclick: move |_| on_select.call(item_index),
                         {inner}

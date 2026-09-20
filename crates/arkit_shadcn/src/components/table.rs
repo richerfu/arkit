@@ -30,6 +30,9 @@ pub fn Table(props: TableProps) -> Element {
         .map(|header| {
             rsx! {
                 row {
+                    accessibility_role: "group",
+                    accessibility_text: header.clone(),
+                    accessibility_group: true,
                     layout_weight: 1.0,
                     height: control::HEIGHT,
                     align_items: "center",
@@ -80,6 +83,9 @@ pub fn Table(props: TableProps) -> Element {
             rsx! {
                 row {
                     key: "{index}",
+                    accessibility_role: "list_item",
+                    accessibility_text: row.join(", "),
+                    accessibility_group: true,
                     width: "100%",
                     align_items: "center",
                     border_width: border_width,
@@ -93,6 +99,7 @@ pub fn Table(props: TableProps) -> Element {
     rsx! {
         column {
             width: "100%",
+            accessibility_role: "grid",
             border_width: 1.0,
             border_color: theme.colors.border,
             border_radius: theme.radii.sm,

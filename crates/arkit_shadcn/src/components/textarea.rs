@@ -13,6 +13,10 @@ use super::ARKUI_BORDER_STYLE_SOLID;
 /// Props for [`Textarea`].
 #[derive(Props, Clone, PartialEq)]
 pub struct TextareaProps {
+    #[props(default)]
+    pub accessibility_label: Option<String>,
+    #[props(default)]
+    pub accessibility_description: Option<String>,
     pub placeholder: Option<String>,
     pub value: Option<String>,
     pub height: Option<f32>,
@@ -43,6 +47,10 @@ pub fn Textarea(props: TextareaProps) -> Element {
 
     rsx! {
         textarea {
+            accessibility_role: "text_area",
+            accessibility_text: if let Some(label) = props.accessibility_label { label },
+            accessibility_description: if let Some(description) = props.accessibility_description { description },
+            accessibility_disabled: disabled,
             value: if let Some(v) = props.value { v },
             placeholder: if let Some(p) = props.placeholder { p },
             placeholder_color: with_alpha(theme.colors.muted_foreground, 0x80),
