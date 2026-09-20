@@ -5,6 +5,7 @@
 //! write goes through the same encoder used for desired-state replay. Commands
 //! such as `scroll_offset` are typed separately and consumed exactly once.
 
+use ohos_arkui_binding::api::attribute_option::{AccessibilityState, AccessibilityValue};
 use ohos_arkui_binding::common::attribute::{ArkUINodeAttributeItem, ArkUINodeAttributeNumber};
 use ohos_arkui_binding::common::error::ArkUIResult;
 use ohos_arkui_binding::common::node::ArkUINode;
@@ -21,7 +22,6 @@ const ROW_ALIGN_CENTER: i32 = 1;
 const JUSTIFY_CENTER: i32 = 2;
 const STACK_ALIGNMENT_CENTER: i32 = 4;
 const TEXT_ALIGN_CENTER: i32 = 1;
-const BUTTON_ACCESSIBILITY_ROLE: u32 = 9;
 const BUTTON_DEFAULT_HEIGHT: f32 = 40.0;
 const BUTTON_DEFAULT_HORIZONTAL_PADDING: f32 = 16.0;
 const BUTTON_DEFAULT_VERTICAL_PADDING: f32 = 8.0;
@@ -219,6 +219,137 @@ impl DesiredAttrs {
         names.iter().any(|name| self.get(name).is_some())
     }
 
+    fn bool_value(&self, name: &str) -> Option<bool> {
+        match &self.get(name)?.value {
+            EncodedAttrValue::Bool(value) => Some(*value),
+            _ => None,
+        }
+    }
+
+    fn i32_value(&self, name: &str) -> Option<i32> {
+        match &self.get(name)?.value {
+            EncodedAttrValue::I32(value) => Some(*value),
+            _ => None,
+        }
+    }
+
+    fn string_value(&self, name: &str) -> Option<&str> {
+        match &self.get(name)?.value {
+            EncodedAttrValue::String(value) => Some(value),
+            _ => None,
+        }
+    }
+
+    fn has_accessibility_state(&self) -> bool {
+        self.get("enabled").is_some()
+            || self.has_any(&[
+                "accessibility_disabled",
+                "accessibility_selected",
+                "accessibility_checked",
+            ])
+    }
+
+    fn has_accessibility_value(&self) -> bool {
+        self.has_any(&[
+            "accessibility_value_min",
+            "accessibility_value_max",
+            "accessibility_value_current",
+            "accessibility_value_range_min",
+            "accessibility_value_range_max",
+            "accessibility_value_range_current",
+            "accessibility_value_text",
+        ])
+    }
+
+    fn apply_accessibility_state(&self, node: &mut ArkUINode) {
+        if !self.has_accessibility_state() {
+            return;
+        }
+        let Ok(mut state) = AccessibilityState::new() else {
+            ohos_hilog_binding::error("arkit_arkui: failed to allocate ArkUI accessibility state");
+            return;
+        };
+        let disabled = self
+            .bool_value("accessibility_disabled")
+            .or_else(|| self.bool_value("enabled").map(|enabled| !enabled));
+        if let Some(disabled) = disabled {
+            state.set_disabled(i32::from(disabled));
+        }
+        if let Some(selected) = self.bool_value("accessibility_selected") {
+            state.set_selected(i32::from(selected));
+        }
+        if let Some(checked) = self.bool_value("accessibility_checked") {
+            state.set_checked_state(i32::from(checked));
+        }
+        let result =
+            node.set_attribute(ArkUINodeAttributeType::AccessibilityState, (&state).into());
+        state.dispose();
+        if let Err(error) = result {
+            ohos_hilog_binding::error(format!(
+                "arkit_arkui: failed to apply accessibility state: {error}"
+            ));
+        }
+    }
+
+    fn reconcile_accessibility_state(&self, node: &mut ArkUINode) {
+        if self.has_accessibility_state() {
+            self.apply_accessibility_state(node);
+        } else {
+            let _ = node.reset_attribute(ArkUINodeAttributeType::AccessibilityState);
+        }
+    }
+
+    fn apply_accessibility_value(&self, node: &mut ArkUINode) {
+        if !self.has_accessibility_value() {
+            return;
+        }
+        let Ok(mut value) = AccessibilityValue::new() else {
+            ohos_hilog_binding::error("arkit_arkui: failed to allocate ArkUI accessibility value");
+            return;
+        };
+        if let Some(min) = self.i32_value("accessibility_value_min") {
+            value.set_min(min);
+        }
+        if let Some(max) = self.i32_value("accessibility_value_max") {
+            value.set_max(max);
+        }
+        if let Some(current) = self.i32_value("accessibility_value_current") {
+            value.set_current(current);
+        }
+        if let Some(min) = self.i32_value("accessibility_value_range_min") {
+            value.set_range_min(min);
+        }
+        if let Some(max) = self.i32_value("accessibility_value_range_max") {
+            value.set_range_max(max);
+        }
+        if let Some(current) = self.i32_value("accessibility_value_range_current") {
+            value.set_range_current(current);
+        }
+        if let Some(text) = self.string_value("accessibility_value_text") {
+            if let Err(error) = value.set_text(text) {
+                ohos_hilog_binding::error(format!(
+                    "arkit_arkui: failed to set accessibility value text: {error}"
+                ));
+            }
+        }
+        let result =
+            node.set_attribute(ArkUINodeAttributeType::AccessibilityValue, (&value).into());
+        value.dispose();
+        if let Err(error) = result {
+            ohos_hilog_binding::error(format!(
+                "arkit_arkui: failed to apply accessibility value: {error}"
+            ));
+        }
+    }
+
+    fn reconcile_accessibility_value(&self, node: &mut ArkUINode) {
+        if self.has_accessibility_value() {
+            self.apply_accessibility_value(node);
+        } else {
+            let _ = node.reset_attribute(ArkUINodeAttributeType::AccessibilityValue);
+        }
+    }
+
     pub(crate) fn apply_to(&self, node: &mut ArkUINode, tag: &str) {
         self.apply_to_skipping(node, tag, &[]);
     }
@@ -243,6 +374,12 @@ impl DesiredAttrs {
         ] {
             self.apply_group(node, tag, group, skip);
         }
+        if !skip.contains(&ArkUINodeAttributeType::AccessibilityState) {
+            self.apply_accessibility_state(node);
+        }
+        if !skip.contains(&ArkUINodeAttributeType::AccessibilityValue) {
+            self.apply_accessibility_value(node);
+        }
     }
 
     fn apply_group(
@@ -265,6 +402,7 @@ impl DesiredAttrs {
                 .filter(|attr| !is_constraint_attr(attr.name()))
                 .filter(|attr| !is_flex_option_attr(attr.name()))
                 .filter(|attr| !is_alignment_attr(attr.name()))
+                .filter(|attr| !is_composite_accessibility_attr(attr.name()))
                 .filter(|attr| !skip.contains(&attr.ty))
             {
                 let _ = attr.apply(node, tag);
@@ -280,6 +418,7 @@ impl DesiredAttrs {
                 .iter()
                 .filter(|attr| attr_group(attr.name()) == group)
                 .filter(|attr| is_alignment_attr(attr.name()))
+                .filter(|attr| !is_composite_accessibility_attr(attr.name()))
                 .filter(|attr| !skip.contains(&attr.ty))
             {
                 let _ = attr.apply(node, tag);
@@ -292,6 +431,7 @@ impl DesiredAttrs {
             .attrs
             .iter()
             .filter(|attr| attr_group(attr.name()) == group)
+            .filter(|attr| !is_composite_accessibility_attr(attr.name()))
             .filter(|attr| !skip.contains(&attr.ty))
         {
             if is_deferred_attr(attr.name()) {
@@ -309,9 +449,16 @@ impl DesiredAttrs {
         let wants_padding = names.iter().any(|name| name.starts_with("padding"));
         let wants_margin = names.iter().any(|name| name.starts_with("margin"));
         let wants_flex = names.iter().any(|name| is_flex_option_attr(name));
+        let wants_accessibility_state = names
+            .iter()
+            .any(|name| *name == "enabled" || is_accessibility_state_attr(name));
+        let wants_accessibility_value = names.iter().any(|name| is_accessibility_value_attr(name));
         let mut deferred = Vec::new();
         for name in names {
             if is_box_attr(name) || is_flex_option_attr(name) || is_constraint_attr(name) {
+                continue;
+            }
+            if is_composite_accessibility_attr(name) {
                 continue;
             }
             if let Some(attr) = self.get(name) {
@@ -348,6 +495,12 @@ impl DesiredAttrs {
         for attr in deferred {
             let _ = attr.apply(node, tag);
         }
+        if wants_accessibility_state {
+            self.reconcile_accessibility_state(node);
+        }
+        if wants_accessibility_value {
+            self.reconcile_accessibility_value(node);
+        }
     }
 
     pub(crate) fn apply_mutation(
@@ -363,6 +516,17 @@ impl DesiredAttrs {
                 let _ = node.reset_attribute(ty);
             }
             AttrMutation::Set => {}
+        }
+        if tag == "button"
+            && matches!(
+                name,
+                "focusable"
+                    | "accessibility_role"
+                    | "accessibility_group"
+                    | "accessibility_actions"
+            )
+        {
+            self.apply_control_roles(node, tag);
         }
         self.apply_named(node, tag, &[name]);
     }
@@ -393,6 +557,7 @@ impl DesiredAttrs {
                 .iter()
                 .filter(|attr| attr_group(attr.name()) == group)
                 .filter(|attr| types.contains(&attr.ty))
+                .filter(|attr| !is_composite_accessibility_attr(attr.name()))
             {
                 if is_deferred_attr(attr.name()) {
                     deferred.push(attr);
@@ -403,6 +568,12 @@ impl DesiredAttrs {
             for attr in deferred {
                 let _ = attr.apply(node, tag);
             }
+        }
+        if types.contains(&ArkUINodeAttributeType::AccessibilityState) {
+            self.reconcile_accessibility_state(node);
+        }
+        if types.contains(&ArkUINodeAttributeType::AccessibilityValue) {
+            self.reconcile_accessibility_value(node);
         }
         self.after_animation_release(node, tag, types);
     }
@@ -655,6 +826,7 @@ mod tests {
     use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
 
     use super::{
+        accessibility_actions_value, accessibility_mode_value, accessibility_role_value,
         encode_attr, is_button_text_native_type, parse_scroll_offset, parse_scroll_to_index,
         AttrMutation, DesiredAttrs, EncodedAttrValue, ListScrollToIndexCommand,
         ScrollOffsetCommand,
@@ -687,6 +859,47 @@ mod tests {
         ] {
             assert!(!is_button_text_native_type(attribute), "{attribute:?}");
         }
+    }
+
+    #[test]
+    fn accessibility_keywords_map_to_arkui_values() {
+        assert_eq!(
+            accessibility_role_value(&AttributeValue::Text("button".into())),
+            Some(ohos_arkui_sys::ArkUI_NodeType_ARKUI_NODE_BUTTON)
+        );
+        assert_eq!(
+            accessibility_role_value(&AttributeValue::Text("switch".into())),
+            Some(ohos_arkui_sys::ArkUI_NodeType_ARKUI_NODE_TOGGLE)
+        );
+        assert_eq!(
+            accessibility_mode_value(&AttributeValue::Text("disabled-for-descendants".into())),
+            Some(3)
+        );
+        assert_eq!(
+            accessibility_actions_value(&AttributeValue::Text("click|copy|paste".into())),
+            Some(
+                ohos_arkui_sys::ArkUI_AccessibilityActionType_ARKUI_ACCESSIBILITY_ACTION_CLICK
+                    | ohos_arkui_sys::ArkUI_AccessibilityActionType_ARKUI_ACCESSIBILITY_ACTION_COPY
+                    | ohos_arkui_sys::ArkUI_AccessibilityActionType_ARKUI_ACCESSIBILITY_ACTION_PASTE
+            )
+        );
+    }
+
+    #[test]
+    fn accessibility_state_and_value_fields_share_native_objects() {
+        let checked = encode_attr("row", "accessibility_checked", &AttributeValue::Bool(true))
+            .expect("checked state");
+        assert_eq!(checked.ty, ArkUINodeAttributeType::AccessibilityState);
+        assert_eq!(checked.value, EncodedAttrValue::Bool(true));
+
+        let current = encode_attr(
+            "slider",
+            "accessibility_value_current",
+            &AttributeValue::Int(42),
+        )
+        .expect("range current");
+        assert_eq!(current.ty, ArkUINodeAttributeType::AccessibilityValue);
+        assert_eq!(current.value, EncodedAttrValue::I32(42));
     }
 
     #[test]
@@ -1049,6 +1262,30 @@ fn is_alignment_attr(name: &str) -> bool {
     )
 }
 
+fn is_accessibility_state_attr(name: &str) -> bool {
+    matches!(
+        name,
+        "accessibility_disabled" | "accessibility_selected" | "accessibility_checked"
+    )
+}
+
+fn is_accessibility_value_attr(name: &str) -> bool {
+    matches!(
+        name,
+        "accessibility_value_min"
+            | "accessibility_value_max"
+            | "accessibility_value_current"
+            | "accessibility_value_range_min"
+            | "accessibility_value_range_max"
+            | "accessibility_value_range_current"
+            | "accessibility_value_text"
+    )
+}
+
+fn is_composite_accessibility_attr(name: &str) -> bool {
+    is_accessibility_state_attr(name) || is_accessibility_value_attr(name)
+}
+
 fn is_button_text_attr(name: &str) -> bool {
     matches!(
         name,
@@ -1087,9 +1324,27 @@ enum AttrGroup {
 
 fn attr_group(name: &str) -> AttrGroup {
     match name {
-        "focusable" | "focus_on_touch" | "focused" | "focus_status" | "enabled" => {
-            AttrGroup::Control
-        }
+        "focusable"
+        | "focus_on_touch"
+        | "focused"
+        | "focus_status"
+        | "enabled"
+        | "accessibility_text"
+        | "accessibility_description"
+        | "accessibility_group"
+        | "accessibility_mode"
+        | "accessibility_role"
+        | "accessibility_actions"
+        | "accessibility_disabled"
+        | "accessibility_selected"
+        | "accessibility_checked"
+        | "accessibility_value_min"
+        | "accessibility_value_max"
+        | "accessibility_value_current"
+        | "accessibility_value_range_min"
+        | "accessibility_value_range_max"
+        | "accessibility_value_range_current"
+        | "accessibility_value_text" => AttrGroup::Control,
         "font_size"
         | "font_color"
         | "font_weight"
@@ -1183,6 +1438,58 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
     }
 
     let attr = match name {
+        "accessibility_text" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::AccessibilityText,
+            EncodedAttrValue::String(as_string(value)?),
+        ),
+        "accessibility_description" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::AccessibilityDescription,
+            EncodedAttrValue::String(as_string(value)?),
+        ),
+        "accessibility_group" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::AccessibilityGroup,
+            EncodedAttrValue::Bool(as_bool(value)?),
+        ),
+        "accessibility_mode" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::AccessibilityMode,
+            EncodedAttrValue::I32(accessibility_mode_value(value)?),
+        ),
+        "accessibility_role" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::AccessibilityRole,
+            EncodedAttrValue::U32(accessibility_role_value(value)?),
+        ),
+        "accessibility_actions" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::AccessibilityActions,
+            EncodedAttrValue::U32(accessibility_actions_value(value)?),
+        ),
+        "accessibility_disabled" | "accessibility_selected" | "accessibility_checked" => {
+            EncodedAttr::new(
+                name,
+                ArkUINodeAttributeType::AccessibilityState,
+                EncodedAttrValue::Bool(as_bool(value)?),
+            )
+        }
+        "accessibility_value_min"
+        | "accessibility_value_max"
+        | "accessibility_value_current"
+        | "accessibility_value_range_min"
+        | "accessibility_value_range_max"
+        | "accessibility_value_range_current" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::AccessibilityValue,
+            EncodedAttrValue::I32(as_i32(value)?),
+        ),
+        "accessibility_value_text" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::AccessibilityValue,
+            EncodedAttrValue::String(as_string(value)?),
+        ),
         "font_size" => EncodedAttr::new(
             name,
             ArkUINodeAttributeType::FontSize,
@@ -1977,6 +2284,103 @@ fn scroll_bar_display_mode(value: &dioxus_core::AttributeValue) -> Option<i32> {
     i32_or_keyword(value, css_value::scroll_bar_keyword)
 }
 
+fn accessibility_mode_value(value: &dioxus_core::AttributeValue) -> Option<i32> {
+    match value {
+        dioxus_core::AttributeValue::Int(value) => {
+            i32::try_from(*value).ok().filter(|v| (0..=3).contains(v))
+        }
+        dioxus_core::AttributeValue::Text(value) => match css_value::enum_token(value).as_str() {
+            "auto" => Some(0),
+            "enabled" | "yes" | "on" => Some(1),
+            "disabled" | "no" | "off" => Some(2),
+            "disabled_for_descendants" | "disabledfordescendants" | "descendants_disabled" => {
+                Some(3)
+            }
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn accessibility_role_value(value: &dioxus_core::AttributeValue) -> Option<u32> {
+    use ohos_arkui_sys::*;
+
+    match value {
+        dioxus_core::AttributeValue::Int(value) => u32::try_from(*value).ok(),
+        dioxus_core::AttributeValue::Text(value) => {
+            Some(match css_value::enum_token(value).as_str() {
+                "custom" | "none" | "generic" => ArkUI_NodeType_ARKUI_NODE_CUSTOM,
+                "text" | "heading" => ArkUI_NodeType_ARKUI_NODE_TEXT,
+                "image" => ArkUI_NodeType_ARKUI_NODE_IMAGE,
+                "toggle" | "switch" => ArkUI_NodeType_ARKUI_NODE_TOGGLE,
+                "loading" | "loading_progress" | "spinner" => {
+                    ArkUI_NodeType_ARKUI_NODE_LOADING_PROGRESS
+                }
+                "text_input" | "textbox" | "searchbox" => ArkUI_NodeType_ARKUI_NODE_TEXT_INPUT,
+                "text_area" => ArkUI_NodeType_ARKUI_NODE_TEXT_AREA,
+                "button" | "link" | "menu_item" | "menuitem" | "tab" => {
+                    ArkUI_NodeType_ARKUI_NODE_BUTTON
+                }
+                "progress" | "progress_bar" => ArkUI_NodeType_ARKUI_NODE_PROGRESS,
+                "checkbox" | "check_box" => ArkUI_NodeType_ARKUI_NODE_CHECKBOX,
+                "xcomponent" => ArkUI_NodeType_ARKUI_NODE_XCOMPONENT,
+                "date_picker" => ArkUI_NodeType_ARKUI_NODE_DATE_PICKER,
+                "time_picker" => ArkUI_NodeType_ARKUI_NODE_TIME_PICKER,
+                "text_picker" => ArkUI_NodeType_ARKUI_NODE_TEXT_PICKER,
+                "calendar" | "calendar_picker" => ArkUI_NodeType_ARKUI_NODE_CALENDAR_PICKER,
+                "slider" => ArkUI_NodeType_ARKUI_NODE_SLIDER,
+                "radio" => ArkUI_NodeType_ARKUI_NODE_RADIO,
+                "stack" | "dialog" => ArkUI_NodeType_ARKUI_NODE_STACK,
+                "swiper" => ArkUI_NodeType_ARKUI_NODE_SWIPER,
+                "scroll" => ArkUI_NodeType_ARKUI_NODE_SCROLL,
+                "list" | "menu" | "tab_list" | "tablist" => ArkUI_NodeType_ARKUI_NODE_LIST,
+                "list_item" => ArkUI_NodeType_ARKUI_NODE_LIST_ITEM,
+                "column" => ArkUI_NodeType_ARKUI_NODE_COLUMN,
+                "row" | "group" => ArkUI_NodeType_ARKUI_NODE_ROW,
+                "flex" => ArkUI_NodeType_ARKUI_NODE_FLEX,
+                "refresh" => ArkUI_NodeType_ARKUI_NODE_REFRESH,
+                "water_flow" => ArkUI_NodeType_ARKUI_NODE_WATER_FLOW,
+                "flow_item" => ArkUI_NodeType_ARKUI_NODE_FLOW_ITEM,
+                "grid" => ArkUI_NodeType_ARKUI_NODE_GRID,
+                "grid_item" => ArkUI_NodeType_ARKUI_NODE_GRID_ITEM,
+                _ => return None,
+            })
+        }
+        _ => None,
+    }
+}
+
+fn accessibility_actions_value(value: &dioxus_core::AttributeValue) -> Option<u32> {
+    use ohos_arkui_sys::*;
+
+    match value {
+        dioxus_core::AttributeValue::Int(value) => u32::try_from(*value).ok(),
+        dioxus_core::AttributeValue::Text(value) => {
+            let mut actions = 0_u32;
+            for token in value
+                .split(['|', ',', ' '])
+                .map(str::trim)
+                .filter(|token| !token.is_empty())
+            {
+                actions |= match css_value::enum_token(token).as_str() {
+                    "click" | "activate" => {
+                        ArkUI_AccessibilityActionType_ARKUI_ACCESSIBILITY_ACTION_CLICK
+                    }
+                    "long_click" | "longclick" => {
+                        ArkUI_AccessibilityActionType_ARKUI_ACCESSIBILITY_ACTION_LONG_CLICK
+                    }
+                    "cut" => ArkUI_AccessibilityActionType_ARKUI_ACCESSIBILITY_ACTION_CUT,
+                    "copy" => ArkUI_AccessibilityActionType_ARKUI_ACCESSIBILITY_ACTION_COPY,
+                    "paste" => ArkUI_AccessibilityActionType_ARKUI_ACCESSIBILITY_ACTION_PASTE,
+                    _ => return None,
+                };
+            }
+            Some(actions)
+        }
+        _ => None,
+    }
+}
+
 impl DesiredAttrs {
     /// Apply the ArkUI control roles that must exist before declarative
     /// attributes are written.
@@ -1985,9 +2389,14 @@ impl DesiredAttrs {
             let _ = node.set_attribute(ArkUINodeAttributeType::Focusable, true.into());
             let _ = node.set_attribute(
                 ArkUINodeAttributeType::AccessibilityRole,
-                BUTTON_ACCESSIBILITY_ROLE.into(),
+                ohos_arkui_sys::ArkUI_NodeType_ARKUI_NODE_BUTTON.into(),
             );
             let _ = node.set_attribute(ArkUINodeAttributeType::AccessibilityGroup, true.into());
+            let _ = node.set_attribute(
+                ArkUINodeAttributeType::AccessibilityActions,
+                ohos_arkui_sys::ArkUI_AccessibilityActionType_ARKUI_ACCESSIBILITY_ACTION_CLICK
+                    .into(),
+            );
         }
     }
 

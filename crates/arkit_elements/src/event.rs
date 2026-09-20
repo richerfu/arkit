@@ -21,6 +21,7 @@
 /// different alias tables.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ArkEventKind {
+    AccessibilityAction,
     Click,
     LongPress,
     Change,
@@ -85,6 +86,9 @@ pub enum ArkEventPayload {
     Float(f32),
     /// A single integer (swiper index, submit return code).
     Int(i32),
+    /// An ArkUI accessibility action bit (`click`, `long click`, `cut`,
+    /// `copy`, or `paste`).
+    AccessibilityAction(u32),
     /// A string value (text input/area change).
     String(String),
     /// A scroll-index payload (list/grid/water-flow visible range).
@@ -217,6 +221,28 @@ pub struct ClickData {
     pub pointer: Option<PointerPayload>,
 }
 
+/// Action requested by an accessibility service.
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AccessibilityActionData {
+    /// ArkUI action bit: click=1, long-click=2, cut=4, copy=8, paste=16.
+    pub action: u32,
+}
+
+impl From<ArkEventData> for AccessibilityActionData {
+    fn from(data: ArkEventData) -> Self {
+        Self::from(&data)
+    }
+}
+
+impl From<&ArkEventData> for AccessibilityActionData {
+    fn from(data: &ArkEventData) -> Self {
+        match &data.payload {
+            ArkEventPayload::AccessibilityAction(action) => Self { action: *action },
+            _ => Self::default(),
+        }
+    }
+}
+
 impl From<ArkEventData> for ClickData {
     fn from(data: ArkEventData) -> Self {
         Self::from(&data)
@@ -335,6 +361,7 @@ impl From<&ArkEventData> for ChangeData {
             | ArkEventPayload::ScrollOffset(_)
             | ArkEventPayload::Layout(_)
             | ArkEventPayload::Pointer(_)
+            | ArkEventPayload::AccessibilityAction(_)
             | ArkEventPayload::None => {}
         }
         out
