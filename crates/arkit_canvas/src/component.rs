@@ -231,6 +231,13 @@ pub struct CanvasProps {
     /// Optional imperative redraw handle.
     #[props(default)]
     pub controller: Option<CanvasController>,
+    /// Accessible name for meaningful canvas content. When omitted, the
+    /// custom-drawn surface is treated as decorative.
+    #[props(default)]
+    pub accessibility_label: Option<String>,
+    /// Optional longer description of the custom-drawn content.
+    #[props(default)]
+    pub accessibility_description: Option<String>,
 }
 
 struct CustomEventNode<'a>(&'a mut ArkUINode);
@@ -400,12 +407,17 @@ pub fn Canvas(props: CanvasProps) -> Element {
     });
 
     let height = props.height.clone().unwrap_or_else(|| "300".into());
+    let semantic = props.accessibility_label.is_some();
     rsx! {
         custom {
             native_ref: node_ref,
             width: props.width.clone(),
             height: height,
             hit_test_behavior: "default",
+            accessibility_mode: if semantic { "enabled" } else { "disabled" },
+            accessibility_role: if semantic { "image" },
+            accessibility_text: if let Some(label) = props.accessibility_label { label },
+            accessibility_description: if let Some(description) = props.accessibility_description { description },
         }
     }
 }

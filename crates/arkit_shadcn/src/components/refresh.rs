@@ -188,6 +188,9 @@ pub fn LoadMoreIndicator(props: LoadMoreIndicatorProps) -> Element {
 #[derive(Props, Clone, PartialEq)]
 pub struct InfiniteScrollProps {
     pub children: Element,
+    /// Optional name for the continuously loaded scroll region.
+    #[props(default)]
+    pub accessibility_label: Option<String>,
     /// Number of data items currently rendered. It identifies one request
     /// generation and prevents duplicate reach-end callbacks for that page.
     pub item_count: u32,
@@ -230,6 +233,15 @@ pub fn InfiniteScroll(props: InfiniteScrollProps) -> Element {
 
     rsx! {
         scroll {
+            accessibility_role: "scroll",
+            accessibility_text: if let Some(label) = props.accessibility_label { label },
+            accessibility_description: match props.state {
+                LoadMoreState::Idle => "Ready to load more",
+                LoadMoreState::Loading => "Loading more items",
+                LoadMoreState::Failed => "Loading more items failed",
+                LoadMoreState::NoMore => "No more items",
+            },
+            accessibility_group: false,
             width: props.width,
             height: props.height,
             background_color: props.background_color.unwrap_or(theme.colors.background),

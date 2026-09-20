@@ -9,6 +9,12 @@ use arkit_prelude::*;
 #[derive(Props, Clone, PartialEq)]
 pub struct AspectRatioProps {
     pub ratio: f32,
+    /// Optional name for the visual region. Descendant controls remain
+    /// independently reachable because the container is not collapsed.
+    #[props(default)]
+    pub accessibility_label: Option<String>,
+    #[props(default)]
+    pub accessibility_description: Option<String>,
     pub children: Element,
 }
 
@@ -17,6 +23,10 @@ pub struct AspectRatioProps {
 pub fn AspectRatio(props: AspectRatioProps) -> Element {
     rsx! {
         stack {
+            accessibility_role: if props.accessibility_label.is_some() { "group" },
+            accessibility_text: if let Some(label) = props.accessibility_label { label },
+            accessibility_description: if let Some(description) = props.accessibility_description { description },
+            accessibility_group: false,
             width: "100%",
             aspect_ratio: props.ratio,
             {props.children}

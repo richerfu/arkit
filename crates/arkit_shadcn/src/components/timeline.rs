@@ -226,6 +226,9 @@ pub struct TimelineProps {
     pub interactive: bool,
     #[props(default)]
     pub on_value_change: EventHandler<i32>,
+    /// Optional name for the chronological list.
+    #[props(default)]
+    pub accessibility_label: Option<String>,
     pub children: Element,
 }
 
@@ -327,6 +330,9 @@ pub fn Timeline(props: TimelineProps) -> Element {
     let body = match props.orientation {
         TimelineOrientation::Vertical => rsx! {
             column {
+                accessibility_role: "list",
+                accessibility_text: if let Some(label) = props.accessibility_label.clone() { label },
+                accessibility_group: false,
                 width: "100%",
                 align_items: "start",
                 {children}
@@ -337,6 +343,9 @@ pub fn Timeline(props: TimelineProps) -> Element {
                 rsx! {
                     row {
                         native_ref: row_ref,
+                        accessibility_role: "list",
+                        accessibility_text: if let Some(label) = props.accessibility_label.clone() { label },
+                        accessibility_group: false,
                         align_items: "stretch",
                         justify_content: "start",
                         {children}
@@ -346,6 +355,9 @@ pub fn Timeline(props: TimelineProps) -> Element {
                 rsx! {
                     row {
                         native_ref: row_ref,
+                        accessibility_role: "list",
+                        accessibility_text: if let Some(label) = props.accessibility_label.clone() { label },
+                        accessibility_group: false,
                         width: "100%",
                         align_items: "stretch",
                         justify_content: "start",

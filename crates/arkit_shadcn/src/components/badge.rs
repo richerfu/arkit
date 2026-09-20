@@ -70,6 +70,9 @@ fn badge_style(variant: BadgeVariant, theme: &Theme) -> BadgeStyle {
 #[derive(Props, Clone, PartialEq)]
 pub struct BadgeProps {
     pub content: String,
+    /// Overrides the visible badge text for assistive technologies.
+    #[props(default)]
+    pub accessibility_label: Option<String>,
     #[props(default)]
     pub variant: BadgeVariant,
     pub icon: Option<String>,
@@ -100,9 +103,13 @@ pub fn Badge(props: BadgeProps) -> Element {
     let hpad = if pill { spacing::XXS } else { spacing::SM };
     let icon = props.icon.clone();
     let content = props.content.clone();
+    let accessibility_text = props.accessibility_label.unwrap_or_else(|| content.clone());
 
     rsx! {
         row {
+            accessibility_role: "text",
+            accessibility_text,
+            accessibility_group: true,
             constraint_size: format!("0,100000,{BADGE_MIN_HEIGHT},100000"),
             align_items: "center",
             justify_content: "center",
@@ -121,6 +128,7 @@ pub fn Badge(props: BadgeProps) -> Element {
             }
             text {
                 content: content,
+                accessibility_mode: "disabled",
                 font_size: typography::XS,
                 font_weight: 500,
                 font_color: style.foreground,

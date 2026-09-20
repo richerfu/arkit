@@ -207,6 +207,9 @@ pub struct AnchorProps {
     /// 区块判定为"已进入视口"的阈值（vp），避免区块边界闪烁。
     #[props(default)]
     pub active_threshold: f32,
+    /// Optional name for the scrollable anchor content.
+    #[props(default)]
+    pub accessibility_label: Option<String>,
 }
 
 /// 锚点导航容器：左侧导航 + 右侧滚动内容，滚动联动高亮。
@@ -287,6 +290,9 @@ pub fn Anchor(props: AnchorProps) -> Element {
             {nav}
             scroll {
                 native_ref: scroll_ref,
+                accessibility_role: "scroll",
+                accessibility_text: if let Some(label) = props.accessibility_label { label },
+                accessibility_group: false,
                 width: "100%",
                 layout_weight: 1.0,
                 alignment: "top-start",

@@ -103,6 +103,13 @@ pub struct TerminalProps {
     pub background_color: u32,
     #[props(default = 0xFFE2_E8F0_u32)]
     pub foreground_color: u32,
+    /// Accessible name for the terminal surface.
+    #[props(default = "Terminal".to_string())]
+    pub accessibility_label: String,
+    /// Text alternative for the currently relevant terminal output. Hosts can
+    /// update this from [`TerminalController::snapshot`] when output changes.
+    #[props(default)]
+    pub accessibility_description: Option<String>,
     /// Drive caret blink phase on the native render worker.
     #[props(default = true)]
     pub cursor_blink: bool,
@@ -595,6 +602,10 @@ pub fn Terminal(props: TerminalProps) -> Element {
             background_color: surface_bg,
             border_radius: 12.0,
             clip: true,
+            accessibility_role: "xcomponent",
+            accessibility_text: props.accessibility_label.clone(),
+            accessibility_description: if let Some(description) = props.accessibility_description.clone() { description },
+            accessibility_group: true,
             onarea: move |evt: dioxus_core::Event<dioxus_elements::event::AreaData>| {
                 let f = evt.data().frame;
                 if !f.is_measured() {

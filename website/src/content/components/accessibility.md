@@ -55,10 +55,12 @@ row {
 row {
     accessibility_role: "button",
     accessibility_text: "复制邀请码",
-    accessibility_actions: "click|copy",
+    accessibility_actions: "long_click",
     onaccessibilityaction: move |event| {
-        let action = event.data().action;
-        // click=1, long_click=2, cut=4, copy=8, paste=16
+        // 当前节点只声明了 LongClick，因此无需比较原始整数 action。
+        // AccessibilityManager provider action 与 ArkUI 属性 bit mask
+        // 使用不同编号空间，不能把这里的值硬编码成属性掩码。
+        open_context_menu();
     }
 }
 ```
@@ -72,7 +74,7 @@ row {
 | 结构   | `accessibility_group`                       | 把当前节点和后代作为一个语义目标                                                                      |
 | 可见性 | `accessibility_mode`                        | `auto`、`enabled`、`disabled`、`disabled_for_descendants`                                             |
 | 角色   | `accessibility_role`                        | `button`、`checkbox`、`radio`、`switch`、`slider`、`progress`、`text_input`、`list` 等 ArkUI 节点角色 |
-| 动作   | `accessibility_actions`                     | `click`、`long_click`、`cut`、`copy`、`paste`，使用 `                                                 | ` 组合 |
+| 动作   | `accessibility_actions`                     | `click`、`long_click`、`cut`、`copy`、`paste`，使用竖线组合                                           |
 | 状态   | `accessibility_disabled`                    | 禁用状态                                                                                              |
 | 状态   | `accessibility_selected`                    | Tab、菜单项、轮播页等选中状态                                                                         |
 | 状态   | `accessibility_checked`                     | Checkbox、Radio、Switch、Toggle 的勾选状态                                                            |
@@ -92,6 +94,7 @@ shadcn 的交互组件已经在根节点声明相应语义：
 - `Input`、`Textarea`、`InputOtp` 暴露文本输入角色、名称和禁用状态。
 - `Select`、`Combobox`、`Tabs`、日期/时间选择器、轮播和菜单会隐藏非活动内容并暴露展开、选中状态。
 - Dialog、Sheet、Drawer、BottomSheet、Toast 和 Guide 为面板及图标操作提供名称；装饰性遮罩不会成为读屏目标。
+- Card、Badge、Code、Form、Table、Timeline、Index、ScrollArea 等内容与结构组件暴露 heading、group、list、list item、scroll、required、invalid 等语义，同时保留可交互后代。
 
 包含可见文字的组件通常可以从 label 得到名称。纯图标或业务含义不同于可见文字时，必须传 `accessibility_label`：
 
@@ -110,15 +113,32 @@ Switch {
 }
 ```
 
+## 自绘与 XComponent
+
+`Canvas`、原生 `ECharts`、`Barcode`、`LottiePlayer`、`CameraPreview` 和 `Terminal` 都提供可访问名称或文本替代入口：
+
+- `Canvas` 和 `LottiePlayer` 默认按装饰内容处理；业务内容有意义时传 `accessibility_label` 和 `accessibility_description`。
+- `ECharts`、`CameraPreview` 和 `Terminal` 默认提供可覆盖的名称；图表摘要、相机操作提示和终端关键输出通过 `accessibility_description` 提供。
+- `Barcode` 默认只朗读“Barcode”，不会自动朗读可能包含敏感信息的 payload；业务方可显式提供用途描述。
+- `CameraView` 内置的闪光灯、镜头切换、快门、分辨率选择和缩放控件均具备名称、状态、焦点及原生 action。
+
+这些组件把整个绘制表面作为一个 ArkUI 语义节点时，不需要额外 provider。
+
 ## 什么时候需要 ohos-a11y-binding
 
 常规 ArkUI 原生节点不需要。Arkit 通过 `ohos-arkui-binding` 的节点属性和事件接口即可生成系统可识别的语义树。
 
-只有内容不由 ArkUI 子节点表达时才需要 `ohos-a11y-binding`，例如 XComponent、游戏画布、视频/地图引擎或完全自绘表面中的虚拟控件。这类场景需要注册自定义 accessibility provider、维护虚拟节点树、命中测试和 action 回调；当前 provider API 还要求目标系统 API 23。它不应该成为普通组件库的强依赖。
+只有自绘表面内部还要暴露多个可独立聚焦、命中和操作的虚拟子节点时才需要 `ohos-a11y-binding`，例如终端的逐行浏览、图表的数据点、地图标记或游戏内按钮。这类场景需要注册自定义 accessibility provider、维护虚拟节点树、命中测试和 action 回调；它不应该成为普通组件库或“整块表面 + 文本替代”场景的强依赖。
 
 ## 设备验收
 
-`examples/demos` 中的“无障碍验收”页面同时覆盖原生 button、自定义 row button 和 shadcn 控件。QEMU/真机验收至少检查：
+`examples/demos` 中的“无障碍验收”页面同时覆盖原生 button、自定义 row button、CustomNode、Barcode、原生图表和 shadcn 控件。仓库脚本直接使用 `ohos-qemu` 带 a11y 能力的镜像，不修改或重打镜像：
+
+```bash
+scripts/run-qemu-a11y-e2e.sh
+```
+
+QEMU/真机验收至少检查：
 
 1. ArkUI/UITest 树中存在稳定的 `A11Y` 名称、正确 role、checked/selected/disabled/value 和 click action。
 2. 通过无障碍 action 激活原生、自定义和 shadcn button，页面计数各增加一次。

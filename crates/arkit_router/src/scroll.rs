@@ -58,6 +58,12 @@ impl Drop for PageScroll {
 pub struct RouteProviderProps {
     /// Page content rendered inside the router's default native Scroll.
     pub children: Element,
+    /// Optional accessible name for this route's scroll region.
+    #[props(default)]
+    pub accessibility_label: Option<String>,
+    /// Optional purpose or navigation hint for this route's scroll region.
+    #[props(default)]
+    pub accessibility_description: Option<String>,
 }
 
 /// Default scroll viewport for a routed page.
@@ -124,6 +130,9 @@ pub fn RouteProvider(props: RouteProviderProps) -> Element {
             scroll_bar: "auto",
             scroll_enabled: true,
             scroll_offset: offset,
+            accessibility_role: "scroll",
+            accessibility_text: if let Some(label) = props.accessibility_label { label },
+            accessibility_description: if let Some(description) = props.accessibility_description { description },
             onscroll: move |event| {
                 record_scroll_delta(
                     &position,

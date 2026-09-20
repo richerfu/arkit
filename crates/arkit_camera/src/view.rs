@@ -39,6 +39,12 @@ pub struct CameraViewProps {
     /// CSS height (`"100%"`, `"480"`). Defaults to `"100%"` when unset.
     #[props(default)]
     pub height: Option<String>,
+    /// Accessible name for the preview surface.
+    #[props(default = "Camera preview".to_string())]
+    pub accessibility_label: String,
+    /// Optional guidance for the current capture or scan mode.
+    #[props(default)]
+    pub accessibility_description: Option<String>,
     #[props(default)]
     pub on_position_change: Option<EventHandler<CameraPosition>>,
     #[props(default)]
@@ -123,6 +129,8 @@ pub fn CameraView(props: CameraViewProps) -> Element {
             scan: scan_configuration,
             width: "100%",
             height: "100%",
+            accessibility_label: props.accessibility_label.clone(),
+            accessibility_description: props.accessibility_description.clone(),
             on_status_change: move |next: CameraStatus| {
                 status.set(next.clone());
                 if let Some(handler) = status_change { handler.call(next); }
@@ -155,6 +163,8 @@ pub fn CameraView(props: CameraViewProps) -> Element {
             profiles: profiles(),
             width: "100%",
             height: "100%",
+            accessibility_label: props.accessibility_label.clone(),
+            accessibility_description: props.accessibility_description.clone(),
             on_status_change: move |next: CameraStatus| {
                 status.set(next.clone());
                 if let Some(handler) = status_change { handler.call(next); }
@@ -335,6 +345,7 @@ impl From<CameraScanPreviewInteractions> for InteractionConfiguration {
 
 fn camera_icon_button(
     icon_name: &'static str,
+    accessibility_label: String,
     badge: Option<String>,
     size: f32,
     background_color: u32,
@@ -360,8 +371,11 @@ fn camera_icon_button(
             border_radius: size / 2.0,
             background_color,
             alignment: "center",
-            focusable: false,
-            focus_on_touch: false,
+            accessibility_text: accessibility_label,
+            accessibility_actions: "click",
+            accessibility_disabled: !enabled,
+            focusable: enabled,
+            focus_on_touch: enabled,
             enabled,
             onclick: move |_| on_click(),
             column {
@@ -425,6 +439,9 @@ fn camera_zoom_slider(
     let selected_width = progress * usable_width;
     let thumb_x = progress * usable_width;
     let thumb_y = (TOUCH_HEIGHT - THUMB_SIZE) / 2.0;
+    let on_change = EventHandler::new(move |value: f32| on_change(value));
+    let touch_change = on_change;
+    let semantic_change = on_change;
     rsx! {
         stack {
             width,
@@ -452,7 +469,7 @@ fn camera_zoom_slider(
                 let step = spec.step.max(0.01);
                 let value = (spec.min + ((raw - spec.min) / step).round() * step)
                     .clamp(spec.min, spec.max);
-                on_change(value);
+                touch_change.call(value);
             },
             row {
                 position: format!("{track_x},{track_y}"),
@@ -481,6 +498,28 @@ fn camera_zoom_slider(
                 border_radius: THUMB_SIZE / 2.0,
                 background_color: spec.thumb_color,
                 hit_test_behavior: "transparent",
+            }
+            slider {
+                accessibility_text: "Zoom",
+                accessibility_description: format!("{:.1} times", spec.value),
+                slider_value: spec.value,
+                slider_min: spec.min,
+                slider_max: spec.max,
+                slider_step: spec.step.max(0.01),
+                enabled: spec.enabled,
+                focusable: spec.enabled,
+                focus_on_touch: true,
+                width,
+                height: TOUCH_HEIGHT,
+                block_color: 0x0000_0000_u32,
+                selected_color: 0x0000_0000_u32,
+                track_color: 0x0000_0000_u32,
+                hit_test_behavior: "none",
+                onchange: move |event: dioxus_core::Event<dioxus_elements::event::ChangeData>| {
+                    if spec.enabled {
+                        semantic_change.call(event.data().float_value);
+                    }
+                },
             }
         }
     }
@@ -614,6 +653,7 @@ fn camera_pill_button(
     mut on_click: impl FnMut() + 'static,
 ) -> Element {
     let icon = icon_name.map(|name| arkit_icon::icon(name, 15.0, style.foreground_color));
+    let accessibility_label = label.clone();
     rsx! {
         button {
             width: style.width,
@@ -626,8 +666,11 @@ fn camera_pill_button(
             border_radius: style.height / 2.0,
             background_color: style.background_color,
             alignment: "center",
-            focusable: false,
-            focus_on_touch: false,
+            accessibility_text: accessibility_label,
+            accessibility_actions: "click",
+            accessibility_disabled: !enabled,
+            focusable: enabled,
+            focus_on_touch: enabled,
             enabled,
             onclick: move |_| on_click(),
             row {
@@ -790,8 +833,12 @@ fn PhotoToolbar(
     let mut preview_picker = profile_picker;
     let mut photo_picker = profile_picker;
 
+    let flash_accessibility_label = flash_badge
+        .as_deref()
+        .map_or_else(|| "Flash".to_string(), |state| format!("Flash {state}"));
     let flash_button = camera_icon_button(
         flash_icon,
+        flash_accessibility_label,
         flash_badge,
         control_size,
         configuration.control_background_color,
@@ -873,6 +920,7 @@ fn PhotoToolbar(
     );
     let switch_button = camera_icon_button(
         "switch-camera",
+        "Switch camera".to_string(),
         None,
         control_size,
         configuration.control_background_color,
@@ -955,6 +1003,10 @@ fn PhotoToolbar(
                                 border_width: 0.0,
                                 border_radius: 16.0,
                                 background_color: "#00000000",
+                                accessibility_text: "Close resolution picker",
+                                accessibility_actions: "click",
+                                focusable: true,
+                                focus_on_touch: true,
                                 onclick: move |_| profile_picker.set(None),
                                 {arkit_icon::icon("x", 17.0, configuration.foreground_color)}
                             }
@@ -982,6 +1034,12 @@ fn PhotoToolbar(
                                         },
                                         font_size: 9.0,
                                         font_color: configuration.foreground_color,
+                                        accessibility_selected: match picker_kind {
+                                            ProfilePickerKind::Preview => effective_profiles.preview_size == Some(size),
+                                            ProfilePickerKind::Photo => effective_profiles.photo_size == Some(size),
+                                        },
+                                        focusable: true,
+                                        focus_on_touch: true,
                                         onclick: move |_| {
                                             let next = match picker_kind {
                                                 ProfilePickerKind::Preview => CameraProfileSelection {
@@ -1078,8 +1136,11 @@ fn PhotoToolbar(
                             border_color: configuration.shutter_color,
                             background_color: 0x0000_0000u32,
                             alignment: "center",
-                            focusable: false,
-                            focus_on_touch: false,
+                            accessibility_text: "Take photo",
+                            accessibility_actions: "click",
+                            accessibility_disabled: !shutter_enabled,
+                            focusable: shutter_enabled,
+                            focus_on_touch: shutter_enabled,
                             enabled: shutter_enabled,
                             onclick: move |_| {
                                 if let Err(error) = capture_controller.capture_with_options(capture) {
@@ -1179,6 +1240,7 @@ fn ScanToolbar(
     };
     let torch_button = camera_icon_button(
         torch_icon,
+        torch_action_label.to_string(),
         Some(torch_badge.to_string()),
         control_size,
         if torch_on {
@@ -1226,6 +1288,7 @@ fn ScanToolbar(
     );
     let switch_button = camera_icon_button(
         "switch-camera",
+        "Switch camera".to_string(),
         None,
         control_size,
         configuration.control_background_color,

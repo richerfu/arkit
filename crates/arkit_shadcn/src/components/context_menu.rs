@@ -23,6 +23,13 @@ pub fn ContextMenu(
     open: Option<bool>,
     default_open: bool,
     on_open_change: Option<EventHandler<bool>>,
+    /// Accessible name for the long-press trigger. When omitted, ArkUI derives
+    /// the name from the grouped trigger children.
+    #[props(default)]
+    accessibility_label: Option<String>,
+    /// Optional usage hint appended to the expanded/collapsed state.
+    #[props(default)]
+    accessibility_description: Option<String>,
     #[props(default)] width: Option<f32>,
 ) -> Element {
     let theme = use_theme();
@@ -74,10 +81,25 @@ pub fn ContextMenu(
             style.side_offset_vp,
         )
     });
+    let semantic_description = accessibility_description.unwrap_or_else(|| {
+        if current_open {
+            "Context menu expanded".to_string()
+        } else {
+            "Long press to open context menu".to_string()
+        }
+    });
 
     rsx! {
         row {
             native_ref: trigger_ref.clone(),
+            accessibility_role: "button",
+            accessibility_text: if let Some(label) = accessibility_label { label },
+            accessibility_description: semantic_description,
+            accessibility_group: true,
+            accessibility_actions: "long_click",
+            accessibility_selected: current_open,
+            focusable: true,
+            focus_on_touch: true,
             onlongpress: move |evt: dioxus_core::Event<dioxus_elements::event::ClickData>| {
                 if current_open {
                     dismiss.call(());
@@ -107,6 +129,16 @@ pub fn ContextMenu(
                     });
                 cursor_placement.set(Some(placement));
                 set_open.call(true);
+            },
+            onaccessibilityaction: move |_| {
+                // This trigger advertises only LongClick. AccessibilityManager
+                // uses a different action numbering space from ArkUI's native
+                // bit mask on current OpenHarmony images, so filtering the raw
+                // integer would drop a valid performAction("longClick").
+                if !current_open {
+                    cursor_placement.set(None);
+                    set_open.call(true);
+                }
             },
             {children}
         }

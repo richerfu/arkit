@@ -599,6 +599,7 @@ fn default_bar_slot(slot: IndexBarSlot, theme: Theme) -> Element {
     rsx! {
         text {
             content: slot.index,
+            accessibility_mode: "disabled",
             font_size: RAIL_LETTER_SIZE,
             font_weight: if slot.active { 700 } else { 500 },
             font_color: color,
@@ -689,13 +690,33 @@ pub fn IndexBar(props: IndexBarProps) -> Element {
                     } else {
                         default_bar_slot(slot, theme)
                     };
+                    let select_letter = letter.clone();
+                    let accessible_letter = letter.clone();
+                    let selected = active.as_deref() == Some(letter.as_str());
+                    let unavailable = is_empty_index(&empty, letter);
                     rsx! {
                         column {
                             width: RAIL_WIDTH,
                             layout_weight: 1.0,
                             align_items: "center",
                             justify_content: "center",
-                            hit_test_behavior: "none",
+                            accessibility_role: "button",
+                            accessibility_text: accessible_letter,
+                            accessibility_description: if unavailable { "No items" } else { "Jump to index" },
+                            accessibility_group: true,
+                            accessibility_actions: "click",
+                            accessibility_selected: selected,
+                            accessibility_disabled: unavailable,
+                            enabled: !unavailable,
+                            focusable: !unavailable,
+                            focus_on_touch: !unavailable,
+                            background_color: HIT_FILL,
+                            hit_test_behavior: "default",
+                            onclick: move |_| {
+                                if !unavailable {
+                                    on_select.call(select_letter.clone());
+                                }
+                            },
                             {cell}
                         }
                     }

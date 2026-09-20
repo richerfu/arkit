@@ -18,6 +18,12 @@ pub struct CardProps {
     /// Exact reference forwarded to the card's native root.
     #[props(default)]
     pub native_ref: Option<arkit_arkui::NativeElementRef>,
+    /// Optional card-region name. Descendant controls remain independently
+    /// reachable because the card never collapses its accessibility subtree.
+    #[props(default)]
+    pub accessibility_label: Option<String>,
+    #[props(default)]
+    pub accessibility_description: Option<String>,
     pub children: Element,
 }
 
@@ -28,6 +34,10 @@ pub fn Card(props: CardProps) -> Element {
     rsx! {
         column {
             native_ref: props.native_ref,
+            accessibility_role: if props.accessibility_label.is_some() { "group" },
+            accessibility_text: if let Some(label) = props.accessibility_label { label },
+            accessibility_description: if let Some(description) = props.accessibility_description { description },
+            accessibility_group: false,
             width: "100%",
             align_items: "start",
             background_color: theme.colors.card,
@@ -58,6 +68,10 @@ pub fn CardHeader(props: CardHeaderProps) -> Element {
     let theme = use_theme();
     rsx! {
         row {
+            accessibility_role: "group",
+            accessibility_text: props.title.clone(),
+            accessibility_description: props.description.clone(),
+            accessibility_group: true,
             width: "100%",
             justify_content: "start",
             column {
@@ -110,6 +124,8 @@ pub fn CardTitle(props: CardTitleProps) -> Element {
     rsx! {
         text {
             content: props.content.clone(),
+            accessibility_role: "heading",
+            accessibility_text: props.content.clone(),
             font_size: typography::MD,
             font_weight: 600,
             font_color: theme.colors.card_foreground,
@@ -133,6 +149,8 @@ pub fn CardDescription(props: CardDescriptionProps) -> Element {
     rsx! {
         text {
             content: props.content.clone(),
+            accessibility_role: "text",
+            accessibility_text: props.content.clone(),
             font_size: typography::SM,
             font_color: theme.colors.muted_foreground,
             line_height: 20.0,

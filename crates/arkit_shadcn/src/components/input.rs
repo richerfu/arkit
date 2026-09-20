@@ -81,6 +81,10 @@ pub struct InputProps {
     /// Uses the destructive border treatment for validation failures.
     #[props(default)]
     pub invalid: bool,
+    /// Announces that a value is required. Validation remains owned by the
+    /// surrounding form.
+    #[props(default)]
+    pub required: bool,
     /// Prevents editing while preserving the field's dimensions.
     #[props(default)]
     pub disabled: bool,
@@ -115,6 +119,7 @@ pub fn Input(props: InputProps) -> Element {
         height,
         width,
         invalid,
+        required,
         disabled,
         read_only,
         click_to_focus,
@@ -136,6 +141,13 @@ pub fn Input(props: InputProps) -> Element {
     let input_filter = mode.native_input_filter();
     let field_height = height.unwrap_or(control::HEIGHT);
     let field_width = width.clone();
+    let accessibility_description = accessibility_description
+        .into_iter()
+        .chain(invalid.then_some("Invalid".to_string()))
+        .chain(required.then_some("Required".to_string()))
+        .chain(read_only.then_some("Read only".to_string()))
+        .collect::<Vec<_>>()
+        .join(". ");
     let icon_name = if password_is_visible {
         "eye-off"
     } else {
@@ -146,7 +158,7 @@ pub fn Input(props: InputProps) -> Element {
         textinput {
             accessibility_role: "text_input",
             accessibility_text: if let Some(label) = accessibility_label { label },
-            accessibility_description: if let Some(description) = accessibility_description { description },
+            accessibility_description: if !accessibility_description.is_empty() { accessibility_description },
             accessibility_disabled: disabled,
             value: if let Some(value) = value { value },
             placeholder: if let Some(placeholder) = placeholder { placeholder },
@@ -170,7 +182,7 @@ pub fn Input(props: InputProps) -> Element {
             background_color: theme.colors.background,
             opacity: if disabled { 0.5 } else { 1.0 },
             enabled: !disabled,
-            focusable: !read_only,
+            focusable: !disabled && !read_only,
             focus_on_touch: resolves_focus_on_touch(read_only, click_to_focus),
             focused: focus_request(),
             padding_top: spacing::XXS,

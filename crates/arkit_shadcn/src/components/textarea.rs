@@ -25,6 +25,8 @@ pub struct TextareaProps {
     /// Uses the destructive border treatment for validation failures.
     #[props(default)]
     pub invalid: bool,
+    #[props(default)]
+    pub required: bool,
     /// Prevents editing while preserving the field's dimensions.
     #[props(default)]
     pub disabled: bool,
@@ -44,12 +46,20 @@ pub fn Textarea(props: TextareaProps) -> Element {
     let disabled = props.disabled;
     let click_to_focus = props.click_to_focus;
     let mut focus_request = use_signal(|| false);
+    let accessibility_description = props
+        .accessibility_description
+        .clone()
+        .into_iter()
+        .chain(props.invalid.then_some("Invalid".to_string()))
+        .chain(props.required.then_some("Required".to_string()))
+        .collect::<Vec<_>>()
+        .join(". ");
 
     rsx! {
         textarea {
             accessibility_role: "text_area",
             accessibility_text: if let Some(label) = props.accessibility_label { label },
-            accessibility_description: if let Some(description) = props.accessibility_description { description },
+            accessibility_description: if !accessibility_description.is_empty() { accessibility_description },
             accessibility_disabled: disabled,
             value: if let Some(v) = props.value { v },
             placeholder: if let Some(p) = props.placeholder { p },
@@ -66,7 +76,7 @@ pub fn Textarea(props: TextareaProps) -> Element {
             background_color: theme.colors.background,
             opacity: if disabled { 0.5 } else { 1.0 },
             enabled: !disabled,
-            focusable: true,
+            focusable: !disabled,
             focus_on_touch: !click_to_focus,
             focused: focus_request(),
             padding_top: spacing::SM,
