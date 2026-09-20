@@ -3,7 +3,7 @@
 //! Migrated from the original Elm builder API to dioxus 0.7 `#[component]` +
 //! `rsx!`. Preserves the original styling: 32x18.4 native `Toggle` with
 //! `primary` selected color, `input` unselected color, `background` switch
-//! point, transparent 1px border, `full` radius, `shadow-sm`. Supports
+//! point, transparent 1px border, `full` radius, `shadow-xs`. Supports
 //! controlled (`checked`) and uncontrolled (`default_checked`) usage.
 
 use crate::theme::*;
@@ -51,7 +51,8 @@ pub fn Switch(props: SwitchProps) -> Element {
             border_width: 1.0,
             border_color: 0x0000_0000,
             border_radius: theme.radii.full,
-            clip: true,
+            shadow: shadow::XS,
+            clip: false,
             width: SWITCH_WIDTH,
             height: SWITCH_HEIGHT,
             onkey: move |event| {

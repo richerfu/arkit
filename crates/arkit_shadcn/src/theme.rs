@@ -509,6 +509,19 @@ pub mod typography {
     pub const XXL: f32 = 24.0;
 }
 
+/// Elevation tokens used by the New York component recipes.
+///
+/// Generic tiers map to ArkUI's platform shadow presets. Sonner is the one
+/// intentional custom value: its upstream stylesheet specifies exactly
+/// `0 4px 12px rgba(0, 0, 0, 0.1)`.
+pub mod shadow {
+    pub const XS: &str = "xs";
+    pub const SM: &str = "sm";
+    pub const MD: &str = "md";
+    pub const LG: &str = "lg";
+    pub const SONNER: &str = "0 4 12 #1A000000";
+}
+
 /// Interactive control geometry aligned with shadcn/ui New York.
 ///
 /// Values are vp (1vp ≈ 1 CSS px at the ArkUI baseline). The previous

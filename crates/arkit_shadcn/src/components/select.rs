@@ -151,6 +151,7 @@ pub fn Select(
                 border_radius: md,
                 border_width: 1.0,
                 border_color: colors.border,
+                shadow: shadow::XS,
                 row {
                     layout_weight: 1.0,
                     clip: true,
@@ -261,7 +262,7 @@ fn select_overlay_content(content: SelectOverlayContent) -> Element {
                 border_radius: theme.radii.md,
                 border_width: 1.0,
                 border_color: colors.border,
-                shadow: "sm",
+                shadow: shadow::MD,
                 padding: spacing::XXS,
                 super::panel_viewport::PanelViewport {
                     max_height,

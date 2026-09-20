@@ -20,6 +20,7 @@ use arkit_prelude::*;
 const MENU_PANEL_WIDTH: f32 = 224.0;
 const SUBMENU_PANEL_WIDTH: f32 = MENU_PANEL_WIDTH - (spacing::XXS * 2.0);
 const MENU_PANEL_SIDE_OFFSET: f32 = spacing::SM;
+const MENU_PANEL_ALIGN_OFFSET: f32 = -spacing::XXS;
 const MENUBAR_ITEM_TRANSPARENT: u32 = 0x00000000;
 
 /// A single menu spec: trigger title + entries.
@@ -136,13 +137,15 @@ pub fn Menubar(
             .copied()
             .unwrap_or_default();
         let panel_height = menu_closed_panel_height(&items);
-        let placement = MenuOverlayPlacement::resolve(
+        let mut placement = MenuOverlayPlacement::resolve(
             frame,
             viewport,
             style.width,
             panel_height,
             style.side_offset_vp,
         );
+        placement.x = (placement.x + MENU_PANEL_ALIGN_OFFSET)
+            .max(viewport.safe_area.left.max(0.0) + spacing::SM);
         Some((items, placement))
     });
     let last_overlay =
@@ -165,6 +168,7 @@ pub fn Menubar(
             border_width: 1.0,
             border_color: border,
             background_color: background,
+            shadow: shadow::XS,
             for (index, spec) in menus.iter().enumerate() {
                 MenubarMenu {
                     native_ref: Some(focus.native_ref(index)),

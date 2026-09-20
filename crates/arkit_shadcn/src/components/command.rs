@@ -4,7 +4,7 @@
 //! options by case-insensitive substring; selecting an option fires
 //! `on_query_change` with the option text (mirroring the legacy behavior where
 //! the query was set to the clicked option). The panel uses `panel_surface`
-//! styling (`popover` fill, 1px `border`, `md` radius, `shadow-sm`) with `XXS`
+//! styling (`popover` fill, 1px `border`, `md` radius) with `XXS`
 //! padding; the input uses `input_surface` styling and its bottom border
 //! separates it from the option list.
 
@@ -34,7 +34,6 @@ pub fn Command(
             border_radius: md,
             border_width: 1.0,
             border_color: colors.border,
-            shadow: "sm",
             padding_top: spacing::XXS,
             padding_right: spacing::XXS,
             padding_bottom: spacing::XXS,

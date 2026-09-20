@@ -174,7 +174,7 @@ fn hover_card_overlay_content(
                 border_width: 1.0,
                 border_color: theme.colors.border,
                 background_color: theme.colors.popover,
-                shadow: "sm",
+                shadow: shadow::MD,
                 super::panel_viewport::PanelViewport { max_height, {children} }
             }
         }

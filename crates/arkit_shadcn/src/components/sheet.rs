@@ -39,6 +39,12 @@ pub fn Sheet(
     let controlled = open.is_some();
     let side = side_from_name(side.as_deref().unwrap_or("right"));
     let horizontal = matches!(side, FloatingSide::Left | FloatingSide::Right);
+    let panel_border = match side {
+        FloatingSide::Top => "0,0,1,0",
+        FloatingSide::Bottom => "1,0,0,0",
+        FloatingSide::Left => "0,1,0,0",
+        FloatingSide::Right => "0,0,0,1",
+    };
 
     let close = EventHandler::new(move |_: ()| {
         if !controlled {
@@ -67,24 +73,26 @@ pub fn Sheet(
                 width: "100%",
                 max_width: if horizontal && adaptive.is_pc() { SHEET_WIDTH },
                 height: if horizontal { "100%" } else { "auto" },
-                padding_top: spacing::XXL,
-                padding_right: spacing::XXL,
-                padding_bottom: spacing::XXL,
-                padding_left: spacing::XXL,
+                padding_top: spacing::LG,
+                padding_right: spacing::LG,
+                padding_bottom: spacing::LG,
+                padding_left: spacing::LG,
                 border_radius: 0.0,
-                border_width: 1.0,
+                border_width: panel_border,
                 border_color: theme.colors.border,
                 background_color: theme.colors.background,
-                shadow: "sm",
+                shadow: shadow::LG,
                 column {
                     width: "100%",
-                    height: "100%",
+                    height: if horizontal { "100%" } else { "auto" },
+                    align_items: "start",
                     DialogHeader {
                         title: title.clone(),
                         description: String::new(),
                     }
                     column {
                         width: "100%",
+                        align_items: "start",
                         margin_top: spacing::LG,
                         {children}
                     }

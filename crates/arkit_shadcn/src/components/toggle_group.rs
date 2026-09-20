@@ -2,7 +2,7 @@
 //!
 //! Migrated from the original Elm builder API to dioxus 0.7 `#[component]` +
 //! `rsx!`. Preserves the original outline-variant shell (rounded, clipped,
-//! no default elevation) and items, single/multiple selection, and the text/icon item
+//! `shadow-xs`) and items, single/multiple selection, and the text/icon item
 //! variants. Reuses the shared toggle helpers from [`super::toggle`].
 
 use crate::theme::*;
@@ -38,7 +38,7 @@ pub struct ToggleGroupProps {
     /// Optional exact item height override for compact toolbars.
     #[props(default)]
     pub height: Option<f32>,
-    /// Opt into a small drop shadow. The default New York group is flat.
+    /// Override the New York `shadow-xs` elevation.
     #[props(default)]
     pub shadow: Option<bool>,
     #[props(default)]
@@ -63,7 +63,9 @@ pub fn ToggleGroup(props: ToggleGroupProps) -> Element {
     let multi = props.multi;
     let icons = props.icons;
     let stretched = props.width.is_some();
-    let group_shadow = props.shadow.unwrap_or(false);
+    let group_shadow = props.shadow.unwrap_or(true);
+    let group_width = props.width.clone();
+    let inner_width = props.width.as_ref().map(|_| String::from("100%"));
     let on_change = props.on_change;
     let mut size_style = if icons {
         toggle_icon_size()
@@ -184,16 +186,22 @@ pub fn ToggleGroup(props: ToggleGroupProps) -> Element {
     rsx! {
         row {
             accessibility_role: "group",
-            width: if let Some(width) = props.width { width },
-            align_items: "center",
-            justify_content: "start",
-            border_style: ARKUI_BORDER_STYLE_SOLID,
-            border_width: 1.0,
-            border_color: theme.colors.input,
+            width: if let Some(width) = group_width { width },
             border_radius: theme.radii.md,
-            clip: true,
-            shadow: if group_shadow { "sm" },
-            {items.into_iter()}
+            background_color: theme.colors.background,
+            shadow: if group_shadow { shadow::XS } else { "none" },
+            clip: false,
+            row {
+                width: if let Some(width) = inner_width { width },
+                align_items: "center",
+                justify_content: "start",
+                border_style: ARKUI_BORDER_STYLE_SOLID,
+                border_width: 1.0,
+                border_color: theme.colors.input,
+                border_radius: theme.radii.md,
+                clip: true,
+                {items.into_iter()}
+            }
         }
     }
 }

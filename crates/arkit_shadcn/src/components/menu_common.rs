@@ -74,10 +74,6 @@ impl MenuOverlayPassThroughRegion {
     fn top(self) -> f32 {
         self.y.max(0.0)
     }
-
-    fn bottom(self) -> f32 {
-        (self.y + self.height).max(self.top())
-    }
 }
 
 impl MenuOverlayPlacement {
@@ -577,9 +573,9 @@ fn MenuContentPanel(
             border_radius: theme.radii.md,
             border_width: 1.0,
             border_color: colors.border,
-            clip: true,
+            clip: false,
             background_color: colors.popover,
-            shadow: "sm",
+            shadow: shadow::MD,
             super::panel_viewport::PanelViewport {
                 max_height,
             for (index, entry) in entries.iter().enumerate() {
@@ -621,52 +617,60 @@ pub(crate) fn menu_overlay_content(
     let left = placement.x.max(0.0);
     let pass_through_region =
         pass_through_region.filter(|region| region.width > 0.0 && region.height > 0.0);
-    let reserved_above_panel = pass_through_region
-        .map(|region| region.bottom())
-        .unwrap_or(0.0)
-        .clamp(0.0, top);
-    let backdrop_top_padding = (top - reserved_above_panel).max(0.0);
     rsx! {
-        column {
+        stack {
             width: "100%",
             height: "100%",
-            align_items: "start",
+            alignment: "top-start",
             hit_test_behavior: "none",
-            if let Some(region) = pass_through_region {
-                if region.top() > 0.0 {
-                    row {
-                        width: "100%",
-                        height: region.top(),
-                        background_color: FLOATING_CAPTURE_COLOR,
-                        hit_test_behavior: "default",
-                        onclick: move |_| on_dismiss.call(()),
-                    }
-                }
-                row {
-                    width: "100%",
-                    height: region.height,
-                    hit_test_behavior: "none",
-                    if region.x > 0.0 {
+            column {
+                width: "100%",
+                height: "100%",
+                align_items: "start",
+                hit_test_behavior: "none",
+                if let Some(region) = pass_through_region {
+                    if region.top() > 0.0 {
                         row {
-                            width: region.x,
-                            height: "100%",
+                            width: "100%",
+                            height: region.top(),
                             background_color: FLOATING_CAPTURE_COLOR,
                             hit_test_behavior: "default",
                             onclick: move |_| on_dismiss.call(()),
                         }
                     }
                     row {
-                        width: region.width,
-                        height: "100%",
+                        width: "100%",
+                        height: region.height,
                         hit_test_behavior: "none",
+                        if region.x > 0.0 {
+                            row {
+                                width: region.x,
+                                height: "100%",
+                                background_color: FLOATING_CAPTURE_COLOR,
+                                hit_test_behavior: "default",
+                                onclick: move |_| on_dismiss.call(()),
+                            }
+                        }
+                        row {
+                            width: region.width,
+                            height: "100%",
+                            hit_test_behavior: "none",
+                        }
+                        row {
+                            layout_weight: 1.0,
+                            height: "100%",
+                            background_color: FLOATING_CAPTURE_COLOR,
+                            hit_test_behavior: "default",
+                            onclick: move |_| on_dismiss.call(()),
+                        }
                     }
-                    row {
-                        layout_weight: 1.0,
-                        height: "100%",
-                        background_color: FLOATING_CAPTURE_COLOR,
-                        hit_test_behavior: "default",
-                        onclick: move |_| on_dismiss.call(()),
-                    }
+                }
+                column {
+                    width: "100%",
+                    layout_weight: 1.0,
+                    background_color: FLOATING_CAPTURE_COLOR,
+                    hit_test_behavior: "default",
+                    onclick: move |_| on_dismiss.call(()),
                 }
             }
             column {
@@ -965,9 +969,9 @@ fn render_submenu_entry(
                         border_radius: theme.radii.md,
                         border_width: 1.0,
                         border_color: colors.border,
-                        clip: true,
+                        clip: false,
                         background_color: colors.popover,
-                        shadow: "sm",
+                        shadow: shadow::LG,
                         for (child_index, child) in entry.items.iter().enumerate() {
                             {
                                 render_menu_entry(
