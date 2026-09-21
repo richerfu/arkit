@@ -7,7 +7,6 @@
 
 use std::{
     cell::{Cell, RefCell},
-    ptr::NonNull,
     rc::Rc,
     sync::Arc,
 };
@@ -23,12 +22,8 @@ use ohos_arkui_binding::{
 use ohos_drawing_binding::{
     AlphaFormat, Bitmap, BitmapFormat, BlendMode, Brush, Canvas, ColorFormat, FilterMode,
     FontCollection, FontSlant, FontStyle, FontWeight, FontWidth, Image, Matrix, MipmapMode, Pen,
-    Rect, SamplingOptions, ShaderEffect, ShadowLayer, TextStyle, TileMode, TypographyBuilder,
-    TypographyStyle,
-};
-use ohos_native_drawing_sys::{
-    OH_Drawing_CreateTextShadow, OH_Drawing_DestroyTextShadow, OH_Drawing_PointCreate,
-    OH_Drawing_PointDestroy, OH_Drawing_SetTextShadow, OH_Drawing_TextStyleAddShadow,
+    Point, Rect, SamplingOptions, ShaderEffect, ShadowLayer, TextShadow, TextStyle, TileMode,
+    TypographyBuilder, TypographyStyle,
 };
 
 use crate::theme::use_theme;
@@ -602,29 +597,12 @@ impl WatermarkTile {
             text_style.set_foreground_pen(&pen);
             stroke_pen = Some(pen);
         }
-        let text_shadow = style.shadow.and_then(|shadow| {
-            let native_shadow = OwnedNative::new(
-                // SAFETY: The returned native owner is immediately wrapped.
-                unsafe { OH_Drawing_CreateTextShadow() },
-                OH_Drawing_DestroyTextShadow,
-            )?;
-            let offset = OwnedNative::new(
-                // SAFETY: The returned native owner is immediately wrapped.
-                unsafe { OH_Drawing_PointCreate(shadow.offset_x, shadow.offset_y) },
-                OH_Drawing_PointDestroy,
-            )?;
-            // SAFETY: All arguments remain live through this call. Adding the
-            // shadow copies its values into the native text style.
-            unsafe {
-                OH_Drawing_SetTextShadow(
-                    native_shadow.as_ptr(),
-                    shadow.color,
-                    offset.as_ptr(),
-                    shadow.blur_radius as f64,
-                );
-                OH_Drawing_TextStyleAddShadow(text_style.as_ptr(), native_shadow.as_ptr());
-            }
-            Some((native_shadow, offset))
+        let text_shadow = style.shadow.map(|shadow| {
+            let offset = Point::new(shadow.offset_x, shadow.offset_y);
+            let native_shadow =
+                TextShadow::new(shadow.color, &offset, f64::from(shadow.blur_radius));
+            text_style.add_shadow(&native_shadow);
+            (native_shadow, offset)
         });
         let mut fonts = FontCollection::global_instance().unwrap_or_default();
         let mut builder = TypographyBuilder::new(&mut typography_style, &mut fonts);
@@ -1062,28 +1040,6 @@ impl TileRasterPlan {
             width_pixels,
             height_pixels,
         }
-    }
-}
-
-struct OwnedNative<T> {
-    raw: NonNull<T>,
-    destroy: unsafe extern "C" fn(*mut T),
-}
-
-impl<T> OwnedNative<T> {
-    fn new(raw: *mut T, destroy: unsafe extern "C" fn(*mut T)) -> Option<Self> {
-        NonNull::new(raw).map(|raw| Self { raw, destroy })
-    }
-
-    fn as_ptr(&self) -> *mut T {
-        self.raw.as_ptr()
-    }
-}
-
-impl<T> Drop for OwnedNative<T> {
-    fn drop(&mut self) {
-        // SAFETY: `raw` is uniquely owned by this wrapper and destroyed once.
-        unsafe { (self.destroy)(self.raw.as_ptr()) };
     }
 }
 

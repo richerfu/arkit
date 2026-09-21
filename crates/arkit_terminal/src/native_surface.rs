@@ -5,7 +5,6 @@ use std::sync::mpsc::Sender;
 use arkit_arkui::MountedNodeLease;
 use ohos_native_window_binding::NativeWindow;
 use ohos_xcomponent_binding::{NativeXComponent, WindowRaw, XComponentRaw};
-use ohos_xcomponent_sys::OH_NativeXComponent_GetNativeXComponent;
 
 use crate::worker::WorkerMessage;
 use crate::{TerminalError, TerminalErrorKind, TerminalResult};
@@ -71,21 +70,12 @@ impl SurfaceRegistration {
         node: &MountedNodeLease,
         sender: Sender<WorkerMessage>,
     ) -> TerminalResult<Self> {
-        // SAFETY: context lookup is synchronous inside the generation-checked
-        // borrow. The returned XComponent is retained by the registration,
-        // whose owner is tied to this lease's native teardown.
-        let raw = unsafe {
-            node.with_native(|node| {
-                OH_NativeXComponent_GetNativeXComponent(node.raw_handle().cast())
-            })
-        }
-        .ok_or_else(|| surface_error("XComponent is no longer mounted"))?;
-        if raw.is_null() {
-            return Err(surface_error(
-                "ArkUI did not return a native XComponent handle",
-            ));
-        }
-        let component = NativeXComponent::new(XComponentRaw(raw));
+        // SAFETY: component lookup is synchronous inside the
+        // generation-checked borrow. The returned wrapper is retained by the
+        // registration, whose owner is tied to this lease's native teardown.
+        let component = unsafe { node.with_native(|node| node.native_xcomponent()) }
+            .flatten()
+            .ok_or_else(|| surface_error("XComponent is not mounted or has no native surface"))?;
         component
             .id()
             .map_err(|error| surface_error(error.to_string()))?;

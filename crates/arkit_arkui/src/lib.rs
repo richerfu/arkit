@@ -62,7 +62,7 @@
 //! instead.
 
 use std::cell::RefCell;
-use std::ffi::{c_void, CStr};
+use std::ffi::c_void;
 use std::rc::Rc;
 
 use dioxus_core::{ElementId, Template, TemplateNode, WriteMutations};
@@ -77,7 +77,6 @@ use ohos_arkui_binding::gesture::gesture_data::GestureEventData;
 use ohos_arkui_binding::gesture::inner_gesture::Gesture;
 use ohos_arkui_binding::types::attribute::ArkUINodeAttributeType;
 use ohos_arkui_binding::types::gesture_event::GestureEventAction;
-use ohos_arkui_sys::ArkUI_NodeComponentEvent;
 use rustc_hash::{FxHashMap, FxHashSet};
 // Re-export the shared event-payload types (owned by `arkit_elements`, whose
 // lib name is `dioxus_elements`).
@@ -3066,37 +3065,13 @@ fn extract_payload(
 /// contains the documented per-frame offsets. The pointer is owned by ArkUI
 /// and remains valid only for the duration of the callback.
 fn component_event_f32(event: &ArkNativeEvent, index: usize) -> Option<f32> {
-    component_event_number(event, index).map(|value| {
-        // SAFETY: this helper is used only for component event fields whose
-        // ArkUI contract declares the union member as `f32_`.
-        unsafe { value.f32_ }
-    })
+    event.component_f32(index)
 }
 
 /// Same `GetNumberValue` hole as [`component_event_f32`], for List/WaterFlow
 /// visible-index callbacks (`data[n].i32`).
 fn component_event_i32(event: &ArkNativeEvent, index: usize) -> Option<i32> {
-    component_event_number(event, index).map(|value| {
-        // SAFETY: this helper is used only for component event fields whose
-        // ArkUI contract declares the union member as `i32_`.
-        unsafe { value.i32_ }
-    })
-}
-
-fn component_event_number(
-    event: &ArkNativeEvent,
-    index: usize,
-) -> Option<ohos_arkui_sys::ArkUI_NumberValue> {
-    if index >= 12 {
-        return None;
-    }
-    let component = event
-        .node_component_event()?
-        .cast::<ArkUI_NodeComponentEvent>();
-    // SAFETY: ArkUI returned this pointer for the active synchronous callback.
-    // `ArkUI_NodeComponentEvent` has a fixed 12-element `data` array, and the
-    // index is checked above.
-    Some(unsafe { component.as_ref().data[index] })
+    event.component_i32(index)
 }
 
 fn scroll_index_from_event(event: &ArkNativeEvent, include_center: bool) -> ScrollIndexPayload {
@@ -3158,74 +3133,38 @@ fn extract_pointer_payload(event: &ArkNativeEvent) -> Option<PointerPayload> {
 
 fn extract_key_payload(event: &ArkNativeEvent) -> Option<KeyPayload> {
     use ohos_arkui_binding::arkui_input_binding::ModifierKey;
-    use ohos_arkui_sys::{
-        ArkUI_KeyCode_ARKUI_KEYCODE_DEL as KEY_BACKSPACE,
-        ArkUI_KeyCode_ARKUI_KEYCODE_DPAD_DOWN as KEY_ARROW_DOWN,
-        ArkUI_KeyCode_ARKUI_KEYCODE_DPAD_LEFT as KEY_ARROW_LEFT,
-        ArkUI_KeyCode_ARKUI_KEYCODE_DPAD_RIGHT as KEY_ARROW_RIGHT,
-        ArkUI_KeyCode_ARKUI_KEYCODE_DPAD_UP as KEY_ARROW_UP,
-        ArkUI_KeyCode_ARKUI_KEYCODE_ENTER as KEY_ENTER,
-        ArkUI_KeyCode_ARKUI_KEYCODE_ESCAPE as KEY_ESCAPE,
-        ArkUI_KeyCode_ARKUI_KEYCODE_F10 as KEY_F10,
-        ArkUI_KeyCode_ARKUI_KEYCODE_FORWARD_DEL as KEY_DELETE,
-        ArkUI_KeyCode_ARKUI_KEYCODE_MENU as KEY_MENU,
-        ArkUI_KeyCode_ARKUI_KEYCODE_MOVE_END as KEY_END,
-        ArkUI_KeyCode_ARKUI_KEYCODE_MOVE_HOME as KEY_HOME,
-        ArkUI_KeyCode_ARKUI_KEYCODE_PAGE_DOWN as KEY_PAGE_DOWN,
-        ArkUI_KeyCode_ARKUI_KEYCODE_PAGE_UP as KEY_PAGE_UP,
-        ArkUI_KeyCode_ARKUI_KEYCODE_SPACE as KEY_SPACE, ArkUI_KeyCode_ARKUI_KEYCODE_TAB as KEY_TAB,
-        ArkUI_KeyEventType_ARKUI_KEY_EVENT_CLICK as KEY_CLICK,
-        ArkUI_KeyEventType_ARKUI_KEY_EVENT_DOWN as KEY_DOWN,
-        ArkUI_KeyEventType_ARKUI_KEY_EVENT_LONG_PRESS as KEY_REPEAT,
-        ArkUI_KeyEventType_ARKUI_KEY_EVENT_UP as KEY_UP, OH_ArkUI_KeyEvent_GetKeyCode,
-        OH_ArkUI_KeyEvent_GetKeyText, OH_ArkUI_KeyEvent_GetType, OH_ArkUI_KeyEvent_GetUnicode,
-    };
+    use ohos_arkui_binding::event::{KeyCode, KeyEventType};
 
     let input = event.input_event()?;
-    let raw = input
-        .raw()
-        .cast::<ohos_arkui_binding::arkui_input_binding::sys::ArkUI_UIInputEvent>();
-    // SAFETY: `raw` is the ArkUI-owned input event for this synchronous native
-    // callback. The key accessors only borrow it for the duration of the call.
-    let action = match unsafe { OH_ArkUI_KeyEvent_GetType(raw) } {
-        KEY_DOWN => KeyAction::Down,
-        KEY_UP => KeyAction::Up,
-        KEY_REPEAT => KeyAction::Repeat,
-        KEY_CLICK => KeyAction::Click,
-        _ => KeyAction::Unknown,
+    let key_event = event.key_event()?;
+    let action = match key_event.event_type() {
+        KeyEventType::Down => KeyAction::Down,
+        KeyEventType::Up => KeyAction::Up,
+        KeyEventType::LongPress => KeyAction::Repeat,
+        KeyEventType::Click => KeyAction::Click,
+        KeyEventType::Unknown | KeyEventType::Other(_) => KeyAction::Unknown,
     };
-    // SAFETY: same callback-scoped native event lifetime as above.
-    let raw_code = unsafe { OH_ArkUI_KeyEvent_GetKeyCode(raw) };
-    // SAFETY: the returned string is owned by ArkUI and remains valid for the
-    // active callback. A null pointer denotes an empty key text.
-    let text = unsafe {
-        let value = OH_ArkUI_KeyEvent_GetKeyText(raw);
-        if value.is_null() {
-            String::new()
-        } else {
-            CStr::from_ptr(value).to_string_lossy().into_owned()
-        }
-    };
-    // SAFETY: same callback-scoped native event lifetime as above.
-    let unicode = unsafe { OH_ArkUI_KeyEvent_GetUnicode(raw) };
-    let key = match raw_code {
-        KEY_ENTER => KeyboardKey::Enter,
-        KEY_SPACE => KeyboardKey::Space,
-        KEY_TAB => KeyboardKey::Tab,
-        KEY_ESCAPE => KeyboardKey::Escape,
-        KEY_ARROW_UP => KeyboardKey::ArrowUp,
-        KEY_ARROW_DOWN => KeyboardKey::ArrowDown,
-        KEY_ARROW_LEFT => KeyboardKey::ArrowLeft,
-        KEY_ARROW_RIGHT => KeyboardKey::ArrowRight,
-        KEY_HOME => KeyboardKey::Home,
-        KEY_END => KeyboardKey::End,
-        KEY_PAGE_UP => KeyboardKey::PageUp,
-        KEY_PAGE_DOWN => KeyboardKey::PageDown,
-        KEY_BACKSPACE => KeyboardKey::Backspace,
-        KEY_DELETE => KeyboardKey::Delete,
-        KEY_MENU => KeyboardKey::Menu,
-        KEY_F10 => KeyboardKey::F10,
-        _ => char::from_u32(unicode)
+    let code = key_event.key_code();
+    let raw_code = code.raw();
+    let text = key_event.key_text();
+    let key = match code {
+        KeyCode::ENTER => KeyboardKey::Enter,
+        KeyCode::SPACE => KeyboardKey::Space,
+        KeyCode::TAB => KeyboardKey::Tab,
+        KeyCode::ESCAPE => KeyboardKey::Escape,
+        KeyCode::DPAD_UP => KeyboardKey::ArrowUp,
+        KeyCode::DPAD_DOWN => KeyboardKey::ArrowDown,
+        KeyCode::DPAD_LEFT => KeyboardKey::ArrowLeft,
+        KeyCode::DPAD_RIGHT => KeyboardKey::ArrowRight,
+        KeyCode::MOVE_HOME => KeyboardKey::Home,
+        KeyCode::MOVE_END => KeyboardKey::End,
+        KeyCode::PAGE_UP => KeyboardKey::PageUp,
+        KeyCode::PAGE_DOWN => KeyboardKey::PageDown,
+        KeyCode::BACKSPACE => KeyboardKey::Backspace,
+        KeyCode::DELETE => KeyboardKey::Delete,
+        KeyCode::MENU => KeyboardKey::Menu,
+        KeyCode::F10 => KeyboardKey::F10,
+        _ => char::from_u32(key_event.unicode())
             .filter(|character| !character.is_control())
             .map(KeyboardKey::Character)
             .unwrap_or(KeyboardKey::Other(raw_code)),
@@ -3247,19 +3186,8 @@ fn extract_key_payload(event: &ArkNativeEvent) -> Option<KeyPayload> {
 }
 
 fn extract_mouse_payload(event: &ArkNativeEvent) -> Option<MousePayload> {
-    use ohos_arkui_sys::{
-        OH_ArkUI_MouseEvent_GetMouseAction, OH_ArkUI_MouseEvent_GetMouseButton,
-        OH_ArkUI_PointerEvent_GetWindowX, OH_ArkUI_PointerEvent_GetWindowY,
-        OH_ArkUI_PointerEvent_GetX, OH_ArkUI_PointerEvent_GetY,
-    };
-
     let input = event.input_event()?;
-    let raw = input
-        .raw()
-        .cast::<ohos_arkui_binding::arkui_input_binding::sys::ArkUI_UIInputEvent>();
-    // SAFETY: ArkUI owns `raw` for the duration of this synchronous callback;
-    // these accessors only read the current mouse event.
-    let button = match unsafe { OH_ArkUI_MouseEvent_GetMouseButton(raw) } {
+    let button = match input.mouse_button_raw() {
         0 => MouseButton::None,
         1 => MouseButton::Primary,
         2 => MouseButton::Secondary,
@@ -3271,29 +3199,19 @@ fn extract_mouse_payload(event: &ArkNativeEvent) -> Option<MousePayload> {
         128 => MouseButton::Task,
         value => MouseButton::Other(value),
     };
-    // SAFETY: same callback-scoped native event lifetime as above.
-    let action = match unsafe { OH_ArkUI_MouseEvent_GetMouseAction(raw) } {
+    let action = match input.mouse_action_raw() {
         1 => PointerAction::Down,
         2 => PointerAction::Up,
         3 => PointerAction::Move,
         _ => PointerAction::Unknown,
     };
-    // SAFETY: same callback-scoped native event lifetime as above.
-    let (x, y, window_x, window_y) = unsafe {
-        (
-            OH_ArkUI_PointerEvent_GetX(raw),
-            OH_ArkUI_PointerEvent_GetY(raw),
-            OH_ArkUI_PointerEvent_GetWindowX(raw),
-            OH_ArkUI_PointerEvent_GetWindowY(raw),
-        )
-    };
     Some(MousePayload {
         button,
         action,
-        x,
-        y,
-        window_x,
-        window_y,
+        x: input.pointer_x(),
+        y: input.pointer_y(),
+        window_x: input.pointer_window_x(),
+        window_y: input.pointer_window_y(),
     })
 }
 

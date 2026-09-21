@@ -22,7 +22,6 @@ arkit_runtime.workspace = true
 ohos-arkui-binding.workspace = true
 ohos-hilog-binding.workspace = true
 ohos-xcomponent-binding.workspace = true
-ohos-xcomponent-sys.workspace = true
 reqwest = { workspace = true, optional = true }
 rustls = { workspace = true, optional = true }
 tokio.workspace = true

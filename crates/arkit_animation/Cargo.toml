@@ -15,7 +15,6 @@ arkit_arkui.workspace = true
 arkit_prelude.workspace = true
 arkit_hooks.workspace = true
 ohos-arkui-binding.workspace = true
-ohos-arkui-sys.workspace = true
 ohos-hilog-binding.workspace = true
 oxc_index.workspace = true
 rustc-hash.workspace = true

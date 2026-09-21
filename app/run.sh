@@ -161,10 +161,10 @@ EOF
   # Native libraries linked against OHOS libc++ cannot resolve the system copy
   # from an application's module namespace. Bundle the SDK's matching shared
   # runtime whenever the example cdylib declares it as a dependency.
-  if [ -n "${OHOS_NDK_HOME:-}" ] && \
-    "$OHOS_NDK_HOME/native/llvm/bin/llvm-readelf" -d "$SO_SRC" | \
+  if [ -x "$ARKIT_NATIVE_ROOT/llvm/bin/llvm-readelf" ] && \
+    "$ARKIT_NATIVE_ROOT/llvm/bin/llvm-readelf" -d "$SO_SRC" | \
       grep -q '\[libc++_shared\.so\]'; then
-    CXX_SHARED="$OHOS_NDK_HOME/native/llvm/lib/aarch64-linux-ohos/libc++_shared.so"
+    CXX_SHARED="$ARKIT_NATIVE_ROOT/llvm/lib/aarch64-linux-ohos/libc++_shared.so"
     [ -f "$CXX_SHARED" ] || { echo "OHOS libc++ runtime not found: $CXX_SHARED"; exit 1; }
     copy_file "$CXX_SHARED" "$APP/entry/libs/arm64-v8a/libc++_shared.so"
   fi
