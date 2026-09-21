@@ -111,12 +111,6 @@ pub fn Select(
 
     rsx! {
         row {
-            accessibility_role: "radio",
-            accessibility_text: option.clone(),
-            accessibility_group: true,
-            accessibility_actions: "click",
-            accessibility_checked: active,
-            accessibility_selected: active,
             native_ref: trigger_ref,
             accessibility_role: "button",
             accessibility_text: accessible_name,
@@ -126,10 +120,8 @@ pub fn Select(
             accessibility_actions: "click",
             accessibility_disabled: disabled,
             enabled: !disabled,
-            width: "100%",
-            focusable: !disabled,
             width: if full { Some("100%") } else { None },
-            focusable: desktop,
+            focusable: !disabled,
             focus_on_touch: false,
             onclick: move |_| { if !disabled { set_open.call(!current_open); } },
             onkey: move |event| {
@@ -332,6 +324,12 @@ fn SelectOptionRow(
 
     rsx! {
         row {
+            accessibility_role: "radio",
+            accessibility_text: option.clone(),
+            accessibility_group: true,
+            accessibility_actions: "click",
+            accessibility_checked: active,
+            accessibility_selected: active,
             width: "100%",
             height: SELECT_OPTION_HEIGHT,
             align_items: "center",

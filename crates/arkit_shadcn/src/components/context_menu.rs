@@ -8,9 +8,7 @@ use crate::components::floating_layer::trigger_frame_for_anchor;
 use crate::components::menu_common::{
     menu_closed_panel_height, menu_overlay_content, MenuEntry, MenuOverlayPlacement, MenuStyle,
 };
-use crate::components::motion::{
-    OverlayPresence, FLOATING_DISTANCE, FLOATING_ENTER_MS, FLOATING_EXIT_MS,
-};
+use crate::components::motion::{OverlayPresence, FLOATING_ENTER_MS, FLOATING_EXIT_MS};
 use crate::theme::*;
 use arkit_prelude::*;
 
@@ -64,7 +62,6 @@ pub fn ContextMenu(
 
     let dismiss = EventHandler::new(move |_: ()| {
         set_open.call(false);
-        cursor_placement.set(None);
     });
 
     let panel_height = menu_closed_panel_height(&items);
@@ -108,6 +105,7 @@ pub fn ContextMenu(
                 if !mouse.secondary_down() {
                     return;
                 }
+                evt.stop_propagation();
                 let pointer = dioxus_elements::event::PointerPayload {
                     action: mouse.action,
                     x: mouse.x,
@@ -151,6 +149,7 @@ pub fn ContextMenu(
                 }
             },
             onlongpress: move |evt: dioxus_core::Event<dioxus_elements::event::ClickData>| {
+                evt.stop_propagation();
                 if current_open {
                     dismiss.call(());
                     return;
@@ -194,10 +193,12 @@ pub fn ContextMenu(
         }
         OverlayPresence {
             open: current_open,
-            preset: Some(arkit_animation::TransitionPreset::SlideUp),
+            // The capture plane must not translate: moving the full-screen
+            // hit layer shifts a cursor-anchored menu and can consume the
+            // release event that completed a long press.
+            preset: Some(arkit_animation::TransitionPreset::Fade),
             duration_ms: Some(FLOATING_ENTER_MS),
             exit_duration_ms: Some(FLOATING_EXIT_MS),
-            distance: Some(FLOATING_DISTANCE),
             fill: Some(true),
             layer: Some(arkit_hooks::OverlayLayer::Floating),
             {menu_overlay_content(style, theme, dismiss, items, placement, None)}

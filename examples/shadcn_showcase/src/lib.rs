@@ -1562,34 +1562,31 @@ fn ComponentDemo(slug: &'static str) -> Element {
             }
         },
         "alert" => rsx! {
-            fixed_width {
-                width: 576.0,
-                column {
-                    width: "100%",
-                    Alert {
-                        icon: "circle-check".to_string(),
-                        AlertTitle { content: "Success! Your changes have been saved".to_string() }
-                        AlertDescription { content: "This is an alert with icon, title and description.".to_string() }
-                    }
-                    v_gap { height: spacing::LG }
-                    Alert {
-                        icon: "terminal".to_string(),
-                        AlertTitle { content: "This Alert has no description.".to_string() }
-                    }
-                    v_gap { height: spacing::LG }
-                    Alert {
-                        icon: "circle-alert".to_string(),
+            column {
+                width: "100%",
+                Alert {
+                    icon: "circle-check".to_string(),
+                    AlertTitle { content: "Success! Your changes have been saved".to_string() }
+                    AlertDescription { content: "This is an alert with icon, title and description.".to_string() }
+                }
+                v_gap { height: spacing::LG }
+                Alert {
+                    icon: "terminal".to_string(),
+                    AlertTitle { content: "This Alert has no description.".to_string() }
+                }
+                v_gap { height: spacing::LG }
+                Alert {
+                    icon: "circle-alert".to_string(),
+                    variant: AlertVariant::Destructive,
+                    AlertTitle { content: "Unable to process your payment.".to_string(), variant: AlertVariant::Destructive }
+                    AlertDescription { content: "Please verify your billing information and try again.".to_string(), variant: AlertVariant::Destructive }
+                    AlertList {
+                        items: vec![
+                            "Check your card details".to_string(),
+                            "Ensure sufficient funds".to_string(),
+                            "Verify billing address".to_string(),
+                        ],
                         variant: AlertVariant::Destructive,
-                        AlertTitle { content: "Unable to process your payment.".to_string(), variant: AlertVariant::Destructive }
-                        AlertDescription { content: "Please verify your billing information and try again.".to_string(), variant: AlertVariant::Destructive }
-                        AlertList {
-                            items: vec![
-                                "Check your card details".to_string(),
-                                "Ensure sufficient funds".to_string(),
-                                "Verify billing address".to_string(),
-                            ],
-                            variant: AlertVariant::Destructive,
-                        }
                     }
                 }
             }

@@ -25,7 +25,7 @@ use arkit_prelude::*;
 const BOTTOM_SHEET_HEADER_HEIGHT: f32 = 48.0;
 const BOTTOM_SHEET_HANDLE_HEIGHT: f32 = 24.0;
 const BOTTOM_SHEET_MIN_HEIGHT: f32 = 240.0;
-const BOTTOM_SHEET_PC_DEFAULT_WIDTH: f32 = 420.0;
+const BOTTOM_SHEET_DEFAULT_WIDTH: f32 = 420.0;
 const BOTTOM_SHEET_PC_ESTIMATED_HEIGHT: f32 = 360.0;
 const BOTTOM_SHEET_DRAG_DISMISS_THRESHOLD: f32 = 72.0;
 
@@ -61,6 +61,10 @@ fn sheet_presentation(
     } else {
         responsive_sheet_presentation(desktop, anchored, fixed_bottom_on_pc)
     }
+}
+
+fn sheet_fills_width(full: bool, always_bottom: bool, desktop: bool) -> bool {
+    full || (!always_bottom && !desktop)
 }
 
 fn bottom_sheet_backdrop(theme: Theme) -> u32 {
@@ -190,7 +194,12 @@ pub fn BottomSheet(
     show_header: Option<bool>,
     show_backdrop: Option<bool>,
     show_handle: Option<bool>,
-    pc_width: Option<f32>,
+    /// Fill the viewport width. Bottom sheets are full-width by default on
+    /// every form factor; set this to `false` to opt into `width`.
+    #[props(default = true)]
+    full: bool,
+    /// Panel width used when `full` is `false`. Defaults to 420vp.
+    width: Option<f32>,
     on_close: Option<EventHandler<()>>,
     children: Element,
 ) -> Element {
@@ -202,7 +211,8 @@ pub fn BottomSheet(
             show_header,
             show_backdrop,
             show_handle,
-            pc_width,
+            full,
+            width,
             fixed_bottom_on_pc: true,
             always_bottom: true,
             on_close,
@@ -223,7 +233,7 @@ pub(crate) fn AdaptivePickerSheet(
     show_backdrop: Option<bool>,
     show_handle: Option<bool>,
     anchor: Option<arkit_arkui::NativeElementRef>,
-    pc_width: Option<f32>,
+    width: Option<f32>,
     fixed_bottom_on_pc: Option<bool>,
     on_close: Option<EventHandler<()>>,
     children: Element,
@@ -237,7 +247,8 @@ pub(crate) fn AdaptivePickerSheet(
             show_backdrop,
             show_handle,
             anchor,
-            pc_width,
+            full: false,
+            width,
             fixed_bottom_on_pc: fixed_bottom_on_pc.unwrap_or(false),
             always_bottom: false,
             on_close,
@@ -255,7 +266,8 @@ fn SheetSurface(
     show_backdrop: Option<bool>,
     show_handle: Option<bool>,
     anchor: Option<arkit_arkui::NativeElementRef>,
-    pc_width: Option<f32>,
+    full: bool,
+    width: Option<f32>,
     fixed_bottom_on_pc: bool,
     always_bottom: bool,
     on_close: Option<EventHandler<()>>,
@@ -286,9 +298,13 @@ fn SheetSurface(
     let controlled = open.is_some();
     let desktop = adaptive.is_pc();
     let presentation = sheet_presentation(always_bottom, desktop, anchored, fixed_bottom_on_pc);
-    let panel_width = pc_width
+    let panel_width = width
         .filter(|width| width.is_finite() && *width > 0.0)
-        .unwrap_or(BOTTOM_SHEET_PC_DEFAULT_WIDTH);
+        .unwrap_or(BOTTOM_SHEET_DEFAULT_WIDTH);
+    // Picker sheets stay full-width on touch layouts even though their PC
+    // popover requests a finite width. Public BottomSheet follows `full`
+    // exactly on every form factor.
+    let panel_full = sheet_fills_width(full, always_bottom, desktop);
 
     let close = EventHandler::new(move |_: ()| {
         if !controlled {
@@ -307,7 +323,8 @@ fn SheetSurface(
             show_handle: show_handle.unwrap_or(true),
             desktop,
             bottom_attached: presentation == ResponsiveSheetPresentation::BottomDrawer,
-            pc_width: panel_width,
+            full: panel_full,
+            width: panel_width,
             native_ref: Some(panel_ref),
             on_close: close,
             {children}
@@ -356,7 +373,8 @@ struct BottomSheetPanelProps {
     show_handle: bool,
     desktop: bool,
     bottom_attached: bool,
-    pc_width: f32,
+    full: bool,
+    width: f32,
     native_ref: Option<arkit_arkui::NativeElementRef>,
     on_close: EventHandler<()>,
     children: Element,
@@ -376,6 +394,7 @@ fn BottomSheetPanel(props: BottomSheetPanelProps) -> Element {
     let mut drag_offset = use_signal(|| 0.0_f32);
     let on_close = props.on_close;
     let desktop = props.desktop;
+    let fills_width = props.full;
     let radius = if !props.bottom_attached {
         format!("{0},{0},{0},{0}", theme.radii.lg)
     } else {
@@ -426,8 +445,8 @@ fn BottomSheetPanel(props: BottomSheetPanelProps) -> Element {
                     on_close.call(());
                 }
             },
-            width: if desktop { format!("{}", props.pc_width) } else { "100%".to_string() },
-            max_width: if desktop { props.pc_width },
+            width: if fills_width { "100%".to_string() } else { format!("{}", props.width) },
+            max_width: if !fills_width { props.width },
             align_self: if desktop { "center" },
             constraint_size: format!(
                 "0,100000,{},100000",
@@ -601,7 +620,24 @@ pub fn BottomSheetTextInput(
 
 #[cfg(test)]
 mod tests {
-    use super::{responsive_sheet_presentation, sheet_presentation, ResponsiveSheetPresentation};
+    use super::{
+        responsive_sheet_presentation, sheet_fills_width, sheet_presentation,
+        ResponsiveSheetPresentation,
+    };
+
+    #[test]
+    fn public_bottom_sheet_is_full_width_by_default() {
+        assert!(sheet_fills_width(true, true, false));
+        assert!(sheet_fills_width(true, true, true));
+        assert!(!sheet_fills_width(false, true, false));
+        assert!(!sheet_fills_width(false, true, true));
+    }
+
+    #[test]
+    fn adaptive_picker_is_full_on_touch_and_finite_on_pc() {
+        assert!(sheet_fills_width(false, false, false));
+        assert!(!sheet_fills_width(false, false, true));
+    }
 
     #[test]
     fn public_bottom_sheet_stays_bottom_attached_on_every_device() {

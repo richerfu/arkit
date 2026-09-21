@@ -248,7 +248,7 @@ pub fn SecureKeyboardSheet(props: SecureKeyboardSheetProps) -> Element {
             show_backdrop: Some(false),
             show_handle: Some(false),
             anchor: props.anchor,
-            pc_width: 520.0,
+            width: 520.0,
             fixed_bottom_on_pc: props.fixed_bottom_on_pc,
             on_close: move |_| set_open.call(false),
             column {

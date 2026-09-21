@@ -9,6 +9,9 @@ use crate::theme::*;
 use arkit_prelude::*;
 
 const BAR_HEIGHT: f32 = 64.0;
+const DESKTOP_BAR_HEIGHT: f32 = 56.0;
+const DESKTOP_ITEM_HEIGHT: f32 = 40.0;
+const DESKTOP_CONTENT_MAX_WIDTH: f32 = 640.0;
 const ICON_SIZE: f32 = 22.0;
 const ICON_LABEL_GAP: f32 = 3.0;
 const TRANSPARENT: u32 = 0x00000000;
@@ -84,7 +87,7 @@ pub fn BottomNavigation(props: BottomNavigationProps) -> Element {
                     accessibility_actions: "click",
                     accessibility_selected: active,
                     layout_weight: 1.0,
-                    height: "100%",
+                    height: if desktop { format!("{DESKTOP_ITEM_HEIGHT}") } else { "100%".to_string() },
                     align_items: "center",
                     justify_content: "center",
                     padding_left: if desktop { spacing::SM } else { 0.0 },
@@ -144,15 +147,24 @@ pub fn BottomNavigation(props: BottomNavigationProps) -> Element {
             width: "100%",
             accessibility_role: "tablist",
             accessibility_group: false,
-            height: if desktop { control::HEIGHT } else { BAR_HEIGHT },
+            height: if desktop { DESKTOP_BAR_HEIGHT } else { BAR_HEIGHT },
             align_items: "center",
-            justify_content: "start",
-            padding: if desktop { spacing::XXS } else { 0.0 },
-            border_radius: if desktop { theme.radii.lg } else { 0.0 },
+            justify_content: "center",
             background_color: theme.colors.background,
-            border_width: if desktop { "1" } else { "1,0,0,0" },
+            border_width: "1,0,0,0",
             border_color: theme.colors.border,
-            {destinations.into_iter()}
+            row {
+                width: "100%",
+                height: "100%",
+                max_width_constraint: if desktop { DESKTOP_CONTENT_MAX_WIDTH },
+                align_items: "center",
+                justify_content: "start",
+                padding_top: if desktop { spacing::SM } else { 0.0 },
+                padding_right: if desktop { spacing::SM } else { 0.0 },
+                padding_bottom: if desktop { spacing::SM } else { 0.0 },
+                padding_left: if desktop { spacing::SM } else { 0.0 },
+                {destinations.into_iter()}
+            }
         }
     }
 }

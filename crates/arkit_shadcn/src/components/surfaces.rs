@@ -105,6 +105,16 @@ enum HorizontalPosition {
     Right,
 }
 
+impl HorizontalPosition {
+    const fn justify_content(self) -> &'static str {
+        match self {
+            Self::Left => "start",
+            Self::Center => "center",
+            Self::Right => "end",
+        }
+    }
+}
+
 /// Direction used by a Sonner notification for vertical swipe dismissal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ToastSwipeDirection {
@@ -982,10 +992,8 @@ fn SonnerLayer(
             row {
                 width: "100%",
                 align_items: if is_top { "start" } else { "end" },
+                justify_content: horizontal.justify_content(),
                 hit_test_behavior: "none",
-                if horizontal != HorizontalPosition::Left {
-                    row { layout_weight: 1.0, hit_test_behavior: "none" }
-                }
                 if has_notifications {
                     stack {
                         width: notification_width,
@@ -1036,9 +1044,6 @@ fn SonnerLayer(
                             }
                         }
                     }
-                }
-                if horizontal != HorizontalPosition::Right {
-                    row { layout_weight: 1.0, hit_test_behavior: "none" }
                 }
             }
             if !is_top {
@@ -1453,10 +1458,8 @@ fn render_minimal_row(
         row {
             width: "100%",
             align_items: "center",
+            justify_content: horizontal.justify_content(),
             hit_test_behavior: "none",
-            if horizontal != HorizontalPosition::Left {
-                row { layout_weight: 1.0, hit_test_behavior: "none" }
-            }
             column {
                 align_items: "center",
                 hit_test_behavior: "none",
@@ -1490,9 +1493,6 @@ fn render_minimal_row(
                         }
                     }
                 }
-            }
-            if horizontal != HorizontalPosition::Right {
-                row { layout_weight: 1.0, hit_test_behavior: "none" }
             }
         }
     }
@@ -1860,6 +1860,13 @@ mod tests {
         assert_eq!(style.gap, 8.0);
         assert_eq!(style.stack_offset, DEFAULT_STACK_OFFSET);
         assert_eq!(style.stack_offset, 14.0);
+    }
+
+    #[test]
+    fn sonner_horizontal_alignment_uses_native_justification() {
+        assert_eq!(HorizontalPosition::Left.justify_content(), "start");
+        assert_eq!(HorizontalPosition::Center.justify_content(), "center");
+        assert_eq!(HorizontalPosition::Right.justify_content(), "end");
     }
 
     #[test]

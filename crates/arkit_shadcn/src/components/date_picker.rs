@@ -152,7 +152,7 @@ pub fn DatePicker(props: DatePickerProps) -> Element {
             default_open: Some(false),
             show_header: Some(false),
             anchor: trigger_ref,
-            pc_width: 384.0,
+            width: 384.0,
             on_close: move |_| set_open.call(false),
             column {
                 width: "100%",

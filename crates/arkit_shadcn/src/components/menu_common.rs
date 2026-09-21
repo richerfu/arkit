@@ -159,25 +159,35 @@ impl MenuOverlayPlacement {
         viewport: arkit_hooks::OverlayViewport,
         panel_width: f32,
         panel_height: f32,
-        side_offset: f32,
+        _side_offset: f32,
     ) -> Option<Self> {
         if !pointer.has_window_position() {
             return None;
         }
         let scale = super::floating_layer::viewport_scale(viewport);
-        let cursor = arkit_arkui::LayoutFramePx {
-            x: pointer.window_x,
-            y: pointer.window_y,
-            width: scale,
-            height: scale,
-        };
-        Some(Self::from_trigger(
-            cursor,
-            viewport,
+        let metrics = super::floating_layer::overlay_metrics_vp(
+            viewport.frame,
+            scale,
             panel_width,
             panel_height,
-            side_offset,
-        ))
+        );
+        let cursor = super::floating_layer::overlay_local_vp(
+            arkit_arkui::WindowPxPoint::new(pointer.window_x, pointer.window_y),
+            metrics.origin,
+            scale,
+        );
+        let edge = MENU_VIEWPORT_PADDING;
+        let min_x = viewport.safe_area.left.max(0.0) + edge;
+        let min_y = viewport.safe_area.top.max(0.0) + edge;
+        let max_x = (metrics.size.width - viewport.safe_area.right.max(0.0) - panel_width - edge)
+            .max(min_x);
+        let max_y =
+            (metrics.size.height - viewport.safe_area.bottom.max(0.0) - panel_height - edge)
+                .max(min_y);
+        Some(Self {
+            x: cursor.x.clamp(min_x, max_x),
+            y: cursor.y.clamp(min_y, max_y),
+        })
     }
 
     pub(crate) fn fallback(viewport: arkit_hooks::OverlayViewport) -> Self {
@@ -1258,6 +1268,6 @@ mod tests {
             MenuOverlayPlacement::from_cursor(pointer, pc_viewport(), 100.0, 80.0, 4.0).unwrap();
 
         assert!((placement.x - 100.0).abs() < 0.01);
-        assert!((placement.y - 105.0).abs() < 0.01);
+        assert!((placement.y - 100.0).abs() < 0.01);
     }
 }

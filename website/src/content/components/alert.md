@@ -34,4 +34,4 @@ Alert {
 
 Variant 只有 Default 与 Destructive。子 primitive 不会自动继承 root variant，组合时传入相同 variant，保证标题和说明色一致。
 
-Alert 是页内内容，不自动关闭。短时后台结果使用 Sonner。
+Alert 默认横向占满父容器，是页内内容，不自动关闭。短时后台结果使用 Sonner。
