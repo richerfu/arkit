@@ -291,6 +291,7 @@ pub struct IndexProps {
 #[component]
 pub fn Index(props: IndexProps) -> Element {
     let theme = use_theme();
+    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
     let runtime = arkit_runtime::use_runtime_handle();
     let items = props.items;
     let group_keys = item_group_keys(&items);
@@ -415,7 +416,14 @@ pub fn Index(props: IndexProps) -> Element {
                         focusable: true,
                         focus_on_touch: true,
                         background_color: row_bg,
+                        focusable: desktop,
+                        focus_on_touch: false,
                         onclick: move |_| on_select.call(item_index),
+                        onkey: move |event| {
+                            if event.data().activates() {
+                                on_select.call(item_index);
+                            }
+                        },
                         {inner}
                     }
                 }

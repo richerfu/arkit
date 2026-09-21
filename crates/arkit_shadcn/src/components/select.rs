@@ -37,6 +37,7 @@ pub fn Select(
     on_select: Option<EventHandler<String>>,
 ) -> Element {
     let theme = use_theme();
+    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
     let i18n = use_component_i18n();
     let viewport = arkit_hooks::use_overlay_viewport();
     let trigger_ref = arkit_hooks::use_native_element_ref();
@@ -84,16 +85,10 @@ pub fn Select(
     } else {
         colors.muted_foreground
     };
+    let accessible_name = accessibility_label.or_else(|| label.clone()).unwrap_or_else(|| i18n.select_label());
+    let accessible_value = trigger_label.clone();
     let count = options.len();
     let has_panel_label = label.as_deref() != Some("");
-    let accessible_name = accessibility_label
-        .or_else(|| label.clone())
-        .unwrap_or_else(|| i18n.select_label());
-    let accessible_value = if has_value {
-        current_selected.clone()
-    } else {
-        trigger_label.clone()
-    };
 
     let frame = if current_open {
         trigger_frame_for_anchor(&trigger_ref, *trigger_frame.read())
@@ -115,6 +110,12 @@ pub fn Select(
 
     rsx! {
         row {
+            accessibility_role: "radio",
+            accessibility_text: option.clone(),
+            accessibility_group: true,
+            accessibility_actions: "click",
+            accessibility_checked: active,
+            accessibility_selected: active,
             native_ref: trigger_ref,
             accessibility_role: "button",
             accessibility_text: accessible_name,
@@ -123,11 +124,18 @@ pub fn Select(
             accessibility_group: true,
             accessibility_actions: "click",
             accessibility_disabled: disabled,
-            focusable: !disabled,
             enabled: !disabled,
             width: "100%",
-            onclick: move |_| {
-                if !disabled {
+            focusable: !disabled,
+            focus_on_touch: false,
+            onclick: move |_| { if !disabled { set_open.call(!current_open); } },
+            onkey: move |event| {
+                if disabled { return; }
+                if event.data().is_down()
+                    && event.data().key == dioxus_elements::event::KeyboardKey::Escape
+                {
+                    set_open.call(false);
+                } else if event.data().activates() {
                     set_open.call(!current_open);
                 }
             },
@@ -225,11 +233,17 @@ fn select_overlay_content(content: SelectOverlayContent) -> Element {
             hit_test_behavior: "default",
             onclick: move |_| on_dismiss.call(()),
             column {
-                accessibility_role: "list",
                 position: format!("{left},{top}"),
                 width: panel_width,
                 align_items: "start",
                 onclick: move |evt| evt.stop_propagation(),
+                onkey: move |event| {
+                    if event.data().is_down()
+                        && event.data().key == dioxus_elements::event::KeyboardKey::Escape
+                    {
+                        on_dismiss.call(());
+                    }
+                },
                 background_color: colors.popover,
                 border_radius: theme.radii.md,
                 border_width: 1.0,
@@ -264,7 +278,13 @@ fn select_overlay_content(content: SelectOverlayContent) -> Element {
                         column {
                             width: "100%",
                             for option in options.iter() {
-                                {select_option_row(option, selected.as_str(), &theme, set_selected, on_dismiss)}
+                                SelectOptionRow {
+                                    option: option.clone(),
+                                    selected: selected.clone(),
+                                    theme,
+                                    set_selected,
+                                    on_dismiss,
+                                }
                             }
                         }
                     }
@@ -272,7 +292,13 @@ fn select_overlay_content(content: SelectOverlayContent) -> Element {
                     column {
                         width: "100%",
                         for option in options.iter() {
-                            {select_option_row(option, selected.as_str(), &theme, set_selected, on_dismiss)}
+                            SelectOptionRow {
+                                option: option.clone(),
+                                selected: selected.clone(),
+                                theme,
+                                set_selected,
+                                on_dismiss,
+                            }
                         }
                     }
                 }
@@ -281,16 +307,20 @@ fn select_overlay_content(content: SelectOverlayContent) -> Element {
     }
 }
 
-fn select_option_row(
-    option: &str,
-    selected: &str,
-    theme: &Theme,
+#[component]
+fn SelectOptionRow(
+    option: String,
+    selected: String,
+    theme: Theme,
     set_selected: EventHandler<String>,
     on_dismiss: EventHandler<()>,
 ) -> Element {
+    let mut hovering = use_signal(|| false);
+    let mut focused = use_signal(|| false);
     let colors = &theme.colors;
     let active = selected == option;
-    let opt = option.to_owned();
+    let click_opt = option.clone();
+    let key_opt = option.clone();
     let fg = if active {
         colors.accent_foreground
     } else {
@@ -299,13 +329,6 @@ fn select_option_row(
 
     rsx! {
         row {
-            accessibility_role: "radio",
-            accessibility_text: option.to_owned(),
-            accessibility_group: true,
-            accessibility_actions: "click",
-            accessibility_checked: active,
-            accessibility_selected: active,
-            focusable: true,
             width: "100%",
             height: SELECT_OPTION_HEIGHT,
             align_items: "center",
@@ -315,11 +338,22 @@ fn select_option_row(
             padding_bottom: 6.0,
             padding_left: spacing::SM,
             border_radius: theme.radii.sm,
-            background_color: if active { colors.accent } else { 0x00000000 },
+            background_color: if active || hovering() || focused() { colors.accent } else { 0x00000000 },
+            focusable: true,
+            focus_on_touch: false,
             onclick: move |_: dioxus_core::Event<_>| {
-                set_selected.call(opt.clone());
+                set_selected.call(click_opt.clone());
                 on_dismiss.call(());
             },
+            onkey: move |event| {
+                if event.data().activates() {
+                    set_selected.call(key_opt.clone());
+                    on_dismiss.call(());
+                }
+            },
+            onhover: move |event| hovering.set(event.data().is_hovering),
+            onfocus: move |_| focused.set(true),
+            onblur: move |_| focused.set(false),
             row {
                 layout_weight: 1.0,
                 clip: true,
@@ -330,7 +364,7 @@ fn select_option_row(
                     line_height: 20.0,
                     max_lines: SELECT_TEXT_MAX_LINES,
                     text_overflow: SELECT_TEXT_OVERFLOW_ELLIPSIS,
-                    {option.to_owned()}
+                    {option}
                 }
             }
             if active {

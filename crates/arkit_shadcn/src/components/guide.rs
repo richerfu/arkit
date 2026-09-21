@@ -557,6 +557,15 @@ fn guide_overlay_content(
             height: "100%",
             alignment: "top-start",
             hit_test_behavior: HIT_TEST_NONE,
+            focusable: true,
+            focus_on_touch: false,
+            onkey: move |event| {
+                if event.data().is_down()
+                    && event.data().key == dioxus_elements::event::KeyboardKey::Escape
+                {
+                    on_action.call(GuideAction::Skip);
+                }
+            },
 
             {guide_mask_rect(0.0, 0.0, geometry.viewport_width, spotlight.y, backdrop)}
             {guide_mask_rect(

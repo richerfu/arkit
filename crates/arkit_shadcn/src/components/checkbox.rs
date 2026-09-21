@@ -33,6 +33,9 @@ pub struct CheckboxProps {
 #[component]
 pub fn Checkbox(props: CheckboxProps) -> Element {
     let theme = use_theme();
+    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
+    let mut hovering = use_signal(|| false);
+    let mut focused = use_signal(|| false);
     let mut internal = use_signal(|| props.default_checked.unwrap_or(false));
     let controlled = props.checked.is_some();
     let current = props.checked.unwrap_or_else(|| *internal.read());
@@ -71,11 +74,28 @@ pub fn Checkbox(props: CheckboxProps) -> Element {
             enabled: !disabled,
             align_items: "center",
             justify_content: "start",
+            padding: spacing::XXS,
+            border_radius: theme.radii.md,
+            background_color: if desktop && (hovering() || focused()) {
+                theme.colors.accent
+            } else {
+                0x00000000
+            },
+            focusable: desktop && !disabled,
+            focus_on_touch: false,
             opacity: if disabled { 0.5 } else { 1.0 },
             onclick: move |event| {
                 event.stop_propagation();
                 toggle.call(());
             },
+            onkey: move |event| {
+                if event.data().activates() {
+                    toggle.call(());
+                }
+            },
+            onhover: move |event| hovering.set(event.data().is_hovering),
+            onfocus: move |_| focused.set(true),
+            onblur: move |_| focused.set(false),
             stack {
                 width: CHECKBOX_SIZE,
                 height: CHECKBOX_SIZE,

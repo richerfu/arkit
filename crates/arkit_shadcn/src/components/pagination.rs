@@ -28,6 +28,7 @@ pub struct PaginationProps {
 #[component]
 pub fn Pagination(props: PaginationProps) -> Element {
     let theme = use_theme();
+    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
     let i18n = use_component_i18n();
     let total_pages = props.total_pages.max(1);
     let current = props.page.clamp(1, total_pages);
@@ -68,7 +69,16 @@ pub fn Pagination(props: PaginationProps) -> Element {
             padding_bottom: 0.0,
             padding_left: 0.0,
             alignment: "center",
-            onclick: move |_| on_prev.call(prev_target),
+            onclick: move |_| {
+                if current > 1 {
+                    on_prev.call(prev_target);
+                }
+            },
+            onkey: move |event| {
+                if current > 1 && event.data().activates() {
+                    on_prev.call(prev_target);
+                }
+            },
             text {
                 content: previous_label,
                 font_size: typography::SM,
@@ -134,6 +144,11 @@ pub fn Pagination(props: PaginationProps) -> Element {
                 alignment: "center",
                 shadow: if is_active { "sm" },
                 onclick: move |_| on_page.call(number),
+                onkey: move |event| {
+                    if event.data().activates() {
+                        on_page.call(number);
+                    }
+                },
                 text {
                     content: number.to_string(),
                     font_size: typography::SM,
@@ -168,7 +183,16 @@ pub fn Pagination(props: PaginationProps) -> Element {
             padding_bottom: 0.0,
             padding_left: 0.0,
             alignment: "center",
-            onclick: move |_| on_next.call(next_target),
+            onclick: move |_| {
+                if current < total_pages {
+                    on_next.call(next_target);
+                }
+            },
+            onkey: move |event| {
+                if current < total_pages && event.data().activates() {
+                    on_next.call(next_target);
+                }
+            },
             text {
                 content: next_label,
                 font_size: typography::SM,

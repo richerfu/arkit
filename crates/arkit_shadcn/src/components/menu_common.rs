@@ -536,6 +536,13 @@ fn MenuContentPanel(
             width: style.width,
             align_self: "start",
             align_items: "start",
+            onkey: move |event| {
+                if event.data().is_down()
+                    && event.data().key == dioxus_elements::event::KeyboardKey::Escape
+                {
+                    on_dismiss.call(());
+                }
+            },
             padding_top: spacing::XXS,
             padding_right: spacing::XXS,
             padding_bottom: spacing::XXS,
@@ -655,6 +662,75 @@ struct MenuRenderContext<'a> {
     reserve_leading_slot: bool,
 }
 
+/// Shared desktop interaction shell for actionable menu rows. Keeping hover,
+/// focus, click, and keyboard activation here prevents the four entry variants
+/// from drifting apart visually or behaviorally.
+#[component]
+fn MenuItemSurface(
+    accessibility_label: String,
+    #[props(default = "menuitem".to_string())] accessibility_role: String,
+    #[props(default)] accessibility_checked: Option<bool>,
+    #[props(default)] accessibility_selected: bool,
+    width: f32,
+    height: f32,
+    radius: f32,
+    background: u32,
+    interactive_background: u32,
+    opacity: f32,
+    disabled: bool,
+    on_activate: EventHandler<()>,
+    children: Element,
+) -> Element {
+    let mut hovering = use_signal(|| false);
+    let mut focused = use_signal(|| false);
+    rsx! {
+        row {
+            accessibility_role,
+            accessibility_text: accessibility_label,
+            accessibility_group: true,
+            accessibility_actions: "click",
+            accessibility_disabled: disabled,
+            accessibility_checked: if let Some(checked) = accessibility_checked { checked },
+            accessibility_selected,
+            enabled: !disabled,
+            width,
+            height,
+            align_self: "start",
+            align_items: "center",
+            justify_content: "start",
+            padding_top: 8.0,
+            padding_right: 8.0,
+            padding_bottom: 8.0,
+            padding_left: 8.0,
+            border_radius: radius,
+            clip: true,
+            background_color: if !disabled && (hovering() || focused()) {
+                interactive_background
+            } else {
+                background
+            },
+            opacity,
+            focusable: !disabled,
+            focus_on_touch: false,
+            onclick: move |event| {
+                event.stop_propagation();
+                if !disabled {
+                    on_activate.call(());
+                }
+            },
+            onkey: move |event| {
+                if !disabled && event.data().activates() {
+                    on_activate.call(());
+                }
+            },
+            onhover: move |event| hovering.set(event.data().is_hovering),
+            onfocus: move |_| focused.set(true),
+            onblur: move |_| focused.set(false),
+            {children}
+        }
+    }
+}
+
 fn render_menu_entry(
     entry: &MenuEntry,
     index: usize,
@@ -709,31 +785,16 @@ fn render_action_entry(
     let sm = theme.radii.sm;
 
     rsx! {
-        row {
-            accessibility_role: "menuitem",
-            accessibility_text: title.clone(),
-            accessibility_group: true,
-            accessibility_actions: "click",
-            accessibility_disabled: disabled,
-            focusable: !disabled,
-            enabled: !disabled,
+        MenuItemSurface {
+            accessibility_label: title.clone(),
             width: min_width,
             height: MENU_ROW_HEIGHT,
-            align_self: "start",
-            align_items: "center",
-            justify_content: "start",
-            padding_top: 8.0,
-            padding_right: 8.0,
-            padding_bottom: 8.0,
-            padding_left: 8.0,
-            border_radius: sm,
-            clip: true,
-            background_color: TRANSPARENT,
+            radius: sm,
+            background: TRANSPARENT,
+            interactive_background: colors.accent,
             opacity: if disabled { 0.5f32 } else { 1.0f32 },
-            onclick: move |_: dioxus_core::Event<_>| {
-                if disabled {
-                    return;
-                }
+            disabled,
+            on_activate: move |_| {
                 if let Some(on_select) = on_select {
                     on_select.call(());
                 }
@@ -798,28 +859,17 @@ fn render_submenu_entry(
             width: menu_subtree_min_width(&style),
             align_self: "start",
             align_items: "start",
-            row {
-                accessibility_role: "menuitem",
-                accessibility_text: title.clone(),
-                accessibility_description: if submenu_open { "Expanded submenu" } else { "Collapsed submenu" },
-                accessibility_group: true,
-                accessibility_actions: "click",
+            MenuItemSurface {
+            accessibility_label: title.clone(),
                 accessibility_selected: submenu_open,
-                focusable: true,
                 width: min_width,
                 height: MENU_ROW_HEIGHT,
-                align_self: "start",
-                align_items: "center",
-                justify_content: "start",
-                padding_top: 8.0,
-                padding_right: 8.0,
-                padding_bottom: 8.0,
-                padding_left: 8.0,
-                border_radius: sm,
-                clip: true,
-                background_color: if submenu_open { colors.accent } else { TRANSPARENT },
-                onclick: move |evt: dioxus_core::Event<_>| {
-                    evt.stop_propagation();
+                radius: sm,
+                background: if submenu_open { colors.accent } else { TRANSPARENT },
+                interactive_background: colors.accent,
+                opacity: 1.0,
+                disabled: false,
+                on_activate: move |_| {
                     set_open_path.call(next_open_path.clone());
                 },
                 row {
@@ -896,26 +946,18 @@ fn render_checkbox_entry(
     let sm = theme.radii.sm;
 
     rsx! {
-        row {
+        MenuItemSurface {
+            accessibility_label: title.clone(),
             accessibility_role: "checkbox",
-            accessibility_text: title.clone(),
-            accessibility_group: true,
-            accessibility_actions: "click",
-            accessibility_checked: checked,
-            focusable: true,
+            accessibility_checked: Some(checked),
             width: min_width,
             height: MENU_ROW_HEIGHT,
-            align_self: "start",
-            align_items: "center",
-            justify_content: "start",
-            padding_top: 8.0,
-            padding_right: 8.0,
-            padding_bottom: 8.0,
-            padding_left: 8.0,
-            border_radius: sm,
-            clip: true,
-            background_color: TRANSPARENT,
-            onclick: move |_: dioxus_core::Event<_>| {
+            radius: sm,
+            background: TRANSPARENT,
+            interactive_background: colors.accent,
+            opacity: 1.0,
+            disabled: false,
+            on_activate: move |_| {
                 on_toggle.call(!checked);
                 if close_on_select {
                     on_dismiss.call(());
@@ -957,27 +999,19 @@ fn render_radio_entry(
     let full_radius = theme.radii.full;
 
     rsx! {
-        row {
+        MenuItemSurface {
+            accessibility_label: title.clone(),
             accessibility_role: "radio",
-            accessibility_text: title.clone(),
-            accessibility_group: true,
-            accessibility_actions: "click",
-            accessibility_checked: selected,
+            accessibility_checked: Some(selected),
             accessibility_selected: selected,
-            focusable: true,
             width: min_width,
             height: MENU_ROW_HEIGHT,
-            align_self: "start",
-            align_items: "center",
-            justify_content: "start",
-            padding_top: 8.0,
-            padding_right: 8.0,
-            padding_bottom: 8.0,
-            padding_left: 8.0,
-            border_radius: sm,
-            clip: true,
-            background_color: TRANSPARENT,
-            onclick: move |_: dioxus_core::Event<_>| {
+            radius: sm,
+            background: TRANSPARENT,
+            interactive_background: colors.accent,
+            opacity: 1.0,
+            disabled: false,
+            on_activate: move |_| {
                 on_select.call(value.clone());
                 if close_on_select {
                     on_dismiss.call(());

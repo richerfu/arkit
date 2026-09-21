@@ -96,6 +96,7 @@ pub fn Menubar(
     let foreground = theme.colors.foreground;
     let border = theme.colors.border;
     let background = theme.colors.background;
+    let menu_count = menus.len();
     let overlay_open = current_active.is_some();
     let overlay_payload = current_active.and_then(|index| {
         let items = menus.get(index)?.items.clone();
@@ -127,6 +128,22 @@ pub fn Menubar(
         row {
             native_ref: menubar_ref,
             accessibility_role: "menu",
+            onkey: move |event| {
+                if !event.data().is_down() {
+                    return;
+                }
+                match event.data().key {
+                    dioxus_elements::event::KeyboardKey::Escape => set_active.call(None),
+                    dioxus_elements::event::KeyboardKey::ArrowLeft if menu_count > 0 => {
+                        let current = current_active.unwrap_or(0);
+                        set_active.call(Some(if current == 0 { menu_count - 1 } else { current - 1 }));
+                    }
+                    dioxus_elements::event::KeyboardKey::ArrowRight if menu_count > 0 => {
+                        set_active.call(Some((current_active.unwrap_or(0) + 1) % menu_count));
+                    }
+                    _ => {}
+                }
+            },
             padding: spacing::XXS,
             height: control::HEIGHT,
             align_items: "center",
@@ -183,10 +200,14 @@ fn MenubarMenu(
     on_active_change: EventHandler<Option<usize>>,
     on_trigger_frame: EventHandler<(usize, arkit_arkui::LayoutFramePx)>,
 ) -> Element {
+    let mut hovering = use_signal(|| false);
+    let mut focused = use_signal(|| false);
     let trigger_ref = arkit_hooks::use_native_element_ref();
     arkit_hooks::use_layout_frame(trigger_ref.clone(), move |frame| {
         on_trigger_frame.call((index, frame));
     });
+    let click_ref = trigger_ref.clone();
+    let key_ref = trigger_ref.clone();
 
     rsx! {
         row {
@@ -207,9 +228,15 @@ fn MenubarMenu(
             padding_bottom: spacing::XXS,
             padding_left: spacing::SM,
             border_radius: trigger_radius,
-            background_color: if active { active_background } else { MENUBAR_ITEM_TRANSPARENT },
+            background_color: if active || hovering() || focused() {
+                active_background
+            } else {
+                MENUBAR_ITEM_TRANSPARENT
+            },
+            focusable: true,
+            focus_on_touch: false,
             onclick: move |_| {
-                if let Some(frame) = arkit_hooks::current_layout_frame(&trigger_ref) {
+                if let Some(frame) = arkit_hooks::current_layout_frame(&click_ref) {
                     on_trigger_frame.call((index, frame));
                 }
                 if active {
@@ -218,6 +245,21 @@ fn MenubarMenu(
                     on_active_change.call(Some(index));
                 }
             },
+            onkey: move |event| {
+                if event.data().activates() {
+                    if let Some(frame) = arkit_hooks::current_layout_frame(&key_ref) {
+                        on_trigger_frame.call((index, frame));
+                    }
+                    if active {
+                        on_active_change.call(None);
+                    } else {
+                        on_active_change.call(Some(index));
+                    }
+                }
+            },
+            onhover: move |event| hovering.set(event.data().is_hovering),
+            onfocus: move |_| focused.set(true),
+            onblur: move |_| focused.set(false),
             text {
                 font_size: typography::SM,
                 font_weight: 500i32,

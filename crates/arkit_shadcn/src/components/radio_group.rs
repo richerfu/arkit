@@ -59,6 +59,7 @@ pub struct RadioGroupProps {
 #[component]
 pub fn RadioGroup(props: RadioGroupProps) -> Element {
     let theme = use_theme();
+    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
     let controlled = props.selected.is_some();
     let local = use_signal(|| props.default_selected.clone());
     let selected: String = props
@@ -76,6 +77,7 @@ pub fn RadioGroup(props: RadioGroupProps) -> Element {
             let on_select = props.on_select;
             let mut local = local;
             let click_value = option.clone();
+            let key_value = option.clone();
             let label_color = theme.colors.foreground;
             let top_margin = if index == 0 { 0.0 } else { spacing::SM };
             let row = rsx! {
@@ -91,11 +93,23 @@ pub fn RadioGroup(props: RadioGroupProps) -> Element {
                     align_items: "center",
                     justify_content: "start",
                     margin_top: top_margin,
+                    padding: spacing::XXS,
+                    border_radius: theme.radii.md,
+                    focusable: desktop,
+                    focus_on_touch: false,
                     onclick: move |_| {
                         if !controlled {
                             local.set(click_value.clone());
                         }
                         on_select.call(click_value.clone());
+                    },
+                    onkey: move |event| {
+                        if event.data().activates() {
+                            if !controlled {
+                                local.set(key_value.clone());
+                            }
+                            on_select.call(key_value.clone());
+                        }
                     },
                     {indicator}
                     row {

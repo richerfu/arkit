@@ -553,7 +553,14 @@ pub fn TimelineItem(props: TimelineItemProps) -> Element {
                     focus_on_touch: interactive,
                     align_items: "start",
                     background_color: if interactive { HIT_FILL } else { 0x0000_0000 },
+                    focusable: interactive,
+                    focus_on_touch: false,
                     onclick: move |_| on_press.call(()),
+                    onkey: move |event| {
+                        if interactive && event.data().activates() {
+                            on_press.call(());
+                        }
+                    },
                     {vertical_item_slots(align, side, RAIL_CONTENT_GAP, rail, body)}
                 }
             }
@@ -640,7 +647,14 @@ fn horizontal_item_frame(
                 align_items: "start",
                 justify_content: justify,
                 background_color: bg,
+                focusable: interactive,
+                focus_on_touch: false,
                 onclick: move |_| on_press.call(()),
+                onkey: move |event| {
+                    if interactive && event.data().activates() {
+                        on_press.call(());
+                    }
+                },
                 {content}
             }
         },
@@ -659,7 +673,14 @@ fn horizontal_item_frame(
                 align_items: "start",
                 justify_content: justify,
                 background_color: bg,
+                focusable: interactive,
+                focus_on_touch: false,
                 onclick: move |_| on_press.call(()),
+                onkey: move |event| {
+                    if interactive && event.data().activates() {
+                        on_press.call(());
+                    }
+                },
                 {content}
             }
         },
@@ -679,7 +700,14 @@ fn horizontal_item_frame(
                 align_items: "start",
                 justify_content: justify,
                 background_color: bg,
+                focusable: interactive,
+                focus_on_touch: false,
                 onclick: move |_| on_press.call(()),
+                onkey: move |event| {
+                    if interactive && event.data().activates() {
+                        on_press.call(());
+                    }
+                },
                 {content}
             }
         },
@@ -698,7 +726,14 @@ fn horizontal_item_frame(
                 align_items: "start",
                 justify_content: justify,
                 background_color: bg,
+                focusable: interactive,
+                focus_on_touch: false,
                 onclick: move |_| on_press.call(()),
+                onkey: move |event| {
+                    if interactive && event.data().activates() {
+                        on_press.call(());
+                    }
+                },
                 {content}
             }
         },

@@ -173,7 +173,7 @@ pub(crate) fn toggle_surface(
     content: Element,
     style: ToggleSurfaceStyle,
     accessibility_label: String,
-    on_click: impl FnMut() + 'static,
+    on_click: EventHandler<()>,
     theme: &Theme,
 ) -> Element {
     let _ = theme;
@@ -186,7 +186,6 @@ pub(crate) fn toggle_surface(
     let border_color = visual.border_color;
     let background = paint_or_hit_fill(style.background.unwrap_or(visual.background));
     let shadow_on = style.shadow.unwrap_or(visual.shadow);
-    let mut on_click = on_click;
     // Prefer CSS width when provided (stretched group segments); otherwise
     // explicit size width (icon-only). Avoid always emitting `width: Option`.
     let fixed_width = style.size.width;
@@ -224,7 +223,14 @@ pub(crate) fn toggle_surface(
             // are excluded so icon content cannot absorb the press without
             // bubbling `onclick` to the surface.
             hit_test_behavior: "block",
-            onclick: move |_| on_click(),
+            focusable: true,
+            focus_on_touch: false,
+            onclick: move |_| on_click.call(()),
+            onkey: move |event| {
+                if event.data().activates() {
+                    on_click.call(());
+                }
+            },
             {content}
         }
     }
@@ -301,14 +307,14 @@ pub fn Toggle(props: ToggleProps) -> Element {
                 background: None,
             },
             props.label.clone(),
-            move || {
+            EventHandler::new(move |_: ()| {
                 let current = checked_prop.unwrap_or_else(|| *local.read());
                 let next = !current;
                 if checked_prop.is_none() {
                     local.set(next);
                 }
                 on_change.call(next);
-            },
+            }),
             &theme,
         )}
     }

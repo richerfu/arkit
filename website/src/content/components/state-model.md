@@ -42,7 +42,7 @@ Checkbox {
 ## 状态所有权
 
 - Input/表单值由表单页面持有。
-- Sidebar、BottomNavigation 的 active route 从 Router 派生。
+- BottomNavigation 的 active route 从 Router 派生；PC 导航由应用自己的路由壳层负责。
 - Menu 的 checkbox/radio 值由业务 Signal 持有。
 - Sonner 的 toast Vec 和稳定 id 由调用方持有。
 - 动画进度由 AnimationHost 持有，不要每帧复制到全局 Signal。

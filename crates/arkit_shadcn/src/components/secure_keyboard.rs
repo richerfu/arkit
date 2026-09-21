@@ -1035,6 +1035,7 @@ struct SecureKeyboardKeyProps {
 #[component]
 fn SecureKeyboardKey(props: SecureKeyboardKeyProps) -> Element {
     let theme = use_theme();
+    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
     let disabled = props.disabled;
     let onclick = props.onclick;
     let accessibility_label = props
@@ -1094,6 +1095,11 @@ fn SecureKeyboardKey(props: SecureKeyboardKeyProps) -> Element {
                 opacity: if disabled { 0.4 } else { 1.0 },
                 onclick: move |_| {
                     if !disabled {
+                        onclick.call(());
+                    }
+                },
+                onkey: move |event| {
+                    if !disabled && event.data().activates() {
                         onclick.call(());
                     }
                 },

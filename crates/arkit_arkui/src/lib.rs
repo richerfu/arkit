@@ -62,7 +62,7 @@
 //! instead.
 
 use std::cell::RefCell;
-use std::ffi::c_void;
+use std::ffi::{c_void, CStr};
 use std::rc::Rc;
 
 use dioxus_core::{ElementId, Template, TemplateNode, WriteMutations};
@@ -83,8 +83,9 @@ use rustc_hash::{FxHashMap, FxHashSet};
 // lib name is `dioxus_elements`).
 use dioxus_elements::event::{classify_event_name, ArkEventKind};
 pub use dioxus_elements::event::{
-    ArkEventData, ArkEventPayload, LayoutPayload, PointerAction, PointerPayload,
-    ScrollIndexPayload, ScrollOffsetPayload,
+    ArkEventData, ArkEventPayload, KeyAction, KeyModifiers, KeyPayload, KeyboardKey, LayoutPayload,
+    MouseButton, MousePayload, PointerAction, PointerPayload, ScrollIndexPayload,
+    ScrollOffsetPayload,
 };
 
 mod animation_ownership;
@@ -2993,6 +2994,12 @@ fn extract_payload(
         }
         OnFocus => ArkEventPayload::Bool(true),
         OnBlur => ArkEventPayload::Bool(false),
+        OnKeyEvent => extract_key_payload(event)
+            .map(ArkEventPayload::Key)
+            .unwrap_or_default(),
+        OnMouse => extract_mouse_payload(event)
+            .map(ArkEventPayload::Mouse)
+            .unwrap_or_default(),
         // Checkbox / radio checked state: i32(0) != 0.
         CheckboxEventOnChange | RadioEventOnChange | ToggleOnChange => {
             ArkEventPayload::Bool(event.i32_value(0).unwrap_or(0) != 0)
@@ -3041,7 +3048,7 @@ fn extract_payload(
             .unwrap_or_default(),
         // These are non-touch UIInputEvents. Keep delivery intact without
         // asking the upstream wrapper to interpret their action as touch.
-        OnHoverEvent | OnHoverMove | OnMouse => ArkEventPayload::None,
+        OnHoverEvent | OnHoverMove => ArkEventPayload::None,
         // Drag callbacks carry ArkUI_DragEvent, not ArkUI_UIInputEvent. The
         // binding intentionally exposes that object as an opaque pointer, so
         // dispatch the lifecycle event without inventing pointer coordinates.
@@ -3149,6 +3156,147 @@ fn extract_pointer_payload(event: &ArkNativeEvent) -> Option<PointerPayload> {
     })
 }
 
+fn extract_key_payload(event: &ArkNativeEvent) -> Option<KeyPayload> {
+    use ohos_arkui_binding::arkui_input_binding::ModifierKey;
+    use ohos_arkui_sys::{
+        ArkUI_KeyCode_ARKUI_KEYCODE_DEL as KEY_BACKSPACE,
+        ArkUI_KeyCode_ARKUI_KEYCODE_DPAD_DOWN as KEY_ARROW_DOWN,
+        ArkUI_KeyCode_ARKUI_KEYCODE_DPAD_LEFT as KEY_ARROW_LEFT,
+        ArkUI_KeyCode_ARKUI_KEYCODE_DPAD_RIGHT as KEY_ARROW_RIGHT,
+        ArkUI_KeyCode_ARKUI_KEYCODE_DPAD_UP as KEY_ARROW_UP,
+        ArkUI_KeyCode_ARKUI_KEYCODE_ENTER as KEY_ENTER,
+        ArkUI_KeyCode_ARKUI_KEYCODE_ESCAPE as KEY_ESCAPE,
+        ArkUI_KeyCode_ARKUI_KEYCODE_F10 as KEY_F10,
+        ArkUI_KeyCode_ARKUI_KEYCODE_FORWARD_DEL as KEY_DELETE,
+        ArkUI_KeyCode_ARKUI_KEYCODE_MENU as KEY_MENU,
+        ArkUI_KeyCode_ARKUI_KEYCODE_MOVE_END as KEY_END,
+        ArkUI_KeyCode_ARKUI_KEYCODE_MOVE_HOME as KEY_HOME,
+        ArkUI_KeyCode_ARKUI_KEYCODE_PAGE_DOWN as KEY_PAGE_DOWN,
+        ArkUI_KeyCode_ARKUI_KEYCODE_PAGE_UP as KEY_PAGE_UP,
+        ArkUI_KeyCode_ARKUI_KEYCODE_SPACE as KEY_SPACE, ArkUI_KeyCode_ARKUI_KEYCODE_TAB as KEY_TAB,
+        ArkUI_KeyEventType_ARKUI_KEY_EVENT_CLICK as KEY_CLICK,
+        ArkUI_KeyEventType_ARKUI_KEY_EVENT_DOWN as KEY_DOWN,
+        ArkUI_KeyEventType_ARKUI_KEY_EVENT_LONG_PRESS as KEY_REPEAT,
+        ArkUI_KeyEventType_ARKUI_KEY_EVENT_UP as KEY_UP, OH_ArkUI_KeyEvent_GetKeyCode,
+        OH_ArkUI_KeyEvent_GetKeyText, OH_ArkUI_KeyEvent_GetType, OH_ArkUI_KeyEvent_GetUnicode,
+    };
+
+    let input = event.input_event()?;
+    let raw = input
+        .raw()
+        .cast::<ohos_arkui_binding::arkui_input_binding::sys::ArkUI_UIInputEvent>();
+    // SAFETY: `raw` is the ArkUI-owned input event for this synchronous native
+    // callback. The key accessors only borrow it for the duration of the call.
+    let action = match unsafe { OH_ArkUI_KeyEvent_GetType(raw) } {
+        KEY_DOWN => KeyAction::Down,
+        KEY_UP => KeyAction::Up,
+        KEY_REPEAT => KeyAction::Repeat,
+        KEY_CLICK => KeyAction::Click,
+        _ => KeyAction::Unknown,
+    };
+    // SAFETY: same callback-scoped native event lifetime as above.
+    let raw_code = unsafe { OH_ArkUI_KeyEvent_GetKeyCode(raw) };
+    // SAFETY: the returned string is owned by ArkUI and remains valid for the
+    // active callback. A null pointer denotes an empty key text.
+    let text = unsafe {
+        let value = OH_ArkUI_KeyEvent_GetKeyText(raw);
+        if value.is_null() {
+            String::new()
+        } else {
+            CStr::from_ptr(value).to_string_lossy().into_owned()
+        }
+    };
+    // SAFETY: same callback-scoped native event lifetime as above.
+    let unicode = unsafe { OH_ArkUI_KeyEvent_GetUnicode(raw) };
+    let key = match raw_code {
+        KEY_ENTER => KeyboardKey::Enter,
+        KEY_SPACE => KeyboardKey::Space,
+        KEY_TAB => KeyboardKey::Tab,
+        KEY_ESCAPE => KeyboardKey::Escape,
+        KEY_ARROW_UP => KeyboardKey::ArrowUp,
+        KEY_ARROW_DOWN => KeyboardKey::ArrowDown,
+        KEY_ARROW_LEFT => KeyboardKey::ArrowLeft,
+        KEY_ARROW_RIGHT => KeyboardKey::ArrowRight,
+        KEY_HOME => KeyboardKey::Home,
+        KEY_END => KeyboardKey::End,
+        KEY_PAGE_UP => KeyboardKey::PageUp,
+        KEY_PAGE_DOWN => KeyboardKey::PageDown,
+        KEY_BACKSPACE => KeyboardKey::Backspace,
+        KEY_DELETE => KeyboardKey::Delete,
+        KEY_MENU => KeyboardKey::Menu,
+        KEY_F10 => KeyboardKey::F10,
+        _ => char::from_u32(unicode)
+            .filter(|character| !character.is_control())
+            .map(KeyboardKey::Character)
+            .unwrap_or(KeyboardKey::Other(raw_code)),
+    };
+    let modifier_states = input.modifier_key_states().ok();
+    let modifiers = KeyModifiers {
+        ctrl: modifier_states.is_some_and(|states| states.contains(ModifierKey::Ctrl)),
+        shift: modifier_states.is_some_and(|states| states.contains(ModifierKey::Shift)),
+        alt: modifier_states.is_some_and(|states| states.contains(ModifierKey::Alt)),
+        function: modifier_states.is_some_and(|states| states.contains(ModifierKey::Fn)),
+    };
+    Some(KeyPayload {
+        key,
+        action,
+        raw_code,
+        text,
+        modifiers,
+    })
+}
+
+fn extract_mouse_payload(event: &ArkNativeEvent) -> Option<MousePayload> {
+    use ohos_arkui_sys::{
+        OH_ArkUI_MouseEvent_GetMouseAction, OH_ArkUI_MouseEvent_GetMouseButton,
+        OH_ArkUI_PointerEvent_GetWindowX, OH_ArkUI_PointerEvent_GetWindowY,
+        OH_ArkUI_PointerEvent_GetX, OH_ArkUI_PointerEvent_GetY,
+    };
+
+    let input = event.input_event()?;
+    let raw = input
+        .raw()
+        .cast::<ohos_arkui_binding::arkui_input_binding::sys::ArkUI_UIInputEvent>();
+    // SAFETY: ArkUI owns `raw` for the duration of this synchronous callback;
+    // these accessors only read the current mouse event.
+    let button = match unsafe { OH_ArkUI_MouseEvent_GetMouseButton(raw) } {
+        0 => MouseButton::None,
+        1 => MouseButton::Primary,
+        2 => MouseButton::Secondary,
+        4 => MouseButton::Middle,
+        8 => MouseButton::Back,
+        16 => MouseButton::Forward,
+        32 => MouseButton::Side,
+        64 => MouseButton::Extra,
+        128 => MouseButton::Task,
+        value => MouseButton::Other(value),
+    };
+    // SAFETY: same callback-scoped native event lifetime as above.
+    let action = match unsafe { OH_ArkUI_MouseEvent_GetMouseAction(raw) } {
+        1 => PointerAction::Down,
+        2 => PointerAction::Up,
+        3 => PointerAction::Move,
+        _ => PointerAction::Unknown,
+    };
+    // SAFETY: same callback-scoped native event lifetime as above.
+    let (x, y, window_x, window_y) = unsafe {
+        (
+            OH_ArkUI_PointerEvent_GetX(raw),
+            OH_ArkUI_PointerEvent_GetY(raw),
+            OH_ArkUI_PointerEvent_GetWindowX(raw),
+            OH_ArkUI_PointerEvent_GetWindowY(raw),
+        )
+    };
+    Some(MousePayload {
+        button,
+        action,
+        x,
+        y,
+        window_x,
+        window_y,
+    })
+}
+
 fn extract_layout_payload(node: &NodeRef) -> Option<LayoutPayload> {
     let n = node.borrow();
     let size = n.layout_size().ok()?;
@@ -3233,6 +3381,12 @@ fn event_type_for_name(name: &str, tag: &str) -> Option<NodeEventType> {
         // Raw touch (generic across components).
         (ArkEventKind::Touch, _) => TouchEvent,
 
+        // Physical keyboard input for focusable desktop controls.
+        (ArkEventKind::Key, _) => OnKeyEvent,
+
+        // Raw mouse input, including secondary-button context-menu presses.
+        (ArkEventKind::Mouse, _) => OnMouse,
+
         _ => return None,
     })
 }
@@ -3295,6 +3449,14 @@ mod event_tests {
         assert_eq!(
             event_type_for_name("accessibilityaction", "row"),
             Some(NodeEventType::OnAccessibilityActions)
+        );
+        assert_eq!(
+            event_type_for_name("key", "row"),
+            Some(NodeEventType::OnKeyEvent)
+        );
+        assert_eq!(
+            event_type_for_name("mouse", "row"),
+            Some(NodeEventType::OnMouse)
         );
     }
 

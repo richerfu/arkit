@@ -22,7 +22,7 @@ use arkit_animation::{
 };
 use arkit_prelude::*;
 
-use super::floating_layer::{ALIGN_TOP, HIT_TEST_DEFAULT, HIT_TEST_NONE};
+use super::floating_layer::{HIT_TEST_DEFAULT, HIT_TEST_NONE};
 
 const DEFAULT_DURATION_MS: u64 = 4_000;
 const DEFAULT_MAX_WIDTH: f32 = 420.0;
@@ -105,7 +105,7 @@ enum HorizontalPosition {
     Right,
 }
 
-/// Direction used by a standalone [`Toast`] for vertical swipe dismissal.
+/// Direction used by a Sonner notification for vertical swipe dismissal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ToastSwipeDirection {
     Up,
@@ -366,7 +366,7 @@ fn callback_eq(left: &Option<Rc<dyn Fn()>>, right: &Option<Rc<dyn Fn()>>) -> boo
 
 /// Props for a standalone toast card.
 #[derive(Props, Clone, PartialEq)]
-pub struct ToastProps {
+struct ToastProps {
     /// Primary line.
     pub title: String,
     #[props(default)]
@@ -410,8 +410,9 @@ pub struct ToastProps {
 
 /// A shadcn-styled mobile toast card.
 #[component]
-pub fn Toast(props: ToastProps) -> Element {
+fn Toast(props: ToastProps) -> Element {
     let theme = use_theme();
+    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
     let is_minimal = props.appearance == ToastAppearance::Minimal;
     let palette = toast_palette(
         props.variant,
@@ -651,6 +652,13 @@ pub fn Toast(props: ToastProps) -> Element {
                                 handler.call(());
                             }
                         },
+                        onkey: move |event| {
+                            if event.data().activates() {
+                                if let Some(handler) = on_action {
+                                    handler.call(());
+                                }
+                            }
+                        },
                         text {
                             content: action_label,
                             font_size: typography::XS,
@@ -679,6 +687,13 @@ pub fn Toast(props: ToastProps) -> Element {
                         event.stop_propagation();
                         if let Some(handler) = on_dismiss {
                             handler.call(());
+                        }
+                    },
+                    onkey: move |event| {
+                        if event.data().activates() {
+                            if let Some(handler) = on_dismiss {
+                                handler.call(());
+                            }
                         }
                     },
                     {icon_placeholder("x", 16.0, palette.description)}
@@ -914,7 +929,7 @@ fn SonnerLayer(
     }
     // Always top-align inside the stack; bottom placement is done by the outer
     // column spacer so `position.y` stays a simple top-left coordinate.
-    let stack_alignment = ALIGN_TOP;
+    let stack_alignment = "top";
 
     let mut expand_signal = expanded;
     let on_expand_change = EventHandler::new(move |next: bool| {

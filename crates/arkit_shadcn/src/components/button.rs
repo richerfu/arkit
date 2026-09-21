@@ -247,6 +247,13 @@ pub fn Button(props: ButtonProps) -> Element {
                     }
                 }
             },
+            onkey: move |event| {
+                if !disabled && event.data().activates() {
+                    if let Some(handler) = onclick {
+                        handler.call(());
+                    }
+                }
+            },
             row {
                 align_items: "center",
                 justify_content: "center",

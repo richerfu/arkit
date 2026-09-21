@@ -51,7 +51,7 @@ pub struct ToggleGroupProps {
 pub fn ToggleGroup(props: ToggleGroupProps) -> Element {
     let theme = use_theme();
     let controlled = props.selected.is_some();
-    let local = use_signal(|| props.default_selected.clone());
+    let mut local = use_signal(|| props.default_selected.clone());
     let selected: Vec<String> = props
         .selected
         .clone()
@@ -100,7 +100,7 @@ pub fn ToggleGroup(props: ToggleGroupProps) -> Element {
                 background: Some(0x00000000),
             },
             option.clone(),
-            move || {
+            EventHandler::new(move |_: ()| {
                 let next = if multi {
                     let mut v = current_selected.clone();
                     if let Some(pos) = v.iter().position(|value| value == &click_value) {
@@ -116,7 +116,7 @@ pub fn ToggleGroup(props: ToggleGroupProps) -> Element {
                     local.set(next.clone());
                 }
                 on_change.call(next);
-            },
+            }),
             &theme,
         );
         // Selection chrome is painted on the segment shell; the inner surface
@@ -170,6 +170,27 @@ pub fn ToggleGroup(props: ToggleGroupProps) -> Element {
             border_radius: theme.radii.md,
             clip: true,
             shadow: if group_shadow { "sm" },
+            onkey: move |event| {
+                if !event.data().is_down() || multi || total == 0 { return; }
+                let current = props.options
+                    .iter()
+                    .position(|option| selected.contains(option))
+                    .unwrap_or(0);
+                let next_index = match event.data().key {
+                    dioxus_elements::event::KeyboardKey::ArrowLeft => {
+                        if current == 0 { total - 1 } else { current - 1 }
+                    }
+                    dioxus_elements::event::KeyboardKey::ArrowRight => (current + 1) % total,
+                    dioxus_elements::event::KeyboardKey::Home => 0,
+                    dioxus_elements::event::KeyboardKey::End => total - 1,
+                    _ => return,
+                };
+                let next = vec![props.options[next_index].clone()];
+                if !controlled {
+                    local.set(next.clone());
+                }
+                on_change.call(next);
+            },
             {items.into_iter()}
         }
     }

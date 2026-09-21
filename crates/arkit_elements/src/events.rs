@@ -8,7 +8,7 @@
 //! [`ArkEventData`](crate::event::ArkEventData) into the typed event data.
 
 use crate::event::{
-    AccessibilityActionData, AreaData, ArkEventKind, ChangeData, ClickData, FocusData, HoverData,
+    AccessibilityActionData, AreaData, ArkEventKind, ChangeData, ClickData, FocusData, HoverData, KeyData, MouseData,
     PointerData, ReachEndData, RefreshData, ScrollData, SubmitData, SwiperChangeData,
 };
 
@@ -91,4 +91,8 @@ impl_events! {
     PointerData;
     onhovermove => HoverMove, ondragstart => DragStart, ondragmove => DragMove,
     ondragend => DragEnd, ondragleave => DragLeave, ondragenter => DragEnter, ontouch => Touch;
+    KeyData;
+    onkey => Key;
+    MouseData;
+    onmouse => Mouse;
 }

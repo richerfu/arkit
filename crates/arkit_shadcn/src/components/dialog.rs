@@ -132,6 +132,11 @@ pub fn Dialog(
                         alignment: "center",
                         opacity: 0.7_f32,
                         onclick: move |_| close.call(()),
+                        onkey: move |event| {
+                            if event.data().activates() {
+                                close.call(());
+                            }
+                        },
                         {icon_placeholder("x", 18.0, theme.colors.muted_foreground)}
                     }
                 }

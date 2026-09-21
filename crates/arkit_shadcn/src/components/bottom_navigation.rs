@@ -53,6 +53,7 @@ fn normalized_index(index: usize, item_count: usize) -> usize {
 #[component]
 pub fn BottomNavigation(props: BottomNavigationProps) -> Element {
     let theme = use_theme();
+    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
     let item_count = props.items.len();
     let initial = normalized_index(props.default_selected, item_count);
     let mut local = use_signal(move || initial);
@@ -86,27 +87,51 @@ pub fn BottomNavigation(props: BottomNavigationProps) -> Element {
                     height: "100%",
                     align_items: "center",
                     justify_content: "center",
+                    padding_left: if desktop { spacing::SM } else { 0.0 },
+                    padding_right: if desktop { spacing::SM } else { 0.0 },
+                    border_radius: if desktop { theme.radii.md } else { 0.0 },
                     focusable: true,
                     focus_on_touch: true,
-                    background_color: TRANSPARENT,
+                    background_color: if desktop && active { theme.colors.accent } else { TRANSPARENT },
                     onclick: move |_| {
                         if !controlled {
                             local.set(index);
                         }
                         on_select.call(index);
                     },
-                    column {
-                        align_items: "center",
-                        justify_content: "center",
-                        {icon_placeholder(icon_name.as_str(), ICON_SIZE, foreground)}
-                        row { height: ICON_LABEL_GAP }
+                    onkey: move |event| {
+                        if event.data().activates() {
+                            if !controlled {
+                                local.set(index);
+                            }
+                            on_select.call(index);
+                        }
+                    },
+                    if desktop {
+                        {icon_placeholder(icon_name.as_str(), 16.0, foreground)}
                         text {
+                            margin_left: spacing::XS,
                             content: label,
-                            font_size: typography::XS,
+                            font_size: typography::SM,
                             font_weight: if active { 600_i32 } else { 500_i32 },
                             font_color: foreground,
-                            line_height: 14.0,
+                            line_height: 20.0,
                             text_align: "center",
+                        }
+                    } else {
+                        column {
+                            align_items: "center",
+                            justify_content: "center",
+                            {icon_placeholder(icon_name.as_str(), ICON_SIZE, foreground)}
+                            row { height: ICON_LABEL_GAP }
+                            text {
+                                content: label,
+                                font_size: typography::XS,
+                                font_weight: if active { 600_i32 } else { 500_i32 },
+                                font_color: foreground,
+                                line_height: 14.0,
+                                text_align: "center",
+                            }
                         }
                     }
                 }
@@ -119,11 +144,13 @@ pub fn BottomNavigation(props: BottomNavigationProps) -> Element {
             width: "100%",
             accessibility_role: "tablist",
             accessibility_group: false,
-            height: BAR_HEIGHT,
+            height: if desktop { control::HEIGHT } else { BAR_HEIGHT },
             align_items: "center",
             justify_content: "start",
+            padding: if desktop { spacing::XXS } else { 0.0 },
+            border_radius: if desktop { theme.radii.lg } else { 0.0 },
             background_color: theme.colors.background,
-            border_width: "1,0,0,0",
+            border_width: if desktop { "1" } else { "1,0,0,0" },
             border_color: theme.colors.border,
             {destinations.into_iter()}
         }

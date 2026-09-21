@@ -30,6 +30,9 @@ pub struct CollapsibleProps {
 #[component]
 pub fn Collapsible(props: CollapsibleProps) -> Element {
     let theme = use_theme();
+    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
+    let mut hovering = use_signal(|| false);
+    let mut focused = use_signal(|| false);
     let controlled = props.open.is_some();
     let mut local = use_signal(|| props.default_open);
     let open = props.open.unwrap_or_else(|| *local.read());
@@ -54,6 +57,14 @@ pub fn Collapsible(props: CollapsibleProps) -> Element {
                 padding_right: spacing::LG,
                 padding_bottom: 0.0,
                 padding_left: spacing::LG,
+                border_radius: theme.radii.md,
+                background_color: if desktop && (hovering() || focused()) {
+                    theme.colors.accent
+                } else {
+                    0x00000000
+                },
+                focusable: desktop,
+                focus_on_touch: false,
                 onclick: move |_| {
                     let next = !open;
                     if !controlled {
@@ -61,6 +72,18 @@ pub fn Collapsible(props: CollapsibleProps) -> Element {
                     }
                     on_change.call(next);
                 },
+                onkey: move |event| {
+                    if event.data().activates() {
+                        let next = !open;
+                        if !controlled {
+                            local.set(next);
+                        }
+                        on_change.call(next);
+                    }
+                },
+                onhover: move |event| hovering.set(event.data().is_hovering),
+                onfocus: move |_| focused.set(true),
+                onblur: move |_| focused.set(false),
                 text {
                     content: props.title.clone(),
                     font_size: typography::SM,
@@ -68,7 +91,7 @@ pub fn Collapsible(props: CollapsibleProps) -> Element {
                     font_color: theme.colors.foreground,
                     line_height: 20.0,
                 }
-                button {
+                row {
                     accessibility_mode: "disabled",
                     width: 32.0,
                     height: 32.0,
@@ -79,8 +102,6 @@ pub fn Collapsible(props: CollapsibleProps) -> Element {
                     background_color: "#00000000",
                     border_width: 0.0,
                     border_style: ARKUI_BORDER_STYLE_SOLID,
-                    focusable: false,
-                    focus_on_touch: false,
                     alignment: "center",
                     {arkit_icon::icon("chevrons-up-down".to_string(), 16.0, theme.colors.foreground)}
                 }

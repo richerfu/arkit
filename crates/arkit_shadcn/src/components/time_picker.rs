@@ -432,7 +432,12 @@ fn time_picker_column(
                                         theme.colors.foreground
                                     },
                                     onclick: move |_| on_select.call(value),
-                                    {option.label.clone()}
+                                    onkey: move |event| {
+                                        if event.data().activates() {
+                                            on_select.call(value);
+                                        }
+                                    },
+                                    {option.label}
                                 }
                             }
                         }
@@ -516,7 +521,12 @@ fn period_button(
                 theme.colors.foreground
             },
             onclick: move |_| on_select.call(is_pm),
-            {label.clone()}
+            onkey: move |event| {
+                if event.data().activates() {
+                    on_select.call(is_pm);
+                }
+            },
+            {label}
         }
     }
 }

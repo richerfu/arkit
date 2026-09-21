@@ -33,6 +33,7 @@ pub fn ContextMenu(
     #[props(default)] width: Option<f32>,
 ) -> Element {
     let theme = use_theme();
+    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
     let viewport = arkit_hooks::use_overlay_viewport();
     let trigger_ref = arkit_hooks::use_native_element_ref();
     let trigger_frame = use_signal(arkit_arkui::LayoutFramePx::default);
@@ -88,6 +89,8 @@ pub fn ContextMenu(
             "Long press to open context menu".to_string()
         }
     });
+    let mouse_trigger_ref = trigger_ref.clone();
+    let long_press_trigger_ref = trigger_ref.clone();
 
     rsx! {
         row {
@@ -100,12 +103,59 @@ pub fn ContextMenu(
             accessibility_selected: current_open,
             focusable: true,
             focus_on_touch: true,
+            onmouse: move |evt| {
+                let mouse = evt.data();
+                if !mouse.secondary_down() {
+                    return;
+                }
+                let pointer = dioxus_elements::event::PointerPayload {
+                    action: mouse.action,
+                    x: mouse.x,
+                    y: mouse.y,
+                    window_x: mouse.window_x,
+                    window_y: mouse.window_y,
+                    ..Default::default()
+                };
+                let placement = MenuOverlayPlacement::from_cursor(
+                    pointer,
+                    viewport,
+                    style.width,
+                    panel_height,
+                    style.side_offset_vp,
+                )
+                .unwrap_or_else(|| {
+                    let frame = trigger_frame_for_anchor(&mouse_trigger_ref, *trigger_frame.read());
+                    MenuOverlayPlacement::resolve(
+                        frame,
+                        viewport,
+                        style.width,
+                        panel_height,
+                        style.side_offset_vp,
+                    )
+                });
+                cursor_placement.set(Some(placement));
+                set_open.call(true);
+            },
+            onkey: move |event| {
+                if !event.data().is_down() {
+                    return;
+                }
+                if event.data().key == dioxus_elements::event::KeyboardKey::Escape {
+                    dismiss.call(());
+                } else if event.data().key == dioxus_elements::event::KeyboardKey::Menu
+                    || (event.data().key == dioxus_elements::event::KeyboardKey::F10
+                        && event.data().modifiers.shift)
+                {
+                    cursor_placement.set(None);
+                    set_open.call(true);
+                }
+            },
             onlongpress: move |evt: dioxus_core::Event<dioxus_elements::event::ClickData>| {
                 if current_open {
                     dismiss.call(());
                     return;
                 }
-                let frame = trigger_frame_for_anchor(&trigger_ref, *trigger_frame.read());
+                let frame = trigger_frame_for_anchor(&long_press_trigger_ref, *trigger_frame.read());
                 let placement = evt
                     .data()
                     .pointer

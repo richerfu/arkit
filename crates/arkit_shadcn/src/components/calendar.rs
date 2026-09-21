@@ -603,6 +603,11 @@ fn CalendarHeaderButton(label: String, expanded: bool, onclick: EventHandler<()>
             border_width: 0.0,
             border_color: TRANSPARENT,
             onclick: move |_| onclick.call(()),
+            onkey: move |event| {
+                if event.data().activates() {
+                    onclick.call(());
+                }
+            },
             row {
                 align_items: "center",
                 justify_content: "center",
@@ -650,6 +655,11 @@ fn CalendarPickerBackButton(label: String, onclick: EventHandler<()>) -> Element
                 border_color: theme.colors.border,
                 border_radius: theme.radii.md,
                 onclick: move |_| onclick.call(()),
+                onkey: move |event| {
+                    if event.data().activates() {
+                        onclick.call(());
+                    }
+                },
                 row {
                     align_items: "center",
                     justify_content: "center",
@@ -697,6 +707,11 @@ fn CalendarNavigationButton(
             border_color: TRANSPARENT,
             opacity: if disabled { 0.36 } else { 1.0 },
             onclick: move |_| onclick.call(()),
+            onkey: move |event| {
+                if !disabled && event.data().activates() {
+                    onclick.call(());
+                }
+            },
             {icon_placeholder(icon.as_str(), 18.0, accent)}
         }
     }
@@ -723,7 +738,7 @@ fn CalendarDays(
         ThemeMode::Dark => 0xFF000000,
     };
     let dates = month.grid_dates();
-    let weeks = dates.chunks_exact(7).map(|week| {
+    let weeks = dates.as_chunks::<7>().0.iter().map(|week| {
         let cells = week.iter().copied().map(|date| {
             let date_string = date.to_string();
             let is_selected = selected_dates.iter().any(|value| value == &date_string);
@@ -794,7 +809,9 @@ fn CalendarDays(
             let overlay_content = decoration.overlays;
             let replacement_content = decoration.replacement;
             let pressed_date = date_string.clone();
+            let key_pressed_date = date_string.clone();
             let press_plugins = plugins.clone();
+            let key_press_plugins = plugins.clone();
             let long_press_plugins = plugins.clone();
 
             rsx! {
@@ -840,6 +857,23 @@ fn CalendarDays(
                                         on_visible_month.call(date.calendar_month());
                                     }
                                     on_day_press.call(pressed_date.clone());
+                                }
+                            }
+                        },
+                        onkey: move |event| {
+                            if enabled && event.data().activates() {
+                                let response = dispatch_plugins_for_day(
+                                    &key_press_plugins,
+                                    CalendarDayEvent {
+                                        context,
+                                        kind: CalendarDayEventKind::Press,
+                                    },
+                                );
+                                if !response.prevent_default {
+                                    if is_outside {
+                                        on_visible_month.call(date.calendar_month());
+                                    }
+                                    on_day_press.call(key_pressed_date.clone());
                                 }
                             }
                         },
@@ -1047,6 +1081,11 @@ fn CalendarMonthGrid(
                                         border_color: TRANSPARENT,
                                         border_radius: theme.radii.md,
                                         onclick: move |_| on_select.call(month_number),
+                                        onkey: move |event| {
+                                            if event.data().activates() {
+                                                on_select.call(month_number);
+                                            }
+                                        },
                                         text {
                                             content: label,
                                             font_size: typography::SM,
@@ -1128,6 +1167,11 @@ fn CalendarYearGrid(
                                             border_color: TRANSPARENT,
                                             border_radius: theme.radii.md,
                                             onclick: move |_| on_select.call(year),
+                                            onkey: move |event| {
+                                                if event.data().activates() {
+                                                    on_select.call(year);
+                                                }
+                                            },
                                             text {
                                                 content: year.to_string(),
                                                 font_size: typography::SM,

@@ -334,6 +334,7 @@ struct SliderTrackProps {
 #[component]
 fn SliderTrack(props: SliderTrackProps) -> Element {
     let theme = use_theme();
+    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
     let style = props.style.resolve(theme);
     let style = if props.disabled {
         style.disabled(theme.colors.background)
@@ -393,6 +394,7 @@ fn SliderTrack(props: SliderTrackProps) -> Element {
         })
         .collect::<Vec<_>>();
     let values = props.values.clone();
+    let key_values = props.values.clone();
     let orientation = props.orientation;
     let reversed = props.reversed;
     let disabled = props.disabled;
@@ -467,6 +469,45 @@ fn SliderTrack(props: SliderTrackProps) -> Element {
             height: native_height.max(style.touch_target),
             alignment: "top-start",
             enabled: !disabled,
+            focusable: desktop && !disabled,
+            focus_on_touch: false,
+            onkey: move |event| {
+                if disabled || !event.data().is_down() || key_values.values.is_empty() {
+                    return;
+                }
+                let current = key_values.values[0];
+                let increasing = matches!(
+                    event.data().key,
+                    dioxus_elements::event::KeyboardKey::ArrowRight
+                        | dioxus_elements::event::KeyboardKey::ArrowUp
+                );
+                let decreasing = matches!(
+                    event.data().key,
+                    dioxus_elements::event::KeyboardKey::ArrowLeft
+                        | dioxus_elements::event::KeyboardKey::ArrowDown
+                );
+                let target = match event.data().key {
+                    dioxus_elements::event::KeyboardKey::Home => key_values.min,
+                    dioxus_elements::event::KeyboardKey::End => key_values.max,
+                    _ if increasing || decreasing => {
+                        let direction = if increasing { 1.0 } else { -1.0 };
+                        let direction = if reversed { -direction } else { direction };
+                        current + (key_values.step * direction)
+                    }
+                    _ => return,
+                };
+                let next = update_thumb_value(
+                    &key_values.values,
+                    0,
+                    target,
+                    key_values.min,
+                    key_values.max,
+                    key_values.step,
+                );
+                if next != key_values.values {
+                    on_change.call(next);
+                }
+            },
             onarea: move |event| {
                 let frame = event.data().frame;
                 if !frame.is_measured() {

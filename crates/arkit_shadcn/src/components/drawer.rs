@@ -1,18 +1,16 @@
 //! Drawer — a panel that slides in from a screen side (default: bottom).
 //!
-//! Migrated from the legacy Elm builder API. The `side` prop (`"top"` /
-//! `"bottom"` / `"left"` / `"right"`) selects the capture-layer alignment
-//! (left=3, right=5, top=1, bottom=7). The panel preserves the original
-//! styling: `DRAWER_MAX_WIDTH` 640 cap, `spacing` padding
-//! (`[LG, XXL, XXL, XXL]`), `lg` radius, 1px top border, `background`/`border`
-//! tokens, small outer shadow, and a 40×4 drag handle (full radius,
-//! `muted_foreground` at 0.4 opacity) that dismisses on tap.
+//! The panel is projected into the root modal layer so its backdrop and edge
+//! placement are independent of the caller's layout. The `side` prop accepts
+//! `"top"`, `"bottom"`, `"left"`, or `"right"`; horizontal PC drawers are
+//! capped at 640vp. Touch layouts retain the drag handle, while PC omits it.
 
 use super::dialog::DialogHeader;
-use super::floating_layer::{side_alignment, side_from_name, OVERLAY_BACKDROP};
-use super::motion::{slide_in_from, OVERLAY_ENTER_MS, OVERLAY_EXIT_MS, SHEET_DISTANCE};
+use super::floating_layer::{side_from_name, FloatingSide, OVERLAY_BACKDROP};
+use super::motion::{
+    slide_in_from, AnimatedEdgeModal, OVERLAY_ENTER_MS, OVERLAY_EXIT_MS, SHEET_DISTANCE,
+};
 use crate::theme::*;
-use arkit_animation::{use_presence_visibility, PresenceTransition};
 use arkit_prelude::*;
 use dioxus_core_macro::component;
 
@@ -29,6 +27,7 @@ pub fn Drawer(
     children: Element,
 ) -> Element {
     let theme = use_theme();
+    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
     let mut internal = use_signal(|| default_open.unwrap_or(false));
     let current = match open {
         Some(v) => v,
@@ -36,7 +35,7 @@ pub fn Drawer(
     };
     let controlled = open.is_some();
     let side = side_from_name(side.as_deref().unwrap_or("bottom"));
-    let alignment = side_alignment(side);
+    let horizontal = matches!(side, FloatingSide::Left | FloatingSide::Right);
 
     let close = EventHandler::new(move |_: ()| {
         if !controlled {
@@ -47,32 +46,28 @@ pub fn Drawer(
         }
     });
 
-    let visibility = use_presence_visibility(current);
-    if !visibility.mounted {
-        return rsx! {};
-    }
-
     rsx! {
-        stack {
-            width: "100%",
-            accessibility_mode: "disabled",
-            height: "100%",
-            background_color: OVERLAY_BACKDROP,
-            alignment: alignment,
-            onclick: move |_| close.call(()),
-            PresenceTransition {
-                phase: visibility.phase,
-                on_terminal: visibility.on_terminal,
-                preset: Some(slide_in_from(side)),
-                duration_ms: Some(OVERLAY_ENTER_MS),
-                exit_duration_ms: Some(OVERLAY_EXIT_MS),
-                distance: Some(SHEET_DISTANCE),
+        AnimatedEdgeModal {
+            open: current,
+            side,
+            on_dismiss: close,
+            backdrop_color: OVERLAY_BACKDROP,
+            viewport_inset: if desktop { spacing::LG } else { 0.0 },
+            panel_width: if horizontal && desktop { Some(DRAWER_MAX_WIDTH) } else { None },
+            preset: Some(slide_in_from(side)),
+            duration_ms: Some(OVERLAY_ENTER_MS),
+            exit_duration_ms: Some(OVERLAY_EXIT_MS),
+            distance: Some(SHEET_DISTANCE),
             stack {
-                onclick: move |evt| { evt.stop_propagation(); },
                 accessibility_role: "dialog",
                 accessibility_text: title.clone(),
-                width: "100%",
+                width: if horizontal && desktop {
+                    format!("{DRAWER_MAX_WIDTH}")
+                } else {
+                    "100%".to_string()
+                },
                 max_width: DRAWER_MAX_WIDTH,
+                height: if horizontal { "100%" } else { "auto" },
                 padding_top: spacing::LG,
                 padding_right: spacing::XXL,
                 padding_bottom: spacing::XXL,
@@ -84,29 +79,25 @@ pub fn Drawer(
                 shadow: "sm",
                 column {
                     width: "100%",
-                    row {
-                        width: "100%",
-                        accessibility_role: "button",
-                        accessibility_text: "Close drawer",
-                        accessibility_group: true,
-                        accessibility_actions: "click",
-                        focusable: true,
-                        focus_on_touch: true,
-                        height: 24.0,
-                        justify_content: "center",
-                        align_items: "center",
-                        onclick: move |_| close.call(()),
+                    if !desktop {
                         row {
-                            width: 40.0,
-                            height: 4.0,
-                            border_radius: theme.radii.full,
-                            background_color: theme.colors.muted_foreground,
-                            opacity: 0.4_f32,
+                            width: "100%",
+                            height: 24.0,
+                            justify_content: "center",
+                            align_items: "center",
+                            onclick: move |_| close.call(()),
+                            row {
+                                width: 40.0,
+                                height: 4.0,
+                                border_radius: theme.radii.full,
+                                background_color: theme.colors.muted_foreground,
+                                opacity: 0.4_f32,
+                            }
                         }
                     }
                     column {
                         width: "100%",
-                        margin_top: spacing::LG,
+                        margin_top: if desktop { 0.0 } else { spacing::LG },
                         DialogHeader {
                             title: title.clone(),
                             description: String::new(),
@@ -119,7 +110,6 @@ pub fn Drawer(
                     }
                 }
             }
-        }
         }
     }
 }

@@ -24,6 +24,7 @@ const POPOVER_ESTIMATED_HEIGHT: f32 = 132.0;
 #[component]
 pub fn Popover(
     trigger: Element,
+    #[props(default)] disabled: bool,
     #[props(default)] accessibility_label: Option<String>,
     open: Option<bool>,
     default_open: Option<bool>,
@@ -34,6 +35,7 @@ pub fn Popover(
     children: Element,
 ) -> Element {
     let theme = use_theme();
+    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
     let viewport = arkit_hooks::use_overlay_viewport();
     let trigger_ref = arkit_hooks::use_native_element_ref();
     let trigger_frame = use_signal(arkit_arkui::LayoutFramePx::default);
@@ -89,9 +91,21 @@ pub fn Popover(
             accessibility_group: true,
             accessibility_actions: "click",
             accessibility_selected: current,
-            focusable: true,
+            accessibility_disabled: disabled,
+            enabled: !disabled,
+            focusable: !disabled,
             focus_on_touch: true,
-            onclick: move |_| set_open.call(!current),
+            onclick: move |_| { if !disabled { set_open.call(!current); } },
+            onkey: move |event| {
+                if disabled { return; }
+                if event.data().key == dioxus_elements::event::KeyboardKey::Escape
+                    && event.data().is_down()
+                {
+                    set_open.call(false);
+                } else if event.data().activates() {
+                    set_open.call(!current);
+                }
+            },
             {trigger}
         }
         OverlayPresence {

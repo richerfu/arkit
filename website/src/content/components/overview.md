@@ -59,7 +59,7 @@ use arkit::shadcn::theme::*;
 
 ## 内置文案与 i18n
 
-Calendar、Chart、Combobox、Command、DatePicker、Markdown、Pagination 和
+Calendar、Combobox、Command、DatePicker、Markdown、Pagination 和
 Select 的内置文案自带 `en-US`、`zh-CN` 资源。应用 root 安装
 `use_i18n_provider` 后，这些组件会读取同一个响应式 locale；调用
 `I18nContext::set_locale_id` 会同步刷新组件默认文案。未安装 provider
@@ -75,8 +75,4 @@ Select 的内置文案自带 `en-US`、`zh-CN` 资源。应用 root 安装
 2. 阅读「状态模型」，确定受控或非受控用法。
 3. 按名称打开具体组件页，查看公开 Props、示例和生命周期。
 4. 完整示例在 `examples/shadcn_showcase`（含 Guide 等新组件）。
-5. 需要 ECharts 级图表时离开本区，打开顶部「图表」文档。
-
-## Chart 的边界
-
-组件库 `Chart` 是轻量主题化展示组件，不等同 `arkit::echarts::ECharts`。需要 22 类 series、Action、DataZoom、增量更新和导出时，使用顶部“图表”文档。
+5. 图表统一使用 `arkit_chart`，打开顶部「图表」文档。

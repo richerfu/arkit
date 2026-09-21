@@ -52,8 +52,12 @@ pub struct TabsTriggerProps {
 #[component]
 pub fn TabsTrigger(props: TabsTriggerProps) -> Element {
     let theme = use_theme();
+    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
+    let mut hovering = use_signal(|| false);
     let background = if props.active {
         theme.colors.background
+    } else if desktop && hovering() {
+        theme.colors.accent
     } else {
         TRANSPARENT
     };
@@ -78,7 +82,15 @@ pub fn TabsTrigger(props: TabsTriggerProps) -> Element {
             border_width: 1.0,
             border_color: TRANSPARENT,
             background_color: background,
+            focusable: desktop,
+            focus_on_touch: false,
             onclick: move |_| on_press.call(()),
+            onkey: move |event| {
+                if event.data().activates() {
+                    on_press.call(());
+                }
+            },
+            onhover: move |event| hovering.set(event.data().is_hovering),
             text {
                 content: props.label.clone(),
                 font_size: typography::SM,
@@ -131,9 +143,10 @@ pub struct TabsProps {
 #[component]
 pub fn Tabs(props: TabsProps) -> Element {
     let controlled = props.active.is_some();
-    let local = use_signal(|| props.default_active);
+    let mut local = use_signal(|| props.default_active);
     let active = props.active.unwrap_or_else(|| *local.read());
     let on_change = props.on_change;
+    let tab_count = props.labels.len();
 
     let triggers: Vec<Element> = props
         .labels
@@ -175,6 +188,22 @@ pub fn Tabs(props: TabsProps) -> Element {
     rsx! {
         column {
             width: "100%",
+            onkey: move |event| {
+                if !event.data().is_down() || tab_count == 0 { return; }
+                let next = match event.data().key {
+                    dioxus_elements::event::KeyboardKey::ArrowLeft => {
+                        if active == 0 { tab_count - 1 } else { active - 1 }
+                    }
+                    dioxus_elements::event::KeyboardKey::ArrowRight => (active + 1) % tab_count,
+                    dioxus_elements::event::KeyboardKey::Home => 0,
+                    dioxus_elements::event::KeyboardKey::End => tab_count - 1,
+                    _ => return,
+                };
+                if !controlled {
+                    local.set(next);
+                }
+                on_change.call(next);
+            },
             TabsList {
                 {triggers.into_iter()}
             }

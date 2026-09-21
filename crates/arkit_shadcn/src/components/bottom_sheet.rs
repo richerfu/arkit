@@ -331,6 +331,15 @@ fn BottomSheetPanel(props: BottomSheetPanelProps) -> Element {
             accessibility_role: "dialog",
             accessibility_text: props.title.clone(),
             native_ref: props.native_ref,
+            focusable: desktop,
+            focus_on_touch: false,
+            onkey: move |event| {
+                if event.data().is_down()
+                    && event.data().key == dioxus_elements::event::KeyboardKey::Escape
+                {
+                    on_close.call(());
+                }
+            },
             width: if desktop { format!("{}", props.pc_width) } else { "100%".to_string() },
             max_width: if desktop { props.pc_width },
             align_self: if desktop { "center" },
@@ -442,6 +451,11 @@ fn BottomSheetPanel(props: BottomSheetPanelProps) -> Element {
                         focus_on_touch: true,
                         alignment: "center",
                         onclick: move |_| on_close.call(()),
+                        onkey: move |event| {
+                            if event.data().activates() {
+                                on_close.call(());
+                            }
+                        },
                         {icon_placeholder("x", 16.0, theme.colors.muted_foreground)}
                     }
                 }

@@ -23,7 +23,6 @@ pub fn Command(
     let i18n = use_component_i18n();
     let placeholder = placeholder.unwrap_or_else(|| i18n.command_placeholder());
     let colors = &theme.colors;
-    let sm = theme.radii.sm;
     let md = theme.radii.md;
     let keyword = query.to_lowercase();
 
@@ -72,35 +71,65 @@ pub fn Command(
                     let on_query_change_inner = on_query_change;
                     rsx! {
                         if passes {
-                            row {
-                                accessibility_role: "button",
-                                accessibility_text: option.clone(),
-                                accessibility_group: true,
-                                accessibility_actions: "click",
-                                focusable: true,
-                                width: "100%",
-                                height: 32.0,
-                                align_items: "center",
-                                padding_top: 6.0,
-                                padding_right: spacing::SM,
-                                padding_bottom: 6.0,
-                                padding_left: spacing::SM,
-                                border_radius: sm,
-                                onclick: move |_: dioxus_core::Event<_>| {
+                            CommandOption {
+                                option: opt,
+                                on_select: move |value| {
                                     if let Some(handler) = on_query_change_inner {
-                                        handler.call(opt.clone());
+                                        handler.call(value);
                                     }
                                 },
-                                text {
-                                    font_size: typography::SM,
-                                    font_color: colors.foreground,
-                                    line_height: 20.0,
-                                    {option.clone()}
-                                }
                             }
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+#[component]
+fn CommandOption(option: String, on_select: EventHandler<String>) -> Element {
+    let theme = use_theme();
+    let mut hovering = use_signal(|| false);
+    let mut focused = use_signal(|| false);
+    let click_value = option.clone();
+    let key_value = option.clone();
+
+    rsx! {
+        row {
+            accessibility_role: "button",
+            accessibility_text: option.clone(),
+            accessibility_group: true,
+            accessibility_actions: "click",
+            width: "100%",
+            height: 32.0,
+            align_items: "center",
+            padding_top: 6.0,
+            padding_right: spacing::SM,
+            padding_bottom: 6.0,
+            padding_left: spacing::SM,
+            border_radius: theme.radii.sm,
+            background_color: if hovering() || focused() {
+                theme.colors.accent
+            } else {
+                0x00000000
+            },
+            focusable: true,
+            focus_on_touch: false,
+            onclick: move |_| on_select.call(click_value.clone()),
+            onkey: move |event| {
+                if event.data().activates() {
+                    on_select.call(key_value.clone());
+                }
+            },
+            onhover: move |event| hovering.set(event.data().is_hovering),
+            onfocus: move |_| focused.set(true),
+            onblur: move |_| focused.set(false),
+            text {
+                font_size: typography::SM,
+                font_color: theme.colors.foreground,
+                line_height: 20.0,
+                {option}
             }
         }
     }

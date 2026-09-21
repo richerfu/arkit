@@ -30,6 +30,7 @@ pub fn Tooltip(
     on_open_change: Option<EventHandler<bool>>,
 ) -> Element {
     let theme = use_theme();
+    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
     let viewport = arkit_hooks::use_overlay_viewport();
     let trigger_ref = arkit_hooks::use_native_element_ref();
     let trigger_frame = use_signal(arkit_arkui::LayoutFramePx::default);
@@ -98,6 +99,15 @@ pub fn Tooltip(
             focusable: true,
             focus_on_touch: true,
             onclick: move |_| set_open.call(!current),
+            onfocus: move |_| show_tooltip.call(()),
+            onblur: move |_| close_tooltip.call(()),
+            onkey: move |event| {
+                if event.data().key == dioxus_elements::event::KeyboardKey::Escape
+                    && event.data().is_down()
+                {
+                    set_open.call(false);
+                }
+            },
             onhover: move |evt| {
                 if evt.data().is_hovering {
                     show_tooltip.call(());

@@ -47,6 +47,7 @@ pub fn Accordion(
     on_value_change: Option<EventHandler<Option<String>>>,
 ) -> Element {
     let theme = use_theme();
+    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
     let mut internal_value = use_signal(|| default_value.clone());
     let is_controlled = value.is_some();
     let current_value = value
@@ -76,6 +77,9 @@ pub fn Accordion(
                     let current_value_inner = current_value.clone();
                     let collapsible_inner = collapsible;
                     let set_value_inner = set_value;
+                    let set_value_from_key = set_value;
+                    let key_value = item.value.clone();
+                    let current_value_from_key = current_value.clone();
                     let title = item.title.clone();
                     let disabled = item.disabled;
                     let content = item.content.clone();
@@ -102,6 +106,8 @@ pub fn Accordion(
                                 padding_top: spacing::LG,
                                 padding_bottom: spacing::LG,
                                 border_radius: md,
+                                focusable: desktop && !disabled,
+                                focus_on_touch: false,
                                 opacity: if disabled { 0.5f32 } else { 1.0f32 },
                                 onclick: move |_: dioxus_core::Event<_>| {
                                     if disabled { return; }
@@ -111,6 +117,15 @@ pub fn Accordion(
                                         Some(item_value.clone())
                                     };
                                     set_value_inner.call(next);
+                                },
+                                onkey: move |event| {
+                                    if disabled || !event.data().activates() { return; }
+                                    let next = if current_value_from_key.as_deref() == Some(key_value.as_str()) {
+                                        if collapsible_inner { None } else { Some(key_value.clone()) }
+                                    } else {
+                                        Some(key_value.clone())
+                                    };
+                                    set_value_from_key.call(next);
                                 },
                                 column {
                                     accessibility_mode: "disabled_for_descendants",

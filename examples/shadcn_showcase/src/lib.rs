@@ -14,23 +14,25 @@ use arkit::shadcn::components::{
     use_anchor, Accordion, AccordionItemSpec, Alert, AlertDescription, AlertDialog,
     AlertDialogAction, AlertList, AlertTitle, AlertVariant, Anchor, AnchorItem, AnchorSection,
     AspectRatio, Avatar, AvatarFallback, Badge, BadgeVariant, BottomNavigation,
-    BottomNavigationItem, BottomSheet, BottomSheetTextInput, Button, ButtonSize, ButtonVariant,
-    Calendar, CalendarDayContext, CalendarDayDecoration, CalendarDayEvent, CalendarDayEventKind,
-    CalendarDayEventResponse, CalendarDayStyle, CalendarPlugin, CalendarPluginLayout,
-    CalendarYearRange, Card, CardContent, CardFooter, CardHeader, Carousel,
+    BottomNavigationItem, BottomSheet, BottomSheetTextInput, Breadcrumb, Button, ButtonSize,
+    ButtonVariant, Calendar, CalendarDayContext, CalendarDayDecoration, CalendarDayEvent,
+    CalendarDayEventKind, CalendarDayEventResponse, CalendarDayStyle, CalendarPlugin,
+    CalendarPluginLayout, CalendarYearRange, Card, CardContent, CardFooter, CardHeader, Carousel,
     CarouselControlsPlacement, CarouselIndicatorVariant, CarouselStyle, Checkbox, Code,
-    Collapsible, ContextMenu, DatePicker, Dialog, DialogFooter, DialogHeader, DropdownMenu, Field,
-    FieldContent, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldOrientation,
-    FieldSeparator, FieldSet, FieldTitle, FloatingSide, Guide, GuideStep, GuideTarget, HoverCard,
-    Index, IndexBarSlot, IndexHeaderContext, IndexItemContext, IndexItemSpec, InfiniteScroll,
-    Input, InputMode, InputOtp, InputOtpMode, InputOtpSeparator, Label, LoadMoreIndicator,
-    LoadMoreState, Markdown, MenuEntry, Menubar, MenubarMenuSpec, MultiSlider, Popover, Progress,
-    PullToRefresh, RadioGroup, RangeSlider, SecureKeyboardMode, SecureKeyboardSheet, Select,
-    Separator, Skeleton, Slider, SliderOrientation, SliderStyle, Sonner, SonnerPosition,
-    SonnerToast, Spinner, Switch, Table, Tabs, Text, TextVariant, Textarea, TimePicker,
-    TimePickerFormat, TimeValue, Timeline, TimelineAlign, TimelineItem, TimelineOrientation,
-    ToastAppearance, Toggle, ToggleGroup, ToggleVariant, Tooltip, Watermark, WatermarkBlendMode,
-    WatermarkFontStyle, WatermarkShadow, WatermarkSource, WatermarkStroke, WatermarkStyle,
+    Collapsible, Combobox, Command, ContextMenu, DatePicker, Dialog, DialogFooter, DialogHeader,
+    Drawer, DropdownMenu, Field, FieldContent, FieldDescription, FieldError, FieldGroup,
+    FieldLabel, FieldOrientation, FieldSeparator, FieldSet, FieldTitle, FloatingLayer,
+    FloatingSide, Guide, GuideStep, GuideTarget, HoverCard, Index, IndexBarSlot,
+    IndexHeaderContext, IndexItemContext, IndexItemSpec, InfiniteScroll, Input, InputMode,
+    InputOtp, InputOtpMode, InputOtpSeparator, Label, LoadMoreIndicator, LoadMoreState, Markdown,
+    MenuEntry, Menubar, MenubarMenuSpec, MultiSlider, NavigationItem, NavigationMenu, Popover,
+    Progress, PullToRefresh, RadioGroup, RangeSlider, SecureKeyboardMode, SecureKeyboardSheet,
+    Select, Separator, Sheet, Skeleton, Slider, SliderOrientation, SliderStyle, Sonner,
+    SonnerPosition, SonnerToast, Spinner, Switch, Table, Tabs, Text, TextVariant, Textarea,
+    TimePicker, TimePickerFormat, TimeValue, Timeline, TimelineAlign, TimelineItem,
+    TimelineOrientation, ToastAppearance, Toggle, ToggleGroup, ToggleVariant, Tooltip, Watermark,
+    WatermarkBlendMode, WatermarkFontStyle, WatermarkShadow, WatermarkSource, WatermarkStroke,
+    WatermarkStyle,
 };
 use arkit::shadcn::icon::icon_placeholder;
 use arkit::shadcn::theme::{
@@ -216,6 +218,10 @@ const COMPONENTS: &[ComponentSpec] = &[
         name: "Bottom Sheet",
     },
     ComponentSpec {
+        slug: "breadcrumb",
+        name: "Breadcrumb",
+    },
+    ComponentSpec {
         slug: "button",
         name: "Button",
     },
@@ -238,6 +244,14 @@ const COMPONENTS: &[ComponentSpec] = &[
     ComponentSpec {
         slug: "collapsible",
         name: "Collapsible",
+    },
+    ComponentSpec {
+        slug: "combobox",
+        name: "Combobox",
+    },
+    ComponentSpec {
+        slug: "command",
+        name: "Command",
     },
     ComponentSpec {
         slug: "context-menu",
@@ -268,8 +282,16 @@ const COMPONENTS: &[ComponentSpec] = &[
         name: "Dropdown Menu",
     },
     ComponentSpec {
+        slug: "drawer",
+        name: "Drawer",
+    },
+    ComponentSpec {
         slug: "form",
         name: "Form",
+    },
+    ComponentSpec {
+        slug: "floating-layer",
+        name: "Floating Layer",
     },
     ComponentSpec {
         slug: "guide",
@@ -312,6 +334,10 @@ const COMPONENTS: &[ComponentSpec] = &[
         name: "Menubar",
     },
     ComponentSpec {
+        slug: "navigation-menu",
+        name: "Navigation Menu",
+    },
+    ComponentSpec {
         slug: "popover",
         name: "Popover",
     },
@@ -338,6 +364,10 @@ const COMPONENTS: &[ComponentSpec] = &[
     ComponentSpec {
         slug: "separator",
         name: "Separator",
+    },
+    ComponentSpec {
+        slug: "sheet",
+        name: "Sheet",
     },
     ComponentSpec {
         slug: "skeleton",
@@ -1376,6 +1406,12 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let mut context_person = use_signal(|| "pedro".to_string());
     let mut context_outside_clicks = use_signal(|| 0_u32);
     let mut menubar_active = use_signal(|| None::<usize>);
+    let mut navigation_active = use_signal(|| 0_usize);
+    let mut combobox_open = use_signal(|| false);
+    let mut combobox_value = use_signal(|| "Rust".to_string());
+    let mut command_query = use_signal(String::new);
+    let mut drawer_open = use_signal(|| false);
+    let mut sheet_open = use_signal(|| false);
     let mut select_open = use_signal(|| false);
     let mut selected_fruit = use_signal(|| "Apple".to_string());
     let mut accordion_value = use_signal(|| Some("item-1".to_string()));
@@ -5141,6 +5177,215 @@ fn ComponentDemo(slug: &'static str) -> Element {
                             "Hover/Press"
                         }
                     },
+                }
+            }
+        },
+        "breadcrumb" => rsx! {
+            fixed_width {
+                width: 520.0,
+                column {
+                    width: "100%",
+                    align_items: "start",
+                    demo_mode_label {
+                        title: "Path".to_string(),
+                        detail: Some("Muted ancestors and a foreground current page.".to_string()),
+                    }
+                    Breadcrumb {
+                        items: vec![
+                            "Home".to_string(),
+                            "Components".to_string(),
+                            "Breadcrumb".to_string(),
+                        ],
+                    }
+                }
+            }
+        },
+        "combobox" => rsx! {
+            fixed_width {
+                width: 320.0,
+                column {
+                    width: "100%",
+                    align_items: "start",
+                    demo_mode_label {
+                        title: "Controlled".to_string(),
+                        detail: Some(format!("selected = {}", combobox_value())),
+                    }
+                    Combobox {
+                        options: vec![
+                            "Rust".to_string(),
+                            "ArkTS".to_string(),
+                            "TypeScript".to_string(),
+                            "Kotlin".to_string(),
+                            "Swift".to_string(),
+                        ],
+                        placeholder: Some("Select a language".to_string()),
+                        label: Some("Languages".to_string()),
+                        selected: combobox_value(),
+                        open: Some(combobox_open()),
+                        default_open: false,
+                        on_open_change: Some(EventHandler::new(move |value| combobox_open.set(value))),
+                        on_select: Some(EventHandler::new(move |value| combobox_value.set(value))),
+                    }
+                }
+            }
+        },
+        "command" => rsx! {
+            fixed_width {
+                width: 420.0,
+                column {
+                    width: "100%",
+                    align_items: "start",
+                    demo_mode_label {
+                        title: "Command palette".to_string(),
+                        detail: Some("Type to filter, then activate an item.".to_string()),
+                    }
+                    Command {
+                        query: command_query(),
+                        options: vec![
+                            "Open settings".to_string(),
+                            "Create project".to_string(),
+                            "Invite teammate".to_string(),
+                            "Toggle theme".to_string(),
+                        ],
+                        placeholder: Some("Type a command…".to_string()),
+                        on_query_change: Some(EventHandler::new(move |value| command_query.set(value))),
+                    }
+                }
+            }
+        },
+        "drawer" => rsx! {
+            column {
+                width: "100%",
+                align_items: "start",
+                demo_mode_label {
+                    title: "Desktop drawer".to_string(),
+                    detail: Some("A modal task surface without the touch drag handle.".to_string()),
+                }
+                Button {
+                    variant: ButtonVariant::Outline,
+                    onclick: move |_| drawer_open.set(true),
+                    "Open drawer"
+                }
+            }
+            Drawer {
+                title: "Move goal".to_string(),
+                side: Some("bottom".to_string()),
+                open: Some(drawer_open()),
+                default_open: Some(false),
+                on_close: Some(EventHandler::new(move |_| drawer_open.set(false))),
+                column {
+                    width: "100%",
+                    Text {
+                        content: "Choose a destination for this goal.".to_string(),
+                        variant: TextVariant::Muted,
+                    }
+                    v_gap { height: spacing::XL }
+                    Button {
+                        width: "100%",
+                        onclick: move |_| drawer_open.set(false),
+                        "Move to workspace"
+                    }
+                }
+            }
+        },
+        "floating-layer" => rsx! {
+            fixed_width {
+                width: 420.0,
+                FloatingLayer {
+                    default_open: Some(false),
+                    side: Some(FloatingSide::Bottom),
+                    align: Some(arkit::shadcn::components::FloatingAlign::Start),
+                    width: Some(280.0),
+                    estimated_height: Some(96.0),
+                    hover: Some(false),
+                    trigger: rsx! {
+                        Button {
+                            variant: ButtonVariant::Outline,
+                            onclick: move |_| {},
+                            "Open floating layer"
+                        }
+                    },
+                    column {
+                        width: 280.0,
+                        padding: spacing::LG,
+                        background_color: theme.colors.popover,
+                        border_width: 1.0,
+                        border_color: theme.colors.border,
+                        border_radius: theme.radii.md,
+                        shadow: "sm",
+                        align_items: "start",
+                        Text { content: "Floating layer".to_string(), variant: TextVariant::Small }
+                        v_gap { height: spacing::SM }
+                        Text {
+                            content: "A reusable anchored desktop surface.".to_string(),
+                            variant: TextVariant::Muted,
+                        }
+                    }
+                }
+            }
+        },
+        "navigation-menu" => rsx! {
+            column {
+                width: "100%",
+                align_items: "start",
+                demo_mode_label {
+                    title: "Desktop navigation".to_string(),
+                    detail: Some("Tab through items or activate with Enter / Space.".to_string()),
+                }
+                NavigationMenu {
+                    NavigationItem {
+                        title: "Overview".to_string(),
+                        active: Some(navigation_active() == 0),
+                        onclick: move |_| navigation_active.set(0),
+                    }
+                    NavigationItem {
+                        title: "Components".to_string(),
+                        active: Some(navigation_active() == 1),
+                        onclick: move |_| navigation_active.set(1),
+                    }
+                    NavigationItem {
+                        title: "Examples".to_string(),
+                        active: Some(navigation_active() == 2),
+                        onclick: move |_| navigation_active.set(2),
+                    }
+                }
+            }
+        },
+        "sheet" => rsx! {
+            column {
+                width: "100%",
+                align_items: "start",
+                demo_mode_label {
+                    title: "Desktop sheet".to_string(),
+                    detail: Some("A fixed-width side panel on PC.".to_string()),
+                }
+                Button {
+                    variant: ButtonVariant::Outline,
+                    onclick: move |_| sheet_open.set(true),
+                    "Open sheet"
+                }
+            }
+            Sheet {
+                title: "Edit settings".to_string(),
+                side: Some("right".to_string()),
+                open: Some(sheet_open()),
+                default_open: Some(false),
+                on_close: Some(EventHandler::new(move |_| sheet_open.set(false))),
+                column {
+                    width: "100%",
+                    Label { content: "Display name".to_string() }
+                    v_gap { height: spacing::SM }
+                    Input {
+                        value: Some(dialog_name()),
+                        width: "100%",
+                        on_change: move |value| dialog_name.set(value),
+                    }
+                    v_gap { height: spacing::XL }
+                    Button {
+                        width: "100%",
+                        onclick: move |_| sheet_open.set(false),
+                        "Save changes"
+                    }
                 }
             }
         },

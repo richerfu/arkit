@@ -2,11 +2,11 @@
 //! `floating_panel` helper.
 //!
 //! The legacy implementation drove ArkUI's native floating-overlay system
-//! (`floating_overlay_with_surfaces`). In the dioxus migration we render
-//! inline: the trigger is mounted normally, and when `open` an optional
-//! full-size outside-dismiss layer is stacked over the trigger area. Passive
-//! hover surfaces remain pass-through; click-opened surfaces consume an
-//! outside click to dismiss while the panel itself keeps normal interaction.
+//! (`floating_overlay_with_surfaces`). The dioxus implementation keeps the
+//! trigger in normal flow and projects the panel into the app overlay so it is
+//! positioned in window coordinates and cannot be clipped by its parent.
+//! Passive hover surfaces remain pass-through; click-opened surfaces consume
+//! one outside click to dismiss.
 //!
 //! Shared constants/enums here are consumed by the overlay components
 //! (`popover`, `tooltip`, `hover_card`, `dialog`, `drawer`, `sheet`,
@@ -15,6 +15,7 @@
 use arkit_prelude::*;
 use dioxus_core_macro::component;
 
+use super::motion::{OverlayPresence, FLOATING_ENTER_MS, FLOATING_EXIT_MS};
 use crate::theme::spacing;
 
 /// Backdrop color for modal overlays (50% black).
@@ -29,12 +30,6 @@ pub(crate) const HIT_TEST_DEFAULT: &str = "default";
 pub(crate) const HIT_TEST_NONE: &str = "none";
 /// Small outer shadow preset (`shadow: "sm"`).
 pub(crate) const SHADOW_SM: &str = "sm";
-
-// CSS-style stack `alignment` keywords.
-pub(crate) const ALIGN_TOP: &str = "top";
-pub(crate) const ALIGN_START: &str = "start";
-pub(crate) const ALIGN_END: &str = "end";
-pub(crate) const ALIGN_BOTTOM: &str = "bottom";
 
 /// Side of the trigger the floating panel anchors to.
 ///
@@ -55,16 +50,6 @@ pub enum FloatingAlign {
     #[default]
     Center,
     End,
-}
-
-/// Resolve a [`FloatingSide`] to a CSS `alignment` keyword.
-pub(crate) fn side_alignment(side: FloatingSide) -> &'static str {
-    match side {
-        FloatingSide::Top => ALIGN_TOP,
-        FloatingSide::Bottom => ALIGN_BOTTOM,
-        FloatingSide::Left => ALIGN_START,
-        FloatingSide::Right => ALIGN_END,
-    }
 }
 
 /// Resolve a side name (`"top"` / `"bottom"` / `"left"` / `"right"`) to a
@@ -275,8 +260,8 @@ pub(crate) fn trigger_width_vp(
     (trigger.width / scale.max(f32::EPSILON)).max(1.0)
 }
 
-/// Generic floating layer: renders `trigger` and, when open, a capture layer
-/// holding `children` (the panel) aligned to `side`.
+/// Generic floating layer: renders `trigger` and, when open, projects
+/// `children` into the app overlay and anchors the panel to the trigger.
 ///
 /// `hover` selects the trigger activation mode: when `true`, hovering the
 /// trigger opens the panel (tooltip/hover-card behaviour); otherwise the
@@ -290,10 +275,23 @@ pub fn FloatingLayer(
     open: Option<bool>,
     default_open: Option<bool>,
     on_close: Option<EventHandler<()>>,
+    on_open_change: Option<EventHandler<bool>>,
     side: Option<FloatingSide>,
+    align: Option<FloatingAlign>,
+    width: Option<f32>,
+    estimated_height: Option<f32>,
+    side_offset: Option<f32>,
     hover: Option<bool>,
     children: Element,
 ) -> Element {
+    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
+    let viewport = arkit_hooks::use_overlay_viewport();
+    let trigger_ref = arkit_hooks::use_native_element_ref();
+    let trigger_frame = use_signal(arkit_arkui::LayoutFramePx::default);
+    arkit_hooks::use_layout_frame(trigger_ref.clone(), move |frame| {
+        let mut trigger_frame = trigger_frame;
+        trigger_frame.set(frame);
+    });
     let mut internal = use_signal(|| default_open.unwrap_or(false));
     let current = match open {
         Some(v) => v,
@@ -301,17 +299,30 @@ pub fn FloatingLayer(
     };
     let controlled = open.is_some();
     let hover = hover.unwrap_or(false);
-    let alignment = side_alignment(side.unwrap_or_default());
+    let side = side.unwrap_or_default();
+    let panel_width = width.unwrap_or(288.0);
+    let panel_height = estimated_height.unwrap_or(132.0);
+    let frame = if current {
+        trigger_frame_for_anchor(&trigger_ref, *trigger_frame.read())
+    } else {
+        *trigger_frame.read()
+    };
+    let placement = FloatingPanelPlacement::resolve(
+        frame,
+        viewport,
+        panel_width,
+        panel_height,
+        side,
+        align.unwrap_or_default(),
+        side_offset.unwrap_or(spacing::XXS),
+    );
 
-    let open_up = EventHandler::new(move |_: ()| {
-        if !controlled {
-            internal.set(true);
-        }
-    });
-    let toggle = EventHandler::new(move |_: ()| {
-        let next = !current;
+    let set_open = EventHandler::new(move |next: bool| {
         if !controlled {
             internal.set(next);
+        }
+        if let Some(handler) = on_open_change {
+            handler.call(next);
         }
         if !next {
             if let Some(handler) = on_close {
@@ -319,72 +330,77 @@ pub fn FloatingLayer(
             }
         }
     });
-    let close = EventHandler::new(move |_: ()| {
-        if !controlled {
-            internal.set(false);
-        }
-        if let Some(handler) = on_close {
-            handler.call(());
-        }
+    let open_up = EventHandler::new(move |_: ()| set_open.call(true));
+    let toggle = EventHandler::new(move |_: ()| {
+        set_open.call(!current);
     });
+    let close = EventHandler::new(move |_: ()| set_open.call(false));
 
     rsx! {
-        stack {
-            width: "100%",
-            height: "100%",
-            alignment: "top",
-            hit_test_behavior: "none",
-            if hover {
-                row {
-                    accessibility_role: "button",
-                    accessibility_text: if let Some(label) = accessibility_label.clone() { label },
-                    accessibility_description: if current { "expanded" } else { "collapsed" },
-                    accessibility_group: true,
-                    accessibility_actions: "click",
-                    accessibility_selected: current,
-                    focusable: true,
-                    focus_on_touch: true,
-                    onclick: move |_| toggle.call(()),
-                    onhover: move |_| open_up.call(()),
-                    {trigger}
-                }
-            } else {
-                row {
-                    accessibility_role: "button",
-                    accessibility_text: if let Some(label) = accessibility_label { label },
-                    accessibility_description: if current { "expanded" } else { "collapsed" },
-                    accessibility_group: true,
-                    accessibility_actions: "click",
-                    accessibility_selected: current,
-                    focusable: true,
-                    focus_on_touch: true,
-                    onclick: move |_| toggle.call(()),
-                    {trigger}
-                }
-            }
-            if current {
+        row {
+            native_ref: trigger_ref,
+            accessibility_role: "button",
+            accessibility_text: if let Some(label) = accessibility_label { label },
+            accessibility_description: if current { "expanded" } else { "collapsed" },
+            accessibility_group: true,
+            accessibility_actions: "click",
+            accessibility_selected: current,
+            focusable: true,
+            focus_on_touch: false,
+            onclick: move |_| toggle.call(()),
+            onhover: move |event| {
                 if hover {
-                    stack {
-                        width: "100%",
-                        accessibility_mode: "disabled",
-                        height: "100%",
-                        alignment: alignment,
-                        hit_test_behavior: "none",
-                        {children}
+                    if event.data().is_hovering {
+                        open_up.call(());
+                    } else {
+                        close.call(());
                     }
-                } else {
-                    stack {
-                        width: "100%",
-                        height: "100%",
-                        background_color: FLOATING_CAPTURE_COLOR,
-                        alignment: alignment,
-                        hit_test_behavior: "default",
-                        onclick: move |_| close.call(()),
-                        stack {
-                            onclick: move |evt| evt.stop_propagation(),
-                            {children}
-                        }
+                }
+            },
+            onfocus: move |_| {
+                if hover {
+                    open_up.call(());
+                }
+            },
+            onblur: move |_| {
+                if hover {
+                    close.call(());
+                }
+            },
+            onkey: move |event| {
+                if event.data().is_down()
+                    && event.data().key == dioxus_elements::event::KeyboardKey::Escape
+                {
+                    close.call(());
+                } else if !hover && event.data().activates() {
+                    toggle.call(());
+                }
+            },
+            {trigger}
+        }
+        OverlayPresence {
+            open: current,
+            preset: Some(arkit_animation::TransitionPreset::Fade),
+            duration_ms: Some(FLOATING_ENTER_MS),
+            exit_duration_ms: Some(FLOATING_EXIT_MS),
+            fill: Some(true),
+            layer: Some(arkit_hooks::OverlayLayer::Floating),
+            stack {
+                width: "100%",
+                height: "100%",
+                background_color: if hover { 0x00000000 } else { FLOATING_CAPTURE_COLOR },
+                hit_test_behavior: if hover { HIT_TEST_NONE } else { HIT_TEST_DEFAULT },
+                onclick: move |_| {
+                    if !hover {
+                        close.call(());
                     }
+                },
+                stack {
+                    position: format!("{},{}", placement.x.max(0.0), placement.y.max(0.0)),
+                    width: panel_width,
+                    hit_test_behavior: HIT_TEST_DEFAULT,
+                    onclick: move |event| event.stop_propagation(),
+                    {children}
                 }
             }
         }
@@ -394,14 +410,6 @@ pub fn FloatingLayer(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn side_alignment_maps_to_arkui_alignment_ints() {
-        assert_eq!(side_alignment(FloatingSide::Top), ALIGN_TOP);
-        assert_eq!(side_alignment(FloatingSide::Bottom), ALIGN_BOTTOM);
-        assert_eq!(side_alignment(FloatingSide::Left), ALIGN_START);
-        assert_eq!(side_alignment(FloatingSide::Right), ALIGN_END);
-    }
 
     #[test]
     fn side_from_name_defaults_to_bottom() {

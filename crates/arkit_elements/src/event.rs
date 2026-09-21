@@ -41,12 +41,17 @@ pub enum ArkEventKind {
     DragLeave,
     DragEnter,
     Touch,
+    Key,
+    Mouse,
 }
 
 impl ArkEventKind {
     /// Whether Dioxus should propagate this event through ancestor listeners.
     pub const fn bubbles(self) -> bool {
-        matches!(self, Self::Click | Self::LongPress | Self::Touch)
+        matches!(
+            self,
+            Self::Click | Self::LongPress | Self::Touch | Self::Key | Self::Mouse
+        )
     }
 }
 
@@ -99,6 +104,10 @@ pub enum ArkEventPayload {
     Layout(LayoutPayload),
     /// Pointer payload for input events such as click, touch, and hover move.
     Pointer(PointerPayload),
+    /// Physical keyboard input delivered to the focused node.
+    Key(KeyPayload),
+    /// Raw mouse input delivered to a desktop-capable node.
+    Mouse(MousePayload),
 }
 
 /// Scroll-index payload shared by list/grid/water-flow `on_scroll` events.
@@ -177,6 +186,88 @@ pub enum PointerAction {
     Down,
     Move,
     Up,
+}
+
+/// Platform-neutral mouse button identity.
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MouseButton {
+    #[default]
+    None,
+    Primary,
+    Secondary,
+    Middle,
+    Back,
+    Forward,
+    Side,
+    Extra,
+    Task,
+    Other(i32),
+}
+
+/// Raw mouse values captured during the native callback.
+#[derive(Default, Clone, Copy, Debug, PartialEq)]
+pub struct MousePayload {
+    pub button: MouseButton,
+    pub action: PointerAction,
+    pub x: f32,
+    pub y: f32,
+    pub window_x: f32,
+    pub window_y: f32,
+}
+
+/// Platform-neutral key identity used by desktop-capable components.
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KeyboardKey {
+    #[default]
+    Unknown,
+    Enter,
+    Space,
+    Tab,
+    Escape,
+    ArrowUp,
+    ArrowDown,
+    ArrowLeft,
+    ArrowRight,
+    Home,
+    End,
+    PageUp,
+    PageDown,
+    Delete,
+    Backspace,
+    Menu,
+    F10,
+    Character(char),
+    Other(i32),
+}
+
+/// Native key lifecycle normalized across OpenHarmony keyboard sources.
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KeyAction {
+    #[default]
+    Unknown,
+    Down,
+    Up,
+    Repeat,
+    Click,
+}
+
+/// Modifier snapshot attached to a physical key event.
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct KeyModifiers {
+    pub ctrl: bool,
+    pub shift: bool,
+    pub alt: bool,
+    pub function: bool,
+}
+
+/// Raw and normalized keyboard values captured during the native callback.
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
+pub struct KeyPayload {
+    pub key: KeyboardKey,
+    pub action: KeyAction,
+    pub raw_code: i32,
+    pub text: String,
+    pub modifiers: KeyModifiers,
 }
 
 impl PointerPayload {
@@ -329,6 +420,86 @@ impl From<&ArkEventData> for PointerData {
     }
 }
 
+/// Data for a native mouse event.
+#[derive(Default, Clone, Copy, Debug, PartialEq)]
+pub struct MouseData {
+    pub button: MouseButton,
+    pub action: PointerAction,
+    pub x: f32,
+    pub y: f32,
+    pub window_x: f32,
+    pub window_y: f32,
+}
+
+impl MouseData {
+    pub fn secondary_down(self) -> bool {
+        self.button == MouseButton::Secondary && self.action == PointerAction::Down
+    }
+}
+
+impl From<ArkEventData> for MouseData {
+    fn from(data: ArkEventData) -> Self {
+        Self::from(&data)
+    }
+}
+
+impl From<&ArkEventData> for MouseData {
+    fn from(data: &ArkEventData) -> Self {
+        match data.payload {
+            ArkEventPayload::Mouse(payload) => Self {
+                button: payload.button,
+                action: payload.action,
+                x: payload.x,
+                y: payload.y,
+                window_x: payload.window_x,
+                window_y: payload.window_y,
+            },
+            _ => Self::default(),
+        }
+    }
+}
+
+/// Data for a physical keyboard event.
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
+pub struct KeyData {
+    pub key: KeyboardKey,
+    pub action: KeyAction,
+    pub raw_code: i32,
+    pub text: String,
+    pub modifiers: KeyModifiers,
+}
+
+impl KeyData {
+    pub fn is_down(&self) -> bool {
+        matches!(self.action, KeyAction::Down | KeyAction::Repeat)
+    }
+
+    pub fn activates(&self) -> bool {
+        self.is_down() && matches!(self.key, KeyboardKey::Enter | KeyboardKey::Space)
+    }
+}
+
+impl From<ArkEventData> for KeyData {
+    fn from(data: ArkEventData) -> Self {
+        Self::from(&data)
+    }
+}
+
+impl From<&ArkEventData> for KeyData {
+    fn from(data: &ArkEventData) -> Self {
+        match &data.payload {
+            ArkEventPayload::Key(payload) => Self {
+                key: payload.key,
+                action: payload.action,
+                raw_code: payload.raw_code,
+                text: payload.text.clone(),
+                modifiers: payload.modifiers,
+            },
+            _ => Self::default(),
+        }
+    }
+}
+
 /// Data for a value-change event (checkbox/toggle/radio/slider/text input).
 ///
 /// `bool_value`/`float_value`/`string_value` are populated depending on the
@@ -362,6 +533,8 @@ impl From<&ArkEventData> for ChangeData {
             | ArkEventPayload::Layout(_)
             | ArkEventPayload::Pointer(_)
             | ArkEventPayload::AccessibilityAction(_)
+            | ArkEventPayload::Key(_)
+            | ArkEventPayload::Mouse(_)
             | ArkEventPayload::None => {}
         }
         out
@@ -511,7 +684,10 @@ impl From<&ArkEventData> for ReachEndData {
 
 #[cfg(test)]
 mod tests {
-    use super::{classify_event_name, ArkEventKind};
+    use super::{
+        classify_event_name, ArkEventData, ArkEventKind, ArkEventPayload, KeyAction, KeyData,
+        KeyPayload, KeyboardKey, MouseButton, MouseData, MousePayload, PointerAction,
+    };
 
     #[test]
     fn canonical_event_names_share_one_semantic_identity() {
@@ -530,9 +706,51 @@ mod tests {
         for name in ["onreachend", "reachend"] {
             assert_eq!(classify_event_name(name), Some(ArkEventKind::ReachEnd));
         }
+        for name in ["onkey", "key"] {
+            assert_eq!(classify_event_name(name), Some(ArkEventKind::Key));
+        }
+        for name in ["onmouse", "mouse"] {
+            assert_eq!(classify_event_name(name), Some(ArkEventKind::Mouse));
+        }
         assert!(ArkEventKind::Click.bubbles());
         assert!(ArkEventKind::LongPress.bubbles());
         assert!(!ArkEventKind::Change.bubbles());
+    }
+
+    #[test]
+    fn keyboard_activation_requires_a_press_of_enter_or_space() {
+        let enter = KeyData::from(ArkEventData::with_payload(ArkEventPayload::Key(
+            KeyPayload {
+                key: KeyboardKey::Enter,
+                action: KeyAction::Down,
+                ..Default::default()
+            },
+        )));
+        assert!(enter.activates());
+
+        let released_space = KeyData::from(ArkEventData::with_payload(ArkEventPayload::Key(
+            KeyPayload {
+                key: KeyboardKey::Space,
+                action: KeyAction::Up,
+                ..Default::default()
+            },
+        )));
+        assert!(!released_space.activates());
+    }
+
+    #[test]
+    fn secondary_mouse_press_is_preserved() {
+        let mouse = MouseData::from(ArkEventData::with_payload(ArkEventPayload::Mouse(
+            MousePayload {
+                button: MouseButton::Secondary,
+                action: PointerAction::Down,
+                window_x: 24.0,
+                window_y: 48.0,
+                ..Default::default()
+            },
+        )));
+        assert!(mouse.secondary_down());
+        assert_eq!((mouse.window_x, mouse.window_y), (24.0, 48.0));
     }
 
     /// The classifier is generated from the listener declarations, so every

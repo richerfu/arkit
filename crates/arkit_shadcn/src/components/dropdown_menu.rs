@@ -30,6 +30,7 @@ pub fn DropdownMenu(
 ) -> Element {
     let _ = trigger_capture;
     let theme = use_theme();
+    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
     let viewport = arkit_hooks::use_overlay_viewport();
     let trigger_ref = arkit_hooks::use_native_element_ref();
     let trigger_frame = use_signal(arkit_arkui::LayoutFramePx::default);
@@ -86,6 +87,15 @@ pub fn DropdownMenu(
             accessibility_selected: current_open,
             focusable: true,
             onclick: move |_| set_open.call(!current_open),
+            onkey: move |event| {
+                if event.data().key == dioxus_elements::event::KeyboardKey::Escape
+                    && event.data().is_down()
+                {
+                    set_open.call(false);
+                } else if event.data().activates() {
+                    set_open.call(!current_open);
+                }
+            },
             {children}
         }
         OverlayPresence {
