@@ -26,6 +26,13 @@ OHPM="${OHPM:-${DEVECO_CONTENTS:+$DEVECO_CONTENTS/tools/ohpm/bin/ohpm}}"
 [ -x "$OHPM" ] || OHPM="$(command -v ohpm || true)"
 [ -x "$HVIGWORW" ] || { echo "hvigorw not found; set HVIGORW or DEVECO_CONTENTS" >&2; exit 1; }
 [ -x "$OHPM" ] || { echo "ohpm not found; set OHPM or DEVECO_CONTENTS" >&2; exit 1; }
+if [ -d "${OHOS_NDK_HOME:-}/native/llvm" ]; then
+  ARKIT_NATIVE_ROOT="$OHOS_NDK_HOME/native"
+elif [ -d "${OHOS_NDK_HOME:-}/llvm" ]; then
+  ARKIT_NATIVE_ROOT="$OHOS_NDK_HOME"
+else
+  ARKIT_NATIVE_ROOT="${DEVECO_SDK_HOME:-}/default/openharmony/native"
+fi
 BUNDLE="com.arkit.example"
 ABILITY="EntryAbility"
 HDC_TARGET="${HDC_TARGET:-}"

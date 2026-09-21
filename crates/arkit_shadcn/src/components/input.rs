@@ -76,8 +76,11 @@ pub struct InputProps {
     pub mode: InputMode,
     #[props(default)]
     pub height: Option<f32>,
-    /// CSS width (`"100%"`, `"50%"`). Unset leaves the field content-sized.
+    /// CSS width (`"100%"`, `"50%"`). Takes precedence over `full`.
     pub width: Option<String>,
+    /// Fill the available parent width, matching shadcn's `w-full` default.
+    #[props(default = true)]
+    pub full: bool,
     /// Uses the destructive border treatment for validation failures.
     #[props(default)]
     pub invalid: bool,
@@ -120,6 +123,7 @@ pub fn Input(props: InputProps) -> Element {
         mode,
         height,
         width,
+        full,
         invalid,
         required,
         disabled,
@@ -144,6 +148,7 @@ pub fn Input(props: InputProps) -> Element {
     let input_type = mode.native_input_type(password_is_visible);
     let input_filter = mode.native_input_filter();
     let field_height = height.unwrap_or(control::HEIGHT);
+    let width = width.or_else(|| full.then(|| "100%".to_string()));
     let field_width = width.clone();
     let accessibility_description = accessibility_description
         .into_iter()

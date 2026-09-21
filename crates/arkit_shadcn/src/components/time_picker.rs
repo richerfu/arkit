@@ -6,7 +6,9 @@
 
 use std::fmt;
 
-use super::{BottomSheet, Button, ButtonSize, ButtonVariant, ARKUI_BORDER_STYLE_SOLID};
+use super::{
+    bottom_sheet::AdaptivePickerSheet, Button, ButtonSize, ButtonVariant, ARKUI_BORDER_STYLE_SOLID,
+};
 use crate::i18n::{use_component_i18n, ComponentI18n};
 use crate::icon::icon_placeholder;
 use crate::theme::{spacing, typography, use_theme, Theme};
@@ -138,6 +140,9 @@ pub struct TimePickerProps {
     pub default_open: bool,
     #[props(default)]
     pub disabled: bool,
+    /// Fill the available parent width instead of using the trigger's content width.
+    #[props(default)]
+    pub full: bool,
     #[props(default)]
     pub on_change: EventHandler<Option<TimeValue>>,
     #[props(default)]
@@ -227,6 +232,7 @@ pub fn TimePicker(props: TimePickerProps) -> Element {
         Button {
             native_ref: trigger_ref.clone(),
             variant: ButtonVariant::Outline,
+            full: props.full,
             disabled: Some(disabled),
             accessibility_label: trigger_label.clone(),
             accessibility_description: if open { "expanded" } else { "collapsed" },
@@ -252,7 +258,7 @@ pub fn TimePicker(props: TimePickerProps) -> Element {
                 }
             }
         }
-        BottomSheet {
+        AdaptivePickerSheet {
             title: String::new(),
             open: Some(open),
             default_open: Some(false),

@@ -6,8 +6,8 @@
 //! selected day again clears the value.
 
 use super::{
-    BottomSheet, Button, ButtonSize, ButtonVariant, Calendar, CalendarDate, CalendarLabels,
-    CalendarPlugin, CalendarYearRange,
+    bottom_sheet::AdaptivePickerSheet, Button, ButtonSize, ButtonVariant, Calendar, CalendarDate,
+    CalendarLabels, CalendarPlugin, CalendarYearRange,
 };
 use crate::i18n::use_component_i18n;
 use crate::icon::icon_placeholder;
@@ -49,6 +49,9 @@ pub struct DatePickerProps {
     pub default_open: bool,
     #[props(default)]
     pub disabled: bool,
+    /// Fill the available parent width instead of using the trigger's content width.
+    #[props(default)]
+    pub full: bool,
     #[props(default)]
     pub on_change: EventHandler<Option<String>>,
     #[props(default)]
@@ -123,6 +126,7 @@ pub fn DatePicker(props: DatePickerProps) -> Element {
         Button {
             native_ref: trigger_ref.clone(),
             variant: ButtonVariant::Outline,
+            full: props.full,
             disabled: Some(disabled),
             accessibility_label: label.clone(),
             accessibility_description: if open { "expanded" } else { "collapsed" },
@@ -142,7 +146,7 @@ pub fn DatePicker(props: DatePickerProps) -> Element {
                 }
             }
         }
-        BottomSheet {
+        AdaptivePickerSheet {
             title: String::new(),
             open: Some(open),
             default_open: Some(false),

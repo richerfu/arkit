@@ -163,6 +163,9 @@ pub struct ButtonProps {
     pub disabled: Option<bool>,
     /// CSS width (`"100%"`, `"48%"`, `"120"`). When unset, size defaults apply.
     pub width: Option<String>,
+    /// Fill the available parent width. An explicit `width` takes precedence.
+    #[props(default)]
+    pub full: bool,
     /// Override elevation. New York variants are flat by default; pass `true`
     /// to opt into a small drop shadow.
     #[props(default)]
@@ -214,6 +217,8 @@ pub fn Button(props: ButtonProps) -> Element {
             height: props.height.unwrap_or(ss.height),
             width: if let Some(w) = props.width {
                 w
+            } else if props.full {
+                "100%".to_string()
             } else if let Some(w) = ss.width {
                 format!("{w}")
             },

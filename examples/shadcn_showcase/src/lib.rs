@@ -1371,8 +1371,6 @@ fn ComponentDemo(slug: &'static str) -> Element {
         use_signal(|| "Click an anchor item to jump to a section.".to_string());
     let mut bottom_navigation_selected = use_signal(|| 0_usize);
     let mut bottom_sheet_open = use_signal(|| false);
-    let bottom_sheet_trigger_ref = use_native_element_ref();
-    let bottom_sheet_uc_trigger_ref = use_native_element_ref();
     let mut bottom_sheet_name = use_signal(|| "Pedro Duarte".to_string());
     let mut bottom_sheet_username = use_signal(|| "@peduarte".to_string());
     let mut calendar_selected = use_signal(|| None::<String>);
@@ -1903,7 +1901,6 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     detail: Some(format!("open = {}", bottom_sheet_open())),
                 }
                 Button {
-                    native_ref: bottom_sheet_trigger_ref.clone(),
                     onclick: move |_| bottom_sheet_open.set(true),
                     "Open"
                 }
@@ -1912,7 +1909,6 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 title: "Edit your profile".to_string(),
                 open: Some(bottom_sheet_open()),
                 default_open: Some(false),
-                anchor: bottom_sheet_trigger_ref,
                 on_close: move |_| bottom_sheet_open.set(false),
                 column {
                     width: "100%",
@@ -1943,7 +1939,6 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 detail: Some("default_open via remount key".to_string()),
             }
             Button {
-                native_ref: bottom_sheet_uc_trigger_ref.clone(),
                 variant: ButtonVariant::Outline,
                 onclick: move |_| sheet_uc_gen.set(sheet_uc_gen() + 1),
                 "Open Uncontrolled Sheet"
@@ -1953,7 +1948,6 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     key: "{sheet_uc_gen()}",
                     title: "Uncontrolled sheet".to_string(),
                     default_open: Some(true),
-                    anchor: bottom_sheet_uc_trigger_ref,
                     on_close: move |_| {},
                     Text {
                         content: "Dismiss uses internal open state.".to_string(),
@@ -1970,29 +1964,29 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     title: "Variants".to_string(),
                     detail: Some("Default, secondary, outline, ghost, link, destructive.".to_string()),
                 }
-                Button { width: "100%", onclick: move |_| {}, "Default" }
+                Button { full: true, onclick: move |_| {}, "Default" }
                 v_gap { height: spacing::SM }
-                Button { width: "100%", variant: ButtonVariant::Secondary, onclick: move |_| {}, "Secondary" }
+                Button { full: true, variant: ButtonVariant::Secondary, onclick: move |_| {}, "Secondary" }
                 v_gap { height: spacing::SM }
-                Button { width: "100%", variant: ButtonVariant::Outline, onclick: move |_| {}, "Outline" }
+                Button { full: true, variant: ButtonVariant::Outline, onclick: move |_| {}, "Outline" }
                 v_gap { height: spacing::SM }
-                Button { width: "100%", variant: ButtonVariant::Ghost, onclick: move |_| {}, "Ghost" }
+                Button { full: true, variant: ButtonVariant::Ghost, onclick: move |_| {}, "Ghost" }
                 v_gap { height: spacing::SM }
-                Button { width: "100%", variant: ButtonVariant::Link, onclick: move |_| {}, "Link" }
+                Button { full: true, variant: ButtonVariant::Link, onclick: move |_| {}, "Link" }
                 v_gap { height: spacing::SM }
-                Button { width: "100%", variant: ButtonVariant::Destructive, onclick: move |_| {}, "Destructive" }
+                Button { full: true, variant: ButtonVariant::Destructive, onclick: move |_| {}, "Destructive" }
                 v_gap { height: spacing::SM }
-                Button { width: "100%", variant: ButtonVariant::Destructive, disabled: Some(true), onclick: move |_| {}, "Disabled" }
+                Button { full: true, variant: ButtonVariant::Destructive, disabled: Some(true), onclick: move |_| {}, "Disabled" }
                 {demo_mode_divider()}
                 demo_mode_label {
                     title: "Sizes".to_string(),
                     detail: Some("Default 36vp, Sm 32vp, Lg 40vp, Icon 36×36.".to_string()),
                 }
-                Button { width: "100%", size: ButtonSize::Sm, onclick: move |_| {}, "Small" }
+                Button { full: true, size: ButtonSize::Sm, onclick: move |_| {}, "Small" }
                 v_gap { height: spacing::SM }
-                Button { width: "100%", onclick: move |_| {}, "Default" }
+                Button { full: true, onclick: move |_| {}, "Default" }
                 v_gap { height: spacing::SM }
-                Button { width: "100%", size: ButtonSize::Lg, onclick: move |_| {}, "Large" }
+                Button { full: true, size: ButtonSize::Lg, onclick: move |_| {}, "Large" }
                 v_gap { height: spacing::SM }
                 Button {
                     size: ButtonSize::Icon,
@@ -2430,6 +2424,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 DatePicker {
                     selected: date_picker_selected(),
                     open: Some(date_picker_open()),
+                    full: true,
                     calendar_year_range: CalendarYearRange::new(1900, 2100),
                     calendar_plugins: vec![lunar_calendar_plugin],
                     on_change: move |date| date_picker_selected.set(date),
@@ -2470,6 +2465,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 TimePicker {
                     selected: time_picker_selected(),
                     open: Some(time_picker_open()),
+                    full: true,
                     minute_step: 5,
                     on_change: move |time| time_picker_selected.set(time),
                     on_open_change: move |open| time_picker_open.set(open),
@@ -3331,7 +3327,6 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     Input {
                         placeholder: Some("Email".to_string()),
                         value: Some(input_controlled()),
-                        width: "100%",
                         on_change: Some(EventHandler::new(move |value| input_controlled.set(value))),
                     }
                     {demo_mode_divider()}
@@ -3341,7 +3336,6 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     Input {
                         placeholder: Some("Uncontrolled input".to_string()),
-                        width: "100%",
                     }
                     {demo_mode_divider()}
                     demo_mode_label {
@@ -3352,7 +3346,6 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         mode: InputMode::Password,
                         placeholder: Some("Password".to_string()),
                         value: Some(input_password()),
-                        width: "100%",
                         on_change: move |value| input_password.set(value),
                     }
                     {demo_mode_divider()}
@@ -3364,7 +3357,6 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         mode: InputMode::Number,
                         placeholder: Some("Digits only".to_string()),
                         value: Some(input_number()),
-                        width: "100%",
                         on_change: move |value| input_number.set(value),
                     }
                 }

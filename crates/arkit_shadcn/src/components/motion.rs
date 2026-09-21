@@ -233,6 +233,7 @@ pub(crate) fn AnimatedModal(
     #[props(default = true)] dismiss_on_backdrop: bool,
     #[props(default = 0x80000000)] backdrop_color: u32,
     #[props(default = 16.0)] viewport_inset: f32,
+    #[props(default)] panel_max_width: Option<f32>,
     #[props(default)] preset: Option<TransitionPreset>,
     #[props(default)] duration_ms: Option<i32>,
     #[props(default)] exit_duration_ms: Option<i32>,
@@ -252,17 +253,19 @@ pub(crate) fn AnimatedModal(
     let dismiss = on_dismiss;
     let placed = match presentation {
         arkit_hooks::ModalPresentation::CenteredDialog => rsx! {
-            stack {
+            column {
                 width: "100%",
                 height: "100%",
-                alignment: "center",
+                justify_content: "center",
+                align_items: "center",
                 padding_top: inset_top,
                 padding_right: inset_right,
                 padding_bottom: inset_bottom,
                 padding_left: inset_left,
                 hit_test_behavior: "transparent",
-                stack {
+                column {
                     width: "100%",
+                    max_width: panel_max_width,
                     clip: false,
                     hit_test_behavior: "transparent",
                     PresenceTransition {

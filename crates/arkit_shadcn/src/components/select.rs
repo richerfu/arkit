@@ -33,6 +33,7 @@ pub fn Select(
     default_selected: String,
     open: Option<bool>,
     default_open: bool,
+    #[props(default = true)] full: bool,
     on_open_change: Option<EventHandler<bool>>,
     on_select: Option<EventHandler<String>>,
 ) -> Element {
@@ -127,6 +128,8 @@ pub fn Select(
             enabled: !disabled,
             width: "100%",
             focusable: !disabled,
+            width: if full { Some("100%") } else { None },
+            focusable: desktop,
             focus_on_touch: false,
             onclick: move |_| { if !disabled { set_open.call(!current_open); } },
             onkey: move |event| {

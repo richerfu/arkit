@@ -1,11 +1,12 @@
-//! Responsive bottom sheet / anchored desktop popover.
+//! Bottom sheet and private adaptive picker surface.
 //!
 //! The sheet is mounted through a root-projected portal, so it is not
 //! clipped by the page or showcase canvas. Phone layouts mirror the React
 //! Native Reusables sheet: optional dismissible backdrop and drag indicator,
-//! rounded top corners, safe-area-aware padding, and pan-down dismissal. PC
-//! layouts follow shadcn's responsive picker pattern: when an anchor is
-//! supplied, the same content opens as an in-place popover next to its trigger.
+//! rounded top corners, safe-area-aware padding, and pan-down dismissal. A
+//! public `BottomSheet` always stays attached to the bottom edge. Date, time,
+//! and keyboard pickers use the private adaptive surface when they need an
+//! anchored PC popover instead.
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -46,6 +47,19 @@ fn responsive_sheet_presentation(
         ResponsiveSheetPresentation::AnchoredPopover
     } else {
         ResponsiveSheetPresentation::CenteredDialog
+    }
+}
+
+fn sheet_presentation(
+    always_bottom: bool,
+    desktop: bool,
+    anchored: bool,
+    fixed_bottom_on_pc: bool,
+) -> ResponsiveSheetPresentation {
+    if always_bottom {
+        ResponsiveSheetPresentation::BottomDrawer
+    } else {
+        responsive_sheet_presentation(desktop, anchored, fixed_bottom_on_pc)
     }
 }
 
@@ -163,18 +177,45 @@ fn anchored_bottom_sheet_popover(
     }
 }
 
-/// A controlled or uncontrolled bottom sheet.
+/// A controlled or uncontrolled panel attached to the bottom viewport edge.
 ///
-/// The trigger remains caller-owned, matching the other modal components in
-/// this crate. Set `open` from the trigger and handle `on_close` for backdrop,
-/// close-button, save-button, and drag dismissal paths. On PC, pass the
-/// trigger's `NativeElementRef` through `anchor` to use the shadcn-style
-/// in-place popover presentation. Without an anchor, PC falls back to a
-/// centered dialog. Set `fixed_bottom_on_pc` for controls such as an in-app
-/// keyboard that must stay attached to the bottom edge on every device. Phone
-/// and Pad layouts always ignore `anchor` and retain the bottom sheet.
+/// The trigger remains caller-owned. `BottomSheet` preserves bottom-sheet
+/// semantics on Phone, Pad, and PC; picker-specific responsive behavior is not
+/// part of this public component.
 #[component]
 pub fn BottomSheet(
+    title: String,
+    open: Option<bool>,
+    default_open: Option<bool>,
+    show_header: Option<bool>,
+    show_backdrop: Option<bool>,
+    show_handle: Option<bool>,
+    pc_width: Option<f32>,
+    on_close: Option<EventHandler<()>>,
+    children: Element,
+) -> Element {
+    rsx! {
+        SheetSurface {
+            title,
+            open,
+            default_open,
+            show_header,
+            show_backdrop,
+            show_handle,
+            pc_width,
+            fixed_bottom_on_pc: true,
+            always_bottom: true,
+            on_close,
+            {children}
+        }
+    }
+}
+
+/// Picker-only adaptive surface: anchored popover on PC, bottom sheet on
+/// touch-oriented layouts, with an explicit PC bottom override for secure
+/// keyboards.
+#[component]
+pub(crate) fn AdaptivePickerSheet(
     title: String,
     open: Option<bool>,
     default_open: Option<bool>,
@@ -184,6 +225,39 @@ pub fn BottomSheet(
     anchor: Option<arkit_arkui::NativeElementRef>,
     pc_width: Option<f32>,
     fixed_bottom_on_pc: Option<bool>,
+    on_close: Option<EventHandler<()>>,
+    children: Element,
+) -> Element {
+    rsx! {
+        SheetSurface {
+            title,
+            open,
+            default_open,
+            show_header,
+            show_backdrop,
+            show_handle,
+            anchor,
+            pc_width,
+            fixed_bottom_on_pc: fixed_bottom_on_pc.unwrap_or(false),
+            always_bottom: false,
+            on_close,
+            {children}
+        }
+    }
+}
+
+#[component]
+fn SheetSurface(
+    title: String,
+    open: Option<bool>,
+    default_open: Option<bool>,
+    show_header: Option<bool>,
+    show_backdrop: Option<bool>,
+    show_handle: Option<bool>,
+    anchor: Option<arkit_arkui::NativeElementRef>,
+    pc_width: Option<f32>,
+    fixed_bottom_on_pc: bool,
+    always_bottom: bool,
     on_close: Option<EventHandler<()>>,
     children: Element,
 ) -> Element {
@@ -211,8 +285,7 @@ pub fn BottomSheet(
     };
     let controlled = open.is_some();
     let desktop = adaptive.is_pc();
-    let presentation =
-        responsive_sheet_presentation(desktop, anchored, fixed_bottom_on_pc.unwrap_or(false));
+    let presentation = sheet_presentation(always_bottom, desktop, anchored, fixed_bottom_on_pc);
     let panel_width = pc_width
         .filter(|width| width.is_finite() && *width > 0.0)
         .unwrap_or(BOTTOM_SHEET_PC_DEFAULT_WIDTH);
@@ -233,6 +306,7 @@ pub fn BottomSheet(
             show_header: show_header.unwrap_or(true),
             show_handle: show_handle.unwrap_or(true),
             desktop,
+            bottom_attached: presentation == ResponsiveSheetPresentation::BottomDrawer,
             pc_width: panel_width,
             native_ref: Some(panel_ref),
             on_close: close,
@@ -281,6 +355,7 @@ struct BottomSheetPanelProps {
     show_header: bool,
     show_handle: bool,
     desktop: bool,
+    bottom_attached: bool,
     pc_width: f32,
     native_ref: Option<arkit_arkui::NativeElementRef>,
     on_close: EventHandler<()>,
@@ -301,12 +376,23 @@ fn BottomSheetPanel(props: BottomSheetPanelProps) -> Element {
     let mut drag_offset = use_signal(|| 0.0_f32);
     let on_close = props.on_close;
     let desktop = props.desktop;
-    let radius = if desktop {
+    let radius = if !props.bottom_attached {
         format!("{0},{0},{0},{0}", theme.radii.lg)
     } else {
-        format!("{0},{0},0,0", theme.radii.xl)
+        format!(
+            "{0},{0},0,0",
+            if desktop {
+                theme.radii.lg
+            } else {
+                theme.radii.xl
+            }
+        )
     };
-    let border_width = if desktop { "1" } else { "1,1,0,1" };
+    let border_width = if props.bottom_attached {
+        "1,1,0,1"
+    } else {
+        "1"
+    };
     let body_bottom_padding = if desktop {
         spacing::LG
     } else {
@@ -515,10 +601,24 @@ pub fn BottomSheetTextInput(
 
 #[cfg(test)]
 mod tests {
-    use super::{responsive_sheet_presentation, ResponsiveSheetPresentation};
+    use super::{responsive_sheet_presentation, sheet_presentation, ResponsiveSheetPresentation};
 
     #[test]
-    fn phone_and_pad_always_use_the_bottom_drawer() {
+    fn public_bottom_sheet_stays_bottom_attached_on_every_device() {
+        for desktop in [false, true] {
+            for anchored in [false, true] {
+                for fixed_bottom_on_pc in [false, true] {
+                    assert_eq!(
+                        sheet_presentation(true, desktop, anchored, fixed_bottom_on_pc),
+                        ResponsiveSheetPresentation::BottomDrawer,
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn adaptive_picker_uses_the_bottom_drawer_on_phone_and_pad() {
         for anchored in [false, true] {
             for fixed_bottom_on_pc in [false, true] {
                 assert_eq!(
@@ -530,7 +630,7 @@ mod tests {
     }
 
     #[test]
-    fn pc_uses_an_anchor_or_centered_fallback_by_default() {
+    fn adaptive_picker_uses_an_anchor_or_centered_fallback_on_pc() {
         assert_eq!(
             responsive_sheet_presentation(true, true, false),
             ResponsiveSheetPresentation::AnchoredPopover,
@@ -542,7 +642,7 @@ mod tests {
     }
 
     #[test]
-    fn fixed_bottom_overrides_pc_anchor_presentation() {
+    fn adaptive_picker_can_force_the_pc_bottom_presentation() {
         assert_eq!(
             responsive_sheet_presentation(true, true, true),
             ResponsiveSheetPresentation::BottomDrawer,

@@ -8,7 +8,7 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use super::{BottomSheet, Button, ButtonVariant, ARKUI_BORDER_STYLE_SOLID};
+use super::{bottom_sheet::AdaptivePickerSheet, Button, ButtonVariant, ARKUI_BORDER_STYLE_SOLID};
 use crate::i18n::{use_component_i18n, ComponentI18n};
 use crate::icon::icon_placeholder;
 use crate::theme::{spacing, typography, use_theme};
@@ -240,7 +240,7 @@ pub fn SecureKeyboardSheet(props: SecureKeyboardSheetProps) -> Element {
     });
 
     rsx! {
-        BottomSheet {
+        AdaptivePickerSheet {
             title: String::new(),
             open: Some(open),
             default_open: Some(false),
