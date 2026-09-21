@@ -164,6 +164,10 @@ pub struct SecureKeyboardSheetProps {
     pub open: Option<bool>,
     /// Trigger anchor used by the PC popover presentation.
     pub anchor: Option<arkit_arkui::NativeElementRef>,
+    /// Keep the keyboard attached to the bottom edge on PC instead of opening
+    /// it as an anchored popover.
+    #[props(default)]
+    pub fixed_bottom_on_pc: bool,
     #[props(default)]
     pub default_open: bool,
     pub value: Option<String>,
@@ -245,6 +249,7 @@ pub fn SecureKeyboardSheet(props: SecureKeyboardSheetProps) -> Element {
             show_handle: Some(false),
             anchor: props.anchor,
             pc_width: 520.0,
+            fixed_bottom_on_pc: props.fixed_bottom_on_pc,
             on_close: move |_| set_open.call(false),
             column {
                 width: "100%",

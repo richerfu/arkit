@@ -28,6 +28,27 @@ const BOTTOM_SHEET_PC_DEFAULT_WIDTH: f32 = 420.0;
 const BOTTOM_SHEET_PC_ESTIMATED_HEIGHT: f32 = 360.0;
 const BOTTOM_SHEET_DRAG_DISMISS_THRESHOLD: f32 = 72.0;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ResponsiveSheetPresentation {
+    AnchoredPopover,
+    CenteredDialog,
+    BottomDrawer,
+}
+
+fn responsive_sheet_presentation(
+    desktop: bool,
+    anchored: bool,
+    fixed_bottom_on_pc: bool,
+) -> ResponsiveSheetPresentation {
+    if !desktop || fixed_bottom_on_pc {
+        ResponsiveSheetPresentation::BottomDrawer
+    } else if anchored {
+        ResponsiveSheetPresentation::AnchoredPopover
+    } else {
+        ResponsiveSheetPresentation::CenteredDialog
+    }
+}
+
 fn bottom_sheet_backdrop(theme: Theme) -> u32 {
     match theme.mode {
         ThemeMode::Light => 0x8F000000,
@@ -77,8 +98,9 @@ fn modal_bottom_sheet_portal(
     on_dismiss: EventHandler<()>,
     theme: Theme,
     show_backdrop: bool,
-    desktop: bool,
+    presentation: ResponsiveSheetPresentation,
 ) -> Element {
+    let centered = presentation == ResponsiveSheetPresentation::CenteredDialog;
     let backdrop_color = if show_backdrop {
         bottom_sheet_backdrop(theme)
     } else {
@@ -87,23 +109,23 @@ fn modal_bottom_sheet_portal(
     rsx! {
         AnimatedModal {
             open,
-            presentation: if desktop {
+            presentation: if centered {
                 arkit_hooks::ModalPresentation::CenteredDialog
             } else {
                 arkit_hooks::ModalPresentation::BottomDrawer
             },
             dismiss_on_backdrop: true,
             backdrop_color,
-            viewport_inset: if desktop { spacing::LG } else { 0.0 },
+            viewport_inset: if centered { spacing::LG } else { 0.0 },
             on_dismiss,
-            preset: Some(if desktop {
+            preset: Some(if centered {
                 arkit_animation::TransitionPreset::ZoomIn
             } else {
                 arkit_animation::TransitionPreset::SlideUp
             }),
             duration_ms: Some(OVERLAY_ENTER_MS),
             exit_duration_ms: Some(OVERLAY_EXIT_MS),
-            distance: if desktop { None } else { Some(SHEET_DISTANCE) },
+            distance: if centered { None } else { Some(SHEET_DISTANCE) },
             {panel}
         }
     }
@@ -148,7 +170,9 @@ fn anchored_bottom_sheet_popover(
 /// close-button, save-button, and drag dismissal paths. On PC, pass the
 /// trigger's `NativeElementRef` through `anchor` to use the shadcn-style
 /// in-place popover presentation. Without an anchor, PC falls back to a
-/// centered dialog. Phone layouts ignore `anchor` and retain the bottom sheet.
+/// centered dialog. Set `fixed_bottom_on_pc` for controls such as an in-app
+/// keyboard that must stay attached to the bottom edge on every device. Phone
+/// and Pad layouts always ignore `anchor` and retain the bottom sheet.
 #[component]
 pub fn BottomSheet(
     title: String,
@@ -159,6 +183,7 @@ pub fn BottomSheet(
     show_handle: Option<bool>,
     anchor: Option<arkit_arkui::NativeElementRef>,
     pc_width: Option<f32>,
+    fixed_bottom_on_pc: Option<bool>,
     on_close: Option<EventHandler<()>>,
     children: Element,
 ) -> Element {
@@ -186,6 +211,8 @@ pub fn BottomSheet(
     };
     let controlled = open.is_some();
     let desktop = adaptive.is_pc();
+    let presentation =
+        responsive_sheet_presentation(desktop, anchored, fixed_bottom_on_pc.unwrap_or(false));
     let panel_width = pc_width
         .filter(|width| width.is_finite() && *width > 0.0)
         .unwrap_or(BOTTOM_SHEET_PC_DEFAULT_WIDTH);
@@ -213,7 +240,7 @@ pub fn BottomSheet(
         }
     };
 
-    if desktop && anchored {
+    if presentation == ResponsiveSheetPresentation::AnchoredPopover {
         let frame = if current {
             trigger_frame_for_anchor(&anchor_ref, *anchor_frame.read())
         } else {
@@ -244,7 +271,7 @@ pub fn BottomSheet(
         close,
         theme,
         show_backdrop.unwrap_or(true),
-        desktop,
+        presentation,
     )
 }
 
@@ -469,5 +496,46 @@ pub fn BottomSheetTextInput(
                 }
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{responsive_sheet_presentation, ResponsiveSheetPresentation};
+
+    #[test]
+    fn phone_and_pad_always_use_the_bottom_drawer() {
+        for anchored in [false, true] {
+            for fixed_bottom_on_pc in [false, true] {
+                assert_eq!(
+                    responsive_sheet_presentation(false, anchored, fixed_bottom_on_pc),
+                    ResponsiveSheetPresentation::BottomDrawer,
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn pc_uses_an_anchor_or_centered_fallback_by_default() {
+        assert_eq!(
+            responsive_sheet_presentation(true, true, false),
+            ResponsiveSheetPresentation::AnchoredPopover,
+        );
+        assert_eq!(
+            responsive_sheet_presentation(true, false, false),
+            ResponsiveSheetPresentation::CenteredDialog,
+        );
+    }
+
+    #[test]
+    fn fixed_bottom_overrides_pc_anchor_presentation() {
+        assert_eq!(
+            responsive_sheet_presentation(true, true, true),
+            ResponsiveSheetPresentation::BottomDrawer,
+        );
+        assert_eq!(
+            responsive_sheet_presentation(true, false, true),
+            ResponsiveSheetPresentation::BottomDrawer,
+        );
     }
 }

@@ -3490,6 +3490,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     SecureKeyboardSheet {
                         anchor: secure_keyboard_trigger_ref,
+                        fixed_bottom_on_pc: true,
                         value: Some(secure_pin()),
                         open: Some(secure_keyboard_open()),
                         max_length: 6,
@@ -3572,6 +3573,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     SecureKeyboardSheet {
                         anchor: secure_text_trigger_ref,
+                        fixed_bottom_on_pc: true,
                         value: Some(secure_text()),
                         open: Some(secure_text_open()),
                         mode: SecureKeyboardMode::Full,
