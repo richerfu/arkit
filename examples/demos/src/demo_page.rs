@@ -91,6 +91,14 @@ fn DemoFrame(title: String, children: Element) -> Element {
 fn DemoOperationBar(title: String) -> Element {
     let navigator = use_navigator();
     let mut hovering = use_signal(|| false);
+    let mut focused = use_signal(|| false);
+    let go_back = EventHandler::new(move |_: ()| {
+        if navigator.can_go_back() {
+            navigator.go_back();
+        } else {
+            navigator.replace(Route::Home {});
+        }
+    });
 
     rsx! {
         row {
@@ -103,6 +111,7 @@ fn DemoOperationBar(title: String) -> Element {
             border_width: "0,0,1,0",
             border_color: "#14000000",
             border_style: "solid",
+            tab_stop: true,
 
             button {
                 button_type: "normal",
@@ -111,20 +120,17 @@ fn DemoOperationBar(title: String) -> Element {
                 padding_right: 12.0,
                 padding_left: 10.0,
                 alignment: "center",
-                background_color: if hovering() { "#fff4f4f5" } else { "#00ffffff" },
+                background_color: if hovering() || focused() { "#fff4f4f5" } else { "#00ffffff" },
                 foreground_color: "#ff18181b",
                 border_width: 0.0,
                 border_radius: 6.0,
                 focusable: true,
                 focus_on_touch: false,
+                default_focus: true,
                 onhover: move |event| hovering.set(event.data().is_hovering),
-                onclick: move |_| {
-                    if navigator.can_go_back() {
-                        navigator.go_back();
-                    } else {
-                        navigator.replace(Route::Home {});
-                    }
-                },
+                onfocus: move |_| focused.set(true),
+                onblur: move |_| focused.set(false),
+                onclick: move |_| go_back.call(()),
                 row {
                     width: "100%",
                     align_items: "center",

@@ -231,6 +231,7 @@ struct NodeEventRoute {
     node: std::rc::Weak<RefCell<ArkUINode>>,
     sink: Rc<dyn EventSink>,
     listeners: Vec<(&'static str, ElementId)>,
+    dispatch_on_keyboard_activation: bool,
     native_ref: Option<(NativeElementRef, u64)>,
 }
 
@@ -1350,6 +1351,25 @@ impl ArkUIRenderer {
         // click event as well as `OnAccessibilityActions`. Keep the latter
         // exclusive to an explicit `onaccessibilityaction` listener so one
         // screen-reader activation cannot dispatch `onclick` twice.
+        // Native ArkUI nodes do not consistently synthesize click events from
+        // Enter/Space. Add a key route for semantic buttons and explicitly
+        // focusable custom controls. Passive click catchers such as modal
+        // backdrops stay out because they are neither buttons nor focusable.
+        let keyboard_click_fallback = (tag == "button"
+            || self.hosts[host]
+                .desired_attrs
+                .borrow()
+                .bool_value("focusable")
+                == Some(true))
+            && listeners
+                .iter()
+                .any(|(name, _)| classify_event_name(name) == Some(ArkEventKind::Click))
+            && !listeners
+                .iter()
+                .any(|(name, _)| classify_event_name(name) == Some(ArkEventKind::Key));
+        if keyboard_click_fallback {
+            requested_event_types.push(NodeEventType::OnKeyEvent);
+        }
         // A native_ref is a mount capability by default. Layout and
         // visibility hooks opt into their respective ArkUI events explicitly;
         // animation/canvas/native-component refs therefore do not pay for or
@@ -1381,6 +1401,32 @@ impl ArkUIRenderer {
             }
         }
 
+        // A key listener declares an interactive keyboard target. Native
+        // Button/TextInput controls retain their platform focus policy; custom
+        // controls become focusable here unless they explicitly opt out.
+        // Focus-on-touch lets a mouse click establish the same key target.
+        // Pages containing nested scrollable containers can declaratively set
+        // `default_focus` on their first custom control to enter that focus
+        // subtree, matching ArkUI's hierarchical-page focus model.
+        if event_types.contains(&NodeEventType::OnKeyEvent) {
+            let attrs = self.hosts[host].desired_attrs.borrow();
+            let enabled = attrs.bool_value("enabled") != Some(false);
+            let focusable = attrs.bool_value("focusable") != Some(false);
+            if enabled && focusable {
+                let node = native.borrow();
+                if attrs.bool_value("focusable").is_none() {
+                    log_arkui_result(
+                        "keyboard target focusable",
+                        node.set_attribute(ArkUINodeAttributeType::Focusable, true.into()),
+                    );
+                }
+                log_arkui_result(
+                    "keyboard target focus on touch",
+                    node.set_attribute(ArkUINodeAttributeType::FocusOnTouch, true.into()),
+                );
+            }
+        }
+
         self.hosts[host]
             .registered_event_listeners
             .retain(|registration| event_types.contains(&registration.event_type));
@@ -1390,11 +1436,20 @@ impl ArkUIRenderer {
 
         let mut has_deferred_work = false;
         for event_type in event_types {
-            let event_listeners = listeners
+            let mut event_listeners = listeners
                 .iter()
                 .copied()
                 .filter(|(name, _)| event_type_for_name(name, tag) == Some(event_type))
                 .collect::<Vec<_>>();
+            let dispatch_on_keyboard_activation =
+                event_type == NodeEventType::OnKeyEvent && keyboard_click_fallback;
+            if dispatch_on_keyboard_activation {
+                event_listeners = listeners
+                    .iter()
+                    .copied()
+                    .filter(|(name, _)| classify_event_name(name) == Some(ArkEventKind::Click))
+                    .collect();
+            }
             let route = if let Some(route) = self.hosts[host]
                 .routed_node_events
                 .iter()
@@ -1406,6 +1461,7 @@ impl ArkUIRenderer {
                     node: Rc::downgrade(&native),
                     sink: sink.clone(),
                     listeners: Vec::new(),
+                    dispatch_on_keyboard_activation: false,
                     native_ref: None,
                 }));
                 self.hosts[host].routed_node_events.push(RoutedNodeEvent {
@@ -1419,6 +1475,7 @@ impl ArkUIRenderer {
                 route.node = Rc::downgrade(&native);
                 route.sink = sink.clone();
                 route.listeners = event_listeners;
+                route.dispatch_on_keyboard_activation = dispatch_on_keyboard_activation;
                 route.native_ref = self.hosts[host].native_ref.as_ref().and_then(|reference| {
                     reference
                         .current()
@@ -2854,18 +2911,30 @@ fn register_routed_node_event(
         if !callback_active.get() {
             return;
         }
-        let (node, sink, listeners, native_ref) = {
+        let (node, sink, listeners, dispatch_on_keyboard_activation, native_ref) = {
             let route = route.borrow();
             (
                 route.node.upgrade(),
                 route.sink.clone(),
                 route.listeners.clone(),
+                route.dispatch_on_keyboard_activation,
                 route.native_ref.clone(),
             )
         };
         let payload = extract_payload(event_type, event, node.as_ref());
+        if dispatch_on_keyboard_activation && !keyboard_activates(&payload) {
+            return;
+        }
         for (name, id) in listeners {
-            sink.dispatch(name, id, payload.clone());
+            sink.dispatch(
+                name,
+                id,
+                if dispatch_on_keyboard_activation {
+                    ArkEventPayload::None
+                } else {
+                    payload.clone()
+                },
+            );
         }
         let Some((reference, epoch)) = native_ref else {
             return;
@@ -2914,6 +2983,17 @@ fn register_routed_node_event(
         }
     });
     active
+}
+
+fn keyboard_activates(payload: &ArkEventPayload) -> bool {
+    matches!(
+        payload,
+        ArkEventPayload::Key(KeyPayload {
+            key: KeyboardKey::Enter | KeyboardKey::Space,
+            action: KeyAction::Down,
+            ..
+        })
+    )
 }
 
 fn is_deferred_node_event(event_type: NodeEventType) -> bool {
@@ -3045,9 +3125,13 @@ fn extract_payload(
         TouchEvent => extract_pointer_payload(event)
             .map(ArkEventPayload::Pointer)
             .unwrap_or_default(),
-        // These are non-touch UIInputEvents. Keep delivery intact without
-        // asking the upstream wrapper to interpret their action as touch.
-        OnHoverEvent | OnHoverMove => ArkEventPayload::None,
+        OnHoverEvent => event
+            .input_event()
+            .map(|input| ArkEventPayload::Bool(input.is_hovered()))
+            .unwrap_or_default(),
+        // Hover-move is a non-touch UIInputEvent. Keep delivery intact without
+        // interpreting its generic action as a touch phase.
+        OnHoverMove => ArkEventPayload::None,
         // Drag callbacks carry ArkUI_DragEvent, not ArkUI_UIInputEvent. The
         // binding intentionally exposes that object as an opaque pointer, so
         // dispatch the lifecycle event without inventing pointer coordinates.
@@ -3142,27 +3226,27 @@ fn extract_key_payload(event: &ArkNativeEvent) -> Option<KeyPayload> {
         KeyEventType::Up => KeyAction::Up,
         KeyEventType::LongPress => KeyAction::Repeat,
         KeyEventType::Click => KeyAction::Click,
-        KeyEventType::Unknown | KeyEventType::Other(_) => KeyAction::Unknown,
+        KeyEventType::Unknown => KeyAction::Unknown,
     };
+    let raw_code = key_event.key_code_raw();
     let code = key_event.key_code();
-    let raw_code = code.raw();
     let text = key_event.key_text();
     let key = match code {
-        KeyCode::ENTER => KeyboardKey::Enter,
-        KeyCode::SPACE => KeyboardKey::Space,
-        KeyCode::TAB => KeyboardKey::Tab,
-        KeyCode::ESCAPE => KeyboardKey::Escape,
-        KeyCode::DPAD_UP => KeyboardKey::ArrowUp,
-        KeyCode::DPAD_DOWN => KeyboardKey::ArrowDown,
-        KeyCode::DPAD_LEFT => KeyboardKey::ArrowLeft,
-        KeyCode::DPAD_RIGHT => KeyboardKey::ArrowRight,
-        KeyCode::MOVE_HOME => KeyboardKey::Home,
-        KeyCode::MOVE_END => KeyboardKey::End,
-        KeyCode::PAGE_UP => KeyboardKey::PageUp,
-        KeyCode::PAGE_DOWN => KeyboardKey::PageDown,
-        KeyCode::BACKSPACE => KeyboardKey::Backspace,
-        KeyCode::DELETE => KeyboardKey::Delete,
-        KeyCode::MENU => KeyboardKey::Menu,
+        KeyCode::Enter | KeyCode::NumpadEnter | KeyCode::DpadCenter => KeyboardKey::Enter,
+        KeyCode::Space => KeyboardKey::Space,
+        KeyCode::Tab => KeyboardKey::Tab,
+        KeyCode::Escape => KeyboardKey::Escape,
+        KeyCode::DpadUp => KeyboardKey::ArrowUp,
+        KeyCode::DpadDown => KeyboardKey::ArrowDown,
+        KeyCode::DpadLeft => KeyboardKey::ArrowLeft,
+        KeyCode::DpadRight => KeyboardKey::ArrowRight,
+        KeyCode::MoveHome => KeyboardKey::Home,
+        KeyCode::MoveEnd => KeyboardKey::End,
+        KeyCode::PageUp => KeyboardKey::PageUp,
+        KeyCode::PageDown => KeyboardKey::PageDown,
+        KeyCode::Del => KeyboardKey::Backspace,
+        KeyCode::ForwardDel => KeyboardKey::Delete,
+        KeyCode::Menu => KeyboardKey::Menu,
         KeyCode::F10 => KeyboardKey::F10,
         _ => char::from_u32(key_event.unicode())
             .filter(|character| !character.is_control())
@@ -3284,9 +3368,7 @@ fn event_type_for_name(name: &str, tag: &str) -> Option<NodeEventType> {
         // Refresh trigger.
         (ArkEventKind::Refresh, "refresh") => RefreshOnRefresh,
 
-        // Keep the numeric hover variant until the upstream input binding can
-        // parse non-touch input actions without panicking.
-        (ArkEventKind::Hover, _) => OnHover,
+        (ArkEventKind::Hover, _) => OnHoverEvent,
         (ArkEventKind::HoverMove, _) => OnHoverMove,
 
         // Drag lifecycle (generic across components).
@@ -3312,9 +3394,37 @@ fn event_type_for_name(name: &str, tag: &str) -> Option<NodeEventType> {
 #[cfg(test)]
 mod event_tests {
     use super::{
-        event_type_for_name, latch_renderer_fault, DirtyHostQueue, HostId, NodeEventType,
-        ProjectionState, RetiredSubtreeQueue,
+        event_type_for_name, keyboard_activates, latch_renderer_fault, ArkEventPayload,
+        DirtyHostQueue, HostId, KeyAction, KeyPayload, KeyboardKey, NodeEventType, ProjectionState,
+        RetiredSubtreeQueue,
     };
+
+    #[test]
+    fn keyboard_click_fallback_accepts_only_enter_and_space_down() {
+        let payload = |key, action| {
+            ArkEventPayload::Key(KeyPayload {
+                key,
+                action,
+                ..KeyPayload::default()
+            })
+        };
+        assert!(keyboard_activates(&payload(
+            KeyboardKey::Enter,
+            KeyAction::Down
+        )));
+        assert!(keyboard_activates(&payload(
+            KeyboardKey::Space,
+            KeyAction::Down
+        )));
+        assert!(!keyboard_activates(&payload(
+            KeyboardKey::Enter,
+            KeyAction::Up
+        )));
+        assert!(!keyboard_activates(&payload(
+            KeyboardKey::Escape,
+            KeyAction::Down
+        )));
+    }
 
     #[test]
     fn component_events_use_their_typed_native_event() {
@@ -3324,7 +3434,7 @@ mod event_tests {
         );
         assert_eq!(
             event_type_for_name("hover", "row"),
-            Some(NodeEventType::OnHover)
+            Some(NodeEventType::OnHoverEvent)
         );
         assert_eq!(
             event_type_for_name("change", "toggle"),

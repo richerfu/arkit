@@ -215,6 +215,13 @@ impl DesiredAttrs {
         self.attrs.iter().find(|attr| attr.name == name)
     }
 
+    pub(crate) fn bool_value(&self, name: &str) -> Option<bool> {
+        match &self.get(name)?.value {
+            EncodedAttrValue::Bool(value) => Some(*value),
+            _ => None,
+        }
+    }
+
     fn has_any(&self, names: &[&str]) -> bool {
         names.iter().any(|name| self.get(name).is_some())
     }
@@ -953,6 +960,19 @@ mod tests {
     }
 
     #[test]
+    fn tab_stop_maps_to_native_keyboard_focus_attribute() {
+        let tab_stop =
+            encode_attr("row", "tab_stop", &AttributeValue::Bool(true)).expect("tab_stop");
+        assert_eq!(tab_stop.ty, ArkUINodeAttributeType::TabStop);
+        assert_eq!(tab_stop.value, EncodedAttrValue::Bool(true));
+
+        let default_focus = encode_attr("row", "default_focus", &AttributeValue::Bool(true))
+            .expect("default_focus");
+        assert_eq!(default_focus.ty, ArkUINodeAttributeType::DefaultFocus);
+        assert_eq!(default_focus.value, EncodedAttrValue::Bool(true));
+    }
+
+    #[test]
     fn remaining_enum_keywords() {
         let d = encode_attr(
             "text",
@@ -1324,7 +1344,9 @@ enum AttrGroup {
 
 fn attr_group(name: &str) -> AttrGroup {
     match name {
-        "focusable"
+        "default_focus"
+        | "tab_stop"
+        | "focusable"
         | "focus_on_touch"
         | "focused"
         | "focus_status"
@@ -1756,6 +1778,16 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
         "focus_on_touch" => EncodedAttr::new(
             name,
             ArkUINodeAttributeType::FocusOnTouch,
+            EncodedAttrValue::Bool(as_bool(value)?),
+        ),
+        "default_focus" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::DefaultFocus,
+            EncodedAttrValue::Bool(as_bool(value)?),
+        ),
+        "tab_stop" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::TabStop,
             EncodedAttrValue::Bool(as_bool(value)?),
         ),
         // ArkUI NODE_FOCUS_STATUS: 1 = request focus.
@@ -2387,6 +2419,7 @@ impl DesiredAttrs {
     pub(crate) fn apply_control_roles(&self, node: &mut ArkUINode, tag: &str) {
         if tag == "button" {
             let _ = node.set_attribute(ArkUINodeAttributeType::Focusable, true.into());
+            let _ = node.set_attribute(ArkUINodeAttributeType::FocusOnTouch, true.into());
             let _ = node.set_attribute(
                 ArkUINodeAttributeType::AccessibilityRole,
                 ohos_arkui_sys::ArkUI_NodeType_ARKUI_NODE_BUTTON.into(),
@@ -2397,6 +2430,9 @@ impl DesiredAttrs {
                 ohos_arkui_sys::ArkUI_AccessibilityActionType_ARKUI_ACCESSIBILITY_ACTION_CLICK
                     .into(),
             );
+        } else if matches!(tag, "textinput" | "textarea") {
+            let _ = node.set_attribute(ArkUINodeAttributeType::Focusable, true.into());
+            let _ = node.set_attribute(ArkUINodeAttributeType::FocusOnTouch, true.into());
         }
     }
 

@@ -230,7 +230,7 @@ define_element! {
         width, height, max_width_constraint, constraint_size, min_width, max_width, min_height, max_height, align_items, justify_content,
         align_self, item_alignment, layout_weight, opacity, border_radius, border_width,
         border_color, border_style, shadow, visibility, enabled, clip, focusable,
-        focus_on_touch, hit_test_behavior, alignment, aspect_ratio, position, z_index,
+        focus_on_touch, default_focus, tab_stop, hit_test_behavior, alignment, aspect_ratio, position, z_index,
     }
 }
 
@@ -242,7 +242,7 @@ define_element! {
         width, height, max_width_constraint, constraint_size, min_width, max_width, min_height, max_height, align_items, justify_content,
         align_self, item_alignment, layout_weight, opacity, border_radius, border_width,
         border_color, border_style, shadow, visibility, enabled, clip, focusable,
-        focus_on_touch, hit_test_behavior, alignment, aspect_ratio, position, z_index,
+        focus_on_touch, default_focus, tab_stop, hit_test_behavior, alignment, aspect_ratio, position, z_index,
     }
 }
 
@@ -269,7 +269,7 @@ define_element! {
         margin_top, margin_bottom, margin_left, margin_right, margin_x, margin_y, margin_horizontal, margin_vertical,
         width, height, max_width_constraint, constraint_size, min_width, max_width, min_height, max_height, alignment, opacity,
         border_radius, border_width, border_color, border_style, shadow, visibility,
-        enabled, clip, focusable, focus_on_touch, hit_test_behavior, aspect_ratio,
+        enabled, clip, focusable, focus_on_touch, default_focus, tab_stop, hit_test_behavior, aspect_ratio,
         position, z_index,
     }
 }
@@ -282,7 +282,7 @@ define_element! {
         width, height, max_width_constraint, constraint_size, min_width, max_width, min_height, max_height, align_items, justify_content,
         align_self, item_alignment, flex_direction, flex_wrap, flex_align_content,
         layout_weight, opacity, border_radius, border_width, border_color, border_style,
-        shadow, visibility, enabled, clip, focusable, focus_on_touch,
+        shadow, visibility, enabled, clip, focusable, focus_on_touch, default_focus, tab_stop,
         hit_test_behavior, aspect_ratio, position, z_index,
     }
 }
@@ -296,7 +296,7 @@ define_element! {
         margin_top, margin_bottom, margin_left, margin_right, margin_x, margin_y, margin_horizontal, margin_vertical,
         width, height, max_width_constraint, constraint_size, min_width, max_width, min_height, max_height, opacity, border_radius,
         border_width, border_color, border_style, shadow, visibility, enabled, clip,
-        focusable, focus_on_touch, hit_test_behavior, aspect_ratio, position, z_index,
+        focusable, focus_on_touch, default_focus, tab_stop, hit_test_behavior, aspect_ratio, position, z_index,
     }
 }
 
@@ -307,7 +307,7 @@ define_element! {
         margin_top, margin_bottom, margin_left, margin_right, margin_x, margin_y, margin_horizontal, margin_vertical,
         width, height, max_width_constraint, constraint_size, min_width, max_width, min_height, max_height, button_type, label,
         opacity, border_radius, border_width, border_color, border_style, shadow,
-        visibility, enabled, clip, focusable, focus_on_touch, hit_test_behavior,
+        visibility, enabled, clip, focusable, focus_on_touch, default_focus, tab_stop, focused, focus_status, hit_test_behavior,
         align_self, item_alignment, alignment, aspect_ratio, position, z_index,
     }
 }
@@ -319,7 +319,7 @@ define_element! {
         margin_top, margin_bottom, margin_left, margin_right, margin_x, margin_y, margin_horizontal, margin_vertical,
         width, height, opacity, border_radius,
         border_width, border_color, border_style, shadow, visibility, enabled, clip,
-        focusable, focus_on_touch, hit_test_behavior, aspect_ratio, position, z_index,
+        focusable, focus_on_touch, default_focus, tab_stop, hit_test_behavior, aspect_ratio, position, z_index,
     }
 }
 
@@ -539,7 +539,7 @@ define_element! {
         padding_top, padding_right, padding_bottom, padding_left, padding_x, padding_y, padding_horizontal, padding_vertical, margin, margin_top, margin_bottom,
         margin_left, margin_right, margin_x, margin_y, margin_horizontal, margin_vertical,
         width, height, opacity, border_radius, border_width,
-        border_color, border_style, visibility, enabled, clip, focusable, focus_on_touch,
+        border_color, border_style, visibility, enabled, clip, focusable, focus_on_touch, default_focus, tab_stop,
         focused, focus_status,
         hit_test_behavior, aspect_ratio, position, z_index,
     }
@@ -553,7 +553,7 @@ define_element! {
         padding_top, padding_right, padding_bottom, padding_left, padding_x, padding_y, padding_horizontal, padding_vertical, margin, margin_top, margin_bottom,
         margin_left, margin_right, margin_x, margin_y, margin_horizontal, margin_vertical,
         width, height, opacity, border_radius, border_width,
-        border_color, border_style, visibility, enabled, clip, focusable, focus_on_touch,
+        border_color, border_style, visibility, enabled, clip, focusable, focus_on_touch, default_focus, tab_stop,
         focused, focus_status,
         hit_test_behavior, aspect_ratio, position, z_index,
     }

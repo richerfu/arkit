@@ -7,9 +7,9 @@
 use ohos_arkui_binding::common::error::ArkUIResult;
 use ohos_arkui_binding::common::node::ArkUINode;
 use ohos_arkui_binding::component::built_in_component::{
-    CalendarPicker, Checkbox, Column, Custom, DatePicker, Flex, FlowItem, Grid, GridItem, Image,
-    List, ListItem, LoadingProgress, Progress, Radio, Refresh, Row, Scroll, Slider, Stack, Swiper,
-    Text, TextArea, TextInput, Toggle, WaterFlow, XComponent,
+    Button, CalendarPicker, Checkbox, Column, Custom, DatePicker, Flex, FlowItem, Grid, GridItem,
+    Image, List, ListItem, LoadingProgress, Progress, Radio, Refresh, Row, Scroll, Slider, Stack,
+    Swiper, Text, TextArea, TextInput, Toggle, WaterFlow, XComponent,
 };
 
 /// The canonical set of ArkUI built-in component kinds the renderer supports.
@@ -50,11 +50,12 @@ pub enum NodeKind {
 /// Instantiate a native [`ArkUINode`] for the given component kind.
 pub fn create_node(kind: NodeKind) -> ArkUIResult<ArkUINode> {
     Ok(match kind {
-        // Dioxus buttons accept arbitrary child trees, whereas ArkUI's native
-        // Button accepts a label rather than child nodes. Project the semantic
-        // button onto a pressable Stack; the renderer supplies its default
-        // Button skin, accessibility role, and internal content Row.
-        NodeKind::Button => Stack::new()?.into(),
+        // Native Button accepts a child content node. The renderer
+        // supplies one internal Row so Dioxus buttons retain arbitrary child
+        // composition while ArkUI owns button semantics, focus traversal, and
+        // accessibility behavior. The renderer normalizes keyboard activation
+        // because Native Button does not consistently synthesize click events.
+        NodeKind::Button => Button::new()?.into(),
         NodeKind::CalendarPicker => CalendarPicker::new()?.into(),
         NodeKind::Checkbox => Checkbox::new()?.into(),
         NodeKind::Column => Column::new()?.into(),
