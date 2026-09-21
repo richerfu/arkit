@@ -48,6 +48,7 @@ pub(crate) fn AnimatedEdgeModal(
     #[props(default = 0x80000000)] backdrop_color: u32,
     #[props(default = 0.0)] viewport_inset: f32,
     #[props(default)] panel_width: Option<f32>,
+    #[props(default)] panel_width_fraction: Option<f32>,
     #[props(default)] preset: Option<TransitionPreset>,
     #[props(default)] duration_ms: Option<i32>,
     #[props(default)] exit_duration_ms: Option<i32>,
@@ -68,6 +69,11 @@ pub(crate) fn AnimatedEdgeModal(
     let edge_width = panel_width
         .filter(|width| width.is_finite() && *width > 0.0)
         .map(|width| format!("{width}"))
+        .or_else(|| {
+            panel_width_fraction
+                .filter(|fraction| fraction.is_finite() && *fraction > 0.0)
+                .map(|fraction| format!("{}%", (fraction.clamp(0.0, 1.0) * 100.0).round()))
+        })
         .unwrap_or_else(|| "100%".to_string());
 
     let panel = rsx! {

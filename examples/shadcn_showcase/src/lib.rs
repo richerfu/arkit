@@ -5247,8 +5247,8 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 width: "100%",
                 align_items: "start",
                 demo_mode_label {
-                    title: "Desktop drawer".to_string(),
-                    detail: Some("A modal task surface without the touch drag handle.".to_string()),
+                    title: "Bottom drawer".to_string(),
+                    detail: Some("A modal task surface attached to the bottom edge.".to_string()),
                 }
                 Button {
                     variant: ButtonVariant::Outline,
