@@ -92,6 +92,8 @@ pub struct InputProps {
     /// Pair with `on_click` to use the field as a custom-keyboard trigger.
     #[props(default)]
     pub read_only: bool,
+    /// Optional exact reference forwarded to the native text-input root.
+    pub native_ref: Option<arkit_arkui::NativeElementRef>,
     /// Requires an explicit click to focus instead of grabbing focus on any
     /// touch-down. Intended for long scrolling forms: a drag that starts on
     /// the field scrolls the parent `Scroll` instead of focusing the input
@@ -122,6 +124,7 @@ pub fn Input(props: InputProps) -> Element {
         required,
         disabled,
         read_only,
+        native_ref,
         click_to_focus,
         on_change,
         on_click,
@@ -160,6 +163,7 @@ pub fn Input(props: InputProps) -> Element {
             accessibility_text: if let Some(label) = accessibility_label { label },
             accessibility_description: if !accessibility_description.is_empty() { accessibility_description },
             accessibility_disabled: disabled,
+            native_ref,
             value: if let Some(value) = value { value },
             placeholder: if let Some(placeholder) = placeholder { placeholder },
             input_type,

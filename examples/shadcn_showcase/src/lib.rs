@@ -1341,6 +1341,8 @@ fn ComponentDemo(slug: &'static str) -> Element {
         use_signal(|| "Click an anchor item to jump to a section.".to_string());
     let mut bottom_navigation_selected = use_signal(|| 0_usize);
     let mut bottom_sheet_open = use_signal(|| false);
+    let bottom_sheet_trigger_ref = use_native_element_ref();
+    let bottom_sheet_uc_trigger_ref = use_native_element_ref();
     let mut bottom_sheet_name = use_signal(|| "Pedro Duarte".to_string());
     let mut bottom_sheet_username = use_signal(|| "@peduarte".to_string());
     let mut calendar_selected = use_signal(|| None::<String>);
@@ -1420,9 +1422,11 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let mut invite_code = use_signal(|| "A7".to_string());
     let mut secure_pin = use_signal(String::new);
     let mut secure_keyboard_open = use_signal(|| false);
+    let secure_keyboard_trigger_ref = use_native_element_ref();
     let mut secure_keyboard_status = use_signal(|| "No PIN has been submitted.".to_string());
     let mut secure_text = use_signal(String::new);
     let mut secure_text_open = use_signal(|| false);
+    let secure_text_trigger_ref = use_native_element_ref();
     let mut secure_text_status =
         use_signal(|| "Letters, numbers, spaces, and symbols are accepted.".to_string());
     let mut form_name = use_signal(|| "Avery Stone".to_string());
@@ -1863,6 +1867,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     detail: Some(format!("open = {}", bottom_sheet_open())),
                 }
                 Button {
+                    native_ref: bottom_sheet_trigger_ref.clone(),
                     onclick: move |_| bottom_sheet_open.set(true),
                     "Open"
                 }
@@ -1871,6 +1876,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 title: "Edit your profile".to_string(),
                 open: Some(bottom_sheet_open()),
                 default_open: Some(false),
+                anchor: bottom_sheet_trigger_ref,
                 on_close: move |_| bottom_sheet_open.set(false),
                 column {
                     width: "100%",
@@ -1901,6 +1907,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 detail: Some("default_open via remount key".to_string()),
             }
             Button {
+                native_ref: bottom_sheet_uc_trigger_ref.clone(),
                 variant: ButtonVariant::Outline,
                 onclick: move |_| sheet_uc_gen.set(sheet_uc_gen() + 1),
                 "Open Uncontrolled Sheet"
@@ -1910,6 +1917,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     key: "{sheet_uc_gen()}",
                     title: "Uncontrolled sheet".to_string(),
                     default_open: Some(true),
+                    anchor: bottom_sheet_uc_trigger_ref,
                     on_close: move |_| {},
                     Text {
                         content: "Dismiss uses internal open state.".to_string(),
@@ -3473,6 +3481,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     v_gap { height: spacing::XXL }
                     Input {
+                        native_ref: secure_keyboard_trigger_ref.clone(),
                         value: Some("•".repeat(secure_pin().chars().count())),
                         placeholder: Some("Tap to enter payment PIN".to_string()),
                         width: "100%",
@@ -3480,6 +3489,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         on_click: move |_| secure_keyboard_open.set(true),
                     }
                     SecureKeyboardSheet {
+                        anchor: secure_keyboard_trigger_ref,
                         value: Some(secure_pin()),
                         open: Some(secure_keyboard_open()),
                         max_length: 6,
@@ -3553,6 +3563,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     v_gap { height: spacing::LG }
                     Input {
+                        native_ref: secure_text_trigger_ref.clone(),
                         value: Some(secure_text()),
                         placeholder: Some("Tap to enter secure text".to_string()),
                         width: "100%",
@@ -3560,6 +3571,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         on_click: move |_| secure_text_open.set(true),
                     }
                     SecureKeyboardSheet {
+                        anchor: secure_text_trigger_ref,
                         value: Some(secure_text()),
                         open: Some(secure_text_open()),
                         mode: SecureKeyboardMode::Full,

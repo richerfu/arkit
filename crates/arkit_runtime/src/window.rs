@@ -268,10 +268,15 @@ impl WindowMetricsHandle {
     }
 
     pub(crate) fn update(&self, mut metrics: WindowMetrics) -> bool {
-        if metrics.content_rect.is_empty() {
-            if let Some(reported) = self.0.reported_content_rect.get() {
-                metrics = metrics.with_content_rect(reported);
-            }
+        // The native surface callback reports the XComponent rect in surface
+        // coordinates. Native node layout frames (and renderer portals) use
+        // application-window coordinates instead. Once the renderer root has
+        // supplied that authoritative frame, keep it across window/config/
+        // avoid-area refreshes; otherwise a later surface event can reset the
+        // title-bar/content offset to zero and shift every anchored overlay.
+        // A subsequent root layout pass replaces the frame after a resize.
+        if let Some(reported) = self.0.reported_content_rect.get() {
+            metrics = metrics.with_content_rect(reported);
         }
         self.update_and_notify(metrics)
     }
@@ -552,6 +557,62 @@ mod tests {
             height: 2000,
         }));
         assert_eq!(handle.get().safe_area.top, 50.0);
+    }
+
+    #[test]
+    fn native_refresh_preserves_the_measured_root_coordinate_space() {
+        let measured = PhysicalRect {
+            left: 24,
+            top: 70,
+            width: 1000,
+            height: 700,
+        };
+        let handle = WindowMetricsHandle::new(WindowMetrics::default());
+        assert!(handle.report_content_rect(measured));
+
+        let refreshed = WindowMetrics {
+            window_rect: PhysicalRect {
+                left: 480,
+                top: 220,
+                width: 1000,
+                height: 770,
+            },
+            // XComponent surface callbacks use a different origin on PC.
+            content_rect: PhysicalRect {
+                left: 0,
+                top: 0,
+                width: 1000,
+                height: 700,
+            },
+            scale: 2.0,
+            ..WindowMetrics::default()
+        };
+
+        assert!(handle.update(refreshed));
+        let current = handle.get();
+        assert_eq!(current.content_rect, measured);
+        assert_eq!(current.window_rect, refreshed.window_rect);
+        assert_eq!(current.scale, refreshed.scale);
+    }
+
+    #[test]
+    fn a_new_root_layout_replaces_the_preserved_frame_after_resize() {
+        let handle = WindowMetricsHandle::new(WindowMetrics::default());
+        assert!(handle.report_content_rect(PhysicalRect {
+            left: 0,
+            top: 70,
+            width: 1000,
+            height: 700,
+        }));
+
+        let resized = PhysicalRect {
+            left: 0,
+            top: 70,
+            width: 1400,
+            height: 900,
+        };
+        assert!(handle.report_content_rect(resized));
+        assert_eq!(handle.get().content_rect, resized);
     }
 
     #[test]

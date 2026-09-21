@@ -121,7 +121,7 @@ pub fn Menubar(
     }
     let painted_overlay = overlay_payload.or_else(|| last_overlay.borrow().clone());
     let pass_through_region =
-        MenuOverlayPassThroughRegion::from_frame(*menubar_frame.read(), viewport.frame);
+        MenuOverlayPassThroughRegion::from_frame(*menubar_frame.read(), viewport);
 
     rsx! {
         row {

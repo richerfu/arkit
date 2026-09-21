@@ -1,12 +1,21 @@
-//! Bottom sheet — a full-width modal surface anchored to the viewport bottom.
+//! Responsive bottom sheet / anchored desktop popover.
 //!
 //! The sheet is mounted through a root-projected portal, so it is not
-//! clipped by the page or showcase canvas. Its native presentation mirrors the
-//! React Native Reusables sheet: optional dismissible backdrop and drag
-//! indicator, rounded top corners, 48vp header, safe-area-aware body padding,
-//! and pan-down dismissal.
+//! clipped by the page or showcase canvas. Phone layouts mirror the React
+//! Native Reusables sheet: optional dismissible backdrop and drag indicator,
+//! rounded top corners, safe-area-aware padding, and pan-down dismissal. PC
+//! layouts follow shadcn's responsive picker pattern: when an anchor is
+//! supplied, the same content opens as an in-place popover next to its trigger.
 
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
+
+use super::floating_layer::{
+    trigger_frame_for_anchor, viewport_scale, FloatingAlign, FloatingPanelPlacement, FloatingSide,
+    FLOATING_CAPTURE_COLOR,
+};
 use super::motion::{AnimatedModal, OVERLAY_ENTER_MS, OVERLAY_EXIT_MS, SHEET_DISTANCE};
+use super::motion::{OverlayPresence, FLOATING_ENTER_MS, FLOATING_EXIT_MS};
 use super::ARKUI_BORDER_STYLE_SOLID;
 use crate::icon::icon_placeholder;
 use crate::theme::*;
@@ -15,7 +24,8 @@ use arkit_prelude::*;
 const BOTTOM_SHEET_HEADER_HEIGHT: f32 = 48.0;
 const BOTTOM_SHEET_HANDLE_HEIGHT: f32 = 24.0;
 const BOTTOM_SHEET_MIN_HEIGHT: f32 = 240.0;
-const BOTTOM_SHEET_PC_MAX_WIDTH: f32 = 640.0;
+const BOTTOM_SHEET_PC_DEFAULT_WIDTH: f32 = 420.0;
+const BOTTOM_SHEET_PC_ESTIMATED_HEIGHT: f32 = 360.0;
 const BOTTOM_SHEET_DRAG_DISMISS_THRESHOLD: f32 = 72.0;
 
 fn bottom_sheet_backdrop(theme: Theme) -> u32 {
@@ -34,12 +44,40 @@ fn display_vp_ratio() -> f32 {
     }
 }
 
-fn bottom_sheet_portal(
+#[derive(Default)]
+struct BottomSheetBackState {
+    open: Cell<bool>,
+    close: RefCell<Option<EventHandler<()>>>,
+}
+
+fn use_bottom_sheet_back_press(open: bool, close: EventHandler<()>) {
+    let runtime = arkit_runtime::use_runtime_handle();
+    let state = use_hook(|| Rc::new(BottomSheetBackState::default()));
+    state.open.set(open);
+    state.close.replace(Some(close));
+
+    let registration_state = state.clone();
+    let _registration = use_hook(move || {
+        let handler: Rc<dyn Fn() -> bool> = Rc::new(move || {
+            if !registration_state.open.replace(false) {
+                return false;
+            }
+            if let Some(close) = *registration_state.close.borrow() {
+                close.call(());
+            }
+            true
+        });
+        Rc::new(runtime.register_back_handler(handler))
+    });
+}
+
+fn modal_bottom_sheet_portal(
     open: bool,
     panel: Element,
     on_dismiss: EventHandler<()>,
     theme: Theme,
     show_backdrop: bool,
+    desktop: bool,
 ) -> Element {
     let backdrop_color = if show_backdrop {
         bottom_sheet_backdrop(theme)
@@ -49,16 +87,56 @@ fn bottom_sheet_portal(
     rsx! {
         AnimatedModal {
             open,
-            presentation: arkit_hooks::ModalPresentation::BottomDrawer,
+            presentation: if desktop {
+                arkit_hooks::ModalPresentation::CenteredDialog
+            } else {
+                arkit_hooks::ModalPresentation::BottomDrawer
+            },
             dismiss_on_backdrop: true,
             backdrop_color,
-            viewport_inset: 0.0,
+            viewport_inset: if desktop { spacing::LG } else { 0.0 },
             on_dismiss,
-            preset: Some(arkit_animation::TransitionPreset::SlideUp),
+            preset: Some(if desktop {
+                arkit_animation::TransitionPreset::ZoomIn
+            } else {
+                arkit_animation::TransitionPreset::SlideUp
+            }),
             duration_ms: Some(OVERLAY_ENTER_MS),
             exit_duration_ms: Some(OVERLAY_EXIT_MS),
-            distance: Some(SHEET_DISTANCE),
+            distance: if desktop { None } else { Some(SHEET_DISTANCE) },
             {panel}
+        }
+    }
+}
+
+fn anchored_bottom_sheet_popover(
+    open: bool,
+    panel: Element,
+    placement: FloatingPanelPlacement,
+    on_dismiss: EventHandler<()>,
+) -> Element {
+    let left = placement.x.max(0.0);
+    let top = placement.y.max(0.0);
+    rsx! {
+        OverlayPresence {
+            open,
+            preset: Some(arkit_animation::TransitionPreset::Fade),
+            duration_ms: Some(FLOATING_ENTER_MS),
+            exit_duration_ms: Some(FLOATING_EXIT_MS),
+            fill: Some(true),
+            layer: Some(arkit_hooks::OverlayLayer::Floating),
+            stack {
+                width: "100%",
+                height: "100%",
+                background_color: FLOATING_CAPTURE_COLOR,
+                hit_test_behavior: "default",
+                onclick: move |_| on_dismiss.call(()),
+                column {
+                    position: format!("{left},{top}"),
+                    onclick: move |event| event.stop_propagation(),
+                    {panel}
+                }
+            }
         }
     }
 }
@@ -67,9 +145,10 @@ fn bottom_sheet_portal(
 ///
 /// The trigger remains caller-owned, matching the other modal components in
 /// this crate. Set `open` from the trigger and handle `on_close` for backdrop,
-/// close-button, save-button, and drag dismissal paths. Set `show_backdrop` to
-/// `false` when the surrounding content should remain undimmed. The drag
-/// indicator can be hidden independently with `show_handle`.
+/// close-button, save-button, and drag dismissal paths. On PC, pass the
+/// trigger's `NativeElementRef` through `anchor` to use the shadcn-style
+/// in-place popover presentation. Without an anchor, PC falls back to a
+/// centered dialog. Phone layouts ignore `anchor` and retain the bottom sheet.
 #[component]
 pub fn BottomSheet(
     title: String,
@@ -78,16 +157,38 @@ pub fn BottomSheet(
     show_header: Option<bool>,
     show_backdrop: Option<bool>,
     show_handle: Option<bool>,
+    anchor: Option<arkit_arkui::NativeElementRef>,
+    pc_width: Option<f32>,
     on_close: Option<EventHandler<()>>,
     children: Element,
 ) -> Element {
     let theme = use_theme();
+    let adaptive = arkit_hooks::use_adaptive_layout();
+    let viewport = arkit_hooks::use_overlay_viewport();
+    let fallback_anchor_ref = arkit_hooks::use_native_element_ref();
+    let anchored = anchor.is_some();
+    let anchor_ref = anchor.unwrap_or(fallback_anchor_ref);
+    let anchor_frame = use_signal(arkit_arkui::LayoutFramePx::default);
+    arkit_hooks::use_layout_frame(anchor_ref.clone(), move |frame| {
+        let mut anchor_frame = anchor_frame;
+        anchor_frame.set(frame);
+    });
+    let panel_ref = arkit_hooks::use_native_element_ref();
+    let panel_frame = use_signal(arkit_arkui::LayoutFramePx::default);
+    arkit_hooks::use_layout_frame(panel_ref.clone(), move |frame| {
+        let mut panel_frame = panel_frame;
+        panel_frame.set(frame);
+    });
     let mut internal = use_signal(|| default_open.unwrap_or(false));
     let current = match open {
         Some(value) => value,
         None => *internal.read(),
     };
     let controlled = open.is_some();
+    let desktop = adaptive.is_pc();
+    let panel_width = pc_width
+        .filter(|width| width.is_finite() && *width > 0.0)
+        .unwrap_or(BOTTOM_SHEET_PC_DEFAULT_WIDTH);
 
     let close = EventHandler::new(move |_: ()| {
         if !controlled {
@@ -97,18 +198,54 @@ pub fn BottomSheet(
             handler.call(());
         }
     });
+    use_bottom_sheet_back_press(current, close);
 
     let panel = rsx! {
         BottomSheetPanel {
             title,
             show_header: show_header.unwrap_or(true),
             show_handle: show_handle.unwrap_or(true),
+            desktop,
+            pc_width: panel_width,
+            native_ref: Some(panel_ref),
             on_close: close,
             {children}
         }
     };
 
-    bottom_sheet_portal(current, panel, close, theme, show_backdrop.unwrap_or(true))
+    if desktop && anchored {
+        let frame = if current {
+            trigger_frame_for_anchor(&anchor_ref, *anchor_frame.read())
+        } else {
+            *anchor_frame.read()
+        };
+        let measured_panel = *panel_frame.read();
+        let scale = viewport_scale(viewport);
+        let panel_height = if measured_panel.is_measured() {
+            measured_panel.height / scale
+        } else {
+            BOTTOM_SHEET_PC_ESTIMATED_HEIGHT
+        };
+        let placement = FloatingPanelPlacement::resolve(
+            frame,
+            viewport,
+            panel_width,
+            panel_height,
+            FloatingSide::Bottom,
+            FloatingAlign::Start,
+            spacing::XXS,
+        );
+        return anchored_bottom_sheet_popover(current, panel, placement, close);
+    }
+
+    modal_bottom_sheet_portal(
+        current,
+        panel,
+        close,
+        theme,
+        show_backdrop.unwrap_or(true),
+        desktop,
+    )
 }
 
 #[derive(Clone, Props)]
@@ -116,6 +253,9 @@ struct BottomSheetPanelProps {
     title: String,
     show_header: bool,
     show_handle: bool,
+    desktop: bool,
+    pc_width: f32,
+    native_ref: Option<arkit_arkui::NativeElementRef>,
     on_close: EventHandler<()>,
     children: Element,
 }
@@ -129,35 +269,59 @@ impl PartialEq for BottomSheetPanelProps {
 #[allow(non_snake_case)]
 fn BottomSheetPanel(props: BottomSheetPanelProps) -> Element {
     let theme = use_theme();
-    let adaptive = arkit_hooks::use_adaptive_layout();
     let safe_area = arkit_hooks::use_safe_area();
     let mut drag_start = use_signal(|| None::<f32>);
     let mut drag_offset = use_signal(|| 0.0_f32);
     let on_close = props.on_close;
-    let top_radius = format!("{0},{0},0,0", theme.radii.xl);
-    let body_bottom_padding = safe_area.bottom + spacing::LG;
-    let body_top_padding = if props.show_header {
-        spacing::XXL
+    let desktop = props.desktop;
+    let radius = if desktop {
+        format!("{0},{0},{0},{0}", theme.radii.lg)
     } else {
-        spacing::SM
+        format!("{0},{0},0,0", theme.radii.xl)
+    };
+    let border_width = if desktop { "1" } else { "1,1,0,1" };
+    let body_bottom_padding = if desktop {
+        spacing::LG
+    } else {
+        safe_area.bottom + spacing::LG
+    };
+    let body_top_padding = if props.show_header {
+        if desktop {
+            spacing::LG
+        } else {
+            spacing::XXL
+        }
+    } else {
+        if desktop {
+            spacing::LG
+        } else {
+            spacing::SM
+        }
     };
 
     rsx! {
         column {
-            width: "100%",
             accessibility_role: "dialog",
             accessibility_text: props.title.clone(),
-            max_width: if adaptive.is_pc() { BOTTOM_SHEET_PC_MAX_WIDTH },
-            align_self: if adaptive.is_pc() { "center" },
-            constraint_size: format!("0,100000,{BOTTOM_SHEET_MIN_HEIGHT},100000"),
-            border_radius: top_radius,
-            border_width: "1,1,0,1",
+            native_ref: props.native_ref,
+            width: if desktop { format!("{}", props.pc_width) } else { "100%".to_string() },
+            max_width: if desktop { props.pc_width },
+            align_self: if desktop { "center" },
+            constraint_size: format!(
+                "0,100000,{},100000",
+                if desktop { 0.0 } else { BOTTOM_SHEET_MIN_HEIGHT },
+            ),
+            border_radius: radius,
+            border_width: border_width,
             border_color: theme.colors.border,
             border_style: ARKUI_BORDER_STYLE_SOLID,
-            background_color: theme.colors.card,
-            shadow: "sm",
+            background_color: if desktop { theme.colors.popover } else { theme.colors.card },
+            shadow: if desktop { "lg" } else { "sm" },
             clip: true,
             ontouch: move |evt| {
+                if desktop {
+                    return;
+                }
                 let Some(pointer) = evt.data().pointer else {
                     return;
                 };
@@ -199,7 +363,7 @@ fn BottomSheetPanel(props: BottomSheetPanelProps) -> Element {
                     dioxus_elements::event::PointerAction::Unknown => {}
                 }
             },
-            if props.show_handle {
+            if props.show_handle && !desktop {
                 row {
                     width: "100%",
                     height: BOTTOM_SHEET_HANDLE_HEIGHT,
@@ -220,6 +384,7 @@ fn BottomSheetPanel(props: BottomSheetPanelProps) -> Element {
                     height: BOTTOM_SHEET_HEADER_HEIGHT,
                     align_items: "center",
                     padding_left: spacing::LG,
+                    padding_right: if desktop { spacing::SM } else { 0.0 },
                     border_width: "0,0,1,0",
                     border_color: theme.colors.border,
                     border_style: ARKUI_BORDER_STYLE_SOLID,
@@ -231,7 +396,7 @@ fn BottomSheetPanel(props: BottomSheetPanelProps) -> Element {
                             font_weight: 600_i32,
                             font_color: theme.colors.foreground,
                             line_height: 24.0,
-                            text_align: "center",
+                            text_align: if desktop { "start" } else { "center" },
                             "{props.title}"
                         }
                     }

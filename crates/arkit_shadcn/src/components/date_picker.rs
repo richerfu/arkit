@@ -1,10 +1,9 @@
-//! Date Picker — an outline trigger backed by a bottom-sheet calendar.
+//! Date Picker — an outline trigger backed by a responsive calendar surface.
 //!
 //! React Native Reusables presents date selection as a compact outline button
 //! with a calendar icon. Pressing it opens the shared month calendar in a
-//! bottom sheet; pressing the selected day again clears the value. This keeps
-//! the mobile interaction model instead of exposing ArkUI's inline wheel
-//! picker, which is a different component.
+//! bottom sheet on Phone/Pad and an anchored popover on PC; pressing the
+//! selected day again clears the value.
 
 use super::{
     BottomSheet, Button, ButtonSize, ButtonVariant, Calendar, CalendarDate, CalendarLabels,
@@ -64,6 +63,7 @@ pub struct DatePickerProps {
 pub fn DatePicker(props: DatePickerProps) -> Element {
     let theme = use_theme();
     let i18n = use_component_i18n();
+    let trigger_ref = arkit_hooks::use_native_element_ref();
     let mut internal_selected = use_signal(|| props.default_selected.clone());
     let mut internal_open = use_signal(|| props.default_open);
     let open_controlled = props.open.is_some();
@@ -121,6 +121,7 @@ pub fn DatePicker(props: DatePickerProps) -> Element {
 
     rsx! {
         Button {
+            native_ref: trigger_ref.clone(),
             variant: ButtonVariant::Outline,
             disabled: Some(disabled),
             accessibility_label: label.clone(),
@@ -146,6 +147,8 @@ pub fn DatePicker(props: DatePickerProps) -> Element {
             open: Some(open),
             default_open: Some(false),
             show_header: Some(false),
+            anchor: trigger_ref,
+            pc_width: 384.0,
             on_close: move |_| set_open.call(false),
             column {
                 width: "100%",

@@ -44,19 +44,15 @@ pub(crate) struct MenuOverlayPassThroughRegion {
 impl MenuOverlayPassThroughRegion {
     pub(crate) fn from_frame(
         frame: arkit_arkui::LayoutFramePx,
-        overlay: arkit_arkui::LayoutFramePx,
+        viewport: arkit_hooks::OverlayViewport,
     ) -> Option<Self> {
         if !frame.is_measured() {
             return None;
         }
 
-        let scale = super::floating_layer::viewport_scale(arkit_hooks::OverlayViewport {
-            frame: overlay,
-            safe_area: Default::default(),
-            scale: 0.0,
-        });
-        let measured_overlay = if overlay.is_measured() {
-            overlay
+        let scale = super::floating_layer::viewport_scale(viewport);
+        let measured_overlay = if viewport.frame.is_measured() {
+            viewport.frame
         } else {
             Default::default()
         };
@@ -168,13 +164,10 @@ impl MenuOverlayPlacement {
         if !pointer.has_window_position() {
             return None;
         }
-        // Window coords may already be logical (vp) on some devices; prefer
-        // treating them as physical when they match layout magnitude, else vp.
         let scale = super::floating_layer::viewport_scale(viewport);
-        let (x, y) = cursor_to_physical(pointer.window_x, pointer.window_y, scale);
         let cursor = arkit_arkui::LayoutFramePx {
-            x,
-            y,
+            x: pointer.window_x,
+            y: pointer.window_y,
             width: scale,
             height: scale,
         };
@@ -192,17 +185,6 @@ impl MenuOverlayPlacement {
             x: viewport.safe_area.left + MENU_VIEWPORT_PADDING,
             y: (viewport.safe_area.top + MENU_VIEWPORT_PADDING).max(96.0),
         }
-    }
-}
-
-fn cursor_to_physical(window_x: f32, window_y: f32, scale: f32) -> (f32, f32) {
-    // If values already look like physical pixels (large vs density), keep them.
-    // Otherwise treat as vp and expand.
-    let scale = scale.max(f32::EPSILON);
-    if window_x > 600.0 || window_y > 1000.0 || scale <= 1.01 {
-        (window_x, window_y)
-    } else {
-        (window_x * scale, window_y * scale)
     }
 }
 
@@ -1189,4 +1171,59 @@ fn menu_branch_is_open(open_path: &[usize], branch_path: &[usize]) -> bool {
             .iter()
             .zip(branch_path.iter())
             .all(|(open, branch)| open == branch)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pc_viewport() -> arkit_hooks::OverlayViewport {
+        arkit_hooks::OverlayViewport {
+            frame: arkit_arkui::LayoutFramePx {
+                x: 24.0,
+                y: 70.0,
+                width: 1000.0,
+                height: 700.0,
+            },
+            safe_area: arkit_hooks::EdgeInsets::default(),
+            scale: 2.0,
+        }
+    }
+
+    fn trigger() -> arkit_arkui::LayoutFramePx {
+        arkit_arkui::LayoutFramePx {
+            x: 224.0,
+            y: 270.0,
+            width: 200.0,
+            height: 40.0,
+        }
+    }
+
+    #[test]
+    fn menu_and_pass_through_share_the_portal_coordinate_space() {
+        let viewport = pc_viewport();
+        let placement = MenuOverlayPlacement::from_trigger(trigger(), viewport, 100.0, 80.0, 4.0);
+        let pass_through = MenuOverlayPassThroughRegion::from_frame(trigger(), viewport).unwrap();
+
+        assert!((placement.x - 100.0).abs() < 0.01);
+        assert!((placement.y - 124.0).abs() < 0.01);
+        assert!((pass_through.x - 100.0).abs() < 0.01);
+        assert!((pass_through.y - 100.0).abs() < 0.01);
+        assert!((pass_through.width - 100.0).abs() < 0.01);
+        assert!((pass_through.height - 20.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn context_cursor_uses_native_window_pixels_without_magnitude_guessing() {
+        let pointer = dioxus_elements::event::PointerPayload {
+            window_x: 224.0,
+            window_y: 270.0,
+            ..Default::default()
+        };
+        let placement =
+            MenuOverlayPlacement::from_cursor(pointer, pc_viewport(), 100.0, 80.0, 4.0).unwrap();
+
+        assert!((placement.x - 100.0).abs() < 0.01);
+        assert!((placement.y - 105.0).abs() < 0.01);
+    }
 }

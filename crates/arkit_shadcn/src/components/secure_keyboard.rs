@@ -162,6 +162,8 @@ pub struct SecureKeyboardSheetProps {
     pub title: Option<String>,
     /// Controlled sheet state.
     pub open: Option<bool>,
+    /// Trigger anchor used by the PC popover presentation.
+    pub anchor: Option<arkit_arkui::NativeElementRef>,
     #[props(default)]
     pub default_open: bool,
     pub value: Option<String>,
@@ -241,6 +243,8 @@ pub fn SecureKeyboardSheet(props: SecureKeyboardSheetProps) -> Element {
             show_header: Some(false),
             show_backdrop: Some(false),
             show_handle: Some(false),
+            anchor: props.anchor,
+            pc_width: 520.0,
             on_close: move |_| set_open.call(false),
             column {
                 width: "100%",
