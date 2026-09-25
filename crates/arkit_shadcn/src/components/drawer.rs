@@ -55,6 +55,7 @@ pub fn Drawer(
     rsx! {
         stack {
             width: "100%",
+            accessibility_mode: "disabled",
             height: "100%",
             background_color: OVERLAY_BACKDROP,
             alignment: alignment,
@@ -68,6 +69,8 @@ pub fn Drawer(
                 distance: Some(SHEET_DISTANCE),
             stack {
                 onclick: move |evt| { evt.stop_propagation(); },
+                accessibility_role: "dialog",
+                accessibility_text: title.clone(),
                 width: "100%",
                 max_width: DRAWER_MAX_WIDTH,
                 padding_top: spacing::LG,
@@ -83,6 +86,12 @@ pub fn Drawer(
                     width: "100%",
                     row {
                         width: "100%",
+                        accessibility_role: "button",
+                        accessibility_text: "Close drawer",
+                        accessibility_group: true,
+                        accessibility_actions: "click",
+                        focusable: true,
+                        focus_on_touch: true,
                         height: 24.0,
                         justify_content: "center",
                         align_items: "center",
@@ -99,7 +108,7 @@ pub fn Drawer(
                         width: "100%",
                         margin_top: spacing::LG,
                         DialogHeader {
-                            title: title,
+                            title: title.clone(),
                             description: String::new(),
                         }
                     }

@@ -87,6 +87,16 @@ pub fn Accordion(
                             width: "100%",
                             row {
                                 width: "100%",
+                                accessibility_role: "button",
+                                accessibility_text: title.clone(),
+                                accessibility_description: if is_open { "expanded" } else { "collapsed" },
+                                accessibility_group: true,
+                                accessibility_actions: "click",
+                                accessibility_selected: is_open,
+                                accessibility_disabled: disabled,
+                                focusable: !disabled,
+                                focus_on_touch: true,
+                                enabled: !disabled,
                                 align_items: "start",
                                 justify_content: "start",
                                 padding_top: spacing::LG,
@@ -103,6 +113,7 @@ pub fn Accordion(
                                     set_value_inner.call(next);
                                 },
                                 column {
+                                    accessibility_mode: "disabled_for_descendants",
                                     layout_weight: 1.0,
                                     align_items: "start",
                                     margin_right: ACCORDION_TRIGGER_GAP,
@@ -111,10 +122,11 @@ pub fn Accordion(
                                         font_weight: 500i32,
                                         font_color: fg,
                                         line_height: 20.0,
-                                        {title}
+                                        {title.clone()}
                                     }
                                 }
                                 row {
+                                    accessibility_mode: "disabled_for_descendants",
                                     width: ACCORDION_ICON_SIZE,
                                     height: ACCORDION_ICON_SIZE,
                                     align_items: "center",
@@ -126,6 +138,8 @@ pub fn Accordion(
                                 open: is_open,
                                 column {
                                     width: "100%",
+                                    accessibility_role: "group",
+                                    accessibility_text: title.clone(),
                                     align_items: "start",
                                     padding_bottom: spacing::LG,
                                     {content}

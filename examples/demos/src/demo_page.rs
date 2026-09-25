@@ -10,6 +10,7 @@ use arkit::router::RouteTransition;
 use crate::registry;
 use crate::Route;
 
+mod accessibility;
 mod chart_contracts;
 mod regressions;
 use regressions::RegressionPage;
@@ -32,6 +33,7 @@ pub fn Demo(slug: String) -> Element {
         RouteTransition::<Route> {
             if known {
                 match slug.as_str() {
+                    "accessibility" => rsx! { accessibility::AccessibilityPage {} },
                     "counter" => rsx! { counter::CounterPage {} },
                     "async_task" => rsx! { async_task::AsyncTaskPage {} },
                     "animation" => rsx! { animation::AnimationPage {} },

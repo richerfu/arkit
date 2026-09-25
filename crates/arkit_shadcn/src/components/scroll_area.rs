@@ -14,6 +14,11 @@ use arkit_prelude::*;
 #[derive(Props, Clone, PartialEq)]
 pub struct ScrollAreaProps {
     pub children: Element,
+    /// Optional name and hint for the scrollable region.
+    #[props(default)]
+    pub accessibility_label: Option<String>,
+    #[props(default)]
+    pub accessibility_description: Option<String>,
     /// Scrollbar visibility. Maps to ArkUI `ScrollBarDisplayMode`:
     /// - `false` / omitted hide policy defaults to `"auto"` when `None`
     /// - Prefer explicit: `Some(false)` hide, `Some(true)` always on
@@ -43,6 +48,10 @@ pub fn ScrollArea(props: ScrollAreaProps) -> Element {
 
     rsx! {
         scroll {
+            accessibility_role: "scroll",
+            accessibility_text: if let Some(label) = props.accessibility_label { label },
+            accessibility_description: if let Some(description) = props.accessibility_description { description },
+            accessibility_group: false,
             width: "100%",
             background_color: theme.colors.popover,
             border_width: 1.0,

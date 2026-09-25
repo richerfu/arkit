@@ -414,6 +414,12 @@ pub struct EChartsProps {
     /// Unified ECharts-style pointer and component action events.
     #[props(default)]
     pub on_event: Option<EventHandler<ChartRuntimeEvent>>,
+    /// Accessible name for the chart surface.
+    #[props(default = "Chart".to_string())]
+    pub accessibility_label: String,
+    /// Text alternative summarizing the chart's important data or trend.
+    #[props(default)]
+    pub accessibility_description: Option<String>,
 }
 
 struct SharedChartOption(RefCell<Rc<ChartOption>>);
@@ -2430,6 +2436,9 @@ pub fn ECharts(props: EChartsProps) -> Element {
             width: props.width.clone(),
             height: height,
             hit_test_behavior: "default",
+            accessibility_role: "image",
+            accessibility_text: props.accessibility_label.clone(),
+            accessibility_description: if let Some(description) = props.accessibility_description.clone() { description },
             ontouch: move |event: dioxus_core::Event<dioxus_elements::event::PointerData>| {
                 let Some(pointer) = event.data().pointer else {
                     return;

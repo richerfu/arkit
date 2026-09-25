@@ -27,6 +27,8 @@ pub fn Select(
     options: Vec<String>,
     placeholder: Option<String>,
     label: Option<String>,
+    accessibility_label: Option<String>,
+    #[props(default)] disabled: bool,
     selected: Option<String>,
     default_selected: String,
     open: Option<bool>,
@@ -84,6 +86,14 @@ pub fn Select(
     };
     let count = options.len();
     let has_panel_label = label.as_deref() != Some("");
+    let accessible_name = accessibility_label
+        .or_else(|| label.clone())
+        .unwrap_or_else(|| i18n.select_label());
+    let accessible_value = if has_value {
+        current_selected.clone()
+    } else {
+        trigger_label.clone()
+    };
 
     let frame = if current_open {
         trigger_frame_for_anchor(&trigger_ref, *trigger_frame.read())
@@ -106,8 +116,21 @@ pub fn Select(
     rsx! {
         row {
             native_ref: trigger_ref,
+            accessibility_role: "button",
+            accessibility_text: accessible_name,
+            accessibility_description: if current_open { "Expanded" } else { "Collapsed" },
+            accessibility_value_text: accessible_value,
+            accessibility_group: true,
+            accessibility_actions: "click",
+            accessibility_disabled: disabled,
+            focusable: !disabled,
+            enabled: !disabled,
             width: "100%",
-            onclick: move |_| set_open.call(!current_open),
+            onclick: move |_| {
+                if !disabled {
+                    set_open.call(!current_open);
+                }
+            },
             row {
                 width: "100%",
                 height: control::HEIGHT,
@@ -202,6 +225,7 @@ fn select_overlay_content(content: SelectOverlayContent) -> Element {
             hit_test_behavior: "default",
             onclick: move |_| on_dismiss.call(()),
             column {
+                accessibility_role: "list",
                 position: format!("{left},{top}"),
                 width: panel_width,
                 align_items: "start",
@@ -275,6 +299,13 @@ fn select_option_row(
 
     rsx! {
         row {
+            accessibility_role: "radio",
+            accessibility_text: option.to_owned(),
+            accessibility_group: true,
+            accessibility_actions: "click",
+            accessibility_checked: active,
+            accessibility_selected: active,
+            focusable: true,
             width: "100%",
             height: SELECT_OPTION_HEIGHT,
             align_items: "center",

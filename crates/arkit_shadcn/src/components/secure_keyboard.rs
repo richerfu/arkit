@@ -352,6 +352,8 @@ pub fn SecureKeyboard(props: SecureKeyboardProps) -> Element {
     rsx! {
         column {
             width: "100%",
+            accessibility_role: "group",
+            accessibility_text: "Secure keyboard",
             if page == KeyboardPage::Letters {
                 SecureKeyboardLetterPad {
                     mode,
@@ -1026,6 +1028,11 @@ fn SecureKeyboardKey(props: SecureKeyboardKeyProps) -> Element {
     let theme = use_theme();
     let disabled = props.disabled;
     let onclick = props.onclick;
+    let accessibility_label = props
+        .accessibility_label
+        .clone()
+        .or_else(|| props.label.clone())
+        .unwrap_or_else(|| "Keyboard key".to_string());
     let label_is_long = props
         .label
         .as_ref()
@@ -1048,6 +1055,9 @@ fn SecureKeyboardKey(props: SecureKeyboardKeyProps) -> Element {
             padding: spacing::XXS,
             button {
                 button_type: "normal",
+                accessibility_text: accessibility_label,
+                accessibility_disabled: disabled,
+                accessibility_selected: props.selected,
                 width: "100%",
                 height: "100%",
                 padding_top: 0.0,
@@ -1070,8 +1080,8 @@ fn SecureKeyboardKey(props: SecureKeyboardKeyProps) -> Element {
                 border_radius: theme.radii.md,
                 clip: true,
                 enabled: !disabled,
-                focusable: false,
-                focus_on_touch: false,
+                focusable: !disabled,
+                focus_on_touch: true,
                 opacity: if disabled { 0.4 } else { 1.0 },
                 onclick: move |_| {
                     if !disabled {

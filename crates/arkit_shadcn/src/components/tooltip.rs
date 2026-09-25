@@ -23,6 +23,7 @@ const TOOLTIP_ESTIMATED_HEIGHT: f32 = 28.0;
 pub fn Tooltip(
     trigger: Element,
     content: String,
+    #[props(default)] accessibility_label: Option<String>,
     open: Option<bool>,
     default_open: Option<bool>,
     on_close: Option<EventHandler<()>>,
@@ -88,6 +89,14 @@ pub fn Tooltip(
     rsx! {
         row {
             native_ref: trigger_ref,
+            accessibility_role: "button",
+            accessibility_text: accessibility_label.unwrap_or_else(|| content.clone()),
+            accessibility_description: content.clone(),
+            accessibility_group: true,
+            accessibility_actions: "click",
+            accessibility_selected: current,
+            focusable: true,
+            focus_on_touch: true,
             onclick: move |_| set_open.call(!current),
             onhover: move |evt| {
                 if evt.data().is_hovering {
@@ -105,7 +114,7 @@ pub fn Tooltip(
             exit_duration_ms: Some(FLOATING_EXIT_MS),
             fill: Some(true),
             layer: Some(arkit_hooks::OverlayLayer::Floating),
-            {tooltip_overlay_content(theme, panel_width, placement, content)}
+            {tooltip_overlay_content(theme, panel_width, placement, content.clone())}
         }
     }
 }

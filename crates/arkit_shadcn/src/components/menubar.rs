@@ -126,6 +126,7 @@ pub fn Menubar(
     rsx! {
         row {
             native_ref: menubar_ref,
+            accessibility_role: "menu",
             padding: spacing::XXS,
             height: control::HEIGHT,
             align_items: "center",
@@ -190,6 +191,13 @@ fn MenubarMenu(
     rsx! {
         row {
             native_ref: trigger_ref.clone(),
+            accessibility_role: "button",
+            accessibility_text: title.clone(),
+            accessibility_description: if active { "Expanded menu" } else { "Collapsed menu" },
+            accessibility_group: true,
+            accessibility_actions: "click",
+            accessibility_selected: active,
+            focusable: true,
             margin_left: if index > 0 { spacing::XXS } else { 0.0 },
             height: 28.0,
             align_items: "center",
@@ -215,7 +223,7 @@ fn MenubarMenu(
                 font_weight: 500i32,
                 font_color: foreground,
                 line_height: 20.0,
-                {title}
+                {title.clone()}
             }
         }
     }

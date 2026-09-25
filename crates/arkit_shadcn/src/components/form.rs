@@ -26,6 +26,12 @@ pub struct FieldProps {
     pub invalid: bool,
     #[props(default)]
     pub disabled: bool,
+    /// Optional name for the field region. Controls still keep their own
+    /// focusable semantics; this never collapses the descendants.
+    #[props(default)]
+    pub accessibility_label: Option<String>,
+    #[props(default)]
+    pub accessibility_description: Option<String>,
     pub children: Element,
 }
 
@@ -41,10 +47,29 @@ pub fn Field(props: FieldProps) -> Element {
     } else {
         theme.colors.foreground
     };
+    let accessibility_description = match (
+        props.accessibility_description,
+        props.invalid,
+        props.disabled,
+    ) {
+        (Some(description), true, true) => Some(format!("{description}. Invalid. Disabled")),
+        (Some(description), true, false) => Some(format!("{description}. Invalid")),
+        (Some(description), false, true) => Some(format!("{description}. Disabled")),
+        (description, false, false) => description,
+        (None, true, true) => Some("Invalid. Disabled".to_string()),
+        (None, true, false) => Some("Invalid".to_string()),
+        (None, false, true) => Some("Disabled".to_string()),
+    };
+    let accessibility_role = props.accessibility_label.as_ref().map(|_| "group");
 
     match props.orientation {
         FieldOrientation::Vertical => rsx! {
             column {
+                accessibility_role: if let Some(role) = accessibility_role { role },
+                accessibility_text: if let Some(label) = props.accessibility_label.clone() { label },
+                accessibility_description: if let Some(description) = accessibility_description.clone() { description },
+                accessibility_group: false,
+                accessibility_disabled: props.disabled,
                 width: "100%",
                 align_items: "start",
                 margin_bottom: spacing::LG,
@@ -55,6 +80,11 @@ pub fn Field(props: FieldProps) -> Element {
         },
         FieldOrientation::Horizontal => rsx! {
             row {
+                accessibility_role: if let Some(role) = accessibility_role { role },
+                accessibility_text: if let Some(label) = props.accessibility_label { label },
+                accessibility_description: if let Some(description) = accessibility_description { description },
+                accessibility_group: false,
+                accessibility_disabled: props.disabled,
                 width: "100%",
                 align_items: "center",
                 justify_content: "space_between",
@@ -109,6 +139,14 @@ pub fn FieldLabel(props: FieldLabelProps) -> Element {
     rsx! {
         text {
             content,
+            accessibility_role: "text",
+            accessibility_text: props.content.clone(),
+            accessibility_description: match (props.required, props.invalid) {
+                (true, true) => "Required. Invalid",
+                (true, false) => "Required",
+                (false, true) => "Invalid",
+                (false, false) => "",
+            },
             width: "100%",
             margin_bottom: spacing::SM,
             font_size: typography::SM,
@@ -133,6 +171,8 @@ pub fn FieldTitle(props: FieldTitleProps) -> Element {
     rsx! {
         text {
             content: props.content.clone(),
+            accessibility_role: "heading",
+            accessibility_text: props.content.clone(),
             width: "100%",
             font_size: typography::SM,
             font_weight: 500_i32,
@@ -159,6 +199,8 @@ pub fn FieldDescription(props: FieldDescriptionProps) -> Element {
     rsx! {
         text {
             content: props.content.clone(),
+            accessibility_role: "text",
+            accessibility_text: props.content.clone(),
             width: "100%",
             margin_top: if props.inset { spacing::XS } else { 0.0 },
             font_size: typography::XS,
@@ -187,10 +229,15 @@ pub fn FieldError(props: FieldErrorProps) -> Element {
     if let Some(message) = props.message.as_ref().filter(|message| !message.is_empty()) {
         messages.insert(0, message.clone());
     }
+    let announcement = messages.join(". ");
 
     rsx! {
         if !messages.is_empty() {
             column {
+                accessibility_role: "text",
+                accessibility_text: announcement,
+                accessibility_description: "Validation error",
+                accessibility_group: true,
                 width: "100%",
                 align_items: "start",
                 margin_top: spacing::XS,
@@ -214,6 +261,8 @@ pub fn FieldError(props: FieldErrorProps) -> Element {
 /// Props for [`FieldGroup`].
 #[derive(Props, Clone, PartialEq)]
 pub struct FieldGroupProps {
+    #[props(default)]
+    pub accessibility_label: Option<String>,
     pub children: Element,
 }
 
@@ -222,6 +271,9 @@ pub struct FieldGroupProps {
 pub fn FieldGroup(props: FieldGroupProps) -> Element {
     rsx! {
         column {
+            accessibility_role: if props.accessibility_label.is_some() { "group" },
+            accessibility_text: if let Some(label) = props.accessibility_label { label },
+            accessibility_group: false,
             width: "100%",
             align_items: "start",
             {props.children}
@@ -232,6 +284,8 @@ pub fn FieldGroup(props: FieldGroupProps) -> Element {
 /// Props for [`FieldSet`].
 #[derive(Props, Clone, PartialEq)]
 pub struct FieldSetProps {
+    #[props(default)]
+    pub accessibility_label: Option<String>,
     pub children: Element,
 }
 
@@ -240,6 +294,9 @@ pub struct FieldSetProps {
 pub fn FieldSet(props: FieldSetProps) -> Element {
     rsx! {
         column {
+            accessibility_role: if props.accessibility_label.is_some() { "group" },
+            accessibility_text: if let Some(label) = props.accessibility_label { label },
+            accessibility_group: false,
             width: "100%",
             align_items: "start",
             {props.children}
@@ -277,6 +334,8 @@ pub fn FieldLegend(props: FieldLegendProps) -> Element {
     rsx! {
         text {
             content: props.content.clone(),
+            accessibility_role: "heading",
+            accessibility_text: props.content.clone(),
             width: "100%",
             margin_bottom: spacing::XS,
             font_size,
@@ -303,6 +362,10 @@ pub fn FieldSeparator(props: FieldSeparatorProps) -> Element {
 
     rsx! {
         row {
+            accessibility_role: if label.is_some() { "text" },
+            accessibility_text: if let Some(label) = label.clone() { label },
+            accessibility_group: label.is_some(),
+            accessibility_mode: if label.is_some() { "auto" } else { "disabled_for_descendants" },
             width: "100%",
             align_items: "center",
             margin_top: spacing::XXS,
@@ -312,7 +375,7 @@ pub fn FieldSeparator(props: FieldSeparatorProps) -> Element {
                 height: 1.0,
                 background_color: theme.colors.border,
             }
-            if let Some(label) = label {
+            if let Some(label) = label.clone() {
                 text {
                     content: label,
                     margin_right: spacing::MD,

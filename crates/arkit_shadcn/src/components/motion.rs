@@ -201,6 +201,7 @@ pub(crate) fn AnimatedModal(
                     fill: Some(true),
                     row {
                         width: "100%",
+                        accessibility_mode: "disabled",
                         height: "100%",
                         background_color: backdrop_color,
                         hit_test_behavior: "default",

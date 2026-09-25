@@ -40,6 +40,14 @@ pub fn Collapsible(props: CollapsibleProps) -> Element {
             width: "100%",
             row {
                 width: "100%",
+                accessibility_role: "button",
+                accessibility_text: props.title.clone(),
+                accessibility_description: if open { "expanded" } else { "collapsed" },
+                accessibility_group: true,
+                accessibility_actions: "click",
+                accessibility_selected: open,
+                focusable: true,
+                focus_on_touch: true,
                 align_items: "center",
                 justify_content: "space_between",
                 padding_top: 0.0,
@@ -61,6 +69,7 @@ pub fn Collapsible(props: CollapsibleProps) -> Element {
                     line_height: 20.0,
                 }
                 button {
+                    accessibility_mode: "disabled",
                     width: 32.0,
                     height: 32.0,
                     padding_top: 0.0,
@@ -79,6 +88,8 @@ pub fn Collapsible(props: CollapsibleProps) -> Element {
             ExpandPresence {
                 open,
                 row {
+                    accessibility_role: "group",
+                    accessibility_text: props.title.clone(),
                     margin_top: spacing::SM,
                     {props.children}
                 }

@@ -123,6 +123,9 @@ pub fn DatePicker(props: DatePickerProps) -> Element {
         Button {
             variant: ButtonVariant::Outline,
             disabled: Some(disabled),
+            accessibility_label: label.clone(),
+            accessibility_description: if open { "expanded" } else { "collapsed" },
+            accessibility_selected: open,
             onclick: move |_| set_open.call(true),
             row {
                 align_items: "center",
@@ -164,6 +167,7 @@ pub fn DatePicker(props: DatePickerProps) -> Element {
                 Button {
                     size: ButtonSize::Sm,
                     width: "100%",
+                    accessibility_label: close_label.clone(),
                     onclick: move |_| set_open.call(false),
                     {close_label}
                 }

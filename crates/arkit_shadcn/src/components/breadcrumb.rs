@@ -19,6 +19,7 @@ pub struct BreadcrumbProps {
 pub fn Breadcrumb(props: BreadcrumbProps) -> Element {
     let theme = use_theme();
     let total = props.items.len();
+    let accessibility_text = props.items.join(", ");
     let rows: Vec<Element> = props
         .items
         .iter()
@@ -30,6 +31,7 @@ pub fn Breadcrumb(props: BreadcrumbProps) -> Element {
                 rsx! {
                     text {
                         content: content,
+                        accessibility_mode: "disabled",
                         font_size: typography::SM,
                         font_weight: 500,
                         font_color: theme.colors.foreground,
@@ -40,12 +42,14 @@ pub fn Breadcrumb(props: BreadcrumbProps) -> Element {
                 rsx! {
                     text {
                         content: content,
+                        accessibility_mode: "disabled",
                         font_size: typography::SM,
                         font_color: theme.colors.muted_foreground,
                         line_height: 20.0,
                     }
                     text {
                         content: "/".to_string(),
+                        accessibility_mode: "disabled",
                         font_size: typography::SM,
                         font_color: theme.colors.muted_foreground,
                     }
@@ -57,6 +61,9 @@ pub fn Breadcrumb(props: BreadcrumbProps) -> Element {
     rsx! {
         row {
             width: "100%",
+            accessibility_role: "list",
+            accessibility_text,
+            accessibility_group: true,
             align_items: "center",
             {rows.into_iter()}
         }

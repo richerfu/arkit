@@ -25,6 +25,13 @@ pub struct BarcodeProps {
     /// Fine-grained options. When set, overrides format/size/height for encode.
     #[props(default)]
     pub options: Option<BarcodeOptions>,
+    /// Accessible name for the rendered barcode image.
+    #[props(default = "Barcode".to_string())]
+    pub accessibility_label: String,
+    /// Optional description of the barcode's purpose. The encoded payload is
+    /// deliberately not announced by default because it may contain secrets.
+    #[props(default)]
+    pub accessibility_description: Option<String>,
     #[props(default)]
     pub on_error: Option<EventHandler<crate::error::BarcodeError>>,
 }
@@ -35,6 +42,8 @@ pub struct BarcodeProps {
 /// placeholder while [`BarcodePhase::Encoding`].
 #[component]
 pub fn Barcode(props: BarcodeProps) -> Element {
+    let accessibility_label = props.accessibility_label.clone();
+    let accessibility_description = props.accessibility_description.clone();
     let contents = props.contents;
     let options = props.options.unwrap_or_else(|| {
         let width = props.size.max(1.0).round() as u32;
@@ -88,6 +97,9 @@ pub fn Barcode(props: BarcodeProps) -> Element {
                     object_fit: "cover",
                     width: layout_w,
                     height: layout_h,
+                    accessibility_role: "image",
+                    accessibility_text: accessibility_label,
+                    accessibility_description: if let Some(description) = accessibility_description { description },
                 }
             }
         }
@@ -99,7 +111,12 @@ pub fn Barcode(props: BarcodeProps) -> Element {
                 border_radius: 8.0,
                 align_items: "center",
                 justify_content: "center",
+                accessibility_role: "image",
+                accessibility_text: accessibility_label,
+                accessibility_description: "Encoding barcode",
+                accessibility_group: true,
                 text {
+                    accessibility_mode: "disabled",
                     content: "Encoding…".to_string(),
                     font_size: 12.0,
                     font_color: "#FF71717A",
@@ -114,7 +131,12 @@ pub fn Barcode(props: BarcodeProps) -> Element {
                 border_radius: 8.0,
                 align_items: "center",
                 justify_content: "center",
+                accessibility_role: "image",
+                accessibility_text: accessibility_label,
+                accessibility_description: "Barcode content is empty",
+                accessibility_group: true,
                 text {
+                    accessibility_mode: "disabled",
                     content: "Enter content".to_string(),
                     font_size: 12.0,
                     font_color: "#FF71717A",
@@ -131,7 +153,12 @@ pub fn Barcode(props: BarcodeProps) -> Element {
                 justify_content: "center",
                 padding_left: 8.0,
                 padding_right: 8.0,
+                accessibility_role: "image",
+                accessibility_text: accessibility_label,
+                accessibility_description: format!("Barcode error: {}", error.message()),
+                accessibility_group: true,
                 text {
+                    accessibility_mode: "disabled",
                     content: error.message().to_string(),
                     font_size: 11.0,
                     font_color: "#FFB91C1C",

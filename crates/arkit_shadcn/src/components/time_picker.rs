@@ -227,6 +227,9 @@ pub fn TimePicker(props: TimePickerProps) -> Element {
         Button {
             variant: ButtonVariant::Outline,
             disabled: Some(disabled),
+            accessibility_label: trigger_label.clone(),
+            accessibility_description: if open { "expanded" } else { "collapsed" },
+            accessibility_selected: open,
             onclick: move |_| {
                 let next_draft = selected.unwrap_or(TimeValue::MIDNIGHT);
                 if draft() != next_draft {
@@ -394,8 +397,12 @@ fn time_picker_column(
                                     width: "100%",
                                     height: TIME_PICKER_OPTION_HEIGHT,
                                     button_type: "normal",
-                                    focusable: false,
-                                    focus_on_touch: false,
+                                    accessibility_role: "radio",
+                                    accessibility_text: option.label.clone(),
+                                    accessibility_checked: active,
+                                    accessibility_selected: active,
+                                    focusable: true,
+                                    focus_on_touch: true,
                                     border_style: ARKUI_BORDER_STYLE_SOLID,
                                     border_width: if active { 1.0 } else { 0.0 },
                                     border_color: if active {
@@ -422,7 +429,7 @@ fn time_picker_column(
                                         theme.colors.foreground
                                     },
                                     onclick: move |_| on_select.call(value),
-                                    {option.label}
+                                    {option.label.clone()}
                                 }
                             }
                         }
@@ -474,8 +481,12 @@ fn period_button(
             width: "100%",
             height: TIME_PICKER_OPTION_HEIGHT,
             button_type: "normal",
-            focusable: false,
-            focus_on_touch: false,
+            accessibility_role: "radio",
+            accessibility_text: label.clone(),
+            accessibility_checked: active,
+            accessibility_selected: active,
+            focusable: true,
+            focus_on_touch: true,
             border_style: ARKUI_BORDER_STYLE_SOLID,
             border_width: if active { 1.0 } else { 0.0 },
             border_color: if active {
@@ -502,7 +513,7 @@ fn period_button(
                 theme.colors.foreground
             },
             onclick: move |_| on_select.call(is_pm),
-            {label}
+            {label.clone()}
         }
     }
 }

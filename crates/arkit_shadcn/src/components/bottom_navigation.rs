@@ -77,12 +77,17 @@ pub fn BottomNavigation(props: BottomNavigationProps) -> Element {
             rsx! {
                 row {
                     key: "{index}",
+                    accessibility_role: "tab",
+                    accessibility_text: label.clone(),
+                    accessibility_group: true,
+                    accessibility_actions: "click",
+                    accessibility_selected: active,
                     layout_weight: 1.0,
                     height: "100%",
                     align_items: "center",
                     justify_content: "center",
-                    focusable: false,
-                    focus_on_touch: false,
+                    focusable: true,
+                    focus_on_touch: true,
                     background_color: TRANSPARENT,
                     onclick: move |_| {
                         if !controlled {
@@ -112,6 +117,8 @@ pub fn BottomNavigation(props: BottomNavigationProps) -> Element {
     rsx! {
         row {
             width: "100%",
+            accessibility_role: "tablist",
+            accessibility_group: false,
             height: BAR_HEIGHT,
             align_items: "center",
             justify_content: "start",

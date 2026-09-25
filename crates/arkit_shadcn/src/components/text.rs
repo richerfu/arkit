@@ -54,7 +54,7 @@ pub fn Text(props: TextProps) -> Element {
     match props.variant {
         TextVariant::Default => rsx! {
             text {
-                content: content,
+                content: content.clone(),
                 font_size: typography::MD,
                 font_color: theme.colors.foreground,
                 line_height: 24.0,
@@ -63,7 +63,9 @@ pub fn Text(props: TextProps) -> Element {
         },
         TextVariant::H1 => rsx! {
             text {
-                content: content,
+                accessibility_role: "heading",
+                accessibility_text: content.clone(),
+                content: content.clone(),
                 font_size: 36.0,
                 font_weight: 700,
                 font_color: theme.colors.foreground,
@@ -75,8 +77,12 @@ pub fn Text(props: TextProps) -> Element {
         TextVariant::H2 => rsx! {
             column {
                 width: "100%",
+                accessibility_role: "heading",
+                accessibility_text: content.clone(),
+                accessibility_group: true,
                 text {
-                    content: content,
+                    content: content.clone(),
+                    accessibility_mode: "disabled",
                     font_size: 30.0,
                     font_weight: 600,
                     font_color: theme.colors.foreground,
@@ -85,6 +91,7 @@ pub fn Text(props: TextProps) -> Element {
                     text_align: "start",
                 }
                 row {
+                    accessibility_mode: "disabled",
                     width: "100%",
                     height: 1.0,
                     margin_top: 8.0,
@@ -94,7 +101,9 @@ pub fn Text(props: TextProps) -> Element {
         },
         TextVariant::H3 => rsx! {
             text {
-                content: content,
+                accessibility_role: "heading",
+                accessibility_text: content.clone(),
+                content: content.clone(),
                 font_size: 24.0,
                 font_weight: 600,
                 font_color: theme.colors.foreground,

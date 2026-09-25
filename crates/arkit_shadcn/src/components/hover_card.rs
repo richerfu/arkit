@@ -23,6 +23,7 @@ const HOVER_CARD_ESTIMATED_HEIGHT: f32 = 132.0;
 #[component]
 pub fn HoverCard(
     trigger: Element,
+    #[props(default)] accessibility_label: Option<String>,
     open: Option<bool>,
     default_open: Option<bool>,
     on_close: Option<EventHandler<()>>,
@@ -90,6 +91,14 @@ pub fn HoverCard(
     rsx! {
         row {
             native_ref: trigger_ref,
+            accessibility_role: "button",
+            accessibility_text: if let Some(label) = accessibility_label { label },
+            accessibility_description: if current { "expanded" } else { "collapsed" },
+            accessibility_group: true,
+            accessibility_actions: "click",
+            accessibility_selected: current,
+            focusable: true,
+            focus_on_touch: true,
             onclick: move |_| set_open.call(!current),
             onhover: move |evt| {
                 if evt.data().is_hovering {
@@ -126,6 +135,7 @@ fn hover_card_overlay_content(
             height: "100%",
             hit_test_behavior: "none",
             column {
+                accessibility_role: "group",
                 position: format!("{left},{top}"),
                 width: panel_width,
                 align_items: "start",

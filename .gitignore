@@ -10,3 +10,6 @@ website/dist
 **/target
 
 .hvigor
+
+# Local QEMU accessibility acceptance evidence.
+.tools/qemu-a11y/

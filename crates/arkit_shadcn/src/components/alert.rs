@@ -64,6 +64,9 @@ fn alert_tone(variant: AlertVariant, theme: &Theme) -> AlertTone {
 pub struct AlertProps {
     /// Lucide icon name rendered at the top-left of the alert.
     pub icon: String,
+    /// Optional name announced for the alert region.
+    #[props(default)]
+    pub accessibility_label: Option<String>,
     #[props(default)]
     pub variant: AlertVariant,
     pub children: Element,
@@ -84,6 +87,9 @@ pub fn Alert(props: AlertProps) -> Element {
     rsx! {
         stack {
             width: "100%",
+            accessibility_role: "group",
+            accessibility_text: if let Some(label) = props.accessibility_label { label },
+            accessibility_group: true,
             border_radius: theme.radii.lg,
             border_width: ALERT_BORDER_WIDTH,
             border_color,

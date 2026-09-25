@@ -61,6 +61,14 @@ impl InputMode {
 /// Props for [`Input`].
 #[derive(Props, Clone, PartialEq)]
 pub struct InputProps {
+    /// Accessible field name. Placeholder text is not a durable replacement.
+    #[props(default)]
+    pub accessibility_label: Option<String>,
+    #[props(default)]
+    pub accessibility_description: Option<String>,
+    /// Accessible name for the password visibility button.
+    #[props(default = "Toggle password visibility".to_string())]
+    pub password_toggle_label: String,
     pub placeholder: Option<String>,
     pub value: Option<String>,
     /// Text, password, or digits-only input behavior.
@@ -73,6 +81,10 @@ pub struct InputProps {
     /// Uses the destructive border treatment for validation failures.
     #[props(default)]
     pub invalid: bool,
+    /// Announces that a value is required. Validation remains owned by the
+    /// surrounding form.
+    #[props(default)]
+    pub required: bool,
     /// Prevents editing while preserving the field's dimensions.
     #[props(default)]
     pub disabled: bool,
@@ -107,11 +119,15 @@ pub fn Input(props: InputProps) -> Element {
         height,
         width,
         invalid,
+        required,
         disabled,
         read_only,
         click_to_focus,
         on_change,
         on_click,
+        accessibility_label,
+        accessibility_description,
+        password_toggle_label,
     } = props;
     let theme = use_theme();
     let mut password_visible = use_signal(|| false);
@@ -125,6 +141,13 @@ pub fn Input(props: InputProps) -> Element {
     let input_filter = mode.native_input_filter();
     let field_height = height.unwrap_or(control::HEIGHT);
     let field_width = width.clone();
+    let accessibility_description = accessibility_description
+        .into_iter()
+        .chain(invalid.then_some("Invalid".to_string()))
+        .chain(required.then_some("Required".to_string()))
+        .chain(read_only.then_some("Read only".to_string()))
+        .collect::<Vec<_>>()
+        .join(". ");
     let icon_name = if password_is_visible {
         "eye-off"
     } else {
@@ -133,6 +156,10 @@ pub fn Input(props: InputProps) -> Element {
 
     let field = rsx! {
         textinput {
+            accessibility_role: "text_input",
+            accessibility_text: if let Some(label) = accessibility_label { label },
+            accessibility_description: if !accessibility_description.is_empty() { accessibility_description },
+            accessibility_disabled: disabled,
             value: if let Some(value) = value { value },
             placeholder: if let Some(placeholder) = placeholder { placeholder },
             input_type,
@@ -155,7 +182,7 @@ pub fn Input(props: InputProps) -> Element {
             background_color: theme.colors.background,
             opacity: if disabled { 0.5 } else { 1.0 },
             enabled: !disabled,
-            focusable: !read_only,
+            focusable: !disabled && !read_only,
             focus_on_touch: resolves_focus_on_touch(read_only, click_to_focus),
             focused: focus_request(),
             padding_top: spacing::XXS,
@@ -206,6 +233,9 @@ pub fn Input(props: InputProps) -> Element {
                 justify_content: "end",
                 hit_test_behavior: "transparent",
                 button {
+                    accessibility_text: password_toggle_label,
+                    accessibility_description: if password_is_visible { "Hide password" } else { "Show password" },
+                    accessibility_disabled: disabled,
                     button_type: "normal",
                     width: PASSWORD_ICON_BUTTON_SIZE,
                     height: PASSWORD_ICON_BUTTON_SIZE,
@@ -215,8 +245,8 @@ pub fn Input(props: InputProps) -> Element {
                     border_style: ARKUI_BORDER_STYLE_SOLID,
                     border_radius: theme.radii.sm,
                     clip: true,
-                    focusable: false,
-                    focus_on_touch: false,
+                    focusable: !disabled,
+                    focus_on_touch: true,
                     alignment: "center",
                     opacity: if disabled { 0.5 } else { 1.0 },
                     enabled: !disabled,

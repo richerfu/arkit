@@ -56,6 +56,7 @@ pub fn Sheet(
     rsx! {
         stack {
             width: "100%",
+            accessibility_mode: "disabled",
             height: "100%",
             background_color: OVERLAY_BACKDROP,
             alignment: alignment,
@@ -69,6 +70,8 @@ pub fn Sheet(
                 distance: Some(SHEET_DISTANCE),
             stack {
                 onclick: move |evt| { evt.stop_propagation(); },
+                accessibility_role: "dialog",
+                accessibility_text: title.clone(),
                 width: SHEET_WIDTH,
                 height: "100%",
                 padding_top: spacing::XXL,
@@ -84,7 +87,7 @@ pub fn Sheet(
                     width: "100%",
                     height: "100%",
                     DialogHeader {
-                        title: title,
+                        title: title.clone(),
                         description: String::new(),
                     }
                     column {
@@ -99,6 +102,7 @@ pub fn Sheet(
                     justify_content: "end",
                     button {
                         button_type: "normal",
+                        accessibility_text: "Close sheet",
                         width: 28.0,
                         height: 28.0,
                         padding: 0.0,
@@ -107,8 +111,8 @@ pub fn Sheet(
                         border_style: ARKUI_BORDER_STYLE_SOLID,
                         border_radius: theme.radii.md,
                         clip: true,
-                        focusable: false,
-                        focus_on_touch: false,
+                        focusable: true,
+                        focus_on_touch: true,
                         alignment: "center",
                         opacity: 0.7_f32,
                         onclick: move |_| close.call(()),

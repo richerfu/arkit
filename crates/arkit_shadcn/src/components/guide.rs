@@ -604,6 +604,9 @@ fn guide_overlay_content(
 
             column {
                 position: format!("{},{}", panel.x, panel.y),
+                accessibility_role: "dialog",
+                accessibility_text: step.title.clone(),
+                accessibility_description: step.description.clone(),
                 width: panel.width,
                 min_height: panel.height,
                 align_items: "start",
@@ -631,6 +634,7 @@ fn guide_overlay_content(
                         variant: ButtonVariant::Ghost,
                         size: ButtonSize::Sm,
                         shadow: false,
+                        accessibility_label: snapshot.labels.skip.clone(),
                         onclick: move |_| on_action.call(GuideAction::Skip),
                         "{snapshot.labels.skip}"
                     }
@@ -638,7 +642,7 @@ fn guide_overlay_content(
                 text {
                     width: "100%",
                     margin_top: spacing::SM,
-                    content: step.title,
+                    content: step.title.clone(),
                     font_size: typography::XL,
                     font_weight: 600_i32,
                     font_color: snapshot.theme.colors.popover_foreground,
@@ -648,7 +652,7 @@ fn guide_overlay_content(
                 text {
                     width: "100%",
                     margin_top: spacing::XS,
-                    content: step.description,
+                    content: step.description.clone(),
                     font_size: typography::SM,
                     font_weight: 400_i32,
                     font_color: snapshot.theme.colors.muted_foreground,
@@ -666,6 +670,7 @@ fn guide_overlay_content(
                             variant: ButtonVariant::Outline,
                             size: ButtonSize::Sm,
                             shadow: false,
+                            accessibility_label: snapshot.labels.previous.clone(),
                             onclick: move |_| on_action.call(GuideAction::Previous),
                             "{snapshot.labels.previous}"
                         }
@@ -674,6 +679,7 @@ fn guide_overlay_content(
                     Button {
                         size: ButtonSize::Sm,
                         shadow: false,
+                        accessibility_label: next_label.clone(),
                         onclick: move |_| on_action.call(GuideAction::Next),
                         "{next_label}"
                     }

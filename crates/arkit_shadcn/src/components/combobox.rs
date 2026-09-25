@@ -16,6 +16,8 @@ pub fn Combobox(
     options: Vec<String>,
     placeholder: Option<String>,
     label: Option<String>,
+    accessibility_label: Option<String>,
+    #[props(default)] disabled: bool,
     selected: String,
     open: Option<bool>,
     default_open: bool,
@@ -55,11 +57,23 @@ pub fn Combobox(
         colors.muted_foreground
     };
     let panel_width = COMBOBOX_PANEL_FALLBACK_WIDTH;
+    let accessible_name = accessibility_label
+        .or_else(|| panel_label.clone())
+        .unwrap_or_else(|| i18n.combobox_label());
 
     rsx! {
         column {
             align_items: "start",
             row {
+                accessibility_role: "button",
+                accessibility_text: accessible_name,
+                accessibility_description: if current_open { "Expanded" } else { "Collapsed" },
+                accessibility_value_text: selected.clone(),
+                accessibility_group: true,
+                accessibility_actions: "click",
+                accessibility_disabled: disabled,
+                focusable: !disabled,
+                enabled: !disabled,
                 height: control::HEIGHT,
                 width: "100%",
                 background_color: colors.background,
@@ -73,7 +87,9 @@ pub fn Combobox(
                 border_width: 1.0,
                 border_color: colors.border,
                 onclick: move |_: dioxus_core::Event<_>| {
-                    set_open.call(!current_open);
+                    if !disabled {
+                        set_open.call(!current_open);
+                    }
                 },
                 row {
                     align_items: "center",
@@ -93,6 +109,7 @@ pub fn Combobox(
             ExpandPresence {
                 open: current_open,
                 column {
+                    accessibility_role: "list",
                     width: panel_width,
                     background_color: colors.popover,
                     border_radius: md,
@@ -127,6 +144,13 @@ pub fn Combobox(
                                 let fg = if active { colors.accent_foreground } else { colors.foreground };
                                 rsx! {
                                     row {
+                                        accessibility_role: "radio",
+                                        accessibility_text: option.clone(),
+                                        accessibility_group: true,
+                                        accessibility_actions: "click",
+                                        accessibility_checked: active,
+                                        accessibility_selected: active,
+                                        focusable: true,
                                         width: "100%",
                                         height: control::HEIGHT_SM,
                                         align_items: "center",

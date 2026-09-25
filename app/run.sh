@@ -13,8 +13,19 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP="$ROOT/app"
-HVIGWORW="/Users/ranger/Downloads/command-line-tools/bin/hvigorw"
-OHPM="/Users/ranger/Downloads/command-line-tools/bin/ohpm"
+DEVECO_CONTENTS="${DEVECO_CONTENTS:-}"
+if [ -z "$DEVECO_CONTENTS" ] && [ -n "${OHOS_NDK_HOME:-}" ]; then
+  DEVECO_CONTENTS="$(cd "$OHOS_NDK_HOME/../../.." && pwd)"
+fi
+if [ ! -d "${DEVECO_SDK_HOME:-}" ] && [ -n "$DEVECO_CONTENTS" ]; then
+  export DEVECO_SDK_HOME="$DEVECO_CONTENTS/sdk"
+fi
+HVIGWORW="${HVIGORW:-${DEVECO_CONTENTS:+$DEVECO_CONTENTS/tools/hvigor/bin/hvigorw}}"
+OHPM="${OHPM:-${DEVECO_CONTENTS:+$DEVECO_CONTENTS/tools/ohpm/bin/ohpm}}"
+[ -x "$HVIGWORW" ] || HVIGWORW="$(command -v hvigorw || true)"
+[ -x "$OHPM" ] || OHPM="$(command -v ohpm || true)"
+[ -x "$HVIGWORW" ] || { echo "hvigorw not found; set HVIGORW or DEVECO_CONTENTS" >&2; exit 1; }
+[ -x "$OHPM" ] || { echo "ohpm not found; set OHPM or DEVECO_CONTENTS" >&2; exit 1; }
 BUNDLE="com.arkit.example"
 ABILITY="EntryAbility"
 HDC_TARGET="${HDC_TARGET:-}"
@@ -109,6 +120,19 @@ run_hdc() {
 
 ACTION="${1:-all}"
 
+copy_file() {
+  local source="$1"
+  local destination="$2"
+
+  # Rust debug cdylibs can exceed 500 MiB. APFS clone-copy keeps local syncs
+  # effectively instant while preserving normal copy semantics (copy-on-write).
+  # Other hosts/filesystems transparently fall back to a regular copy.
+  if [ "$(uname -s)" = "Darwin" ] && cp -c "$source" "$destination" 2>/dev/null; then
+    return 0
+  fi
+  cp "$source" "$destination"
+}
+
 # 1) 构建 Rust 侧(如 .so 缺失),2) 同步 .so + d.ts + 类型包到 app 壳
 sync_shell() {
   if [ ! -f "$SO_SRC" ]; then
@@ -121,7 +145,7 @@ sync_shell() {
   # 清旧 types，建新
   rm -rf "$APP/entry/src/main/cpp/types"/lib*
   mkdir -p "$APP/entry/src/main/cpp/types/lib${CRATE}"
-  cp "$DTS_SRC" "$APP/entry/src/main/cpp/types/lib${CRATE}/Index.d.ts"
+  copy_file "$DTS_SRC" "$APP/entry/src/main/cpp/types/lib${CRATE}/Index.d.ts"
   cat > "$APP/entry/src/main/cpp/types/lib${CRATE}/oh-package.json5" <<EOF
 {
   "name": "lib${CRATE}.so",
@@ -133,7 +157,7 @@ EOF
   # .so — 放 entry/libs/arm64-v8a/（hvigor 默认打包此目录的预编译 native 库）
   rm -f "$APP/entry/libs/arm64-v8a"/lib*.so
   mkdir -p "$APP/entry/libs/arm64-v8a"
-  cp "$SO_SRC" "$APP/entry/libs/arm64-v8a/lib${CRATE}.so"
+  copy_file "$SO_SRC" "$APP/entry/libs/arm64-v8a/lib${CRATE}.so"
   # Native libraries linked against OHOS libc++ cannot resolve the system copy
   # from an application's module namespace. Bundle the SDK's matching shared
   # runtime whenever the example cdylib declares it as a dependency.
@@ -142,7 +166,7 @@ EOF
       grep -q '\[libc++_shared\.so\]'; then
     CXX_SHARED="$OHOS_NDK_HOME/native/llvm/lib/aarch64-linux-ohos/libc++_shared.so"
     [ -f "$CXX_SHARED" ] || { echo "OHOS libc++ runtime not found: $CXX_SHARED"; exit 1; }
-    cp "$CXX_SHARED" "$APP/entry/libs/arm64-v8a/libc++_shared.so"
+    copy_file "$CXX_SHARED" "$APP/entry/libs/arm64-v8a/libc++_shared.so"
   fi
   # entry oh-package.json5 的 lib 依赖。
   # @ohos-rs/ability / ability-plugin-webview 走 ohpm 注册表版本
@@ -166,6 +190,8 @@ EOF
 }
 
 do_build() {
+  local build_marker
+  build_marker="$(mktemp "${TMPDIR:-/tmp}/arkit-hvigor-build.XXXXXX")"
   echo ">> ohpm install"
   (cd "$APP" && "$OHPM" install)
   echo ">> hvigorw assembleHap"
@@ -175,7 +201,8 @@ do_build() {
     # SignHap 依赖 ~/.ohos/config 下的签名材料（build-profile.json5 的
     # signingConfigs）。材料缺失时（如被 DevEco 清理）容忍未签名产物,
     # 由 do_sign 用自签材料补签。
-    UNSIGNED=$(find "$APP/entry/build" -name "*-unsigned.hap" -path "*outputs*" 2>/dev/null | head -1 || true)
+    UNSIGNED=$(find "$APP/entry/build" -name "*-unsigned.hap" -path "*outputs*" -newer "$build_marker" 2>/dev/null | head -1 || true)
+    rm -f "$build_marker"
     if [ -n "$UNSIGNED" ]; then
       echo ">> SignHap failed (missing signing material); continuing with unsigned hap" >&2
       return 0
@@ -183,6 +210,7 @@ do_build() {
     echo ">> hvigor build failed and no unsigned hap produced" >&2
     return 1
   fi
+  rm -f "$build_marker"
 }
 
 # 用 OpenHarmony 自签材料补签 unsigned hap(DevEco 自动签名材料缺失时的兜底)。

@@ -480,6 +480,7 @@ fn WatermarkCanvas(props: WatermarkCanvasProps) -> Element {
     rsx! {
         custom {
             native_ref: node_ref,
+            accessibility_mode: "disabled_for_descendants",
             width: "100%",
             height: "100%",
             hit_test_behavior: "none",

@@ -138,6 +138,8 @@ struct NormalizedSliderValues {
 /// Props for the single-thumb [`Slider`].
 #[derive(Props, Clone, PartialEq)]
 pub struct SliderProps {
+    #[props(default)]
+    pub accessibility_label: Option<String>,
     /// Controlled slider value.
     pub value: f32,
     #[props(default)]
@@ -172,6 +174,8 @@ pub struct SliderProps {
 /// Props for the two-thumb [`RangeSlider`].
 #[derive(Props, Clone, PartialEq)]
 pub struct RangeSliderProps {
+    #[props(default)]
+    pub accessibility_label: Option<String>,
     /// Controlled lower and upper values.
     pub value: [f32; 2],
     #[props(default)]
@@ -201,6 +205,8 @@ pub struct RangeSliderProps {
 /// Props for the arbitrary-thumb [`MultiSlider`].
 #[derive(Props, Clone, PartialEq)]
 pub struct MultiSliderProps {
+    #[props(default)]
+    pub accessibility_label: Option<String>,
     /// Controlled values. Values are sorted and each value becomes one thumb.
     pub values: Vec<f32>,
     #[props(default)]
@@ -236,6 +242,7 @@ pub fn Slider(props: SliderProps) -> Element {
     rsx! {
         SliderTrack {
             values,
+            accessibility_label: props.accessibility_label,
             orientation: props.orientation,
             reversed: props.reversed,
             disabled: props.disabled,
@@ -261,6 +268,7 @@ pub fn RangeSlider(props: RangeSliderProps) -> Element {
     rsx! {
         SliderTrack {
             values,
+            accessibility_label: props.accessibility_label,
             orientation: props.orientation,
             reversed: props.reversed,
             disabled: props.disabled,
@@ -286,6 +294,7 @@ pub fn MultiSlider(props: MultiSliderProps) -> Element {
     rsx! {
         SliderTrack {
             values,
+            accessibility_label: props.accessibility_label,
             orientation: props.orientation,
             reversed: props.reversed,
             disabled: props.disabled,
@@ -311,6 +320,7 @@ struct ActiveDrag {
 #[derive(Props, Clone, PartialEq)]
 struct SliderTrackProps {
     values: NormalizedSliderValues,
+    accessibility_label: Option<String>,
     orientation: SliderOrientation,
     reversed: bool,
     disabled: bool,
@@ -388,9 +398,67 @@ fn SliderTrack(props: SliderTrackProps) -> Element {
     let disabled = props.disabled;
     let on_change = props.on_change;
     let density = display_vp_ratio();
+    let semantic_value_text = display_values
+        .iter()
+        .map(|value| format_slider_accessibility_value(*value))
+        .collect::<Vec<_>>()
+        .join(" – ");
+    let semantic_count = display_values.len();
+    let semantic_label = props.accessibility_label.clone();
+    let semantic_sliders = display_values
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(index, value)| {
+            let label = semantic_label.as_ref().map(|label| {
+                if semantic_count == 1 {
+                    label.clone()
+                } else {
+                    format!("{label} {}", index + 1)
+                }
+            });
+            let values = values.clone();
+            rsx! {
+                slider {
+                    accessibility_text: if let Some(label) = label { label },
+                    accessibility_description: semantic_value_text.clone(),
+                    slider_value: value,
+                    slider_min: values.min,
+                    slider_max: values.max,
+                    slider_step: values.step,
+                    enabled: !disabled,
+                    focusable: !disabled,
+                    focus_on_touch: true,
+                    width: "100%",
+                    height: "100%",
+                    block_color: 0x0000_0000_u32,
+                    selected_color: 0x0000_0000_u32,
+                    track_color: 0x0000_0000_u32,
+                    hit_test_behavior: "none",
+                    onchange: move |event: dioxus_core::Event<dioxus_elements::event::ChangeData>| {
+                        if disabled {
+                            return;
+                        }
+                        let next = update_thumb_value(
+                            &values.values,
+                            index,
+                            event.data().float_value,
+                            values.min,
+                            values.max,
+                            values.step,
+                        );
+                        if next != values.values {
+                            on_change.call(next);
+                        }
+                    },
+                }
+            }
+        })
+        .collect::<Vec<_>>();
 
     rsx! {
         stack {
+            accessibility_mode: "disabled",
             width: if let Some(width) = stretch_width {
                 width.to_string()
             } else if let Some(width) = native_width {
@@ -529,11 +597,25 @@ fn SliderTrack(props: SliderTrackProps) -> Element {
                     dioxus_elements::event::PointerAction::Unknown => {}
                 }
             },
+            for semantic_slider in semantic_sliders {
+                {semantic_slider}
+            }
             {track}
             for thumb in thumbs {
                 {thumb}
             }
         }
+    }
+}
+
+fn format_slider_accessibility_value(value: f32) -> String {
+    if value.fract().abs() <= f32::EPSILON {
+        format!("{value:.0}")
+    } else {
+        format!("{value:.2}")
+            .trim_end_matches('0')
+            .trim_end_matches('.')
+            .to_string()
     }
 }
 

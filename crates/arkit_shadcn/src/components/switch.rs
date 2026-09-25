@@ -15,8 +15,13 @@ const SWITCH_HEIGHT: f32 = 18.4;
 /// Props for [`Switch`].
 #[derive(Props, Clone, PartialEq)]
 pub struct SwitchProps {
+    /// Accessible name for the switch.
+    #[props(default)]
+    pub accessibility_label: Option<String>,
     pub checked: Option<bool>,
     pub default_checked: Option<bool>,
+    #[props(default)]
+    pub disabled: bool,
     pub on_change: Option<EventHandler<bool>>,
 }
 
@@ -28,9 +33,17 @@ pub fn Switch(props: SwitchProps) -> Element {
     let controlled = props.checked.is_some();
     let current = props.checked.unwrap_or_else(|| *internal.read());
     let on_change = props.on_change;
+    let disabled = props.disabled;
 
     rsx! {
         toggle {
+            accessibility_role: "switch",
+            accessibility_text: if let Some(label) = props.accessibility_label { label },
+            accessibility_checked: current,
+            accessibility_disabled: disabled,
+            enabled: !disabled,
+            focusable: !disabled,
+            focus_on_touch: true,
             checked: current,
             toggle_selected_color: theme.colors.primary,
             toggle_unselected_color: theme.colors.input,
@@ -42,6 +55,9 @@ pub fn Switch(props: SwitchProps) -> Element {
             width: SWITCH_WIDTH,
             height: SWITCH_HEIGHT,
             onclick: move |_| {
+                if disabled {
+                    return;
+                }
                 let next = !current;
                 if !controlled {
                     internal.set(next);

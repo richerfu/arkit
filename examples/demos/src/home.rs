@@ -42,7 +42,7 @@ pub fn Home() -> Element {
                         font_size: 13.0,
                         line_height: 18.0,
                         font_color: CAPTION_COLOR,
-                        "15 个示例统一入口 — 点击进入对应页面"
+                        "16 个示例统一入口 — 点击进入对应页面"
                     }
 
                     for group in DEMO_GROUPS {
@@ -93,6 +93,13 @@ fn DemoRow(spec: DemoSpec, first: bool, last: bool, on_select: EventHandler<Stri
     rsx! {
         row {
             width: "100%",
+            accessibility_role: "button",
+            accessibility_text: spec.name,
+            accessibility_description: spec.description,
+            accessibility_group: true,
+            accessibility_actions: "click",
+            focusable: true,
+            focus_on_touch: true,
             height: 56.0,
             align_items: "center",
             justify_content: "start",

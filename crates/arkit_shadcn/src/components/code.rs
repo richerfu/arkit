@@ -67,6 +67,10 @@ pub struct CodeProps {
     /// Complete style override. Omit to track the active shadcn theme.
     #[props(default)]
     pub style: Option<CodeStyle>,
+    /// Optional short name for the code region. The full source remains the
+    /// announced value so highlighted token nodes are never read piecemeal.
+    #[props(default)]
+    pub accessibility_label: Option<String>,
 }
 
 /// Render a syntax-highlighted code block as native ArkUI nodes.
@@ -82,9 +86,18 @@ pub fn Code(props: CodeProps) -> Element {
         .filter(|_| style.show_language_label)
         .map(|value| value.to_string());
     let body = render_code_body(language, &props.source, &style, props.highlight);
+    let accessibility_text = props
+        .accessibility_label
+        .unwrap_or_else(|| props.source.clone());
+    let accessibility_description = language.map(|language| format!("{language} code"));
 
     rsx! {
         column {
+            accessibility_role: "text",
+            accessibility_text,
+            accessibility_description: if let Some(description) = accessibility_description { description },
+            accessibility_value_text: props.source.clone(),
+            accessibility_group: true,
             width: "100%",
             align_items: "start",
             padding_top: style.padding,

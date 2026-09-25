@@ -172,6 +172,7 @@ pub(crate) fn toggle_content_row(
 pub(crate) fn toggle_surface(
     content: Element,
     style: ToggleSurfaceStyle,
+    accessibility_label: String,
     on_click: impl FnMut() + 'static,
     theme: &Theme,
 ) -> Element {
@@ -192,6 +193,13 @@ pub(crate) fn toggle_surface(
     let css_width = style.width;
     rsx! {
         row {
+            accessibility_role: "toggle",
+            accessibility_text: accessibility_label,
+            accessibility_group: true,
+            accessibility_actions: "click",
+            accessibility_checked: style.active,
+            accessibility_selected: style.active,
+            focusable: true,
             border_radius: style.border_radius,
             clip: true,
             border_style: ARKUI_BORDER_STYLE_SOLID,
@@ -292,6 +300,7 @@ pub fn Toggle(props: ToggleProps) -> Element {
                 width: None,
                 background: None,
             },
+            props.label.clone(),
             move || {
                 let current = checked_prop.unwrap_or_else(|| *local.read());
                 let next = !current;

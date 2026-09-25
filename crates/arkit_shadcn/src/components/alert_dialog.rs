@@ -51,6 +51,9 @@ pub fn AlertDialog(
             close,
             column {
                 width: "100%",
+                accessibility_role: "dialog",
+                accessibility_text: title.clone(),
+                accessibility_description: description.clone(),
                 max_width: DIALOG_MAX_WIDTH,
                 padding_top: spacing::XXL,
                 padding_right: spacing::XXL,

@@ -55,6 +55,8 @@ impl LoadMoreLabels {
 #[derive(Props, Clone, PartialEq)]
 pub struct PullToRefreshProps {
     pub children: Element,
+    #[props(default = "Refresh content".to_string())]
+    pub accessibility_label: String,
     /// Controlled refreshing state. Set this to `true` before starting async
     /// work and back to `false` after replacing the data.
     #[props(default)]
@@ -85,6 +87,10 @@ pub fn PullToRefresh(props: PullToRefreshProps) -> Element {
 
     rsx! {
         refresh {
+            accessibility_role: "refresh",
+            accessibility_text: props.accessibility_label,
+            accessibility_description: if refreshing { "Refreshing" } else { "Pull to refresh" },
+            accessibility_disabled: !enabled,
             width: props.width,
             height: props.height,
             background_color: props.background_color.unwrap_or(theme.colors.background),
@@ -142,6 +148,12 @@ pub fn LoadMoreIndicator(props: LoadMoreIndicatorProps) -> Element {
     rsx! {
         row {
             width: "100%",
+            accessibility_role: if can_retry { "button" } else { "text" },
+            accessibility_text: message.clone(),
+            accessibility_group: true,
+            accessibility_actions: if can_retry { "click" } else { "" },
+            focusable: can_retry,
+            focus_on_touch: can_retry,
             height: 48.0,
             align_items: "center",
             justify_content: "center",
@@ -176,6 +188,9 @@ pub fn LoadMoreIndicator(props: LoadMoreIndicatorProps) -> Element {
 #[derive(Props, Clone, PartialEq)]
 pub struct InfiniteScrollProps {
     pub children: Element,
+    /// Optional name for the continuously loaded scroll region.
+    #[props(default)]
+    pub accessibility_label: Option<String>,
     /// Number of data items currently rendered. It identifies one request
     /// generation and prevents duplicate reach-end callbacks for that page.
     pub item_count: u32,
@@ -218,6 +233,15 @@ pub fn InfiniteScroll(props: InfiniteScrollProps) -> Element {
 
     rsx! {
         scroll {
+            accessibility_role: "scroll",
+            accessibility_text: if let Some(label) = props.accessibility_label { label },
+            accessibility_description: match props.state {
+                LoadMoreState::Idle => "Ready to load more",
+                LoadMoreState::Loading => "Loading more items",
+                LoadMoreState::Failed => "Loading more items failed",
+                LoadMoreState::NoMore => "No more items",
+            },
+            accessibility_group: false,
             width: props.width,
             height: props.height,
             background_color: props.background_color.unwrap_or(theme.colors.background),

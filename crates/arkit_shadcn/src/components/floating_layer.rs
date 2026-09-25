@@ -207,17 +207,13 @@ pub(crate) fn overlay_local_vp(
         y: overlay_origin.y,
         ..Default::default()
     };
-    let local = arkit_arkui::LocalVpPoint::from_window_px(window, overlay_frame, scale)
-        .unwrap_or_default();
+    let local =
+        arkit_arkui::LocalVpPoint::from_window_px(window, overlay_frame, scale).unwrap_or_default();
     if local.x >= -1.0 && local.y >= -1.0 {
         return local;
     }
-    arkit_arkui::LocalVpPoint::from_window_px(
-        window,
-        arkit_arkui::LayoutFramePx::default(),
-        scale,
-    )
-    .unwrap_or(local)
+    arkit_arkui::LocalVpPoint::from_window_px(window, arkit_arkui::LayoutFramePx::default(), scale)
+        .unwrap_or(local)
 }
 
 /// Prefer a live native window frame over the last area-change sample.
@@ -301,6 +297,7 @@ pub(crate) fn trigger_width_vp(
 #[component]
 pub fn FloatingLayer(
     trigger: Element,
+    #[props(default)] accessibility_label: Option<String>,
     open: Option<bool>,
     default_open: Option<bool>,
     on_close: Option<EventHandler<()>>,
@@ -350,12 +347,28 @@ pub fn FloatingLayer(
             hit_test_behavior: "none",
             if hover {
                 row {
+                    accessibility_role: "button",
+                    accessibility_text: if let Some(label) = accessibility_label.clone() { label },
+                    accessibility_description: if current { "expanded" } else { "collapsed" },
+                    accessibility_group: true,
+                    accessibility_actions: "click",
+                    accessibility_selected: current,
+                    focusable: true,
+                    focus_on_touch: true,
                     onclick: move |_| toggle.call(()),
                     onhover: move |_| open_up.call(()),
                     {trigger}
                 }
             } else {
                 row {
+                    accessibility_role: "button",
+                    accessibility_text: if let Some(label) = accessibility_label { label },
+                    accessibility_description: if current { "expanded" } else { "collapsed" },
+                    accessibility_group: true,
+                    accessibility_actions: "click",
+                    accessibility_selected: current,
+                    focusable: true,
+                    focus_on_touch: true,
                     onclick: move |_| toggle.call(()),
                     {trigger}
                 }
@@ -364,6 +377,7 @@ pub fn FloatingLayer(
                 if hover {
                     stack {
                         width: "100%",
+                        accessibility_mode: "disabled",
                         height: "100%",
                         alignment: alignment,
                         hit_test_behavior: "none",

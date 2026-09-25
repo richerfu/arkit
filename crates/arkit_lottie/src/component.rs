@@ -168,6 +168,13 @@ pub struct LottiePlayerProps {
     pub on_complete: Option<EventHandler<()>>,
     #[props(default)]
     pub on_error: Option<EventHandler<LottieError>>,
+    /// Accessible name for meaningful animation content. When omitted, the
+    /// animation is treated as decorative.
+    #[props(default)]
+    pub accessibility_label: Option<String>,
+    /// Optional longer description of the animation.
+    #[props(default)]
+    pub accessibility_description: Option<String>,
 }
 
 /// Render Lottie JSON directly into an ArkUI XComponent native window.
@@ -438,12 +445,17 @@ pub fn LottiePlayer(props: LottiePlayerProps) -> Element {
     });
 
     let height = props.height.clone().unwrap_or_else(|| "240".into());
+    let semantic = props.accessibility_label.is_some();
     rsx! {
         xcomponent {
             native_ref: node_ref,
             width: props.width.clone(),
             height: height,
             background_color: props.background_color,
+            accessibility_mode: if semantic { "enabled" } else { "disabled" },
+            accessibility_role: if semantic { "image" },
+            accessibility_text: if let Some(label) = props.accessibility_label { label },
+            accessibility_description: if let Some(description) = props.accessibility_description { description },
         }
     }
 }

@@ -430,6 +430,7 @@ pub fn Calendar(props: CalendarProps) -> Element {
                 align_items: "center",
                 CalendarNavigationButton {
                     icon: "chevron-left".to_string(),
+                    accessibility_label: "Previous month".to_string(),
                     accent: today_color,
                     disabled: previous_disabled,
                     onclick: move |_| navigate_previous.call(()),
@@ -444,6 +445,7 @@ pub fn Calendar(props: CalendarProps) -> Element {
                 }
                 CalendarNavigationButton {
                     icon: "chevron-right".to_string(),
+                    accessibility_label: "Next month".to_string(),
                     accent: today_color,
                     disabled: next_disabled,
                     onclick: move |_| navigate_next.call(()),
@@ -584,8 +586,11 @@ fn CalendarHeaderButton(label: String, expanded: bool, onclick: EventHandler<()>
     rsx! {
         button {
             button_type: "normal",
-            focusable: false,
-            focus_on_touch: false,
+            accessibility_text: label.clone(),
+            accessibility_description: if expanded { "expanded" } else { "collapsed" },
+            accessibility_selected: expanded,
+            focusable: true,
+            focus_on_touch: true,
             width: "100%",
             height: 36.0,
             padding_top: 0.0,
@@ -630,8 +635,9 @@ fn CalendarPickerBackButton(label: String, onclick: EventHandler<()>) -> Element
             justify_content: "center",
             button {
                 button_type: "normal",
-                focusable: false,
-                focus_on_touch: false,
+                accessibility_text: label.clone(),
+                focusable: true,
+                focus_on_touch: true,
                 height: 36.0,
                 padding_top: 0.0,
                 padding_right: spacing::MD,
@@ -665,6 +671,7 @@ fn CalendarPickerBackButton(label: String, onclick: EventHandler<()>) -> Element
 #[component]
 fn CalendarNavigationButton(
     icon: String,
+    accessibility_label: String,
     accent: u32,
     disabled: bool,
     onclick: EventHandler<()>,
@@ -672,8 +679,10 @@ fn CalendarNavigationButton(
     rsx! {
         button {
             button_type: "normal",
-            focusable: false,
-            focus_on_touch: false,
+            accessibility_text: accessibility_label,
+            accessibility_disabled: disabled,
+            focusable: !disabled,
+            focus_on_touch: true,
             enabled: !disabled,
             width: 36.0,
             height: 36.0,
@@ -797,8 +806,12 @@ fn CalendarDays(
                     justify_content: "center",
                     button {
                         button_type: "normal",
-                        focusable: false,
-                        focus_on_touch: false,
+                        accessibility_text: date_string.clone(),
+                        accessibility_actions: "click|long_click",
+                        accessibility_selected: is_selected,
+                        accessibility_disabled: !enabled,
+                        focusable: enabled,
+                        focus_on_touch: true,
                         enabled,
                         width: day_size,
                         height: day_size,
@@ -1013,8 +1026,10 @@ fn CalendarMonthGrid(
                                     justify_content: "center",
                                     button {
                                         button_type: "normal",
-                                        focusable: false,
-                                        focus_on_touch: false,
+                                        accessibility_text: label.clone(),
+                                        accessibility_selected: selected,
+                                        focusable: true,
+                                        focus_on_touch: true,
                                         width: "88%",
                                         height: 42.0,
                                         padding_top: 0.0,
@@ -1092,8 +1107,10 @@ fn CalendarYearGrid(
                                         justify_content: "center",
                                         button {
                                             button_type: "normal",
-                                            focusable: false,
-                                            focus_on_touch: false,
+                                            accessibility_text: year.to_string(),
+                                            accessibility_selected: selected,
+                                            focusable: true,
+                                            focus_on_touch: true,
                                             width: "88%",
                                             height: 42.0,
                                             padding_top: 0.0,

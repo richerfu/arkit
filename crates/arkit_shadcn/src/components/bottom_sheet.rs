@@ -143,6 +143,8 @@ fn BottomSheetPanel(props: BottomSheetPanelProps) -> Element {
     rsx! {
         column {
             width: "100%",
+            accessibility_role: "dialog",
+            accessibility_text: props.title.clone(),
             constraint_size: format!("0,100000,{BOTTOM_SHEET_MIN_HEIGHT},100000"),
             border_radius: top_radius,
             border_width: "1,1,0,1",
@@ -231,6 +233,7 @@ fn BottomSheetPanel(props: BottomSheetPanelProps) -> Element {
                     }
                     button {
                         button_type: "normal",
+                        accessibility_text: "Close bottom sheet",
                         width: control::ICON_SM,
                         height: control::ICON_SM,
                         padding: 0.0,
@@ -239,8 +242,8 @@ fn BottomSheetPanel(props: BottomSheetPanelProps) -> Element {
                         border_style: ARKUI_BORDER_STYLE_SOLID,
                         border_radius: theme.radii.md,
                         clip: true,
-                        focusable: false,
-                        focus_on_touch: false,
+                        focusable: true,
+                        focus_on_touch: true,
                         alignment: "center",
                         onclick: move |_| on_close.call(()),
                         {icon_placeholder("x", 16.0, theme.colors.muted_foreground)}
@@ -262,6 +265,7 @@ fn BottomSheetPanel(props: BottomSheetPanelProps) -> Element {
 /// Compact single-line input used inside bottom-sheet forms.
 #[component]
 pub fn BottomSheetTextInput(
+    #[props(default)] accessibility_label: Option<String>,
     placeholder: Option<String>,
     value: Option<String>,
     on_change: Option<EventHandler<String>>,
@@ -270,6 +274,8 @@ pub fn BottomSheetTextInput(
 
     rsx! {
         textinput {
+            accessibility_role: "text_input",
+            accessibility_text: if let Some(label) = accessibility_label.or_else(|| placeholder.clone()) { label },
             value: if let Some(value) = value { value },
             placeholder: if let Some(placeholder) = placeholder { placeholder },
             placeholder_color: theme.colors.muted_foreground,

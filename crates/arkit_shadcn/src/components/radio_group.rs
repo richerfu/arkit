@@ -42,6 +42,9 @@ fn radio_indicator(checked: bool, theme: &Theme) -> Element {
 #[derive(Props, Clone, PartialEq)]
 pub struct RadioGroupProps {
     pub options: Vec<String>,
+    /// Optional name for the complete radio group.
+    #[props(default)]
+    pub accessibility_label: Option<String>,
     /// Controlled selection. When `Some`, the group is controlled.
     #[props(default)]
     pub selected: Option<String>,
@@ -77,6 +80,13 @@ pub fn RadioGroup(props: RadioGroupProps) -> Element {
             let top_margin = if index == 0 { 0.0 } else { spacing::SM };
             let row = rsx! {
                 row {
+                    accessibility_role: "radio",
+                    accessibility_text: option.clone(),
+                    accessibility_group: true,
+                    accessibility_actions: "click",
+                    accessibility_checked: checked,
+                    accessibility_selected: checked,
+                    focusable: true,
                     width: "100%",
                     align_items: "center",
                     justify_content: "start",
@@ -106,6 +116,8 @@ pub fn RadioGroup(props: RadioGroupProps) -> Element {
 
     rsx! {
         column {
+            accessibility_role: "list",
+            accessibility_text: if let Some(label) = props.accessibility_label { label },
             width: "100%",
             {rows.into_iter()}
         }

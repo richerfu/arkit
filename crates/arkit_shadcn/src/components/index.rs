@@ -391,6 +391,7 @@ pub fn Index(props: IndexProps) -> Element {
             }
             FlatKind::Item(item_index) => {
                 let item = list_items[item_index].clone();
+                let item_label = item.title.clone();
                 let group = list_keys
                     .get(item_index)
                     .cloned()
@@ -407,6 +408,12 @@ pub fn Index(props: IndexProps) -> Element {
                 rsx! {
                     column {
                         width: "100%",
+                        accessibility_role: "button",
+                        accessibility_text: item_label,
+                        accessibility_group: true,
+                        accessibility_actions: "click",
+                        focusable: true,
+                        focus_on_touch: true,
                         background_color: row_bg,
                         onclick: move |_| on_select.call(item_index),
                         {inner}
@@ -592,6 +599,7 @@ fn default_bar_slot(slot: IndexBarSlot, theme: Theme) -> Element {
     rsx! {
         text {
             content: slot.index,
+            accessibility_mode: "disabled",
             font_size: RAIL_LETTER_SIZE,
             font_weight: if slot.active { 700 } else { 500 },
             font_color: color,
@@ -682,13 +690,33 @@ pub fn IndexBar(props: IndexBarProps) -> Element {
                     } else {
                         default_bar_slot(slot, theme)
                     };
+                    let select_letter = letter.clone();
+                    let accessible_letter = letter.clone();
+                    let selected = active.as_deref() == Some(letter.as_str());
+                    let unavailable = is_empty_index(&empty, letter);
                     rsx! {
                         column {
                             width: RAIL_WIDTH,
                             layout_weight: 1.0,
                             align_items: "center",
                             justify_content: "center",
-                            hit_test_behavior: "none",
+                            accessibility_role: "button",
+                            accessibility_text: accessible_letter,
+                            accessibility_description: if unavailable { "No items" } else { "Jump to index" },
+                            accessibility_group: true,
+                            accessibility_actions: "click",
+                            accessibility_selected: selected,
+                            accessibility_disabled: unavailable,
+                            enabled: !unavailable,
+                            focusable: !unavailable,
+                            focus_on_touch: !unavailable,
+                            background_color: HIT_FILL,
+                            hit_test_behavior: "default",
+                            onclick: move |_| {
+                                if !unavailable {
+                                    on_select.call(select_letter.clone());
+                                }
+                            },
                             {cell}
                         }
                     }

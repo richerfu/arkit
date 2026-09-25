@@ -63,6 +63,7 @@ pub(crate) fn dialog_portal(open: bool, panel: Element, on_dismiss: EventHandler
 /// Modal dialog panel.
 #[component]
 pub fn Dialog(
+    #[props(default)] accessibility_label: Option<String>,
     open: Option<bool>,
     default_open: Option<bool>,
     on_close: Option<EventHandler<()>>,
@@ -90,6 +91,8 @@ pub fn Dialog(
             close,
             stack {
                 width: "100%",
+                accessibility_role: "dialog",
+                accessibility_text: if let Some(label) = accessibility_label { label },
                 max_width: DIALOG_MAX_WIDTH,
                 alignment: "top-start",
                 border_radius: theme.radii.lg,
@@ -114,6 +117,7 @@ pub fn Dialog(
                     hit_test_behavior: "transparent",
                     button {
                         button_type: "normal",
+                        accessibility_text: "Close dialog",
                         width: DIALOG_CLOSE_BUTTON_SIZE,
                         height: DIALOG_CLOSE_BUTTON_SIZE,
                         padding: 0.0,
@@ -122,8 +126,8 @@ pub fn Dialog(
                         border_style: ARKUI_BORDER_STYLE_SOLID,
                         border_radius: theme.radii.sm,
                         clip: true,
-                        focusable: false,
-                        focus_on_touch: false,
+                        focusable: true,
+                        focus_on_touch: true,
                         alignment: "center",
                         opacity: 0.7_f32,
                         onclick: move |_| close.call(()),

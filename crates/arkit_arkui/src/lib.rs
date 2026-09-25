@@ -1346,6 +1346,10 @@ impl ArkUIRenderer {
             .iter()
             .filter_map(|(name, _)| event_type_for_name(name, tag))
             .collect::<Vec<_>>();
+        // ArkUI's accessibility `performAction("click")` emits the ordinary
+        // click event as well as `OnAccessibilityActions`. Keep the latter
+        // exclusive to an explicit `onaccessibilityaction` listener so one
+        // screen-reader activation cannot dispatch `onclick` twice.
         // A native_ref is a mount capability by default. Layout and
         // visibility hooks opt into their respective ArkUI events explicitly;
         // animation/canvas/native-component refs therefore do not pay for or
@@ -2984,6 +2988,9 @@ fn extract_payload(
 ) -> ArkEventPayload {
     use NodeEventType::*;
     match event_type {
+        OnAccessibilityActions => {
+            ArkEventPayload::AccessibilityAction(event.u32_value(0).unwrap_or_default())
+        }
         OnFocus => ArkEventPayload::Bool(true),
         OnBlur => ArkEventPayload::Bool(false),
         // Checkbox / radio checked state: i32(0) != 0.
@@ -3171,6 +3178,7 @@ fn event_type_for_name(name: &str, tag: &str) -> Option<NodeEventType> {
     use NodeEventType::*;
     let kind = classify_event_name(name)?;
     Some(match (kind, tag) {
+        (ArkEventKind::AccessibilityAction, _) => OnAccessibilityActions,
         (ArkEventKind::Click, _) => OnClickEvent,
 
         // Value change — component-specific.
@@ -3283,6 +3291,10 @@ mod event_tests {
         assert_eq!(
             event_type_for_name("_blur", "textinput"),
             Some(NodeEventType::OnBlur)
+        );
+        assert_eq!(
+            event_type_for_name("accessibilityaction", "row"),
+            Some(NodeEventType::OnAccessibilityActions)
         );
     }
 

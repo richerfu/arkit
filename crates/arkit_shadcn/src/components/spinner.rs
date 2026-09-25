@@ -24,6 +24,9 @@ thread_local! {
 /// Props for [`Spinner`].
 #[derive(Props, Clone, PartialEq)]
 pub struct SpinnerProps {
+    /// Name announced while the indicator is active.
+    #[props(default = "Loading".to_string())]
+    pub accessibility_label: String,
     /// Width and height in vp. Matches shadcn's `size-4` default.
     #[props(default = 16.0)]
     pub size: f32,
@@ -52,6 +55,7 @@ pub fn Spinner(props: SpinnerProps) -> Element {
         return rsx! {
             CustomSpinnerIcon {
                 icon,
+                accessibility_label: props.accessibility_label,
                 size,
                 color,
                 stroke_width: props.stroke_width.max(0.1),
@@ -62,6 +66,9 @@ pub fn Spinner(props: SpinnerProps) -> Element {
 
     rsx! {
         loadingprogress {
+            accessibility_role: "loading",
+            accessibility_text: props.accessibility_label,
+            accessibility_description: if props.spinning { "In progress" } else { "Paused" },
             width: size,
             height: size,
             loading_progress_color: color,
@@ -74,6 +81,7 @@ pub fn Spinner(props: SpinnerProps) -> Element {
 #[component]
 fn CustomSpinnerIcon(
     icon: String,
+    accessibility_label: String,
     size: f32,
     color: u32,
     stroke_width: f32,
@@ -99,6 +107,10 @@ fn CustomSpinnerIcon(
     rsx! {
         row {
             native_ref: target_ref,
+            accessibility_role: "loading",
+            accessibility_text: accessibility_label,
+            accessibility_description: if spinning { "In progress" } else { "Paused" },
+            accessibility_group: true,
             width: size,
             height: size,
             align_items: "center",
@@ -149,6 +161,7 @@ mod tests {
     #[test]
     fn props_support_custom_icon_style_and_pause() {
         let props = SpinnerProps {
+            accessibility_label: "Loading".to_string(),
             size: 24.0,
             color: Some(0xFF00_7DFF),
             icon: Some("refresh-cw".to_string()),

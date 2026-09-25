@@ -478,6 +478,8 @@ pub fn Toast(props: ToastProps) -> Element {
         return rsx! {
             row {
                 width,
+                accessibility_role: "group",
+                accessibility_text: props.title.clone(),
                 height: min_height,
                 align_items: "center",
                 justify_content: "center",
@@ -525,7 +527,7 @@ pub fn Toast(props: ToastProps) -> Element {
                     }
                 }
                 text {
-                    content: props.title,
+                    content: props.title.clone(),
                     font_size: typography::SM,
                     font_weight: title_weight,
                     font_color: palette.foreground,
@@ -540,6 +542,9 @@ pub fn Toast(props: ToastProps) -> Element {
     rsx! {
         row {
             width: "100%",
+            accessibility_role: "group",
+            accessibility_text: props.title.clone(),
+            accessibility_description: if let Some(description) = props.description.clone() { description },
             constraint_size: format!("0,100000,{min_height},100000"),
             align_items: "center",
             justify_content: "start",
@@ -597,7 +602,7 @@ pub fn Toast(props: ToastProps) -> Element {
                 justify_content: "center",
                 text {
                     width: "100%",
-                    content: props.title,
+                    content: props.title.clone(),
                     font_size: typography::SM,
                     font_weight: title_weight,
                     font_color: palette.foreground,
@@ -626,6 +631,7 @@ pub fn Toast(props: ToastProps) -> Element {
                     row { width: spacing::SM }
                     button {
                         button_type: "normal",
+                        accessibility_text: action_label.clone(),
                         height: TOAST_ACTION_HEIGHT,
                         padding_top: 0.0,
                         padding_right: spacing::MD,
@@ -636,8 +642,8 @@ pub fn Toast(props: ToastProps) -> Element {
                         border_width: 0.0,
                         border_style: ARKUI_BORDER_STYLE_SOLID,
                         border_radius: theme.radii.md,
-                        focusable: false,
-                        focus_on_touch: false,
+                        focusable: true,
+                        focus_on_touch: true,
                         alignment: "center",
                         onclick: move |event| {
                             event.stop_propagation();
@@ -658,6 +664,7 @@ pub fn Toast(props: ToastProps) -> Element {
             if show_close {
                 button {
                     button_type: "normal",
+                    accessibility_text: "Dismiss notification",
                     width: TOAST_CLOSE_SIZE,
                     height: TOAST_CLOSE_SIZE,
                     padding: 0.0,
@@ -665,8 +672,8 @@ pub fn Toast(props: ToastProps) -> Element {
                     border_width: 0.0,
                     border_style: ARKUI_BORDER_STYLE_SOLID,
                     border_radius: theme.radii.md,
-                    focusable: false,
-                    focus_on_touch: false,
+                    focusable: true,
+                    focus_on_touch: true,
                     alignment: "center",
                     onclick: move |event| {
                         event.stop_propagation();

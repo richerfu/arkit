@@ -16,6 +16,9 @@ const AVATAR_RING_WIDTH: f32 = 2.0;
 pub struct AvatarProps {
     #[props(default)]
     pub src: Option<String>,
+    /// Accessible name for the represented person or entity.
+    #[props(default)]
+    pub accessibility_label: Option<String>,
     #[props(default)]
     pub fallback: Option<Element>,
     #[props(default)]
@@ -39,6 +42,9 @@ pub fn Avatar(props: AvatarProps) -> Element {
 
     rsx! {
         stack {
+            accessibility_role: "image",
+            accessibility_text: if let Some(label) = props.accessibility_label.clone() { label },
+            accessibility_group: true,
             width: AVATAR_SIZE,
             height: AVATAR_SIZE,
             border_radius: radius,
@@ -52,6 +58,7 @@ pub fn Avatar(props: AvatarProps) -> Element {
             if let Some(src) = props.src.as_ref() {
                 image {
                     src: src.clone(),
+                    accessibility_mode: "disabled",
                     width: AVATAR_SIZE,
                     height: AVATAR_SIZE,
                     border_radius: radius,

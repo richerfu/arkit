@@ -137,6 +137,12 @@ pub struct CameraPreviewProps {
     /// CSS height (`"360"`, `"100%"`). Defaults to `"360"` when unset.
     #[props(default)]
     pub height: Option<String>,
+    /// Accessible name for the camera surface.
+    #[props(default = "Camera preview".to_string())]
+    pub accessibility_label: String,
+    /// Optional guidance for the active camera mode.
+    #[props(default)]
+    pub accessibility_description: Option<String>,
     #[props(default)]
     pub on_status_change: Option<EventHandler<CameraStatus>>,
     #[props(default)]
@@ -375,6 +381,9 @@ pub fn CameraPreview(props: CameraPreviewProps) -> Element {
             width: props.width.clone(),
             height: height,
             background_color: "#FF000000",
+            accessibility_role: "image",
+            accessibility_text: props.accessibility_label.clone(),
+            accessibility_description: if let Some(description) = props.accessibility_description.clone() { description },
         }
     }
 }

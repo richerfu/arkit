@@ -21,6 +21,7 @@ const MENU_PANEL_WIDTH: f32 = 224.0;
 pub fn DropdownMenu(
     items: Vec<MenuEntry>,
     children: Element,
+    accessibility_label: Option<String>,
     open: Option<bool>,
     default_open: bool,
     on_open_change: Option<EventHandler<bool>>,
@@ -77,6 +78,13 @@ pub fn DropdownMenu(
     rsx! {
         row {
             native_ref: trigger_ref,
+            accessibility_role: "button",
+            accessibility_text: if let Some(label) = accessibility_label { label },
+            accessibility_description: if current_open { "Expanded menu" } else { "Collapsed menu" },
+            accessibility_group: true,
+            accessibility_actions: "click",
+            accessibility_selected: current_open,
+            focusable: true,
             onclick: move |_| set_open.call(!current_open),
             {children}
         }

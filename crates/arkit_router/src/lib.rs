@@ -175,6 +175,12 @@ pub struct LinkProps<R: Clone + PartialEq + 'static> {
     /// Optional font size (vp).
     #[props(default)]
     pub font_size: Option<f32>,
+    /// Accessible name. When omitted, ArkUI derives it from the link content.
+    #[props(default)]
+    pub accessibility_label: Option<String>,
+    /// Optional destination or usage hint.
+    #[props(default)]
+    pub accessibility_description: Option<String>,
 }
 
 /// An ArkUI-native navigation link. Renders as a clickable `text` element
@@ -213,6 +219,13 @@ pub fn Link<R: Clone + PartialEq + 'static + std::fmt::Debug + dioxus_router::Ro
         text {
             font_size: font_size,
             font_color: color,
+            accessibility_role: "link",
+            accessibility_text: if let Some(label) = props.accessibility_label { label },
+            accessibility_description: if let Some(description) = props.accessibility_description { description },
+            accessibility_group: true,
+            accessibility_actions: "click",
+            focusable: true,
+            focus_on_touch: true,
             onclick: move |_| {
                 navigator.push(to.clone());
             },

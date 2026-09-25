@@ -111,6 +111,9 @@ impl Default for InputOtpStyle {
 pub struct InputOtpProps {
     /// Controlled complete OTP value.
     pub value: String,
+    /// Accessible name for the single native OTP field.
+    #[props(default = "One-time code".to_string())]
+    pub accessibility_label: String,
     #[props(default = 6usize)]
     pub digits: usize,
     #[props(default)]
@@ -280,6 +283,10 @@ pub fn InputOtp(props: InputOtpProps) -> Element {
             // while the slots above remain the visual source of truth.
             textinput {
                 value,
+                accessibility_role: "text_input",
+                accessibility_text: props.accessibility_label,
+                accessibility_description: if props.invalid { "Invalid value" },
+                accessibility_disabled: props.disabled,
                 input_type,
                 input_filter,
                 max_length,

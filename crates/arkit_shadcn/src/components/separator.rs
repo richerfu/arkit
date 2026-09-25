@@ -22,6 +22,7 @@ pub fn Separator(props: SeparatorProps) -> Element {
     match props.vertical_height {
         Some(height) => rsx! {
             column {
+                accessibility_mode: "disabled_for_descendants",
                 width: 1.0,
                 height: height,
                 background_color: theme.colors.border,
@@ -29,6 +30,7 @@ pub fn Separator(props: SeparatorProps) -> Element {
         },
         None => rsx! {
             row {
+                accessibility_mode: "disabled_for_descendants",
                 height: 1.0,
                 width: "100%",
                 background_color: theme.colors.border,
