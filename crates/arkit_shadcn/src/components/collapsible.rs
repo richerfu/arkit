@@ -30,7 +30,6 @@ pub struct CollapsibleProps {
 #[component]
 pub fn Collapsible(props: CollapsibleProps) -> Element {
     let theme = use_theme();
-    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
     let mut hovering = use_signal(|| false);
     let mut focused = use_signal(|| false);
     let controlled = props.open.is_some();
@@ -58,13 +57,11 @@ pub fn Collapsible(props: CollapsibleProps) -> Element {
                 padding_bottom: 0.0,
                 padding_left: spacing::LG,
                 border_radius: theme.radii.md,
-                background_color: if desktop && (hovering() || focused()) {
+                background_color: if hovering() || focused() {
                     theme.colors.accent
                 } else {
                     0x00000000
                 },
-                focusable: desktop,
-                focus_on_touch: false,
                 onclick: move |_| {
                     let next = !open;
                     if !controlled {

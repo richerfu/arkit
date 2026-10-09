@@ -56,7 +56,6 @@ pub(crate) fn AnimatedEdgeModal(
 ) -> Element {
     let visibility = use_presence_visibility(open);
     let safe_area = arkit_hooks::use_safe_area();
-    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
     if !visibility.mounted {
         return rsx! {};
     }
@@ -66,9 +65,23 @@ pub(crate) fn AnimatedEdgeModal(
     let inset_left = viewport_inset + safe_area.left;
     let allow_dismiss = dismiss_on_backdrop;
     let dismiss = on_dismiss;
+    let viewport = arkit_hooks::use_overlay_viewport();
+    let max_height =
+        super::panel_viewport::panel_available_height(viewport, inset_top) - inset_bottom;
+    let children = rsx! { super::panel_viewport::PanelViewport { max_height, estimated_height: max_height, center: true, {children} } };
     let edge_width = panel_width
         .filter(|width| width.is_finite() && *width > 0.0)
-        .map(|width| format!("{width}"))
+        .map(|width| {
+            format!(
+                "{}",
+                super::panel_viewport::bounded_panel_width(viewport, width).min(
+                    (viewport.frame.width / viewport.scale.max(f32::EPSILON)
+                        - inset_left
+                        - inset_right)
+                        .max(1.0)
+                )
+            )
+        })
         .or_else(|| {
             panel_width_fraction
                 .filter(|fraction| fraction.is_finite() && *fraction > 0.0)
@@ -152,12 +165,17 @@ pub(crate) fn AnimatedEdgeModal(
                 height: "100%",
                 alignment: "top-start",
                 clip: false,
-                focusable: desktop,
+                focusable: true,
+                focus_scope: open,
+                focus_trap: true,
+                enabled: open,
+                key_capture: "escape",
                 focus_on_touch: false,
                 onkey: move |event| {
-                    if event.data().is_down()
+                    if event.data().action == dioxus_elements::event::KeyAction::Down
                         && event.data().key == dioxus_elements::event::KeyboardKey::Escape
                     {
+                        event.stop_propagation();
                         dismiss.call(());
                     }
                 },
@@ -203,15 +221,21 @@ pub(crate) fn OverlayPresence(
         return rsx! {};
     }
     let body = rsx! {
-        PresenceTransition {
-            phase: visibility.phase,
-            on_terminal: visibility.on_terminal,
-            preset,
-            duration_ms,
-            exit_duration_ms,
-            distance,
-            fill,
-            {children}
+        stack {
+            width: if fill == Some(true) { "100%" },
+            height: if fill == Some(true) { "100%" },
+            enabled: open,
+            hit_test_behavior: "transparent",
+            PresenceTransition {
+                phase: visibility.phase,
+                on_terminal: visibility.on_terminal,
+                preset,
+                duration_ms,
+                exit_duration_ms,
+                distance,
+                fill,
+                {children}
+            }
         }
     };
     match layer {
@@ -247,7 +271,6 @@ pub(crate) fn AnimatedModal(
 ) -> Element {
     let visibility = use_presence_visibility(open);
     let safe_area = arkit_hooks::use_safe_area();
-    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
     if !visibility.mounted {
         return rsx! {};
     }
@@ -257,6 +280,12 @@ pub(crate) fn AnimatedModal(
     let inset_left = viewport_inset + safe_area.left;
     let allow_dismiss = dismiss_on_backdrop;
     let dismiss = on_dismiss;
+    let viewport = arkit_hooks::use_overlay_viewport();
+    let max_height =
+        (viewport.frame.height / viewport.scale.max(f32::EPSILON) - inset_top - inset_bottom)
+            .max(1.0);
+    let children =
+        rsx! { super::panel_viewport::PanelViewport { max_height, center: true, {children} } };
     let placed = match presentation {
         arkit_hooks::ModalPresentation::CenteredDialog => rsx! {
             column {
@@ -351,12 +380,17 @@ pub(crate) fn AnimatedModal(
                 height: "100%",
                 alignment: "top-start",
                 clip: false,
-                focusable: desktop,
+                focusable: true,
+                focus_scope: open,
+                focus_trap: true,
+                enabled: open,
+                key_capture: "escape",
                 focus_on_touch: false,
                 onkey: move |event| {
-                    if event.data().is_down()
+                    if event.data().action == dioxus_elements::event::KeyAction::Down
                         && event.data().key == dioxus_elements::event::KeyboardKey::Escape
                     {
+                        event.stop_propagation();
                         dismiss.call(());
                     }
                 },

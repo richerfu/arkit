@@ -56,7 +56,9 @@ pub fn Combobox(
         colors.muted_foreground
     };
     let panel_width = COMBOBOX_PANEL_FALLBACK_WIDTH;
-    let accessible_name = accessibility_label.or_else(|| panel_label.clone()).unwrap_or_else(|| i18n.combobox_label());
+    let accessible_name = accessibility_label
+        .or_else(|| panel_label.clone())
+        .unwrap_or_else(|| i18n.combobox_label());
 
     let trigger = rsx! {
         row {
@@ -100,6 +102,7 @@ pub fn Combobox(
             width: panel_width,
             padding: 0.0,
             column {
+                focus_navigation: "vertical",
                 width: "100%",
                 background_color: colors.popover,
                 if let Some(label) = panel_label {
@@ -176,7 +179,7 @@ fn ComboboxOption(option: String, active: bool, on_select: EventHandler<String>)
                 0x00000000
             },
             focusable: true,
-            focus_on_touch: false,
+            focus_on_touch: true,
             onclick: move |_| on_select.call(click_value.clone()),
             onkey: move |event| {
                 if event.data().activates() {
@@ -190,7 +193,7 @@ fn ComboboxOption(option: String, active: bool, on_select: EventHandler<String>)
                 font_size: typography::SM,
                 font_color: foreground,
                 line_height: 20.0,
-                {option}
+                {option.clone()}
             }
             if active {
                 {crate::icon::icon_placeholder("check", 16.0, theme.colors.foreground)}

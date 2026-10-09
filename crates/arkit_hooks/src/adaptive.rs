@@ -18,9 +18,9 @@ pub enum AdaptiveMode {
     /// Resolve from the current application-window width.
     #[default]
     Auto,
-    /// Always use touch-oriented Phone layouts.
+    /// Always use Phone layouts. Keyboard and pointer input remain available.
     Phone,
-    /// Always use pointer-oriented PC layouts.
+    /// Always use PC layouts. Touch input remains available.
     Pc,
 }
 

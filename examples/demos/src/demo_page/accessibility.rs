@@ -9,7 +9,7 @@ use arkit::echarts::{ChartOption, ECharts};
 use arkit::prelude::*;
 use arkit::shadcn::components::{
     Badge, Button, Card, CardHeader, Checkbox, Code, ContextMenu, Field, FieldError, FieldLabel,
-    IndexBar, Input, MenuEntry, Progress, ScrollArea, Slider, Switch, Timeline, TimelineItem,
+    IndexBar, Input, MenuEntry, Progress, Slider, Switch, Timeline, TimelineItem,
 };
 
 const BACKGROUND: &str = "#FFF8FAFC";
@@ -251,8 +251,12 @@ pub(super) fn AccessibilityPage() -> Element {
                             accessibility_description: "A11Y native chart",
                         }
                         row { height: 12.0 }
-                        ScrollArea {
-                            accessibility_label: "A11Y results region",
+                        scroll {
+                            width: "100%",
+                            height: 64.0,
+                            scroll_bar: "auto",
+                            accessibility_role: "scroll",
+                            accessibility_text: "A11Y results region",
                             accessibility_description: "Scrollable component results",
                             column {
                                 width: "100%",

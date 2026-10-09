@@ -593,6 +593,20 @@ pub fn Terminal(props: TerminalProps) -> Element {
     let fit_metrics = surface_metrics.clone();
     let fit_settings = paint_settings.clone();
     let fit_runtime = runtime.clone();
+    let key_controller = controller.clone();
+    let key_input = callbacks.on_input.clone();
+    let mouse_controller = controller.clone();
+    let mouse_input = callbacks.on_input.clone();
+    let mouse_metrics = surface_metrics.clone();
+    let mouse_button = use_hook(|| Rc::new(Cell::new(MouseButton::Unknown)));
+    let axis_controller = controller.clone();
+    let axis_input = callbacks.on_input.clone();
+    let axis_metrics = surface_metrics.clone();
+    let wheel_remainder = use_hook(|| Rc::new(Cell::new(0.0_f64)));
+    let focus_controller = controller.clone();
+    let focus_input = callbacks.on_input.clone();
+    let blur_controller = controller.clone();
+    let blur_input = callbacks.on_input.clone();
 
     rsx! {
         xcomponent {
@@ -606,6 +620,56 @@ pub fn Terminal(props: TerminalProps) -> Element {
             accessibility_text: props.accessibility_label.clone(),
             accessibility_description: if let Some(description) = props.accessibility_description.clone() { description },
             accessibility_group: true,
+            focusable: capture_input,
+            focus_on_touch: capture_input,
+            key_capture: if capture_input { "all" } else { "" },
+            axis_capture: capture_input,
+            onkeypreime: move |event| {
+                if capture_input && event.data().is_down() {
+                    if let Some(chord) = input::physical_key_chord(event.data().as_ref()) {
+                        event.stop_propagation();
+                        emit_host(&key_input, key_controller.encode_key_chord(chord));
+                    }
+                }
+            },
+            onfocus: move |_| { if capture_input { emit_host(&focus_input, focus_controller.encode_focus(true)); } },
+            onblur: move |_| { if capture_input { emit_host(&blur_input, blur_controller.encode_focus(false)); } },
+            onmouse: move |event| {
+                if !capture_input { return; }
+                use dioxus_elements::event::{MouseButton as NativeButton, PointerAction};
+                let mouse = event.data();
+                let button = match mouse.button {
+                    NativeButton::Primary => MouseButton::Left, NativeButton::Secondary => MouseButton::Right,
+                    NativeButton::Middle => MouseButton::Middle, _ => mouse_button.get(),
+                };
+                let action = match mouse.action {
+                    PointerAction::Down => { mouse_button.set(button); MouseAction::Press },
+                    PointerAction::Up => { mouse_button.set(MouseButton::Unknown); MouseAction::Release },
+                    PointerAction::Move => MouseAction::Motion, _ => return,
+                };
+                let metrics = mouse_metrics.get();
+                let (x, y) = metrics.content_position_px_from_vp(mouse.x, mouse.y);
+                emit_host(&mouse_input, mouse_controller.encode_mouse(MouseInput {
+                    action, button, x, y, mods: KeyMods { ctrl: mouse.modifiers.ctrl, shift: mouse.modifiers.shift, alt: mouse.modifiers.alt, super_key: false },
+                }));
+            },
+            onaxis: move |event| {
+                if !capture_input { return; }
+                let axis = event.data();
+                if !axis.vertical.is_finite() || axis.vertical == 0.0 { return; }
+                let metrics = axis_metrics.get();
+                let pending = wheel_remainder.get() + axis.vertical / metrics.cell_height_vp.max(1.0);
+                let steps = pending.trunc() as i64;
+                wheel_remainder.set(pending - steps as f64);
+                if steps == 0 { return; }
+                let state = axis_controller.encode_state();
+                if !axis.modifiers.shift && (state.mouse_reporting || state.x10_mouse) {
+                    let (x, y) = metrics.content_position_px_from_vp(axis.x, axis.y);
+                    let button = if steps < 0 { MouseButton::WheelUp } else { MouseButton::WheelDown };
+                    let report = axis_controller.encode_mouse(MouseInput { action: MouseAction::Press, button, x, y, mods: KeyMods { ctrl: axis.modifiers.ctrl, alt: axis.modifiers.alt, ..Default::default() } });
+                    emit_host(&axis_input, report.repeat(steps.unsigned_abs().min(100) as usize));
+                } else { axis_controller.scroll_by(steps); }
+            },
             onarea: move |evt: dioxus_core::Event<dioxus_elements::event::AreaData>| {
                 let f = evt.data().frame;
                 if !f.is_measured() {
@@ -650,6 +714,7 @@ pub fn Terminal(props: TerminalProps) -> Element {
                 let Some(p) = evt.pointer else {
                     return;
                 };
+                if p.source == dioxus_elements::event::PointerSource::Mouse { return; }
                 match p.action {
                     PointerAction::Cancel => {
                         *gesture_touch.borrow_mut() = TouchGesture::default();

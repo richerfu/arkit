@@ -64,11 +64,7 @@ pub fn Sheet(
             stack {
                 accessibility_role: "dialog",
                 accessibility_text: title.clone(),
-                width: if horizontal && adaptive.is_pc() {
-                    format!("{SHEET_WIDTH}")
-                } else {
-                    "100%".to_string()
-                },
+                width: "100%",
                 max_width: if horizontal && adaptive.is_pc() { SHEET_WIDTH },
                 height: if horizontal { "100%" } else { "auto" },
                 padding_top: spacing::XXL,

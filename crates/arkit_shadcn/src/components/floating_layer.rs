@@ -31,26 +31,7 @@ pub(crate) const HIT_TEST_NONE: &str = "none";
 /// Small outer shadow preset (`shadow: "sm"`).
 pub(crate) const SHADOW_SM: &str = "sm";
 
-/// Side of the trigger the floating panel anchors to.
-///
-/// Maps to an ArkUI `Alignment` int used on the capture-layer `stack`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum FloatingSide {
-    Top,
-    #[default]
-    Bottom,
-    Left,
-    Right,
-}
-
-/// Cross-axis alignment of the floating panel relative to the trigger.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum FloatingAlign {
-    Start,
-    #[default]
-    Center,
-    End,
-}
+pub use super::floating_geometry::{FloatingAlign, FloatingSide};
 
 /// Resolve a side name (`"top"` / `"bottom"` / `"left"` / `"right"`) to a
 /// [`FloatingSide`]. Falls back to [`FloatingSide::Bottom`].
@@ -126,29 +107,28 @@ impl FloatingPanelPlacement {
         // Keep panels on-screen with a small edge pad; do NOT force page-level
         // LG inset here — that was shifting start-aligned panels off the trigger.
         let edge = spacing::SM;
-        let min_x = viewport.safe_area.left.max(0.0) + edge;
-        let min_y = viewport.safe_area.top.max(0.0) + edge;
-        let max_x = (metrics.size.width - viewport.safe_area.right.max(0.0) - panel_width - edge)
-            .max(min_x);
-        let max_y =
-            (metrics.size.height - viewport.safe_area.bottom.max(0.0) - panel_height - edge)
-                .max(min_y);
-
-        let raw_x = match align {
-            FloatingAlign::Start => trigger_x,
-            FloatingAlign::Center => trigger_x + ((trigger_width - panel_width) / 2.0),
-            FloatingAlign::End => trigger_x + trigger_width - panel_width,
-        };
-        let raw_y = match side {
-            FloatingSide::Top => trigger_y - panel_height - side_offset,
-            FloatingSide::Bottom => trigger_y + trigger_height + side_offset,
-            FloatingSide::Left | FloatingSide::Right => trigger_y,
-        };
-
-        let x = clamp_preserving_start(raw_x, min_x, max_x, align);
-        let y = raw_y.clamp(min_y, max_y);
-
-        Self { x, y }
+        let placement = super::floating_geometry::PanelPlacement::resolve(
+            super::floating_geometry::AnchorRect {
+                x: trigger_x,
+                y: trigger_y,
+                width: trigger_width,
+                height: trigger_height,
+            },
+            super::floating_geometry::PanelBounds {
+                left: viewport.safe_area.left.max(0.0) + edge,
+                top: viewport.safe_area.top.max(0.0) + edge,
+                right: metrics.size.width - viewport.safe_area.right.max(0.0) - edge,
+                bottom: metrics.size.height - viewport.safe_area.bottom.max(0.0) - edge,
+            },
+            (panel_width, panel_height),
+            side,
+            align,
+            side_offset,
+        );
+        Self {
+            x: placement.x,
+            y: placement.y,
+        }
     }
 
     pub(crate) fn fallback(viewport: arkit_hooks::OverlayViewport) -> Self {
@@ -156,22 +136,6 @@ impl FloatingPanelPlacement {
             x: viewport.safe_area.left + spacing::SM,
             y: (viewport.safe_area.top + spacing::SM).max(96.0),
         }
-    }
-}
-
-/// Clamp horizontal placement while preferring start alignment when possible.
-fn clamp_preserving_start(raw_x: f32, min_x: f32, max_x: f32, align: FloatingAlign) -> f32 {
-    match align {
-        FloatingAlign::Start => {
-            if raw_x < min_x {
-                min_x
-            } else if raw_x > max_x {
-                max_x
-            } else {
-                raw_x
-            }
-        }
-        FloatingAlign::Center | FloatingAlign::End => raw_x.clamp(min_x, max_x),
     }
 }
 
@@ -229,10 +193,7 @@ pub(crate) fn overlay_metrics_vp(
             .expect("validated viewport scale must convert measured overlay dimensions");
         OverlayMetrics {
             origin: arkit_arkui::WindowPxPoint::new(overlay.x, overlay.y),
-            size: arkit_arkui::LogicalSizeVp::new(
-                size.width.max(panel_width + spacing::SM * 2.0),
-                size.height.max(panel_height + spacing::SM * 2.0),
-            ),
+            size: arkit_arkui::LogicalSizeVp::new(size.width, size.height),
         }
     } else {
         OverlayMetrics {
@@ -284,7 +245,6 @@ pub fn FloatingLayer(
     hover: Option<bool>,
     children: Element,
 ) -> Element {
-    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
     let viewport = arkit_hooks::use_overlay_viewport();
     let trigger_ref = arkit_hooks::use_native_element_ref();
     let trigger_frame = use_signal(arkit_arkui::LayoutFramePx::default);
@@ -300,7 +260,7 @@ pub fn FloatingLayer(
     let controlled = open.is_some();
     let hover = hover.unwrap_or(false);
     let side = side.unwrap_or_default();
-    let panel_width = width.unwrap_or(288.0);
+    let panel_width = super::panel_viewport::bounded_panel_width(viewport, width.unwrap_or(288.0));
     let panel_height = estimated_height.unwrap_or(132.0);
     let frame = if current {
         trigger_frame_for_anchor(&trigger_ref, *trigger_frame.read())
@@ -318,6 +278,9 @@ pub fn FloatingLayer(
     );
 
     let set_open = EventHandler::new(move |next: bool| {
+        if next == current {
+            return;
+        }
         if !controlled {
             internal.set(next);
         }
@@ -330,7 +293,18 @@ pub fn FloatingLayer(
             }
         }
     });
-    let open_up = EventHandler::new(move |_: ()| set_open.call(true));
+    let surface = super::hover_surface::use_hover_surface(set_open);
+    let trigger_hover = surface.clone();
+    let trigger_focus = surface.clone();
+    let trigger_blur = surface.clone();
+    let trigger_click = surface.clone();
+    let trigger_key = surface.clone();
+    let panel_hover = surface.clone();
+    let panel_focus = surface.clone();
+    let panel_blur = surface.clone();
+    let panel_key = surface.clone();
+    let outside_hover = surface.clone();
+    let pinned = surface.pinned();
     let toggle = EventHandler::new(move |_: ()| {
         set_open.call(!current);
     });
@@ -346,34 +320,17 @@ pub fn FloatingLayer(
             accessibility_actions: "click",
             accessibility_selected: current,
             focusable: true,
-            focus_on_touch: false,
-            onclick: move |_| toggle.call(()),
-            onhover: move |event| {
-                if hover {
-                    if event.data().is_hovering {
-                        open_up.call(());
-                    } else {
-                        close.call(());
-                    }
-                }
-            },
-            onfocus: move |_| {
-                if hover {
-                    open_up.call(());
-                }
-            },
-            onblur: move |_| {
-                if hover {
-                    close.call(());
-                }
-            },
+            focus_on_touch: true,
+            key_capture: "enter space escape",
+            onclick: move |_| { if hover { trigger_click.toggle_pin(current); } else { toggle.call(()); } },
+            onhover: move |event| { if hover { trigger_hover.trigger_hover(event.data().is_hovering); } },
+            onfocusin: move |_| { if hover { trigger_focus.trigger_focus(true); } },
+            onfocusout: move |_| { if hover { trigger_blur.trigger_focus(false); } },
             onkey: move |event| {
-                if event.data().is_down()
-                    && event.data().key == dioxus_elements::event::KeyboardKey::Escape
-                {
-                    close.call(());
-                } else if !hover && event.data().activates() {
-                    toggle.call(());
+                if event.data().action == dioxus_elements::event::KeyAction::Down && event.data().key == dioxus_elements::event::KeyboardKey::Escape {
+                    event.stop_propagation(); if hover { trigger_key.dismiss(); } else { close.call(()); }
+                } else if event.data().activates() {
+                    event.stop_propagation(); if hover { trigger_key.toggle_pin(current); } else { toggle.call(()); }
                 }
             },
             {trigger}
@@ -388,19 +345,27 @@ pub fn FloatingLayer(
             stack {
                 width: "100%",
                 height: "100%",
-                background_color: if hover { 0x00000000 } else { FLOATING_CAPTURE_COLOR },
-                hit_test_behavior: if hover { HIT_TEST_NONE } else { HIT_TEST_DEFAULT },
+                background_color: if hover && !pinned { 0x00000000 } else { FLOATING_CAPTURE_COLOR },
+                hit_test_behavior: if hover && !pinned { HIT_TEST_NONE } else { HIT_TEST_DEFAULT },
                 onclick: move |_| {
-                    if !hover {
-                        close.call(());
-                    }
+                    if hover { if pinned { outside_hover.dismiss(); } } else { close.call(()); }
                 },
                 stack {
                     position: format!("{},{}", placement.x.max(0.0), placement.y.max(0.0)),
                     width: panel_width,
+                    focus_scope: !hover || pinned,
+                    key_capture: "escape",
+                    onhover: move |event| { if hover { panel_hover.panel_hover(event.data().is_hovering); } },
+                    onfocusin: move |_| { if hover { panel_focus.panel_focus(true); } },
+                    onfocusout: move |_| { if hover { panel_blur.panel_focus(false); } },
+                    onkey: move |event| {
+                        if event.data().action == dioxus_elements::event::KeyAction::Down && event.data().key == dioxus_elements::event::KeyboardKey::Escape {
+                            event.stop_propagation(); if hover { panel_key.dismiss(); } else { close.call(()); }
+                        }
+                    },
                     hit_test_behavior: HIT_TEST_DEFAULT,
                     onclick: move |event| event.stop_propagation(),
-                    {children}
+                    super::panel_viewport::PanelViewport { max_height: super::panel_viewport::panel_available_height(viewport, placement.y), {children} }
                 }
             }
         }

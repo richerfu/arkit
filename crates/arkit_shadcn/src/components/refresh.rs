@@ -125,7 +125,6 @@ pub struct LoadMoreIndicatorProps {
 #[component]
 pub fn LoadMoreIndicator(props: LoadMoreIndicatorProps) -> Element {
     let theme = use_theme();
-    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
     let labels = props
         .labels
         .unwrap_or_else(|| LoadMoreLabels::localized(use_component_i18n()));
@@ -159,8 +158,6 @@ pub fn LoadMoreIndicator(props: LoadMoreIndicatorProps) -> Element {
             align_items: "center",
             justify_content: "center",
             hit_test_behavior: if can_retry { "default" } else { "transparent" },
-            focusable: desktop && can_retry,
-            focus_on_touch: false,
             onclick: move |_| {
                 if can_retry {
                     on_retry.call(());

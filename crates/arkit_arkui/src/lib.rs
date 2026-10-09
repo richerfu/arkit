@@ -82,15 +82,19 @@ use rustc_hash::{FxHashMap, FxHashSet};
 // lib name is `dioxus_elements`).
 use dioxus_elements::event::{classify_event_name, ArkEventKind};
 pub use dioxus_elements::event::{
-    ArkEventData, ArkEventPayload, KeyAction, KeyModifiers, KeyPayload, KeyboardKey, LayoutPayload,
-    MouseButton, MousePayload, PointerAction, PointerPayload, ScrollIndexPayload,
-    ScrollOffsetPayload,
+    ArkEventData, ArkEventPayload, AxisPayload, KeyAction, KeyModifiers, KeyPayload, KeyboardKey,
+    LayoutPayload, MouseButton, MousePayload, PointerAction, PointerPayload, PointerSource,
+    ScrollIndexPayload, ScrollOffsetPayload,
 };
 
 mod animation_ownership;
 mod css_value;
 mod element_ref;
+mod focus;
+mod focus_model;
 mod geometry;
+use focus::{FocusRegistry, FocusScope, FocusTarget};
+use focus_model::FocusId;
 mod native;
 pub use element_ref::{
     AnimatedAttributeClaimError, AnimatedAttributeGuard, AnimatedAttributeOwner, LayoutFramePx,
@@ -232,6 +236,11 @@ struct NodeEventRoute {
     sink: Rc<dyn EventSink>,
     listeners: Vec<(&'static str, ElementId)>,
     dispatch_on_keyboard_activation: bool,
+    desired_attrs: Rc<RefCell<DesiredAttrs>>,
+    focus: Rc<RefCell<FocusRegistry>>,
+    element: Option<ElementId>,
+    semantic_button: bool,
+    focus_id: FocusId,
     native_ref: Option<(NativeElementRef, u64)>,
 }
 
@@ -242,6 +251,7 @@ struct RoutedNodeEvent {
 
 #[derive(Default)]
 struct NativeHostState {
+    focus_id: std::cell::Cell<usize>,
     native: Option<NodeRef>,
     native_attached: bool,
     /// One-shot `EventOnAppear` declarative replay armed for this host (see
@@ -384,6 +394,8 @@ pub struct ArkUIRenderer {
     /// Shared indirection captured by mounted refs before the runtime can
     /// install its weak renderer callback.
     animation_restore_handler: SharedAnimationRestoreHandler,
+    focus: Rc<RefCell<FocusRegistry>>,
+    next_focus_id: std::cell::Cell<usize>,
 }
 
 #[derive(Default)]
@@ -592,6 +604,8 @@ impl ArkUIRenderer {
             inert: false,
             appear_replay_handler: None,
             animation_restore_handler: Rc::new(RefCell::new(None)),
+            focus: Rc::new(RefCell::new(FocusRegistry::default())),
+            next_focus_id: std::cell::Cell::new(0),
         }
     }
 
@@ -1364,11 +1378,28 @@ impl ArkUIRenderer {
             && listeners
                 .iter()
                 .any(|(name, _)| classify_event_name(name) == Some(ArkEventKind::Click))
-            && !listeners
-                .iter()
-                .any(|(name, _)| classify_event_name(name) == Some(ArkEventKind::Key));
+            && !listeners.iter().any(|(name, _)| {
+                matches!(
+                    classify_event_name(name),
+                    Some(ArkEventKind::Key | ArkEventKind::KeyPreIme)
+                )
+            });
         if keyboard_click_fallback {
             requested_event_types.push(NodeEventType::OnKeyEvent);
+        }
+        let keyboard_target = {
+            let attrs = self.hosts[host].desired_attrs.borrow();
+            attrs.bool_value("focusable").unwrap_or(matches!(
+                tag,
+                "button" | "textinput" | "textarea" | "slider" | "toggle"
+            )) || attrs.focus_scope
+        };
+        if keyboard_target {
+            requested_event_types.extend([
+                NodeEventType::OnKeyEvent,
+                NodeEventType::OnFocus,
+                NodeEventType::OnBlur,
+            ]);
         }
         // A native_ref is a mount capability by default. Layout and
         // visibility hooks opt into their respective ArkUI events explicitly;
@@ -1408,7 +1439,9 @@ impl ArkUIRenderer {
         // Pages containing nested scrollable containers can declaratively set
         // `default_focus` on their first custom control to enter that focus
         // subtree, matching ArkUI's hierarchical-page focus model.
-        if event_types.contains(&NodeEventType::OnKeyEvent) {
+        if event_types.contains(&NodeEventType::OnKeyEvent)
+            || event_types.contains(&NodeEventType::OnKeyPreIme)
+        {
             let attrs = self.hosts[host].desired_attrs.borrow();
             let enabled = attrs.bool_value("enabled") != Some(false);
             let focusable = attrs.bool_value("focusable") != Some(false);
@@ -1420,10 +1453,12 @@ impl ArkUIRenderer {
                         node.set_attribute(ArkUINodeAttributeType::Focusable, true.into()),
                     );
                 }
-                log_arkui_result(
-                    "keyboard target focus on touch",
-                    node.set_attribute(ArkUINodeAttributeType::FocusOnTouch, true.into()),
-                );
+                if attrs.bool_value("focus_on_touch").is_none() {
+                    log_arkui_result(
+                        "keyboard target focus on touch",
+                        node.set_attribute(ArkUINodeAttributeType::FocusOnTouch, true.into()),
+                    );
+                }
             }
         }
 
@@ -1462,6 +1497,14 @@ impl ArkUIRenderer {
                     sink: sink.clone(),
                     listeners: Vec::new(),
                     dispatch_on_keyboard_activation: false,
+                    desired_attrs: self.hosts[host].desired_attrs.clone(),
+                    focus: self.focus.clone(),
+                    element: self
+                        .hosts
+                        .element_for_host(host)
+                        .map(|key| ElementId(key.index())),
+                    semantic_button: tag == "button",
+                    focus_id: self.focus_id(host),
                     native_ref: None,
                 }));
                 self.hosts[host].routed_node_events.push(RoutedNodeEvent {
@@ -1476,6 +1519,11 @@ impl ArkUIRenderer {
                 route.sink = sink.clone();
                 route.listeners = event_listeners;
                 route.dispatch_on_keyboard_activation = dispatch_on_keyboard_activation;
+                route.desired_attrs = self.hosts[host].desired_attrs.clone();
+                route.element = self
+                    .hosts
+                    .element_for_host(host)
+                    .map(|key| ElementId(key.index()));
                 route.native_ref = self.hosts[host].native_ref.as_ref().and_then(|reference| {
                     reference
                         .current()
@@ -2844,6 +2892,108 @@ impl ArkUIRenderer {
                 let _ = self.replay_event_listeners_inner(host, true);
             }
         }
+        if !self.inert {
+            let mut targets = Vec::new();
+            let mut scopes = Vec::new();
+            self.collect_focus_snapshot(self.hosts.root(), true, &[], 0, &mut targets, &mut scopes);
+            let focus = self.focus.borrow_mut().synchronize(targets, scopes);
+            if let Some(node) = focus {
+                focus::request_native_focus(&node);
+            }
+        }
+    }
+
+    fn collect_focus_snapshot(
+        &self,
+        host: HostId,
+        visible: bool,
+        enclosing: &[FocusId],
+        portal_order: u64,
+        targets: &mut Vec<FocusTarget>,
+        scopes: &mut Vec<FocusScope>,
+    ) {
+        let state = &self.hosts[host];
+        let attrs = state.desired_attrs.borrow();
+        let visible = visible
+            && state.native_attached
+            && attrs.bool_value("enabled") != Some(false)
+            && attrs
+                .i32_value("visibility")
+                .is_none_or(|visibility| visibility == 0);
+        if !visible {
+            return;
+        }
+        let portal_order = self
+            .projection
+            .active_portals
+            .get(&host)
+            .copied()
+            .unwrap_or(portal_order);
+        let mut enclosing = enclosing.to_vec();
+        if let Some(node) = &state.native {
+            let id = self.focus_id(host);
+            if attrs.focus_scope || attrs.focus_navigation.is_some() {
+                enclosing.push(id);
+                scopes.push(FocusScope {
+                    id,
+                    node: Rc::downgrade(node),
+                    trap: attrs.focus_trap,
+                    auto_focus: attrs.focus_scope,
+                    navigation: attrs.focus_navigation,
+                    order: portal_order,
+                });
+            }
+            let has_key = state.event_listeners.iter().any(|(name, _)| {
+                matches!(
+                    classify_event_name(name),
+                    Some(ArkEventKind::Key | ArkEventKind::KeyPreIme)
+                )
+            });
+            let focusable = attrs.bool_value("focusable").unwrap_or(
+                has_key
+                    || matches!(
+                        state.tag(),
+                        "button" | "textinput" | "textarea" | "slider" | "toggle"
+                    ),
+            );
+            if focusable && !attrs.focus_scope {
+                targets.push(FocusTarget {
+                    id,
+                    node: Rc::downgrade(node),
+                    scopes: enclosing.clone(),
+                    priority: if attrs.bool_value("default_focus") == Some(true) {
+                        2
+                    } else if attrs.bool_value("accessibility_selected") == Some(true)
+                        || attrs.bool_value("accessibility_checked") == Some(true)
+                    {
+                        1
+                    } else {
+                        0
+                    },
+                    text_input: matches!(state.tag(), "textinput" | "textarea"),
+                    tab_stop: attrs.bool_value("tab_stop") != Some(false),
+                });
+            }
+        }
+        drop(attrs);
+        for &child in &state.children {
+            self.collect_focus_snapshot(child, visible, &enclosing, portal_order, targets, scopes);
+        }
+    }
+
+    fn focus_id(&self, host: HostId) -> FocusId {
+        let existing = self.hosts[host].focus_id.get();
+        if existing != 0 {
+            return FocusId::new(existing);
+        }
+        let next = self
+            .next_focus_id
+            .get()
+            .checked_add(1)
+            .expect("keyboard focus identity space exhausted");
+        self.next_focus_id.set(next);
+        self.hosts[host].focus_id.set(next);
+        FocusId::new(next)
     }
 
     /// Unmount the root from the NodeContent slot.
@@ -2911,7 +3061,18 @@ fn register_routed_node_event(
         if !callback_active.get() {
             return;
         }
-        let (node, sink, listeners, dispatch_on_keyboard_activation, native_ref) = {
+        let (
+            node,
+            sink,
+            listeners,
+            dispatch_on_keyboard_activation,
+            native_ref,
+            desired_attrs,
+            focus,
+            element,
+            semantic_button,
+            focus_id,
+        ) = {
             let route = route.borrow();
             (
                 route.node.upgrade(),
@@ -2919,13 +3080,83 @@ fn register_routed_node_event(
                 route.listeners.clone(),
                 route.dispatch_on_keyboard_activation,
                 route.native_ref.clone(),
+                route.desired_attrs.clone(),
+                route.focus.clone(),
+                route.element,
+                route.semantic_button,
+                route.focus_id,
             )
         };
         let payload = extract_payload(event_type, event, node.as_ref());
+        if event_type == NodeEventType::OnAxis && desired_attrs.borrow().axis_capture {
+            if let Some(input) = event.input_event() {
+                let _ = input.axis_set_propagation(false);
+            }
+        }
+        if matches!(event_type, NodeEventType::OnFocus | NodeEventType::OnBlur) {
+            if let Some(element) = element {
+                sink.dispatch(
+                    if event_type == NodeEventType::OnFocus {
+                        "focusin"
+                    } else {
+                        "focusout"
+                    },
+                    element,
+                    payload.clone(),
+                );
+            }
+        }
+        // Dioxus owns logical bubbling. Letting the same native key bubble
+        // through each registered ancestor would enqueue it more than once.
+        if matches!(
+            event_type,
+            NodeEventType::OnKeyEvent | NodeEventType::OnKeyPreIme
+        ) && !listeners.is_empty()
+        {
+            if let Some(event) = event.key_event() {
+                event.stop_propagation(true);
+            }
+        }
+        if node.is_some() {
+            let id = focus_id;
+            if event_type == NodeEventType::OnFocus {
+                focus.borrow_mut().note_focus(id);
+            }
+            if let ArkEventPayload::Key(key) = &payload {
+                let (handled, target) = focus.borrow_mut().handle_key(id, key);
+                if let Some(node) = target {
+                    focus::request_native_focus(&node);
+                }
+                if handled {
+                    event.set_return_bool(true);
+                    if let Some(event) = event.key_event() {
+                        event.set_consumed(true);
+                        event.stop_propagation(true);
+                    }
+                    return;
+                }
+                if dispatch_on_keyboard_activation && keyboard_activates(&payload)
+                    || desired_attrs.borrow().key_capture.captures(key)
+                    || semantic_button && matches!(key.key, KeyboardKey::Enter | KeyboardKey::Space)
+                {
+                    event.set_return_bool(true);
+                    if let Some(event) = event.key_event() {
+                        event.set_consumed(true);
+                        event.stop_propagation(true);
+                    }
+                }
+            }
+        }
         if dispatch_on_keyboard_activation && !keyboard_activates(&payload) {
             return;
         }
         for (name, id) in listeners {
+            if matches!(
+                classify_event_name(name),
+                Some(ArkEventKind::FocusIn | ArkEventKind::FocusOut)
+            ) {
+                continue;
+            }
             sink.dispatch(
                 name,
                 id,
@@ -3073,11 +3304,23 @@ fn extract_payload(
         }
         OnFocus => ArkEventPayload::Bool(true),
         OnBlur => ArkEventPayload::Bool(false),
-        OnKeyEvent => extract_key_payload(event)
+        OnKeyEvent | OnKeyPreIme => extract_key_payload(event)
             .map(ArkEventPayload::Key)
             .unwrap_or_default(),
         OnMouse => extract_mouse_payload(event)
             .map(ArkEventPayload::Mouse)
+            .unwrap_or_default(),
+        OnAxis => event
+            .input_event()
+            .map(|input| {
+                ArkEventPayload::Axis(AxisPayload {
+                    horizontal: input.get_scroll_delta_x().unwrap_or_default(),
+                    vertical: input.get_scroll_delta_y().unwrap_or_default(),
+                    x: input.pointer_x(),
+                    y: input.pointer_y(),
+                    modifiers: extract_modifiers(&input),
+                })
+            })
             .unwrap_or_default(),
         // Checkbox / radio checked state: i32(0) != 0.
         CheckboxEventOnChange | RadioEventOnChange | ToggleOnChange => {
@@ -3194,6 +3437,15 @@ fn extract_pointer_payload(event: &ArkNativeEvent) -> Option<PointerPayload> {
         .filter(|button| *button < 64)
         .fold(0_u64, |mask, button| mask | (1_u64 << button));
     Some(PointerPayload {
+        source: match input.source_type {
+            ohos_arkui_binding::arkui_input_binding::UIInputSourceType::Mouse => {
+                PointerSource::Mouse
+            }
+            ohos_arkui_binding::arkui_input_binding::UIInputSourceType::TouchScreen => {
+                PointerSource::Touch
+            }
+            _ => PointerSource::Unknown,
+        },
         action: match input.action {
             UIInputAction::Cancel => PointerAction::Cancel,
             UIInputAction::Down => PointerAction::Down,
@@ -3216,7 +3468,6 @@ fn extract_pointer_payload(event: &ArkNativeEvent) -> Option<PointerPayload> {
 }
 
 fn extract_key_payload(event: &ArkNativeEvent) -> Option<KeyPayload> {
-    use ohos_arkui_binding::arkui_input_binding::ModifierKey;
     use ohos_arkui_binding::event::{KeyCode, KeyEventType};
 
     let input = event.input_event()?;
@@ -3231,6 +3482,7 @@ fn extract_key_payload(event: &ArkNativeEvent) -> Option<KeyPayload> {
     let raw_code = key_event.key_code_raw();
     let code = key_event.key_code();
     let text = key_event.key_text();
+    let modifiers = extract_modifiers(&input);
     let key = match code {
         KeyCode::Enter | KeyCode::NumpadEnter | KeyCode::DpadCenter => KeyboardKey::Enter,
         KeyCode::Space => KeyboardKey::Space,
@@ -3248,17 +3500,34 @@ fn extract_key_payload(event: &ArkNativeEvent) -> Option<KeyPayload> {
         KeyCode::ForwardDel => KeyboardKey::Delete,
         KeyCode::Menu => KeyboardKey::Menu,
         KeyCode::F10 => KeyboardKey::F10,
+        KeyCode::F1 => KeyboardKey::Function(1),
+        KeyCode::F2 => KeyboardKey::Function(2),
+        KeyCode::F3 => KeyboardKey::Function(3),
+        KeyCode::F4 => KeyboardKey::Function(4),
+        KeyCode::F5 => KeyboardKey::Function(5),
+        KeyCode::F6 => KeyboardKey::Function(6),
+        KeyCode::F7 => KeyboardKey::Function(7),
+        KeyCode::F8 => KeyboardKey::Function(8),
+        KeyCode::F9 => KeyboardKey::Function(9),
+        KeyCode::F11 => KeyboardKey::Function(11),
+        KeyCode::F12 => KeyboardKey::Function(12),
         _ => char::from_u32(key_event.unicode())
             .filter(|character| !character.is_control())
+            .or_else(|| {
+                let first: i32 = KeyCode::A.into();
+                let last: i32 = KeyCode::Z.into();
+                (first..=last).contains(&raw_code).then(|| {
+                    let character = char::from_u32(b'a' as u32 + (raw_code - first) as u32)
+                        .expect("native letter code");
+                    if modifiers.shift {
+                        character.to_ascii_uppercase()
+                    } else {
+                        character
+                    }
+                })
+            })
             .map(KeyboardKey::Character)
             .unwrap_or(KeyboardKey::Other(raw_code)),
-    };
-    let modifier_states = input.modifier_key_states().ok();
-    let modifiers = KeyModifiers {
-        ctrl: modifier_states.is_some_and(|states| states.contains(ModifierKey::Ctrl)),
-        shift: modifier_states.is_some_and(|states| states.contains(ModifierKey::Shift)),
-        alt: modifier_states.is_some_and(|states| states.contains(ModifierKey::Alt)),
-        function: modifier_states.is_some_and(|states| states.contains(ModifierKey::Fn)),
     };
     Some(KeyPayload {
         key,
@@ -3296,7 +3565,25 @@ fn extract_mouse_payload(event: &ArkNativeEvent) -> Option<MousePayload> {
         y: input.pointer_y(),
         window_x: input.pointer_window_x(),
         window_y: input.pointer_window_y(),
+        target_x: input.event_target_global_position_x(),
+        target_y: input.event_target_global_position_y(),
+        target_width: input.event_target_width(),
+        target_height: input.event_target_height(),
+        modifiers: extract_modifiers(&input),
     })
+}
+
+fn extract_modifiers(
+    input: &ohos_arkui_binding::arkui_input_binding::ArkUIInputEvent,
+) -> KeyModifiers {
+    use ohos_arkui_binding::arkui_input_binding::ModifierKey;
+    let states = input.modifier_key_states().ok();
+    KeyModifiers {
+        ctrl: states.is_some_and(|states| states.contains(ModifierKey::Ctrl)),
+        shift: states.is_some_and(|states| states.contains(ModifierKey::Shift)),
+        alt: states.is_some_and(|states| states.contains(ModifierKey::Alt)),
+        function: states.is_some_and(|states| states.contains(ModifierKey::Fn)),
+    }
 }
 
 fn extract_layout_payload(node: &NodeRef) -> Option<LayoutPayload> {
@@ -3348,8 +3635,8 @@ fn event_type_for_name(name: &str, tag: &str) -> Option<NodeEventType> {
         // Element-bound layout/area changes.
         (ArkEventKind::AreaChange, _) => EventOnAreaChange,
 
-        (ArkEventKind::Focus, _) => OnFocus,
-        (ArkEventKind::Blur, _) => OnBlur,
+        (ArkEventKind::Focus | ArkEventKind::FocusIn, _) => OnFocus,
+        (ArkEventKind::Blur | ArkEventKind::FocusOut, _) => OnBlur,
 
         // Grid scroll-index events were added after the workspace's API-20
         // contract. Do not register the unrelated WaterFlow `OnWillScroll`
@@ -3383,9 +3670,11 @@ fn event_type_for_name(name: &str, tag: &str) -> Option<NodeEventType> {
 
         // Physical keyboard input for focusable desktop controls.
         (ArkEventKind::Key, _) => OnKeyEvent,
+        (ArkEventKind::KeyPreIme, _) => OnKeyPreIme,
 
         // Raw mouse input, including secondary-button context-menu presses.
         (ArkEventKind::Mouse, _) => OnMouse,
+        (ArkEventKind::Axis, _) => OnAxis,
 
         _ => return None,
     })

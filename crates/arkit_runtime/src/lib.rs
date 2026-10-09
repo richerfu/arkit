@@ -819,9 +819,15 @@ impl ArkRuntime {
                 &event,
                 AbilityEvent::WindowCreate
                     | AbilityEvent::SurfaceCreate
-                    | AbilityEvent::WindowResize(_)
-                    | AbilityEvent::ContentRectChange(_)
-                    | AbilityEvent::AvoidAreaChange(_)
+                    | AbilityEvent::WindowResize { window_id: 0, .. }
+                    | AbilityEvent::ContentRectChange(openharmony_ability::ContentRect {
+                        window_id: 0,
+                        ..
+                    })
+                    | AbilityEvent::AvoidAreaChange(openharmony_ability::AvoidAreaInfo {
+                        window_id: 0,
+                        ..
+                    })
                     | AbilityEvent::ConfigChanged(_)
                     | AbilityEvent::KeyboardEvent(_)
             );

@@ -35,7 +35,6 @@ pub fn Popover(
     children: Element,
 ) -> Element {
     let theme = use_theme();
-    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
     let viewport = arkit_hooks::use_overlay_viewport();
     let trigger_ref = arkit_hooks::use_native_element_ref();
     let trigger_frame = use_signal(arkit_arkui::LayoutFramePx::default);
@@ -49,7 +48,10 @@ pub fn Popover(
         None => *internal.read(),
     };
     let controlled = open.is_some();
-    let panel_width = width.unwrap_or(POPOVER_DEFAULT_WIDTH);
+    let panel_width = super::panel_viewport::bounded_panel_width(
+        viewport,
+        width.unwrap_or(POPOVER_DEFAULT_WIDTH),
+    );
     let panel_padding = padding.unwrap_or(spacing::LG);
 
     let set_open = EventHandler::new(move |next: bool| {
@@ -135,6 +137,10 @@ fn popover_overlay_content(
     on_dismiss: EventHandler<()>,
     children: Element,
 ) -> Element {
+    let viewport = arkit_hooks::use_overlay_viewport();
+    let max_height = (super::panel_viewport::panel_available_height(viewport, placement.y)
+        - panel_padding * 2.0)
+        .max(1.0);
     let top = placement.y.max(0.0);
     let left = placement.x.max(0.0);
     rsx! {
@@ -147,6 +153,14 @@ fn popover_overlay_content(
             onclick: move |_| on_dismiss.call(()),
             column {
                 accessibility_role: "group",
+                focus_scope: true,
+                key_capture: "escape",
+                onkey: move |event| {
+                    if event.data().is_down() && event.data().key == dioxus_elements::event::KeyboardKey::Escape {
+                        event.stop_propagation();
+                        on_dismiss.call(());
+                    }
+                },
                 position: format!("{left},{top}"),
                 width: panel_width,
                 onclick: move |evt| evt.stop_propagation(),
@@ -157,7 +171,7 @@ fn popover_overlay_content(
                 border_color: theme.colors.border,
                 background_color: theme.colors.popover,
                 shadow: "sm",
-                {children}
+                super::panel_viewport::PanelViewport { max_height, {children} }
             }
         }
     }

@@ -71,7 +71,6 @@ pub fn Dialog(
     children: Element,
 ) -> Element {
     let theme = use_theme();
-    let adaptive = arkit_hooks::use_adaptive_layout();
     let mut internal = use_signal(|| default_open.unwrap_or(false));
     let current = match open {
         Some(v) => v,

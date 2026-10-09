@@ -51,13 +51,15 @@ pub struct ToggleGroupProps {
 pub fn ToggleGroup(props: ToggleGroupProps) -> Element {
     let theme = use_theme();
     let controlled = props.selected.is_some();
-    let mut local = use_signal(|| props.default_selected.clone());
+    let local = use_signal(|| props.default_selected.clone());
     let selected: Vec<String> = props
         .selected
         .clone()
         .unwrap_or_else(|| local.read().clone());
 
     let total = props.options.len();
+    let focus = arkit_hooks::use_keyboard_focus_list(total);
+    let navigation_options = std::rc::Rc::new(props.options.clone());
     let multi = props.multi;
     let icons = props.icons;
     let stretched = props.width.is_some();
@@ -85,9 +87,12 @@ pub fn ToggleGroup(props: ToggleGroupProps) -> Element {
         let click_value = option.clone();
         let current_selected = selected.clone();
         let mut local = local;
+        let navigation = focus.clone();
+        let navigation_options = navigation_options.clone();
         let surface = toggle_surface(
             content,
             ToggleSurfaceStyle {
+                native_ref: Some(focus.native_ref(index)),
                 active,
                 variant: TOGGLE_GROUP_VARIANT,
                 size: size_style,
@@ -117,6 +122,24 @@ pub fn ToggleGroup(props: ToggleGroupProps) -> Element {
                 }
                 on_change.call(next);
             }),
+            Some(EventHandler::new(
+                move |key: dioxus_elements::event::KeyData| {
+                    if let Some(next) = navigation.navigate(
+                        index,
+                        key.key,
+                        dioxus_elements::event::KeyboardNavigation::Horizontal,
+                        &vec![true; total],
+                    ) {
+                        if !multi {
+                            let selected = vec![navigation_options[next].clone()];
+                            if !controlled {
+                                local.set(selected.clone());
+                            }
+                            on_change.call(selected);
+                        }
+                    }
+                },
+            )),
             &theme,
         );
         // Selection chrome is painted on the segment shell; the inner surface
@@ -170,27 +193,6 @@ pub fn ToggleGroup(props: ToggleGroupProps) -> Element {
             border_radius: theme.radii.md,
             clip: true,
             shadow: if group_shadow { "sm" },
-            onkey: move |event| {
-                if !event.data().is_down() || multi || total == 0 { return; }
-                let current = props.options
-                    .iter()
-                    .position(|option| selected.contains(option))
-                    .unwrap_or(0);
-                let next_index = match event.data().key {
-                    dioxus_elements::event::KeyboardKey::ArrowLeft => {
-                        if current == 0 { total - 1 } else { current - 1 }
-                    }
-                    dioxus_elements::event::KeyboardKey::ArrowRight => (current + 1) % total,
-                    dioxus_elements::event::KeyboardKey::Home => 0,
-                    dioxus_elements::event::KeyboardKey::End => total - 1,
-                    _ => return,
-                };
-                let next = vec![props.options[next_index].clone()];
-                if !controlled {
-                    local.set(next.clone());
-                }
-                on_change.call(next);
-            },
             {items.into_iter()}
         }
     }

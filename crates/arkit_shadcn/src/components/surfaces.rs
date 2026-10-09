@@ -422,7 +422,6 @@ struct ToastProps {
 #[component]
 fn Toast(props: ToastProps) -> Element {
     let theme = use_theme();
-    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
     let is_minimal = props.appearance == ToastAppearance::Minimal;
     let palette = toast_palette(
         props.variant,

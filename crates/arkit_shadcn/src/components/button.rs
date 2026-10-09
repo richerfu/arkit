@@ -191,14 +191,13 @@ pub struct ButtonProps {
 #[component]
 pub fn Button(props: ButtonProps) -> Element {
     let theme = use_theme();
-    let adaptive = arkit_hooks::use_adaptive_layout();
     let mut hovering = use_signal(|| false);
     let vs = variant_style(props.variant, &theme);
     let ss = size_style(props.size);
     let disabled = props.disabled.unwrap_or(false);
     let shadow = props.shadow.unwrap_or(vs.shadow);
     let onclick = props.onclick;
-    let background = if adaptive.is_pc() && hovering() && !disabled {
+    let background = if hovering() && !disabled {
         hover_background(props.variant, &theme, vs.background)
     } else {
         vs.background
@@ -241,7 +240,7 @@ pub fn Button(props: ButtonProps) -> Element {
             opacity: if disabled { 0.5 } else { 1.0 },
             enabled: !disabled,
             onhover: move |event| {
-                if adaptive.is_pc() && !disabled {
+                if !disabled {
                     hovering.set(event.data().is_hovering);
                 }
             },

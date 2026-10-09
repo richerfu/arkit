@@ -176,8 +176,8 @@ EOF
     copy_file "$CXX_SHARED" "$APP/entry/libs/arm64-v8a/libc++_shared.so"
   fi
   # entry oh-package.json5 的 lib 依赖。
-  # @ohos-rs/ability / ability-plugin-webview 走 ohpm 注册表版本
-  # （ability 1.0.0-beta.2 / webview plugin 1.0.0-beta.3）。
+  # HAR 与 Rust facade 使用同一 adaptation 分支的接口；发布版 HAR 尚未
+  # 包含窗口 ID 回调，不能与该分支的 Rust facade 混用。
   cat > "$APP/entry/oh-package.json5" <<EOF
 {
   "name": "entry",
@@ -188,8 +188,8 @@ EOF
   "license": "Apache-2.0",
   "dependencies": {
     "lib${CRATE}.so": "file:./src/main/cpp/types/lib${CRATE}",
-    "@ohos-rs/ability": "1.0.0-beta.2",
-    "@ohos-rs/ability-plugin-webview": "1.0.0-beta.3"
+    "@ohos-rs/ability": "file:../../../../southorange/openharmony-ability/native_ability",
+    "@ohos-rs/ability-plugin-webview": "file:../../../../southorange/openharmony-ability/plugins/webview"
   }
 }
 EOF

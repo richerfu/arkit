@@ -173,6 +173,11 @@ impl ListScrollToIndexCommand {
 #[derive(Default, Clone, Debug)]
 pub(crate) struct DesiredAttrs {
     attrs: Vec<EncodedAttr>,
+    pub(crate) focus_scope: bool,
+    pub(crate) focus_trap: bool,
+    pub(crate) focus_navigation: Option<dioxus_elements::event::KeyboardNavigation>,
+    pub(crate) key_capture: dioxus_elements::event::KeyboardCapture,
+    pub(crate) axis_capture: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -189,6 +194,43 @@ impl DesiredAttrs {
         name: &str,
         value: &dioxus_core::AttributeValue,
     ) -> AttrMutation {
+        match name {
+            "axis_capture" => {
+                self.axis_capture = attribute_bool(value).unwrap_or(false);
+                return AttrMutation::Unchanged;
+            }
+            "focus_scope" => {
+                self.focus_scope = attribute_bool(value).unwrap_or(false);
+                return AttrMutation::Unchanged;
+            }
+            "focus_trap" => {
+                self.focus_trap = attribute_bool(value).unwrap_or(false);
+                return AttrMutation::Unchanged;
+            }
+            "key_capture" => {
+                self.key_capture = match value {
+                    dioxus_core::AttributeValue::Text(names) => {
+                        dioxus_elements::event::KeyboardCapture::from_names(names)
+                    }
+                    _ => Default::default(),
+                };
+                return AttrMutation::Unchanged;
+            }
+            "focus_navigation" => {
+                self.focus_navigation = match value {
+                    dioxus_core::AttributeValue::Text(value) => match value.as_str() {
+                        "vertical" => Some(dioxus_elements::event::KeyboardNavigation::Vertical),
+                        "horizontal" => {
+                            Some(dioxus_elements::event::KeyboardNavigation::Horizontal)
+                        }
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                return AttrMutation::Unchanged;
+            }
+            _ => {}
+        }
         if matches!(value, dioxus_core::AttributeValue::None) {
             return self
                 .attrs
@@ -226,14 +268,7 @@ impl DesiredAttrs {
         names.iter().any(|name| self.get(name).is_some())
     }
 
-    fn bool_value(&self, name: &str) -> Option<bool> {
-        match &self.get(name)?.value {
-            EncodedAttrValue::Bool(value) => Some(*value),
-            _ => None,
-        }
-    }
-
-    fn i32_value(&self, name: &str) -> Option<i32> {
+    pub(crate) fn i32_value(&self, name: &str) -> Option<i32> {
         match &self.get(name)?.value {
             EncodedAttrValue::I32(value) => Some(*value),
             _ => None,
@@ -806,6 +841,19 @@ impl DesiredAttrs {
             }
         }
         let _ = node.set_attribute(ArkUINodeAttributeType::FlexOption, fields.into());
+    }
+}
+
+fn attribute_bool(value: &dioxus_core::AttributeValue) -> Option<bool> {
+    match value {
+        dioxus_core::AttributeValue::Bool(value) => Some(*value),
+        dioxus_core::AttributeValue::Int(value) => Some(*value != 0),
+        dioxus_core::AttributeValue::Text(value) => match css_value::enum_token(value).as_str() {
+            "true" | "yes" | "on" => Some(true),
+            "false" | "no" | "off" => Some(false),
+            _ => None,
+        },
+        _ => None,
     }
 }
 

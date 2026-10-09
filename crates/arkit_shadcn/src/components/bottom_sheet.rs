@@ -173,6 +173,11 @@ fn anchored_bottom_sheet_popover(
                 onclick: move |_| on_dismiss.call(()),
                 column {
                     position: format!("{left},{top}"),
+                    focus_scope: true,
+                    key_capture: "escape",
+                    onkey: move |event| {
+                        if event.data().action == dioxus_elements::event::KeyAction::Down && event.data().key == dioxus_elements::event::KeyboardKey::Escape { event.stop_propagation(); on_dismiss.call(()); }
+                    },
                     onclick: move |event| event.stop_propagation(),
                     {panel}
                 }
@@ -301,6 +306,7 @@ fn SheetSurface(
     let panel_width = width
         .filter(|width| width.is_finite() && *width > 0.0)
         .unwrap_or(BOTTOM_SHEET_DEFAULT_WIDTH);
+    let panel_width = super::panel_viewport::bounded_panel_width(viewport, panel_width);
     // Picker sheets stay full-width on touch layouts even though their PC
     // popover requests a finite width. Public BottomSheet follows `full`
     // exactly on every form factor.
@@ -436,12 +442,13 @@ fn BottomSheetPanel(props: BottomSheetPanelProps) -> Element {
             accessibility_role: "dialog",
             accessibility_text: props.title.clone(),
             native_ref: props.native_ref,
-            focusable: desktop,
+            focusable: true,
             focus_on_touch: false,
             onkey: move |event| {
-                if event.data().is_down()
+                if event.data().action == dioxus_elements::event::KeyAction::Down
                     && event.data().key == dioxus_elements::event::KeyboardKey::Escape
                 {
+                    event.stop_propagation();
                     on_close.call(());
                 }
             },
@@ -460,9 +467,7 @@ fn BottomSheetPanel(props: BottomSheetPanelProps) -> Element {
             shadow: if desktop { "lg" } else { "sm" },
             clip: true,
             ontouch: move |evt| {
-                if desktop {
-                    return;
-                }
+                if !props.bottom_attached { return; }
                 let Some(pointer) = evt.data().pointer else {
                     return;
                 };
@@ -504,7 +509,7 @@ fn BottomSheetPanel(props: BottomSheetPanelProps) -> Element {
                     dioxus_elements::event::PointerAction::Unknown => {}
                 }
             },
-            if props.show_handle && !desktop {
+            if props.show_handle && props.bottom_attached {
                 row {
                     width: "100%",
                     height: BOTTOM_SHEET_HANDLE_HEIGHT,

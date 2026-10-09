@@ -28,6 +28,7 @@ pub fn Command(
 
     rsx! {
         column {
+            focus_navigation: "vertical",
             width: "100%",
             background_color: colors.popover,
             border_radius: md,
@@ -115,7 +116,7 @@ fn CommandOption(option: String, on_select: EventHandler<String>) -> Element {
                 0x00000000
             },
             focusable: true,
-            focus_on_touch: false,
+            focus_on_touch: true,
             onclick: move |_| on_select.call(click_value.clone()),
             onkey: move |event| {
                 if event.data().activates() {
@@ -129,7 +130,7 @@ fn CommandOption(option: String, on_select: EventHandler<String>) -> Element {
                 font_size: typography::SM,
                 font_color: theme.colors.foreground,
                 line_height: 20.0,
-                {option}
+                {option.clone()}
             }
         }
     }

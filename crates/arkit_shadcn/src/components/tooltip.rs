@@ -30,7 +30,6 @@ pub fn Tooltip(
     on_open_change: Option<EventHandler<bool>>,
 ) -> Element {
     let theme = use_theme();
-    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
     let viewport = arkit_hooks::use_overlay_viewport();
     let trigger_ref = arkit_hooks::use_native_element_ref();
     let trigger_frame = use_signal(arkit_arkui::LayoutFramePx::default);
@@ -44,9 +43,15 @@ pub fn Tooltip(
         None => *internal.read(),
     };
     let controlled = open.is_some();
-    let panel_width = ((content.chars().count() as f32 * 6.5) + 20.0).clamp(72.0, 240.0);
+    let panel_width = super::panel_viewport::bounded_panel_width(
+        viewport,
+        ((content.chars().count() as f32 * 6.5) + 20.0).clamp(72.0, 240.0),
+    );
 
     let set_open = EventHandler::new(move |next: bool| {
+        if next == current {
+            return;
+        }
         if !controlled {
             internal.set(next);
         }
@@ -60,17 +65,12 @@ pub fn Tooltip(
         }
     });
 
-    let show_tooltip = EventHandler::new(move |_: ()| {
-        if !current {
-            set_open.call(true);
-        }
-    });
-
-    let close_tooltip = EventHandler::new(move |_: ()| {
-        if current {
-            set_open.call(false);
-        }
-    });
+    let surface = super::hover_surface::use_hover_surface(set_open);
+    let trigger_hover = surface.clone();
+    let trigger_focus = surface.clone();
+    let trigger_blur = surface.clone();
+    let trigger_click = surface.clone();
+    let trigger_key = surface.clone();
 
     let frame = if current {
         trigger_frame_for_anchor(&trigger_ref, *trigger_frame.read())
@@ -98,23 +98,20 @@ pub fn Tooltip(
             accessibility_selected: current,
             focusable: true,
             focus_on_touch: true,
-            onclick: move |_| set_open.call(!current),
-            onfocus: move |_| show_tooltip.call(()),
-            onblur: move |_| close_tooltip.call(()),
+            key_capture: "enter space escape",
+            onclick: move |_| trigger_click.toggle_pin(current),
+            onfocusin: move |_| trigger_focus.trigger_focus(true),
+            onfocusout: move |_| trigger_blur.trigger_focus(false),
             onkey: move |event| {
-                if event.data().key == dioxus_elements::event::KeyboardKey::Escape
-                    && event.data().is_down()
-                {
-                    set_open.call(false);
+                if event.data().is_down() && event.data().key == dioxus_elements::event::KeyboardKey::Escape {
+                    event.stop_propagation();
+                    trigger_key.dismiss();
+                } else if event.data().activates() {
+                    event.stop_propagation();
+                    trigger_key.toggle_pin(current);
                 }
             },
-            onhover: move |evt| {
-                if evt.data().is_hovering {
-                    show_tooltip.call(());
-                } else {
-                    close_tooltip.call(());
-                }
-            },
+            onhover: move |event| trigger_hover.trigger_hover(event.data().is_hovering),
             {trigger}
         }
         OverlayPresence {
@@ -124,7 +121,7 @@ pub fn Tooltip(
             exit_duration_ms: Some(FLOATING_EXIT_MS),
             fill: Some(true),
             layer: Some(arkit_hooks::OverlayLayer::Floating),
-            {tooltip_overlay_content(theme, panel_width, placement, content.clone())}
+            {tooltip_overlay_content(theme, panel_width, placement, content.clone(), surface)}
         }
     }
 }
@@ -134,15 +131,33 @@ fn tooltip_overlay_content(
     panel_width: f32,
     placement: FloatingPanelPlacement,
     content: String,
+    surface: super::hover_surface::HoverSurface,
 ) -> Element {
     let top = placement.y.max(0.0);
     let left = placement.x.max(0.0);
+    let pinned = surface.pinned();
+    let outside = surface.clone();
+    let panel_hover = surface.clone();
+    let panel_focus = surface.clone();
+    let panel_blur = surface.clone();
+    let panel_key = surface.clone();
     rsx! {
         stack {
             width: "100%",
             height: "100%",
-            hit_test_behavior: "none",
+            background_color: if pinned { super::floating_layer::FLOATING_CAPTURE_COLOR } else { 0x00000000 },
+            hit_test_behavior: if pinned { "default" } else { "none" },
+            onclick: move |_| { if pinned { outside.dismiss(); } },
             row {
+                focus_scope: pinned,
+                key_capture: "escape",
+                onhover: move |event| panel_hover.panel_hover(event.data().is_hovering),
+                onfocusin: move |_| panel_focus.panel_focus(true),
+                onfocusout: move |_| panel_blur.panel_focus(false),
+                onkey: move |event| {
+                    if event.data().is_down() && event.data().key == dioxus_elements::event::KeyboardKey::Escape { event.stop_propagation(); panel_key.dismiss(); }
+                },
+                onclick: move |event| event.stop_propagation(),
                 position: format!("{left},{top}"),
                 width: panel_width,
                 align_items: "center",

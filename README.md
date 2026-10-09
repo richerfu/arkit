@@ -4,6 +4,14 @@
 
 The workspace MSRV is Rust 1.88, matching the resolved OpenHarmony N-API toolchain dependencies.
 
+The Rust Ability core and WebView facade are pinned together to the
+`feat/ohos-adaptation-runtime-fixes` revision in `Cargo.toml`. The `app/` shell
+uses the matching HAR sources from the local `openharmony-ability` checkout
+at `../../southorange/openharmony-ability` (relative to this repository).
+Keep that checkout on the same revision; the published HAR does not yet
+provide the branch's window ID callbacks. Native bindings come from crates.io
+without Cargo patches.
+
 ```rust
 use arkit::prelude::*;
 
@@ -72,6 +80,13 @@ Use `AdaptiveMode::Phone` or `AdaptiveMode::Pc` to provide an explicit user or
 application preference. Components without a structural difference can read
 `use_adaptive_layout()` and select only the affected dimensions or interaction
 states.
+
+The mode selects presentation, not input devices: narrow PC windows retain
+keyboard and hover support, and wide tablet windows retain touch gestures.
+Modal panels move focus inside, contain Tab/Shift+Tab, dismiss with Escape,
+and restore focus to their live trigger. Picker and menu popups provide
+directional navigation; floating content is bounded and scrolls within the
+current window, including split-screen and keyboard avoid areas.
 
 Applications can register their own openharmony-ability bridge plugins
 (`BridgePlugin` facades) through `#[entry(plugins = [...])]` or by taking an

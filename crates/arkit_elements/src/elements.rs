@@ -161,6 +161,22 @@ macro_rules! define_element {
         pub trait $extension: dioxus_core::HasAttributes + Sized {
             define_accessibility_extension_methods!();
 
+            fn focus_scope(self, value: impl dioxus_core::IntoAttributeValue) -> Self {
+                self.push_attribute("focus_scope", None, value, false)
+            }
+            fn focus_trap(self, value: impl dioxus_core::IntoAttributeValue) -> Self {
+                self.push_attribute("focus_trap", None, value, false)
+            }
+            fn focus_navigation(self, value: impl dioxus_core::IntoAttributeValue) -> Self {
+                self.push_attribute("focus_navigation", None, value, false)
+            }
+            fn key_capture(self, value: impl dioxus_core::IntoAttributeValue) -> Self {
+                self.push_attribute("key_capture", None, value, false)
+            }
+            fn axis_capture(self, value: impl dioxus_core::IntoAttributeValue) -> Self {
+                self.push_attribute("axis_capture", None, value, false)
+            }
+
             $(
                 fn $attr(
                     self,
@@ -193,6 +209,16 @@ macro_rules! define_element {
             pub const native_ref: $crate::AttributeDescription = ("native_ref", None, false);
 
             define_accessibility_attributes!();
+            /// Move focus into this subtree on mount and restore it on removal.
+            pub const focus_scope: $crate::AttributeDescription = ("focus_scope", None, false);
+            /// Keep Tab and Shift+Tab within the active focus scope.
+            pub const focus_trap: $crate::AttributeDescription = ("focus_trap", None, false);
+            /// Native roving focus for a `vertical` or `horizontal` list.
+            pub const focus_navigation: $crate::AttributeDescription = ("focus_navigation", None, false);
+            /// Keys consumed synchronously before ArkUI's default behavior.
+            pub const key_capture: $crate::AttributeDescription = ("key_capture", None, false);
+            /// Consume wheel/touchpad events before ancestor scrolling.
+            pub const axis_capture: $crate::AttributeDescription = ("axis_capture", None, false);
 
             $(
                 pub const $attr: $crate::AttributeDescription = (stringify!($attr), None, false);
@@ -215,6 +241,7 @@ define_element! {
 define_element! {
     /// Native media surface (ArkUI `XComponent`, surface mode).
     xcomponent => "xcomponent" {
+        focusable, focus_on_touch, default_focus, tab_stop, focused,
         background_color, margin, margin_top, margin_bottom, margin_left,
         margin_right, margin_x, margin_y, margin_horizontal, margin_vertical, width, height,
         opacity, border_radius, border_width, border_color, visibility,

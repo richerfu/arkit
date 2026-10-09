@@ -443,7 +443,7 @@ fn time_picker_column(
                                             on_select.call(value);
                                         }
                                     },
-                                    {option.label}
+                                    {option.label.clone()}
                                 }
                             }
                         }
@@ -532,7 +532,7 @@ fn period_button(
                     on_select.call(is_pm);
                 }
             },
-            {label}
+            {label.clone()}
         }
     }
 }

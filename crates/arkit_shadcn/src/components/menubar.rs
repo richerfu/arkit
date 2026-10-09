@@ -97,6 +97,36 @@ pub fn Menubar(
     let border = theme.colors.border;
     let background = theme.colors.background;
     let menu_count = menus.len();
+    let focus = arkit_hooks::use_keyboard_focus_list(menu_count);
+    let key_focus = focus.clone();
+    let trigger_navigation = EventHandler::new(
+        move |(index, key): (usize, dioxus_elements::event::KeyboardKey)| {
+            if let Some(next) = key_focus.navigate(
+                index,
+                key,
+                dioxus_elements::event::KeyboardNavigation::Horizontal,
+                &vec![true; menu_count],
+            ) {
+                if current_active.is_some() {
+                    set_active.call(Some(next));
+                }
+            }
+        },
+    );
+    let popup_focus = focus.clone();
+    let popup_navigation = EventHandler::new(move |key: dioxus_elements::event::KeyboardKey| {
+        if menu_count == 0 {
+            return;
+        }
+        let current = current_active.unwrap_or(0);
+        let next = if key == dioxus_elements::event::KeyboardKey::ArrowLeft {
+            (current + menu_count - 1) % menu_count
+        } else {
+            (current + 1) % menu_count
+        };
+        popup_focus.focus(next);
+        set_active.call(Some(next));
+    });
     let overlay_open = current_active.is_some();
     let overlay_payload = current_active.and_then(|index| {
         let items = menus.get(index)?.items.clone();
@@ -128,22 +158,6 @@ pub fn Menubar(
         row {
             native_ref: menubar_ref,
             accessibility_role: "menu",
-            onkey: move |event| {
-                if !event.data().is_down() {
-                    return;
-                }
-                match event.data().key {
-                    dioxus_elements::event::KeyboardKey::Escape => set_active.call(None),
-                    dioxus_elements::event::KeyboardKey::ArrowLeft if menu_count > 0 => {
-                        let current = current_active.unwrap_or(0);
-                        set_active.call(Some(if current == 0 { menu_count - 1 } else { current - 1 }));
-                    }
-                    dioxus_elements::event::KeyboardKey::ArrowRight if menu_count > 0 => {
-                        set_active.call(Some((current_active.unwrap_or(0) + 1) % menu_count));
-                    }
-                    _ => {}
-                }
-            },
             padding: spacing::XXS,
             height: control::HEIGHT,
             align_items: "center",
@@ -153,6 +167,9 @@ pub fn Menubar(
             background_color: background,
             for (index, spec) in menus.iter().enumerate() {
                 MenubarMenu {
+                    native_ref: Some(focus.native_ref(index)),
+                    on_navigation: trigger_navigation,
+                    menu_open: current_active.is_some(),
                     index,
                     title: spec.title.clone(),
                     active: current_active == Some(index),
@@ -180,6 +197,7 @@ pub fn Menubar(
                         items,
                         placement,
                         pass_through_region,
+                        Some(super::menu_common::MenuHorizontalNavigation { identity: current_active.unwrap_or(0), on_key: popup_navigation }),
                     )
                 } else {
                     rsx! {}
@@ -191,6 +209,9 @@ pub fn Menubar(
 
 #[component]
 fn MenubarMenu(
+    on_navigation: EventHandler<(usize, dioxus_elements::event::KeyboardKey)>,
+    menu_open: bool,
+    native_ref: Option<arkit_arkui::NativeElementRef>,
     index: usize,
     title: String,
     active: bool,
@@ -202,7 +223,8 @@ fn MenubarMenu(
 ) -> Element {
     let mut hovering = use_signal(|| false);
     let mut focused = use_signal(|| false);
-    let trigger_ref = arkit_hooks::use_native_element_ref();
+    let fallback_ref = arkit_hooks::use_native_element_ref();
+    let trigger_ref = native_ref.unwrap_or(fallback_ref);
     arkit_hooks::use_layout_frame(trigger_ref.clone(), move |frame| {
         on_trigger_frame.call((index, frame));
     });
@@ -233,8 +255,8 @@ fn MenubarMenu(
             } else {
                 MENUBAR_ITEM_TRANSPARENT
             },
-            focusable: true,
-            focus_on_touch: false,
+            focus_on_touch: true,
+            key_capture: "enter space up down left right home end escape",
             onclick: move |_| {
                 if let Some(frame) = arkit_hooks::current_layout_frame(&click_ref) {
                     on_trigger_frame.call((index, frame));
@@ -246,14 +268,17 @@ fn MenubarMenu(
                 }
             },
             onkey: move |event| {
-                if event.data().activates() {
+                if event.data().activates() || (event.data().is_down() && matches!(event.data().key, dioxus_elements::event::KeyboardKey::ArrowDown | dioxus_elements::event::KeyboardKey::ArrowUp)) {
+                    event.stop_propagation();
                     if let Some(frame) = arkit_hooks::current_layout_frame(&key_ref) {
                         on_trigger_frame.call((index, frame));
                     }
-                    if active {
-                        on_active_change.call(None);
-                    } else {
-                        on_active_change.call(Some(index));
+                    if active && event.data().activates() { on_active_change.call(None); } else { on_active_change.call(Some(index)); }
+                } else if event.data().is_down() {
+                    if event.data().key == dioxus_elements::event::KeyboardKey::Escape && menu_open {
+                        event.stop_propagation(); on_active_change.call(None);
+                    } else if matches!(event.data().key, dioxus_elements::event::KeyboardKey::ArrowLeft | dioxus_elements::event::KeyboardKey::ArrowRight | dioxus_elements::event::KeyboardKey::Home | dioxus_elements::event::KeyboardKey::End) {
+                        event.stop_propagation(); on_navigation.call((index, event.data().key));
                     }
                 }
             },

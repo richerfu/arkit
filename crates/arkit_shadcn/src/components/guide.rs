@@ -558,11 +558,15 @@ fn guide_overlay_content(
             alignment: "top-start",
             hit_test_behavior: HIT_TEST_NONE,
             focusable: true,
+            focus_scope: snapshot.open,
+            focus_trap: !snapshot.allow_target_interaction,
+            key_capture: "escape",
             focus_on_touch: false,
             onkey: move |event| {
-                if event.data().is_down()
+                if event.data().action == dioxus_elements::event::KeyAction::Down
                     && event.data().key == dioxus_elements::event::KeyboardKey::Escape
                 {
+                    event.stop_propagation();
                     on_action.call(GuideAction::Skip);
                 }
             },

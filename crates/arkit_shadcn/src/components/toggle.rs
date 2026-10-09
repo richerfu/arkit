@@ -50,6 +50,7 @@ pub(crate) struct ToggleVisualStyle {
 }
 
 pub(crate) struct ToggleSurfaceStyle {
+    pub(crate) native_ref: Option<arkit_arkui::NativeElementRef>,
     pub(crate) active: bool,
     pub(crate) variant: ToggleVariant,
     pub(crate) size: ToggleSizeStyle,
@@ -174,6 +175,7 @@ pub(crate) fn toggle_surface(
     style: ToggleSurfaceStyle,
     accessibility_label: String,
     on_click: EventHandler<()>,
+    on_navigation: Option<EventHandler<dioxus_elements::event::KeyData>>,
     theme: &Theme,
 ) -> Element {
     let _ = theme;
@@ -193,6 +195,8 @@ pub(crate) fn toggle_surface(
     rsx! {
         row {
             accessibility_role: "toggle",
+            native_ref: style.native_ref,
+            key_capture: if on_navigation.is_some() { "enter space left right home end" } else { "enter space" },
             accessibility_text: accessibility_label,
             accessibility_group: true,
             accessibility_actions: "click",
@@ -223,12 +227,14 @@ pub(crate) fn toggle_surface(
             // are excluded so icon content cannot absorb the press without
             // bubbling `onclick` to the surface.
             hit_test_behavior: "block",
-            focusable: true,
-            focus_on_touch: false,
+            focus_on_touch: true,
             onclick: move |_| on_click.call(()),
             onkey: move |event| {
                 if event.data().activates() {
+                    event.stop_propagation();
                     on_click.call(());
+                } else if event.data().is_down() && !event.data().modifiers.ctrl && !event.data().modifiers.alt {
+                    if let Some(handler) = on_navigation { event.stop_propagation(); handler.call(event.data().as_ref().clone()); }
                 }
             },
             {content}
@@ -297,6 +303,7 @@ pub fn Toggle(props: ToggleProps) -> Element {
         {toggle_surface(
             content,
             ToggleSurfaceStyle {
+                native_ref: None,
                 active,
                 variant,
                 size: size_style,
@@ -315,6 +322,7 @@ pub fn Toggle(props: ToggleProps) -> Element {
                 }
                 on_change.call(next);
             }),
+            None,
             &theme,
         )}
     }

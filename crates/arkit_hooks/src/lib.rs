@@ -5,6 +5,7 @@
 //! and pass the same handle to layout, lifecycle, or advanced-node hooks.
 
 mod adaptive;
+mod focus;
 mod layout;
 mod lifecycle;
 mod load_more;
@@ -37,6 +38,7 @@ pub use arkit_runtime::{
     ApplicationLifecycleState, ApplicationLifecycleSubscription, EdgeInsets, SafeAreaPolicy,
     WindowMetrics, WindowMetricsHandle, WindowMetricsSubscription,
 };
+pub use focus::{use_keyboard_focus_list, KeyboardFocusList};
 pub use layout::{current_layout_frame, use_layout_frame, use_layout_size};
 pub use lifecycle::{
     use_app_foreground, use_application_lifecycle, use_application_lifecycle_event,

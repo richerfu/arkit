@@ -506,13 +506,18 @@ pub(crate) fn menu_content(
     theme: &Theme,
     on_dismiss: EventHandler<()>,
     entries: &[MenuEntry],
+    top: f32,
+    navigation: Option<MenuHorizontalNavigation>,
 ) -> Element {
     rsx! {
         MenuContentPanel {
+            key: "menu-{navigation.map(|navigation| navigation.identity).unwrap_or(0)}",
             style,
             theme: *theme,
             on_dismiss,
             entries: entries.to_vec(),
+            top,
+            navigation,
         }
     }
 }
@@ -523,6 +528,8 @@ fn MenuContentPanel(
     theme: Theme,
     on_dismiss: EventHandler<()>,
     entries: Vec<MenuEntry>,
+    top: f32,
+    navigation: Option<MenuHorizontalNavigation>,
 ) -> Element {
     let mut open_path = use_signal(Vec::<usize>::new);
     let current_open_path = open_path.read().clone();
@@ -530,6 +537,10 @@ fn MenuContentPanel(
         open_path.set(next);
     });
     let colors = &theme.colors;
+    let viewport = arkit_hooks::use_overlay_viewport();
+    let max_height = (super::panel_viewport::panel_available_height(viewport, top)
+        - spacing::XXS * 2.0)
+        .max(1.0);
     let reserve_leading_slot = menu_entries_need_leading_slot(&entries);
     let render_context = MenuRenderContext {
         open_path: &current_open_path,
@@ -543,14 +554,20 @@ fn MenuContentPanel(
     rsx! {
         column {
             accessibility_role: "menu",
+            focus_scope: true,
+            focus_navigation: "vertical",
+            key_capture: "escape",
             width: style.width,
             align_self: "start",
             align_items: "start",
             onkey: move |event| {
-                if event.data().is_down()
+                if event.data().action == dioxus_elements::event::KeyAction::Down
                     && event.data().key == dioxus_elements::event::KeyboardKey::Escape
                 {
+                    event.stop_propagation();
                     on_dismiss.call(());
+                } else if event.data().is_down() && matches!(event.data().key, dioxus_elements::event::KeyboardKey::ArrowLeft | dioxus_elements::event::KeyboardKey::ArrowRight) {
+                    if let Some(navigation) = navigation { event.stop_propagation(); navigation.on_key.call(event.data().key); }
                 }
             },
             padding_top: spacing::XXS,
@@ -563,6 +580,8 @@ fn MenuContentPanel(
             clip: true,
             background_color: colors.popover,
             shadow: "sm",
+            super::panel_viewport::PanelViewport {
+                max_height,
             for (index, entry) in entries.iter().enumerate() {
                 {
                     render_menu_entry(
@@ -573,6 +592,7 @@ fn MenuContentPanel(
                     )
                 }
             }
+            }
         }
     }
 }
@@ -582,6 +602,12 @@ fn MenuContentPanel(
 /// The root overlay is the one valid stack here: it layers a full-screen
 /// dismiss region behind an anchored panel. Menu item layout below this point
 /// uses row/column, matching the legacy builder implementation.
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) struct MenuHorizontalNavigation {
+    pub identity: usize,
+    pub on_key: EventHandler<dioxus_elements::event::KeyboardKey>,
+}
+
 pub(crate) fn menu_overlay_content(
     style: MenuStyle,
     theme: Theme,
@@ -589,6 +615,7 @@ pub(crate) fn menu_overlay_content(
     entries: Vec<MenuEntry>,
     placement: MenuOverlayPlacement,
     pass_through_region: Option<MenuOverlayPassThroughRegion>,
+    navigation: Option<MenuHorizontalNavigation>,
 ) -> Element {
     let top = placement.y.max(0.0);
     let left = placement.x.max(0.0);
@@ -655,7 +682,7 @@ pub(crate) fn menu_overlay_content(
                 column {
                     position: format!("{left},0"),
                     onclick: move |evt| evt.stop_propagation(),
-                    {menu_content(style, &theme, on_dismiss, &entries)}
+                    {menu_content(style, &theme, on_dismiss, &entries, top, navigation)}
                 }
             }
         }
@@ -689,6 +716,7 @@ fn MenuItemSurface(
     opacity: f32,
     disabled: bool,
     on_activate: EventHandler<()>,
+    #[props(default)] on_navigation: Option<EventHandler<dioxus_elements::event::KeyboardKey>>,
     children: Element,
 ) -> Element {
     let mut hovering = use_signal(|| false);
@@ -721,7 +749,8 @@ fn MenuItemSurface(
             },
             opacity,
             focusable: !disabled,
-            focus_on_touch: false,
+            key_capture: "enter space left right escape",
+            focus_on_touch: true,
             onclick: move |event| {
                 event.stop_propagation();
                 if !disabled {
@@ -730,7 +759,12 @@ fn MenuItemSurface(
             },
             onkey: move |event| {
                 if !disabled && event.data().activates() {
+                    event.stop_propagation();
                     on_activate.call(());
+                } else if !disabled && event.data().is_down() {
+                    if let Some(handler) = on_navigation {
+                        if event.data().key == dioxus_elements::event::KeyboardKey::ArrowRight { event.stop_propagation(); handler.call(event.data().key); }
+                    }
                 }
             },
             onhover: move |event| hovering.set(event.data().is_hovering),
@@ -863,6 +897,8 @@ fn render_submenu_entry(
         "chevron-down"
     };
     let child_reserve_leading_slot = menu_entries_need_leading_slot(&entry.items);
+    let keyboard_open_path = branch_path.clone();
+    let keyboard_parent_path = parent_path.to_vec();
 
     rsx! {
         column {
@@ -882,6 +918,7 @@ fn render_submenu_entry(
                 on_activate: move |_| {
                     set_open_path.call(next_open_path.clone());
                 },
+                on_navigation: move |_| set_open_path.call(keyboard_open_path.clone()),
                 row {
                     layout_weight: 1.0,
                     clip: true,
@@ -906,6 +943,16 @@ fn render_submenu_entry(
             ExpandPresence {
                 open: submenu_open,
                     column {
+                        focus_scope: submenu_open,
+                        focus_navigation: "vertical",
+                        enabled: submenu_open,
+                        key_capture: "left escape",
+                        onkey: move |event| {
+                            if event.data().is_down() && matches!(event.data().key, dioxus_elements::event::KeyboardKey::ArrowLeft | dioxus_elements::event::KeyboardKey::Escape) {
+                                event.stop_propagation();
+                                set_open_path.call(keyboard_parent_path.clone());
+                            }
+                        },
                         width: submenu_min_width.max(min_width),
                         align_self: "start",
                         align_items: "start",

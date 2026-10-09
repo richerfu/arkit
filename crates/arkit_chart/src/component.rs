@@ -2430,6 +2430,437 @@ pub fn ECharts(props: EChartsProps) -> Element {
     let click_clock = animation_clock.clone();
     let click_handler = select_handler.clone();
     let click_events = event_handler.clone();
+
+    let pointer_node = node_ref.clone();
+    let pointer_handler =
+        EventHandler::new(move |pointer: dioxus_elements::event::PointerPayload| {
+            let Some(node) = pointer_node.current() else {
+                return;
+            };
+            let Some(size) = mounted_node_size(&node) else {
+                return;
+            };
+            let ratio = pixel_ratio();
+            let logical_size = (size.0 / ratio, size.1 / ratio);
+            click_state.apply_media(logical_size.0, logical_size.1);
+            let target_is_logical = pointer.target_width > 0.0
+                && (pointer.target_width - logical_size.0).abs()
+                    <= (pointer.target_width - size.0).abs();
+            let (x, y) = if target_is_logical || pointer.target_width <= 0.0 {
+                (pointer.x, pointer.y)
+            } else {
+                (pointer.x / ratio, pointer.y / ratio)
+            };
+            let action = pointer.action;
+            if matches!(
+                action,
+                dioxus_elements::event::PointerAction::Down
+                    | dioxus_elements::event::PointerAction::Move
+            ) {
+                click_state.action_tooltip.replace(None);
+            }
+            if action == dioxus_elements::event::PointerAction::Cancel {
+                click_state.zoom_drag.replace(None);
+                click_state.map_drag.replace(None);
+                click_state.label_drag.replace(None);
+                click_state.brush_drag.replace(None);
+                click_state.toolbox_zoom_drag.replace(None);
+                return;
+            }
+            if action == dioxus_elements::event::PointerAction::Move {
+                let toolbox_zoom_drag = { *click_state.toolbox_zoom_drag.borrow() };
+                if let Some(drag) = toolbox_zoom_drag {
+                    click_state.update_toolbox_zoom_drag(drag, x, y);
+                    mark_node_dirty(&node);
+                    return;
+                }
+                let brush_drag = { *click_state.brush_drag.borrow() };
+                if let Some(drag) = brush_drag {
+                    click_state.update_brush_drag(drag, x, y);
+                    mark_node_dirty(&node);
+                    return;
+                }
+                let map_drag = { *click_state.map_drag.borrow() };
+                if let Some(drag) = map_drag {
+                    click_state.update_map_drag(drag, x, y);
+                    mark_node_dirty(&node);
+                    return;
+                }
+                let label_drag = { *click_state.label_drag.borrow() };
+                if let Some(drag) = label_drag {
+                    click_state.update_label_drag(drag, x, y);
+                    mark_node_dirty(&node);
+                    return;
+                }
+                let zoom_drag = { *click_state.zoom_drag.borrow() };
+                let Some(drag) = zoom_drag else {
+                    if click_state.option.borrow().tooltip.trigger == "axis" {
+                        let previous = click_state.selected.borrow().clone();
+                        let selected = click_state
+                            .cached_nearest_axis_event(x, y, logical_size.0, logical_size.1)
+                            .or_else(|| {
+                                (!click_state.has_cached_hits())
+                                    .then(|| {
+                                        nearest_axis_event(
+                                            &click_state.option.borrow(),
+                                            x,
+                                            y,
+                                            logical_size.0,
+                                            logical_size.1,
+                                            &click_state.hidden_series.borrow(),
+                                            &click_state.zoom_windows.borrow(),
+                                        )
+                                    })
+                                    .flatten()
+                            });
+                        click_state.selected.replace(selected.clone());
+                        emit_pointer_transition(&click_state, &click_events, previous, selected);
+                        mark_node_dirty(&node);
+                    } else {
+                        let previous = click_state.selected.borrow().clone();
+                        let hovered = click_state
+                            .cached_hit(x, y)
+                            .or_else(|| {
+                                (!click_state.has_cached_hits())
+                                    .then(|| {
+                                        hit_test_with_hidden(
+                                            &click_state.option.borrow(),
+                                            x,
+                                            y,
+                                            logical_size.0,
+                                            logical_size.1,
+                                            &click_state.hidden_series.borrow(),
+                                            &click_state.zoom_windows.borrow(),
+                                        )
+                                    })
+                                    .flatten()
+                            })
+                            .filter(|event| {
+                                !matches!(
+                                    event.component_type.as_str(),
+                                    "legend" | "toolbox" | "timeline" | "dataZoom"
+                                )
+                            });
+                        click_state.selected.replace(hovered.clone());
+                        emit_pointer_transition(&click_state, &click_events, previous, hovered);
+                        mark_node_dirty(&node);
+                    }
+                    return;
+                };
+                click_state.update_zoom_drag(drag, x, y, logical_size.0, logical_size.1);
+                mark_node_dirty(&node);
+                return;
+            }
+            let hit = click_state
+                .cached_label_hit(x, y)
+                .or_else(|| click_state.cached_hit(x, y))
+                .or_else(|| {
+                    (!click_state.has_cached_hits())
+                        .then(|| {
+                            hit_test_with_hidden(
+                                &click_state.option.borrow(),
+                                x,
+                                y,
+                                logical_size.0,
+                                logical_size.1,
+                                &click_state.hidden_series.borrow(),
+                                &click_state.zoom_windows.borrow(),
+                            )
+                        })
+                        .flatten()
+                });
+            if action == dioxus_elements::event::PointerAction::Down {
+                if let (Some(hit), Some(handler)) = (hit.as_ref(), click_events.get()) {
+                    handler.call(click_state.runtime_event(
+                        "mousedown",
+                        None::<String>,
+                        Some(hit.clone()),
+                    ));
+                }
+                let began_label = hit
+                    .as_ref()
+                    .is_some_and(|hit| click_state.begin_label_drag(hit, x, y));
+                let began_slider = !began_label
+                    && hit
+                        .as_ref()
+                        .is_some_and(|hit| click_state.begin_zoom_drag(hit, x, y));
+                if !began_label && !began_slider {
+                    let began_map = hit
+                        .as_ref()
+                        .is_some_and(|hit| click_state.begin_map_drag(hit, x, y));
+                    if !began_map {
+                        let chrome_hit = hit.as_ref().is_some_and(|hit| {
+                            matches!(
+                                hit.component_type.as_str(),
+                                "toolbox" | "legend" | "timeline" | "dataZoom"
+                            )
+                        });
+                        let began_toolbox_zoom = !chrome_hit
+                            && click_state.begin_toolbox_zoom(x, y, logical_size.0, logical_size.1);
+                        if began_toolbox_zoom {
+                            return;
+                        }
+                        let began_brush = !chrome_hit && click_state.begin_brush(x, y);
+                        if !began_brush {
+                            if let Some(index) = inside_zoom_at(
+                                &click_state.option.borrow(),
+                                x,
+                                y,
+                                logical_size.0,
+                                logical_size.1,
+                            ) {
+                                click_state.begin_zoom_index(index, ZoomHandle::Window, x, y);
+                            }
+                        }
+                    }
+                }
+                return;
+            }
+            if action != dioxus_elements::event::PointerAction::Up {
+                return;
+            }
+            if let (Some(hit), Some(handler)) = (hit.as_ref(), click_events.get()) {
+                handler.call(click_state.runtime_event(
+                    "mouseup",
+                    None::<String>,
+                    Some(hit.clone()),
+                ));
+            }
+            if let Some(drag) = click_state.label_drag.take() {
+                let event = click_state.finish_label_drag(drag, x, y);
+                mark_node_dirty(&node);
+                if let Some(handler) = click_handler.get() {
+                    handler.call(event.clone());
+                }
+                if let Some(handler) = click_events.get() {
+                    handler.call(click_state.runtime_event(
+                        "labeldragend",
+                        None::<String>,
+                        Some(event.clone()),
+                    ));
+                }
+                return;
+            }
+            if let Some(drag) = click_state.toolbox_zoom_drag.take() {
+                let event =
+                    click_state.finish_toolbox_zoom(drag, x, y, logical_size.0, logical_size.1);
+                click_state.selected.replace(Some(event.clone()));
+                mark_node_dirty(&node);
+                if let Some(handler) = click_handler.get() {
+                    handler.call(event);
+                }
+                return;
+            }
+            if let Some(drag) = click_state.brush_drag.take() {
+                let event = click_state.finish_brush(drag, x, y);
+                click_state.selected.replace(Some(event.clone()));
+                mark_node_dirty(&node);
+                if let Some(handler) = click_handler.get() {
+                    handler.call(event);
+                }
+                return;
+            }
+            if let Some(drag) = click_state.map_drag.take() {
+                let distance = ((drag.pointer_last.0 - drag.pointer_start.0).powi(2)
+                    + (drag.pointer_last.1 - drag.pointer_start.1).powi(2))
+                .sqrt();
+                if distance >= 3.0 {
+                    mark_node_dirty(&node);
+                    return;
+                }
+            }
+            if let Some(drag) = click_state.zoom_drag.take() {
+                let is_inside_tap = click_state
+                    .option
+                    .borrow()
+                    .data_zoom
+                    .get(drag.data_zoom_index)
+                    .is_some_and(|data_zoom| {
+                        let pointer = if data_zoom.orient == "vertical" { y } else { x };
+                        data_zoom.kind == "inside" && (pointer - drag.pointer_start).abs() < 3.0
+                    });
+                if !is_inside_tap {
+                    let event =
+                        click_state.update_zoom_drag(drag, x, y, logical_size.0, logical_size.1);
+                    mark_node_dirty(&node);
+                    if let (Some(event), Some(handler)) = (event, click_handler.get()) {
+                        handler.call(event);
+                    }
+                    return;
+                }
+            }
+            let mut selection_changed = false;
+            if let Some(hit) = hit.as_ref().filter(|hit| hit.component_type == "toolbox") {
+                match hit.name.as_deref() {
+                    Some("restore") => {
+                        click_state.restore();
+                    }
+                    Some("brush-rect") => {
+                        click_state.toolbox_zoom_active.set(false);
+                        click_state.toolbox_zoom_drag.replace(None);
+                        set_toolbox_runtime_status(
+                            &mut click_state.option.borrow_mut(),
+                            "dataZoom",
+                            "__active",
+                            false,
+                        );
+                        if let Some(brush) = click_state.option.borrow_mut().brush.as_mut() {
+                            brush.active = !brush.active;
+                            brush.brush_type = String::from("rect");
+                        }
+                    }
+                    Some("brush-clear") => {
+                        if let Some(brush) = click_state.option.borrow_mut().brush.as_mut() {
+                            brush.areas.clear();
+                            brush.active = false;
+                        }
+                        click_state.selected.replace(None);
+                    }
+                    Some("data-zoom") => click_state.toggle_toolbox_zoom(),
+                    Some("data-zoom-back") => click_state.toolbox_zoom_back(),
+                    Some("magic-line") => click_state.activate_magic_type(MagicOverride::Line),
+                    Some("magic-bar") => click_state.activate_magic_type(MagicOverride::Bar),
+                    Some("magic-stack") => click_state.toggle_magic_stack(),
+                    Some("data-view") => {
+                        click_state.data_view_visible.set(true);
+                        set_toolbox_runtime_status(
+                            &mut click_state.option.borrow_mut(),
+                            "dataView",
+                            "__visible",
+                            true,
+                        );
+                    }
+                    Some("data-view-close") => {
+                        click_state.data_view_visible.set(false);
+                        set_toolbox_runtime_status(
+                            &mut click_state.option.borrow_mut(),
+                            "dataView",
+                            "__visible",
+                            false,
+                        );
+                    }
+                    Some("save-as-image") => {
+                        let option = click_state.option.borrow();
+                        let selected = click_state.selected.borrow();
+                        let hidden_series = click_state.hidden_series.borrow();
+                        let zoom_windows = click_state.zoom_windows.borrow();
+                        let selected_items = click_state.selected_items.borrow();
+                        let result = save_chart_image(ExportContext {
+                            option: &option,
+                            selected: selected.as_ref(),
+                            hidden_series: &hidden_series,
+                            zoom_windows: &zoom_windows,
+                            selected_items: &selected_items,
+                            width: logical_size.0,
+                            height: logical_size.1,
+                            device_pixel_ratio: ratio,
+                        });
+                        drop(selected_items);
+                        drop(zoom_windows);
+                        drop(hidden_series);
+                        drop(selected);
+                        drop(option);
+                        let mut event = hit.clone();
+                        event.name = Some(match result {
+                            Ok(path) => format!("save-as-image:{}", path.display()),
+                            Err(error) => format!("save-as-image-error:{error}"),
+                        });
+                        click_state.selected.replace(Some(event.clone()));
+                        mark_node_dirty(&node);
+                        if let Some(handler) = click_handler.get() {
+                            handler.call(event);
+                        }
+                        return;
+                    }
+                    _ => {}
+                }
+            } else if let Some(hit) = hit.as_ref().filter(|hit| hit.component_type == "timeline") {
+                if click_state.activate_timeline(hit) {
+                    click_state.selected.replace(Some(hit.clone()));
+                    if click_state.needs_animation_clock() {
+                        click_clock.start();
+                    } else {
+                        click_clock.stop();
+                    }
+                }
+            } else if let Some(hit) = hit.as_ref().filter(|hit| hit.component_type == "legend") {
+                if click_state.toggle_legend(hit.series_index) {
+                    click_state.selected.replace(None);
+                }
+            } else {
+                if let Some(hit) = hit.as_ref().filter(|hit| {
+                    click_state
+                        .option
+                        .borrow()
+                        .series
+                        .get(hit.series_index)
+                        .and_then(crate::state::selected_mode)
+                        .is_some()
+                }) {
+                    let selected_mode = click_state
+                        .option
+                        .borrow()
+                        .series
+                        .get(hit.series_index)
+                        .and_then(crate::state::selected_mode)
+                        .map(ToOwned::to_owned);
+                    let mut selected_items = click_state.selected_items.borrow_mut();
+                    let before = selected_items.clone();
+                    match selected_mode.as_deref() {
+                        Some("multiple") => {
+                            let key = (hit.series_index, hit.data_index);
+                            if !selected_items.insert(key) {
+                                selected_items.remove(&key);
+                            }
+                        }
+                        Some("single") | Some("true") => {
+                            selected_items
+                                .retain(|(series_index, _)| *series_index != hit.series_index);
+                            selected_items.insert((hit.series_index, hit.data_index));
+                        }
+                        _ => {}
+                    }
+                    selection_changed = *selected_items != before;
+                }
+                click_state.selected.replace(hit.clone());
+            }
+            mark_node_dirty(&node);
+            if let (Some(hit), Some(handler)) = (hit.as_ref(), click_events.get()) {
+                let event_type = match hit.component_type.as_str() {
+                    "legend" => "legendselectchanged",
+                    "dataZoom" => "datazoom",
+                    "timeline" => "timelinechanged",
+                    _ => "click",
+                };
+                handler.call(click_state.runtime_event(
+                    event_type,
+                    None::<String>,
+                    Some(hit.clone()),
+                ));
+                if selection_changed {
+                    handler.call(click_state.runtime_event(
+                        "selectchanged",
+                        Some("select"),
+                        Some(hit.clone()),
+                    ));
+                }
+            }
+            if let (Some(hit), Some(handler)) = (hit, click_handler.get()) {
+                handler.call(hit);
+            }
+        });
+    let hover_state = state.clone();
+    let hover_events = event_handler.clone();
+    let hover_node = node_ref.clone();
+    let wheel_state = state.clone();
+    let wheel_node = node_ref.clone();
+    let wheel_events = event_handler.clone();
+    let captures_wheel = state
+        .option
+        .borrow()
+        .data_zoom
+        .iter()
+        .any(|zoom| zoom.kind == "inside" && !zoom.zoom_lock);
     rsx! {
         custom {
             native_ref: node_ref.clone(),
@@ -2439,462 +2870,46 @@ pub fn ECharts(props: EChartsProps) -> Element {
             accessibility_role: "image",
             accessibility_text: props.accessibility_label.clone(),
             accessibility_description: if let Some(description) = props.accessibility_description.clone() { description },
+            axis_capture: captures_wheel,
             ontouch: move |event: dioxus_core::Event<dioxus_elements::event::PointerData>| {
-                let Some(pointer) = event.data().pointer else {
-                    return;
-                };
-                let Some(node) = node_ref.current() else {
-                    return;
-                };
-                let Some(size) = mounted_node_size(&node) else {
-                    return;
-                };
+                if let Some(pointer) = event.data().pointer {
+                    if pointer.source != dioxus_elements::event::PointerSource::Mouse { pointer_handler.call(pointer); }
+                }
+            },
+            onmouse: move |event| {
+                let mouse = *event.data();
+                if matches!(mouse.button, dioxus_elements::event::MouseButton::Primary | dioxus_elements::event::MouseButton::None) {
+                    pointer_handler.call(mouse.into());
+                }
+            },
+            onhover: move |event| {
+                if !event.data().is_hovering {
+                    pointer_handler.call(dioxus_elements::event::PointerPayload { action: dioxus_elements::event::PointerAction::Cancel, ..Default::default() });
+                    let previous = hover_state.selected.take();
+                    emit_pointer_transition(&hover_state, &hover_events, previous, None);
+                    if let Some(node) = hover_node.current() { mark_node_dirty(&node); }
+                }
+            },
+            onaxis: move |event| {
+                let axis = event.data();
+                if !axis.vertical.is_finite() || axis.vertical == 0.0 { return; }
+                let Some(node) = wheel_node.current() else { return; };
+                let Some((width, height)) = mounted_node_size(&node) else { return; };
                 let ratio = pixel_ratio();
-                let logical_size = (size.0 / ratio, size.1 / ratio);
-                click_state.apply_media(logical_size.0, logical_size.1);
-                let target_is_logical = pointer.target_width > 0.0
-                    && (pointer.target_width - logical_size.0).abs()
-                        <= (pointer.target_width - size.0).abs();
-                let (x, y) = if target_is_logical || pointer.target_width <= 0.0 {
-                    (pointer.x, pointer.y)
-                } else {
-                    (pointer.x / ratio, pointer.y / ratio)
-                };
-                let action = pointer.action;
-                if matches!(
-                    action,
-                    dioxus_elements::event::PointerAction::Down
-                        | dioxus_elements::event::PointerAction::Move
-                ) {
-                    click_state.action_tooltip.replace(None);
-                }
-                if action == dioxus_elements::event::PointerAction::Cancel {
-                    click_state.zoom_drag.replace(None);
-                    click_state.map_drag.replace(None);
-                    click_state.label_drag.replace(None);
-                    click_state.brush_drag.replace(None);
-                    click_state.toolbox_zoom_drag.replace(None);
-                    return;
-                }
-                if action == dioxus_elements::event::PointerAction::Move {
-                    let toolbox_zoom_drag = { *click_state.toolbox_zoom_drag.borrow() };
-                    if let Some(drag) = toolbox_zoom_drag {
-                        click_state.update_toolbox_zoom_drag(drag, x, y);
+                let option = wheel_state.option.borrow();
+                let Some(index) = inside_zoom_at(&option, axis.x / ratio, axis.y / ratio, width / ratio, height / ratio) else { return; };
+                if option.data_zoom.get(index).is_some_and(|zoom| zoom.zoom_lock) { return; }
+                let Some(window) = wheel_state.zoom_windows.borrow().get(index).copied() else { return; };
+                drop(option);
+                let span = ((window.end - window.start) * (axis.vertical / 500.0).exp()).clamp(1.0, 100.0);
+                let center = (window.start + window.end) * 0.5;
+                let start = (center - span * 0.5).clamp(0.0, 100.0 - span);
+                if let Ok(outcome) = wheel_state.dispatch_action(ChartAction::new(ChartActionKind::DataZoom { data_zoom_index: index, start, end: start + span })) {
+                    if outcome.status == ChartCommandStatus::Applied {
+                        wheel_state.selected.replace(None);
                         mark_node_dirty(&node);
-                        return;
+                        if let (Some(event), Some(handler)) = (outcome.event, wheel_events.get()) { handler.call(event); }
                     }
-                    let brush_drag = { *click_state.brush_drag.borrow() };
-                    if let Some(drag) = brush_drag {
-                        click_state.update_brush_drag(drag, x, y);
-                        mark_node_dirty(&node);
-                        return;
-                    }
-                    let map_drag = { *click_state.map_drag.borrow() };
-                    if let Some(drag) = map_drag {
-                        click_state.update_map_drag(drag, x, y);
-                        mark_node_dirty(&node);
-                        return;
-                    }
-                    let label_drag = { *click_state.label_drag.borrow() };
-                    if let Some(drag) = label_drag {
-                        click_state.update_label_drag(drag, x, y);
-                        mark_node_dirty(&node);
-                        return;
-                    }
-                    let zoom_drag = { *click_state.zoom_drag.borrow() };
-                    let Some(drag) = zoom_drag else {
-                        if click_state.option.borrow().tooltip.trigger == "axis" {
-                            let previous = click_state.selected.borrow().clone();
-                            let selected = click_state.cached_nearest_axis_event(
-                                x,
-                                y,
-                                logical_size.0,
-                                logical_size.1,
-                            ).or_else(|| {
-                                (!click_state.has_cached_hits()).then(|| {
-                                    nearest_axis_event(
-                                        &click_state.option.borrow(),
-                                        x,
-                                        y,
-                                        logical_size.0,
-                                        logical_size.1,
-                                        &click_state.hidden_series.borrow(),
-                                        &click_state.zoom_windows.borrow(),
-                                    )
-                                }).flatten()
-                            });
-                            click_state.selected.replace(selected.clone());
-                            emit_pointer_transition(
-                                &click_state,
-                                &click_events,
-                                previous,
-                                selected,
-                            );
-                            mark_node_dirty(&node);
-                        } else {
-                            let previous = click_state.selected.borrow().clone();
-                            let hovered = click_state
-                                .cached_hit(x, y)
-                                .or_else(|| {
-                                    (!click_state.has_cached_hits())
-                                        .then(|| {
-                                            hit_test_with_hidden(
-                                                &click_state.option.borrow(),
-                                                x,
-                                                y,
-                                                logical_size.0,
-                                                logical_size.1,
-                                                &click_state.hidden_series.borrow(),
-                                                &click_state.zoom_windows.borrow(),
-                                            )
-                                        })
-                                        .flatten()
-                                })
-                            .filter(|event| {
-                                !matches!(
-                                    event.component_type.as_str(),
-                                    "legend" | "toolbox" | "timeline" | "dataZoom"
-                                )
-                            });
-                            click_state.selected.replace(hovered.clone());
-                            emit_pointer_transition(
-                                &click_state,
-                                &click_events,
-                                previous,
-                                hovered,
-                            );
-                            mark_node_dirty(&node);
-                        }
-                        return;
-                    };
-                    click_state.update_zoom_drag(
-                        drag,
-                        x,
-                        y,
-                        logical_size.0,
-                        logical_size.1,
-                    );
-                    mark_node_dirty(&node);
-                    return;
-                }
-                let hit = click_state
-                    .cached_label_hit(x, y)
-                    .or_else(|| click_state.cached_hit(x, y))
-                    .or_else(|| {
-                        (!click_state.has_cached_hits())
-                            .then(|| {
-                                hit_test_with_hidden(
-                                    &click_state.option.borrow(),
-                                    x,
-                                    y,
-                                    logical_size.0,
-                                    logical_size.1,
-                                    &click_state.hidden_series.borrow(),
-                                    &click_state.zoom_windows.borrow(),
-                                )
-                            })
-                            .flatten()
-                    });
-                if action == dioxus_elements::event::PointerAction::Down {
-                    if let (Some(hit), Some(handler)) = (hit.as_ref(), click_events.get()) {
-                        handler.call(click_state.runtime_event(
-                            "mousedown",
-                            None::<String>,
-                            Some(hit.clone()),
-                        ));
-                    }
-                    let began_label = hit
-                        .as_ref()
-                        .is_some_and(|hit| click_state.begin_label_drag(hit, x, y));
-                    let began_slider = !began_label && hit
-                        .as_ref()
-                        .is_some_and(|hit| click_state.begin_zoom_drag(hit, x, y));
-                    if !began_label && !began_slider {
-                        let began_map = hit
-                            .as_ref()
-                            .is_some_and(|hit| click_state.begin_map_drag(hit, x, y));
-                        if !began_map {
-                            let chrome_hit = hit.as_ref().is_some_and(|hit| {
-                                matches!(
-                                    hit.component_type.as_str(),
-                                    "toolbox" | "legend" | "timeline" | "dataZoom"
-                                )
-                            });
-                            let began_toolbox_zoom = !chrome_hit
-                                && click_state.begin_toolbox_zoom(
-                                    x,
-                                    y,
-                                    logical_size.0,
-                                    logical_size.1,
-                                );
-                            if began_toolbox_zoom {
-                                return;
-                            }
-                            let began_brush = !chrome_hit && click_state.begin_brush(x, y);
-                            if !began_brush {
-                                if let Some(index) = inside_zoom_at(
-                                    &click_state.option.borrow(),
-                                    x,
-                                    y,
-                                    logical_size.0,
-                                    logical_size.1,
-                                ) {
-                                    click_state.begin_zoom_index(index, ZoomHandle::Window, x, y);
-                                }
-                            }
-                        }
-                    }
-                    return;
-                }
-                if action != dioxus_elements::event::PointerAction::Up {
-                    return;
-                }
-                if let (Some(hit), Some(handler)) = (hit.as_ref(), click_events.get()) {
-                    handler.call(click_state.runtime_event(
-                        "mouseup",
-                        None::<String>,
-                        Some(hit.clone()),
-                    ));
-                }
-                if let Some(drag) = click_state.label_drag.take() {
-                    let event = click_state.finish_label_drag(drag, x, y);
-                    mark_node_dirty(&node);
-                    if let Some(handler) = click_handler.get() {
-                        handler.call(event.clone());
-                    }
-                    if let Some(handler) = click_events.get() {
-                        handler.call(click_state.runtime_event(
-                            "labeldragend",
-                            None::<String>,
-                            Some(event.clone()),
-                        ));
-                    }
-                    return;
-                }
-                if let Some(drag) = click_state.toolbox_zoom_drag.take() {
-                    let event = click_state.finish_toolbox_zoom(
-                        drag,
-                        x,
-                        y,
-                        logical_size.0,
-                        logical_size.1,
-                    );
-                    click_state.selected.replace(Some(event.clone()));
-                    mark_node_dirty(&node);
-                    if let Some(handler) = click_handler.get() {
-                        handler.call(event);
-                    }
-                    return;
-                }
-                if let Some(drag) = click_state.brush_drag.take() {
-                    let event = click_state.finish_brush(drag, x, y);
-                    click_state.selected.replace(Some(event.clone()));
-                    mark_node_dirty(&node);
-                    if let Some(handler) = click_handler.get() {
-                        handler.call(event);
-                    }
-                    return;
-                }
-                if let Some(drag) = click_state.map_drag.take() {
-                    let distance = ((drag.pointer_last.0 - drag.pointer_start.0).powi(2)
-                        + (drag.pointer_last.1 - drag.pointer_start.1).powi(2))
-                    .sqrt();
-                    if distance >= 3.0 {
-                        mark_node_dirty(&node);
-                        return;
-                    }
-                }
-                if let Some(drag) = click_state.zoom_drag.take() {
-                    let is_inside_tap = click_state
-                        .option
-                        .borrow()
-                        .data_zoom
-                        .get(drag.data_zoom_index)
-                        .is_some_and(|data_zoom| {
-                            let pointer = if data_zoom.orient == "vertical" { y } else { x };
-                            data_zoom.kind == "inside"
-                                && (pointer - drag.pointer_start).abs() < 3.0
-                        });
-                    if !is_inside_tap {
-                        let event = click_state.update_zoom_drag(
-                            drag,
-                            x,
-                            y,
-                            logical_size.0,
-                            logical_size.1,
-                        );
-                        mark_node_dirty(&node);
-                        if let (Some(event), Some(handler)) = (event, click_handler.get()) {
-                            handler.call(event);
-                        }
-                        return;
-                    }
-                }
-                let mut selection_changed = false;
-                if let Some(hit) = hit.as_ref().filter(|hit| hit.component_type == "toolbox") {
-                    match hit.name.as_deref() {
-                        Some("restore") => {
-                            click_state.restore();
-                        }
-                        Some("brush-rect") => {
-                            click_state.toolbox_zoom_active.set(false);
-                            click_state.toolbox_zoom_drag.replace(None);
-                            set_toolbox_runtime_status(
-                                &mut click_state.option.borrow_mut(),
-                                "dataZoom",
-                                "__active",
-                                false,
-                            );
-                            if let Some(brush) = click_state.option.borrow_mut().brush.as_mut() {
-                                brush.active = !brush.active;
-                                brush.brush_type = String::from("rect");
-                            }
-                        }
-                        Some("brush-clear") => {
-                            if let Some(brush) = click_state.option.borrow_mut().brush.as_mut() {
-                                brush.areas.clear();
-                                brush.active = false;
-                            }
-                            click_state.selected.replace(None);
-                        }
-                        Some("data-zoom") => click_state.toggle_toolbox_zoom(),
-                        Some("data-zoom-back") => click_state.toolbox_zoom_back(),
-                        Some("magic-line") => {
-                            click_state.activate_magic_type(MagicOverride::Line)
-                        }
-                        Some("magic-bar") => {
-                            click_state.activate_magic_type(MagicOverride::Bar)
-                        }
-                        Some("magic-stack") => {
-                            click_state.toggle_magic_stack()
-                        }
-                        Some("data-view") => {
-                            click_state.data_view_visible.set(true);
-                            set_toolbox_runtime_status(
-                                &mut click_state.option.borrow_mut(),
-                                "dataView",
-                                "__visible",
-                                true,
-                            );
-                        }
-                        Some("data-view-close") => {
-                            click_state.data_view_visible.set(false);
-                            set_toolbox_runtime_status(
-                                &mut click_state.option.borrow_mut(),
-                                "dataView",
-                                "__visible",
-                                false,
-                            );
-                        }
-                        Some("save-as-image") => {
-                            let option = click_state.option.borrow();
-                            let selected = click_state.selected.borrow();
-                            let hidden_series = click_state.hidden_series.borrow();
-                            let zoom_windows = click_state.zoom_windows.borrow();
-                            let selected_items = click_state.selected_items.borrow();
-                            let result = save_chart_image(ExportContext {
-                                option: &option,
-                                selected: selected.as_ref(),
-                                hidden_series: &hidden_series,
-                                zoom_windows: &zoom_windows,
-                                selected_items: &selected_items,
-                                width: logical_size.0,
-                                height: logical_size.1,
-                                device_pixel_ratio: ratio,
-                            });
-                            drop(selected_items);
-                            drop(zoom_windows);
-                            drop(hidden_series);
-                            drop(selected);
-                            drop(option);
-                            let mut event = hit.clone();
-                            event.name = Some(match result {
-                                Ok(path) => format!("save-as-image:{}", path.display()),
-                                Err(error) => format!("save-as-image-error:{error}"),
-                            });
-                            click_state.selected.replace(Some(event.clone()));
-                            mark_node_dirty(&node);
-                            if let Some(handler) = click_handler.get() {
-                                handler.call(event);
-                            }
-                            return;
-                        }
-                        _ => {}
-                    }
-                } else if let Some(hit) = hit.as_ref().filter(|hit| hit.component_type == "timeline") {
-                    if click_state.activate_timeline(hit) {
-                        click_state.selected.replace(Some(hit.clone()));
-                        if click_state.needs_animation_clock() {
-                            click_clock.start();
-                        } else {
-                            click_clock.stop();
-                        }
-                    }
-                } else if let Some(hit) = hit.as_ref().filter(|hit| hit.component_type == "legend") {
-                    if click_state.toggle_legend(hit.series_index) {
-                        click_state.selected.replace(None);
-                    }
-                } else {
-                    if let Some(hit) = hit.as_ref().filter(|hit| {
-                        click_state
-                            .option
-                            .borrow()
-                            .series
-                            .get(hit.series_index)
-                            .and_then(crate::state::selected_mode)
-                            .is_some()
-                    }) {
-                        let selected_mode = click_state
-                            .option
-                            .borrow()
-                            .series
-                            .get(hit.series_index)
-                            .and_then(crate::state::selected_mode)
-                            .map(ToOwned::to_owned);
-                        let mut selected_items = click_state.selected_items.borrow_mut();
-                        let before = selected_items.clone();
-                        match selected_mode.as_deref() {
-                            Some("multiple") => {
-                                let key = (hit.series_index, hit.data_index);
-                                if !selected_items.insert(key) {
-                                    selected_items.remove(&key);
-                                }
-                            }
-                            Some("single") | Some("true") => {
-                                selected_items.retain(|(series_index, _)| {
-                                    *series_index != hit.series_index
-                                });
-                                selected_items.insert((hit.series_index, hit.data_index));
-                            }
-                            _ => {}
-                        }
-                        selection_changed = *selected_items != before;
-                    }
-                    click_state.selected.replace(hit.clone());
-                }
-                mark_node_dirty(&node);
-                if let (Some(hit), Some(handler)) = (hit.as_ref(), click_events.get()) {
-                    let event_type = match hit.component_type.as_str() {
-                        "legend" => "legendselectchanged",
-                        "dataZoom" => "datazoom",
-                        "timeline" => "timelinechanged",
-                        _ => "click",
-                    };
-                    handler.call(click_state.runtime_event(
-                        event_type,
-                        None::<String>,
-                        Some(hit.clone()),
-                    ));
-                    if selection_changed {
-                        handler.call(click_state.runtime_event(
-                            "selectchanged",
-                            Some("select"),
-                            Some(hit.clone()),
-                        ));
-                    }
-                }
-                if let (Some(hit), Some(handler)) = (hit, click_handler.get()) {
-                    handler.call(hit);
                 }
             },
         }

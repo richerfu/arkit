@@ -114,7 +114,7 @@ pub fn BottomNavigation(props: BottomNavigationProps) -> Element {
                         {icon_placeholder(icon_name.as_str(), 16.0, foreground)}
                         text {
                             margin_left: spacing::XS,
-                            content: label,
+                            content: label.clone(),
                             font_size: typography::SM,
                             font_weight: if active { 600_i32 } else { 500_i32 },
                             font_color: foreground,
@@ -128,7 +128,7 @@ pub fn BottomNavigation(props: BottomNavigationProps) -> Element {
                             {icon_placeholder(icon_name.as_str(), ICON_SIZE, foreground)}
                             row { height: ICON_LABEL_GAP }
                             text {
-                                content: label,
+                                content: label.clone(),
                                 font_size: typography::XS,
                                 font_weight: if active { 600_i32 } else { 500_i32 },
                                 font_color: foreground,

@@ -48,8 +48,8 @@ Input {
 | `value`       | `Option<String>`               | `None`  | 受控值                          |
 | `mode`        | `InputMode`                    | `Text`  | `Text`、`Password` 或 `Number`  |
 | `height`      | `Option<f32>`                  | `36`    | 固定高度 vp                     |
-| `width`       | `Option<String>`               | `None`  | 显式 CSS 宽度，优先于 `full`      |
-| `full`        | `bool`                         | `true`  | 默认占满父容器可用宽度            |
+| `width`       | `Option<String>`               | `None`  | 显式 CSS 宽度，优先于 `full`    |
+| `full`        | `bool`                         | `true`  | 默认占满父容器可用宽度          |
 | `invalid`     | `bool`                         | `false` | 校验失败时使用 destructive 边框 |
 | `disabled`    | `bool`                         | `false` | 禁止编辑，保留尺寸              |
 | `read_only`   | `bool`                         | `false` | 保持外观但禁止焦点和输入        |

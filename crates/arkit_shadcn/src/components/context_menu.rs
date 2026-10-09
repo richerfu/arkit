@@ -31,7 +31,6 @@ pub fn ContextMenu(
     #[props(default)] width: Option<f32>,
 ) -> Element {
     let theme = use_theme();
-    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
     let viewport = arkit_hooks::use_overlay_viewport();
     let trigger_ref = arkit_hooks::use_native_element_ref();
     let trigger_frame = use_signal(arkit_arkui::LayoutFramePx::default);
@@ -53,7 +52,8 @@ pub fn ContextMenu(
         }
     });
 
-    let panel_width = width.unwrap_or(MENU_PANEL_WIDTH);
+    let panel_width =
+        super::panel_viewport::bounded_panel_width(viewport, width.unwrap_or(MENU_PANEL_WIDTH));
     let style = MenuStyle {
         width: panel_width,
         submenu_width: panel_width - (spacing::XXS * 2.0),
@@ -201,7 +201,7 @@ pub fn ContextMenu(
             exit_duration_ms: Some(FLOATING_EXIT_MS),
             fill: Some(true),
             layer: Some(arkit_hooks::OverlayLayer::Floating),
-            {menu_overlay_content(style, theme, dismiss, items, placement, None)}
+            {menu_overlay_content(style, theme, dismiss, items, placement, None, None)}
         }
     }
 }

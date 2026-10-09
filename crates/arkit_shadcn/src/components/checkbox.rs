@@ -33,7 +33,6 @@ pub struct CheckboxProps {
 #[component]
 pub fn Checkbox(props: CheckboxProps) -> Element {
     let theme = use_theme();
-    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
     let mut hovering = use_signal(|| false);
     let mut focused = use_signal(|| false);
     let mut internal = use_signal(|| props.default_checked.unwrap_or(false));
@@ -76,13 +75,11 @@ pub fn Checkbox(props: CheckboxProps) -> Element {
             justify_content: "start",
             padding: spacing::XXS,
             border_radius: theme.radii.md,
-            background_color: if desktop && (hovering() || focused()) {
+            background_color: if hovering() || focused() {
                 theme.colors.accent
             } else {
                 0x00000000
             },
-            focusable: desktop && !disabled,
-            focus_on_touch: false,
             opacity: if disabled { 0.5 } else { 1.0 },
             onclick: move |event| {
                 event.stop_propagation();

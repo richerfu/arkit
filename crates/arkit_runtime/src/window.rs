@@ -142,7 +142,7 @@ impl WindowMetrics {
     pub(crate) fn from_app(app: &OpenHarmonyApp, keyboard_height_px: Option<i32>) -> Self {
         let scale = normalized_scale(app.scale());
         let content_rect = PhysicalRect::from(app.content_rect());
-        let window_rect = PhysicalRect::from(app.window_rect());
+        let window_rect = PhysicalRect::from(app.window_rect_for(0));
         let mut avoid_areas = AvoidAreas::default();
         for (area_type, area) in app.avoid_areas() {
             avoid_areas.set(area_type, area);

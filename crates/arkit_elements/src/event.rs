@@ -33,6 +33,8 @@ pub enum ArkEventKind {
     AreaChange,
     Focus,
     Blur,
+    FocusIn,
+    FocusOut,
     Hover,
     HoverMove,
     DragStart,
@@ -42,7 +44,9 @@ pub enum ArkEventKind {
     DragEnter,
     Touch,
     Key,
+    KeyPreIme,
     Mouse,
+    Axis,
 }
 
 impl ArkEventKind {
@@ -50,7 +54,14 @@ impl ArkEventKind {
     pub const fn bubbles(self) -> bool {
         matches!(
             self,
-            Self::Click | Self::LongPress | Self::Touch | Self::Key | Self::Mouse
+            Self::Click
+                | Self::LongPress
+                | Self::Touch
+                | Self::Key
+                | Self::KeyPreIme
+                | Self::Mouse
+                | Self::FocusIn
+                | Self::FocusOut
         )
     }
 }
@@ -108,6 +119,7 @@ pub enum ArkEventPayload {
     Key(KeyPayload),
     /// Raw mouse input delivered to a desktop-capable node.
     Mouse(MousePayload),
+    Axis(AxisPayload),
 }
 
 /// Scroll-index payload shared by list/grid/water-flow `on_scroll` events.
@@ -147,6 +159,7 @@ impl LayoutPayload {
 /// Pointer coordinates and target bounds carried by ArkUI input events.
 #[derive(Default, Clone, Copy, Debug, PartialEq)]
 pub struct PointerPayload {
+    pub source: PointerSource,
     /// Native touch phase. Click/drag events that do not expose a touch phase
     /// use [`PointerAction::Unknown`].
     pub action: PointerAction,
@@ -175,6 +188,14 @@ pub struct PointerPayload {
     pub target_width: f32,
     /// Event target height.
     pub target_height: f32,
+}
+
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PointerSource {
+    #[default]
+    Unknown,
+    Touch,
+    Mouse,
 }
 
 /// Platform-neutral pointer phase used by touch-capable components.
@@ -213,6 +234,67 @@ pub struct MousePayload {
     pub y: f32,
     pub window_x: f32,
     pub window_y: f32,
+    pub target_x: f32,
+    pub target_y: f32,
+    pub target_width: f32,
+    pub target_height: f32,
+    pub modifiers: KeyModifiers,
+}
+
+impl From<MousePayload> for PointerPayload {
+    fn from(mouse: MousePayload) -> Self {
+        Self {
+            source: PointerSource::Mouse,
+            action: mouse.action,
+            x: mouse.x,
+            y: mouse.y,
+            window_x: mouse.window_x,
+            window_y: mouse.window_y,
+            target_x: mouse.target_x,
+            target_y: mouse.target_y,
+            target_width: mouse.target_width,
+            target_height: mouse.target_height,
+            ..Default::default()
+        }
+    }
+}
+
+#[derive(Default, Clone, Copy, Debug, PartialEq)]
+pub struct AxisPayload {
+    pub horizontal: f64,
+    pub vertical: f64,
+    pub x: f32,
+    pub y: f32,
+    pub modifiers: KeyModifiers,
+}
+
+#[derive(Default, Clone, Copy, Debug)]
+pub struct AxisData {
+    pub horizontal: f64,
+    pub vertical: f64,
+    pub x: f32,
+    pub y: f32,
+    pub modifiers: KeyModifiers,
+}
+
+impl From<ArkEventData> for AxisData {
+    fn from(data: ArkEventData) -> Self {
+        Self::from(&data)
+    }
+}
+impl From<&ArkEventData> for AxisData {
+    fn from(data: &ArkEventData) -> Self {
+        match data.payload {
+            ArkEventPayload::Axis(axis) => Self {
+                horizontal: axis.horizontal,
+                vertical: axis.vertical,
+                x: axis.x,
+                y: axis.y,
+                modifiers: axis.modifiers,
+            },
+            _ => Self::default(),
+        }
+    }
 }
 
 /// Platform-neutral key identity used by desktop-capable components.
@@ -236,8 +318,57 @@ pub enum KeyboardKey {
     Backspace,
     Menu,
     F10,
+    Function(u8),
     Character(char),
     Other(i32),
+}
+
+/// Directional-key policy for lists, tabs, and calendar grids.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyboardNavigation {
+    Horizontal,
+    Vertical,
+    Grid(usize),
+}
+
+pub fn keyboard_navigation_target(
+    current: usize,
+    key: KeyboardKey,
+    navigation: KeyboardNavigation,
+    enabled: &[bool],
+) -> Option<usize> {
+    let count = enabled.len();
+    if count == 0 {
+        return None;
+    }
+    if key == KeyboardKey::Home {
+        return enabled.iter().position(|enabled| *enabled);
+    }
+    if key == KeyboardKey::End {
+        return enabled.iter().rposition(|enabled| *enabled);
+    }
+    let step = match (navigation, key) {
+        (KeyboardNavigation::Horizontal | KeyboardNavigation::Grid(_), KeyboardKey::ArrowLeft)
+        | (KeyboardNavigation::Vertical, KeyboardKey::ArrowUp) => -1,
+        (KeyboardNavigation::Horizontal | KeyboardNavigation::Grid(_), KeyboardKey::ArrowRight)
+        | (KeyboardNavigation::Vertical, KeyboardKey::ArrowDown) => 1,
+        (KeyboardNavigation::Grid(columns), KeyboardKey::ArrowUp) => -(columns.max(1) as isize),
+        (KeyboardNavigation::Grid(columns), KeyboardKey::ArrowDown) => columns.max(1) as isize,
+        _ => return None,
+    };
+    let mut next = current.min(count - 1) as isize;
+    for _ in 0..count {
+        next += step;
+        match navigation {
+            KeyboardNavigation::Grid(_) if next < 0 || next >= count as isize => return None,
+            KeyboardNavigation::Grid(_) => {}
+            _ => next = next.rem_euclid(count as isize),
+        }
+        if enabled[next as usize] {
+            return Some(next as usize);
+        }
+    }
+    None
 }
 
 /// Native key lifecycle normalized across OpenHarmony keyboard sources.
@@ -268,6 +399,60 @@ pub struct KeyPayload {
     pub raw_code: i32,
     pub text: String,
     pub modifiers: KeyModifiers,
+}
+
+/// Declarative native key ownership. Unclaimed keys retain platform behavior.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct KeyboardCapture(u32);
+
+impl KeyboardCapture {
+    pub fn from_names(names: &str) -> Self {
+        let mut mask = 0;
+        for name in names.split([' ', ',', '|']).filter(|name| !name.is_empty()) {
+            mask |= match name {
+                "all" => u32::MAX,
+                "enter" => 1,
+                "space" => 2,
+                "tab" => 4,
+                "escape" => 8,
+                "up" => 16,
+                "down" => 32,
+                "left" => 64,
+                "right" => 128,
+                "home" => 256,
+                "end" => 512,
+                "page_up" => 1024,
+                "page_down" => 2048,
+                _ => 0,
+            };
+        }
+        Self(mask)
+    }
+
+    pub fn captures(self, key: &KeyPayload) -> bool {
+        if self.0 == u32::MAX {
+            return true;
+        }
+        if key.modifiers.ctrl || key.modifiers.alt {
+            return false;
+        }
+        let bit = match key.key {
+            KeyboardKey::Enter => 1,
+            KeyboardKey::Space => 2,
+            KeyboardKey::Tab => 4,
+            KeyboardKey::Escape => 8,
+            KeyboardKey::ArrowUp => 16,
+            KeyboardKey::ArrowDown => 32,
+            KeyboardKey::ArrowLeft => 64,
+            KeyboardKey::ArrowRight => 128,
+            KeyboardKey::Home => 256,
+            KeyboardKey::End => 512,
+            KeyboardKey::PageUp => 1024,
+            KeyboardKey::PageDown => 2048,
+            _ => 0,
+        };
+        self.0 & bit != 0
+    }
 }
 
 impl PointerPayload {
@@ -421,15 +606,7 @@ impl From<&ArkEventData> for PointerData {
 }
 
 /// Data for a native mouse event.
-#[derive(Default, Clone, Copy, Debug, PartialEq)]
-pub struct MouseData {
-    pub button: MouseButton,
-    pub action: PointerAction,
-    pub x: f32,
-    pub y: f32,
-    pub window_x: f32,
-    pub window_y: f32,
-}
+pub type MouseData = MousePayload;
 
 impl MouseData {
     pub fn secondary_down(self) -> bool {
@@ -446,14 +623,7 @@ impl From<ArkEventData> for MouseData {
 impl From<&ArkEventData> for MouseData {
     fn from(data: &ArkEventData) -> Self {
         match data.payload {
-            ArkEventPayload::Mouse(payload) => Self {
-                button: payload.button,
-                action: payload.action,
-                x: payload.x,
-                y: payload.y,
-                window_x: payload.window_x,
-                window_y: payload.window_y,
-            },
+            ArkEventPayload::Mouse(payload) => payload,
             _ => Self::default(),
         }
     }
@@ -475,7 +645,10 @@ impl KeyData {
     }
 
     pub fn activates(&self) -> bool {
-        self.is_down() && matches!(self.key, KeyboardKey::Enter | KeyboardKey::Space)
+        self.action == KeyAction::Down
+            && !self.modifiers.ctrl
+            && !self.modifiers.alt
+            && matches!(self.key, KeyboardKey::Enter | KeyboardKey::Space)
     }
 }
 
@@ -535,6 +708,7 @@ impl From<&ArkEventData> for ChangeData {
             | ArkEventPayload::AccessibilityAction(_)
             | ArkEventPayload::Key(_)
             | ArkEventPayload::Mouse(_)
+            | ArkEventPayload::Axis(_)
             | ArkEventPayload::None => {}
         }
         out
@@ -736,6 +910,94 @@ mod tests {
             },
         )));
         assert!(!released_space.activates());
+        let repeated = KeyData {
+            key: KeyboardKey::Enter,
+            action: KeyAction::Repeat,
+            ..Default::default()
+        };
+        assert!(repeated.is_down());
+        assert!(!repeated.activates());
+        let shortcut = KeyData {
+            key: KeyboardKey::Enter,
+            action: KeyAction::Down,
+            modifiers: super::KeyModifiers {
+                ctrl: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert!(!shortcut.activates());
+    }
+
+    #[test]
+    fn native_key_capture_preserves_unclaimed_editing_and_shortcuts() {
+        let capture = super::KeyboardCapture::from_names("enter space left right escape");
+        let mut key = KeyPayload {
+            key: KeyboardKey::ArrowRight,
+            action: KeyAction::Down,
+            ..Default::default()
+        };
+        assert!(capture.captures(&key));
+        key.modifiers.ctrl = true;
+        assert!(!capture.captures(&key));
+        key.key = KeyboardKey::Character('c');
+        assert!(!capture.captures(&key));
+        assert!(super::KeyboardCapture::from_names("all").captures(&key));
+    }
+
+    #[test]
+    fn roving_navigation_skips_disabled_items_and_keeps_calendar_columns() {
+        use super::{keyboard_navigation_target as next, KeyboardNavigation};
+        let enabled = [true, false, true, true];
+        assert_eq!(
+            next(
+                0,
+                KeyboardKey::ArrowRight,
+                KeyboardNavigation::Horizontal,
+                &enabled
+            ),
+            Some(2)
+        );
+        assert_eq!(
+            next(
+                0,
+                KeyboardKey::ArrowLeft,
+                KeyboardNavigation::Horizontal,
+                &enabled
+            ),
+            Some(3)
+        );
+        let grid = [true; 42];
+        assert_eq!(
+            next(
+                8,
+                KeyboardKey::ArrowDown,
+                KeyboardNavigation::Grid(7),
+                &grid
+            ),
+            Some(15)
+        );
+        assert_eq!(
+            next(8, KeyboardKey::ArrowUp, KeyboardNavigation::Grid(7), &grid),
+            Some(1)
+        );
+        assert_eq!(
+            next(1, KeyboardKey::ArrowUp, KeyboardNavigation::Grid(7), &grid),
+            None
+        );
+        assert_eq!(
+            next(0, KeyboardKey::End, KeyboardNavigation::Vertical, &enabled),
+            Some(3)
+        );
+        assert_eq!(
+            next(
+                0,
+                KeyboardKey::ArrowRight,
+                KeyboardNavigation::Horizontal,
+                &[false; 3]
+            ),
+            None
+        );
     }
 
     #[test]

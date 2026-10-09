@@ -137,7 +137,6 @@ pub fn Input(props: InputProps) -> Element {
         password_toggle_label,
     } = props;
     let theme = use_theme();
-    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
     let mut password_visible = use_signal(|| false);
     // One-shot focus request consumed by `on_focus`: the `focused` attribute
     // only encodes `NODE_FOCUS_STATUS = 1` while this signal is true.

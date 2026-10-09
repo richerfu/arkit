@@ -27,7 +27,7 @@ pub fn Demo(slug: String) -> Element {
         .to_string();
 
     let page = match slug.as_str() {
-            "accessibility" => rsx! { accessibility::AccessibilityPage {} },
+        "accessibility" => rsx! { accessibility::AccessibilityPage {} },
         "counter" => rsx! { counter::CounterPage {} },
         "async_task" => rsx! { async_task::AsyncTaskPage {} },
         "animation" => rsx! { animation::AnimationPage {} },
@@ -67,10 +67,6 @@ pub fn Demo(slug: String) -> Element {
 /// including demos with their own nested router — has the same escape path.
 #[component]
 fn DemoFrame(title: String, children: Element) -> Element {
-    if !use_adaptive_layout().is_pc() {
-        return children;
-    }
-
     rsx! {
         column {
             width: "100%",

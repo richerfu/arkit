@@ -159,7 +159,6 @@ fn DemoRow(
     default_focus: bool,
     on_select: EventHandler<String>,
 ) -> Element {
-    let adaptive = use_adaptive_layout();
     let mut hovering = use_signal(|| false);
     let mut focused = use_signal(|| false);
     let radius = 12.0;
@@ -183,19 +182,15 @@ fn DemoRow(
             height: if standalone { 64.0 } else { 56.0 },
             padding_right: 12.0,
             padding_left: 12.0,
-            background_color: if adaptive.is_pc() && (hovering() || focused()) { ROW_HOVER_BACKGROUND } else { ROW_BACKGROUND },
+            background_color: if hovering() || focused() { ROW_HOVER_BACKGROUND } else { ROW_BACKGROUND },
             border_width: border_width,
             border_color: ROW_BORDER,
             border_style: "solid",
             border_radius: radius_value,
             clip: true,
-            focusable: adaptive.is_pc(),
-            focus_on_touch: adaptive.is_pc(),
-            default_focus: adaptive.is_pc() && default_focus,
+            default_focus,
             onhover: move |event| {
-                if adaptive.is_pc() {
-                    hovering.set(event.data().is_hovering);
-                }
+                hovering.set(event.data().is_hovering);
             },
             onfocus: move |_| focused.set(true),
             onblur: move |_| focused.set(false),

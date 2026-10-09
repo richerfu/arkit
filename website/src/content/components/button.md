@@ -27,8 +27,8 @@ Button {
 | `variant`  | `ButtonVariant`    | Default、Secondary、Outline、Ghost、Destructive、Link |
 | `size`     | `ButtonSize`       | Default 36vp、Sm 32vp、Lg 40vp、Icon 36×36vp          |
 | `disabled` | `Option<bool>`     | 禁止 native event，并降低透明度                       |
-| `width`    | `Option<String>`   | CSS 宽度（`"100%"`、`"120"`）；优先于 `full`         |
-| `full`     | `bool`             | 占满父容器可用宽度，默认 `false`                        |
+| `width`    | `Option<String>`   | CSS 宽度（`"100%"`、`"120"`）；优先于 `full`          |
+| `full`     | `bool`             | 占满父容器可用宽度，默认 `false`                      |
 | `onclick`  | `EventHandler<()>` | 点击回调                                              |
 | `children` | `Element`          | 文本、图标或自定义行                                  |
 

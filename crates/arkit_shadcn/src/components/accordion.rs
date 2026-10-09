@@ -47,7 +47,6 @@ pub fn Accordion(
     on_value_change: Option<EventHandler<Option<String>>>,
 ) -> Element {
     let theme = use_theme();
-    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
     let mut internal_value = use_signal(|| default_value.clone());
     let is_controlled = value.is_some();
     let current_value = value
@@ -106,8 +105,6 @@ pub fn Accordion(
                                 padding_top: spacing::LG,
                                 padding_bottom: spacing::LG,
                                 border_radius: md,
-                                focusable: desktop && !disabled,
-                                focus_on_touch: false,
                                 opacity: if disabled { 0.5f32 } else { 1.0f32 },
                                 onclick: move |_: dioxus_core::Event<_>| {
                                     if disabled { return; }

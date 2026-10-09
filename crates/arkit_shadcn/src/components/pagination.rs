@@ -28,7 +28,6 @@ pub struct PaginationProps {
 #[component]
 pub fn Pagination(props: PaginationProps) -> Element {
     let theme = use_theme();
-    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
     let i18n = use_component_i18n();
     let total_pages = props.total_pages.max(1);
     let current = props.page.clamp(1, total_pages);

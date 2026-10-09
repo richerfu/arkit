@@ -7,7 +7,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "libdemos.so": "file:./src/main/cpp/types/libdemos",
-    "@ohos-rs/ability": "1.0.0-beta.2",
-    "@ohos-rs/ability-plugin-webview": "1.0.0-beta.3"
+    "@ohos-rs/ability": "file:../../../../southorange/openharmony-ability/native_ability",
+    "@ohos-rs/ability-plugin-webview": "file:../../../../southorange/openharmony-ability/plugins/webview"
   }
 }

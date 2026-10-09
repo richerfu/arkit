@@ -24,18 +24,18 @@ rsx! {
 
 ## Controller API
 
-| API                     | 说明                                                        |
-| ----------------------- | ----------------------------------------------------------- |
-| `dispatch_action(s)`    | 返回 `Result<ChartCommandStatus, ChartError>`                |
-| `append_data`           | scatter/lines 增量数据；无效 index/类型返回明确错误          |
-| `clear`                 | 清空当前 instance，返回是否应用                              |
-| `get_option`            | 读取只读 `ChartSnapshot`（含 dataset/runtime selection/zoom）|
-| `get_source_option`     | 读取当前 raw input DTO                                       |
-| `get_size/width/height` | 有效绘制后的 `LogicalSizeVp`                                 |
-| `convert_to/from_pixel` | 数据与 canvas-local `LocalVpPoint` 转换                      |
-| `contain_pixel`         | 测试本地 vp 点是否在 grid/axis/series                        |
-| `hit_test`              | 查询最近一次实际绘制产生的命中缓存                           |
-| `is_bound/is_ready`     | 区分逻辑绑定和 native 首次有效绘制                           |
+| API                     | 说明                                                          |
+| ----------------------- | ------------------------------------------------------------- |
+| `dispatch_action(s)`    | 返回 `Result<ChartCommandStatus, ChartError>`                 |
+| `append_data`           | scatter/lines 增量数据；无效 index/类型返回明确错误           |
+| `clear`                 | 清空当前 instance，返回是否应用                               |
+| `get_option`            | 读取只读 `ChartSnapshot`（含 dataset/runtime selection/zoom） |
+| `get_source_option`     | 读取当前 raw input DTO                                        |
+| `get_size/width/height` | 有效绘制后的 `LogicalSizeVp`                                  |
+| `convert_to/from_pixel` | 数据与 canvas-local `LocalVpPoint` 转换                       |
+| `contain_pixel`         | 测试本地 vp 点是否在 grid/axis/series                         |
+| `hit_test`              | 查询最近一次实际绘制产生的命中缓存                            |
+| `is_bound/is_ready`     | 区分逻辑绑定和 native 首次有效绘制                            |
 
 ## Action 类型
 

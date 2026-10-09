@@ -254,7 +254,6 @@ fn next_index(index: usize, slide_count: usize, looping: bool) -> usize {
 #[component]
 pub fn Carousel(props: CarouselProps) -> Element {
     let theme = use_theme();
-    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
     let slide_count = props.slides.len();
     let initial = normalized_index(props.default_index, slide_count);
     let local_index = use_signal(move || initial);
@@ -344,8 +343,8 @@ pub fn Carousel(props: CarouselProps) -> Element {
             accessibility_value_current: (active_index + 1) as i32,
             accessibility_value_text: format!("Slide {} of {}", active_index + 1, slide_count.max(1)),
             height: props.height.max(1.0),
-            focusable: desktop && slide_count > 1,
-            focus_on_touch: false,
+            focusable: slide_count > 1,
+            focus_on_touch: true,
             onkey: move |event| {
                 if !event.data().is_down() {
                     return;
