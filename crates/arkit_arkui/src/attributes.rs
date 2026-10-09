@@ -16,7 +16,9 @@ use crate::css_value::{
     self, expand_box_shorthand, i32_or_keyword, map_font_weight_to_arkui, object_fit_value,
     parse_css_color, parse_length, parse_opacity, parse_vp, CssLength,
 };
+use crate::paint::PaintScale;
 use crate::parse_color;
+use std::{cell::Cell, rc::Rc};
 
 const ROW_ALIGN_CENTER: i32 = 1;
 const JUSTIFY_CENTER: i32 = 2;
@@ -55,11 +57,12 @@ enum EncodedAttrValue {
         shadow_type: i32,
         color: u32,
         fill: u32,
+        scale_with_density: bool,
     },
 }
 
 impl EncodedAttrValue {
-    fn to_item(&self) -> ArkUINodeAttributeItem {
+    fn to_item(&self, paint_scale: PaintScale) -> ArkUINodeAttributeItem {
         match self {
             Self::F32(v) => (*v).into(),
             Self::I32(v) => (*v).into(),
@@ -85,15 +88,23 @@ impl EncodedAttrValue {
                 shadow_type,
                 color,
                 fill,
-            } => ArkUINodeAttributeItem::NumberValue(vec![
-                ArkUINodeAttributeNumber::Float(*blur_radius),
-                ArkUINodeAttributeNumber::Int(*coloring_strategy),
-                ArkUINodeAttributeNumber::Float(*offset_x),
-                ArkUINodeAttributeNumber::Float(*offset_y),
-                ArkUINodeAttributeNumber::Int(*shadow_type),
-                ArkUINodeAttributeNumber::Uint(*color),
-                ArkUINodeAttributeNumber::Uint(*fill),
-            ]),
+                scale_with_density,
+            } => {
+                let scale = if *scale_with_density {
+                    paint_scale
+                } else {
+                    PaintScale::default()
+                };
+                ArkUINodeAttributeItem::NumberValue(vec![
+                    ArkUINodeAttributeNumber::Float(scale.physical(*blur_radius)),
+                    ArkUINodeAttributeNumber::Int(*coloring_strategy),
+                    ArkUINodeAttributeNumber::Float(scale.physical(*offset_x)),
+                    ArkUINodeAttributeNumber::Float(scale.physical(*offset_y)),
+                    ArkUINodeAttributeNumber::Int(*shadow_type),
+                    ArkUINodeAttributeNumber::Uint(*color),
+                    ArkUINodeAttributeNumber::Uint(*fill),
+                ])
+            }
         }
     }
 }
@@ -118,12 +129,12 @@ impl EncodedAttr {
         &self.name
     }
 
-    fn apply(&self, node: &mut ArkUINode, tag: &str) -> ArkUIResult<()> {
+    fn apply(&self, node: &mut ArkUINode, tag: &str, paint_scale: PaintScale) -> ArkUIResult<()> {
         if tag == "button" && is_button_text_attr(self.name()) {
             return Ok(());
         }
         let ty = self.ty;
-        let result = node.set_attribute(ty, self.value.to_item());
+        let result = node.set_attribute(ty, self.value.to_item(paint_scale));
         if let Err(error) = &result {
             ohos_hilog_binding::error(format!(
                 "arkit_arkui: failed to apply `{}` to <{tag}> ({ty:?}): {error}",
@@ -165,7 +176,7 @@ impl ScrollOffsetCommand {
                 options: self.options.clone(),
             },
         )
-        .apply(node, "scroll")
+        .apply(node, "scroll", PaintScale::default())
     }
 }
 
@@ -196,13 +207,14 @@ impl ListScrollToIndexCommand {
             ArkUINodeAttributeType::ListScrollToIndex,
             EncodedAttrValue::VecI32(vec![self.index, self.smooth, self.align]),
         )
-        .apply(node, "list")
+        .apply(node, "list", PaintScale::default())
     }
 }
 
 #[derive(Default, Clone, Debug)]
 pub(crate) struct DesiredAttrs {
     attrs: Vec<EncodedAttr>,
+    paint_scale: Rc<Cell<PaintScale>>,
     pub(crate) focus_scope: bool,
     pub(crate) focus_trap: bool,
     pub(crate) focus_navigation: Option<dioxus_elements::event::KeyboardNavigation>,
@@ -218,6 +230,10 @@ pub(crate) enum AttrMutation {
 }
 
 impl DesiredAttrs {
+    pub(crate) fn bind_paint_scale(&mut self, scale: Rc<Cell<PaintScale>>) {
+        self.paint_scale = scale;
+    }
+
     pub(crate) fn set(
         &mut self,
         tag: &str,
@@ -479,7 +495,7 @@ impl DesiredAttrs {
                 .filter(|attr| !is_composite_accessibility_attr(attr.name()))
                 .filter(|attr| !skip.contains(&attr.ty))
             {
-                let _ = attr.apply(node, tag);
+                let _ = attr.apply(node, tag, self.paint_scale.get());
             }
             self.apply_box(node, "padding", ArkUINodeAttributeType::Padding);
             self.apply_box(node, "margin", ArkUINodeAttributeType::Margin);
@@ -495,7 +511,7 @@ impl DesiredAttrs {
                 .filter(|attr| !is_composite_accessibility_attr(attr.name()))
                 .filter(|attr| !skip.contains(&attr.ty))
             {
-                let _ = attr.apply(node, tag);
+                let _ = attr.apply(node, tag, self.paint_scale.get());
             }
             return;
         }
@@ -512,10 +528,10 @@ impl DesiredAttrs {
                 deferred.push(attr);
                 continue;
             }
-            let _ = attr.apply(node, tag);
+            let _ = attr.apply(node, tag, self.paint_scale.get());
         }
         for attr in deferred {
-            let _ = attr.apply(node, tag);
+            let _ = attr.apply(node, tag, self.paint_scale.get());
         }
     }
 
@@ -540,7 +556,7 @@ impl DesiredAttrs {
                     deferred.push(attr);
                     continue;
                 }
-                let _ = attr.apply(node, tag);
+                let _ = attr.apply(node, tag, self.paint_scale.get());
             }
         }
         if wants_padding {
@@ -567,7 +583,7 @@ impl DesiredAttrs {
             self.apply_flex_option(node);
         }
         for attr in deferred {
-            let _ = attr.apply(node, tag);
+            let _ = attr.apply(node, tag, self.paint_scale.get());
         }
         if wants_accessibility_state {
             self.reconcile_accessibility_state(node);
@@ -636,11 +652,11 @@ impl DesiredAttrs {
                 if is_deferred_attr(attr.name()) {
                     deferred.push(attr);
                 } else {
-                    let _ = attr.apply(node, tag);
+                    let _ = attr.apply(node, tag, self.paint_scale.get());
                 }
             }
             for attr in deferred {
-                let _ = attr.apply(node, tag);
+                let _ = attr.apply(node, tag, self.paint_scale.get());
             }
         }
         if types.contains(&ArkUINodeAttributeType::AccessibilityState) {
@@ -1122,6 +1138,7 @@ mod tests {
                 shadow_type: 0,
                 color: 0x1A00_0000,
                 fill: 0,
+                scale_with_density: true,
             }
         );
     }
@@ -1557,7 +1574,7 @@ fn requests_attribute_reset(name: &str, value: &dioxus_core::AttributeValue) -> 
 /// ArkUI form `blur strategy x y type color fill` (commas are optional).
 fn parse_custom_shadow(
     value: &dioxus_core::AttributeValue,
-) -> Option<(f32, i32, f32, f32, i32, u32, u32)> {
+) -> Option<(f32, i32, f32, f32, i32, u32, u32, bool)> {
     let dioxus_core::AttributeValue::Text(text) = value else {
         return None;
     };
@@ -1574,6 +1591,7 @@ fn parse_custom_shadow(
             0,
             parse_color(color).ok()?,
             0,
+            true,
         )),
         [blur_radius, strategy, offset_x, offset_y, shadow_type, color, fill] => Some((
             blur_radius.parse().ok()?,
@@ -1583,6 +1601,7 @@ fn parse_custom_shadow(
             shadow_type.parse().ok()?,
             parse_color(color).ok()?,
             fill.parse().ok()?,
+            false,
         )),
         _ => None,
     }
@@ -1933,8 +1952,16 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
             )
         }
         "custom_shadow" => {
-            let (blur_radius, coloring_strategy, offset_x, offset_y, shadow_type, color, fill) =
-                parse_custom_shadow(value)?;
+            let (
+                blur_radius,
+                coloring_strategy,
+                offset_x,
+                offset_y,
+                shadow_type,
+                color,
+                fill,
+                scale_with_density,
+            ) = parse_custom_shadow(value)?;
             EncodedAttr::new(
                 name,
                 ArkUINodeAttributeType::CustomShadow,
@@ -1946,6 +1973,7 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
                     shadow_type,
                     color,
                     fill,
+                    scale_with_density,
                 },
             )
         }

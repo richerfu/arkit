@@ -179,10 +179,12 @@ fn log_window_metrics(metrics: WindowMetrics) {
 struct RuntimeCore {
     dom: VirtualDom,
     renderer: ArkUIRenderer,
+    paint_scale: Rc<std::cell::Cell<f32>>,
 }
 
 impl RuntimeCore {
     fn render_immediate(&mut self, scope: &str) {
+        self.renderer.set_paint_scale(self.paint_scale.get());
         self.dom.render_immediate(&mut self.renderer);
         self.renderer.finish_mutation_batch();
         if let Some(fault) = self.renderer.take_fault() {
@@ -206,6 +208,8 @@ impl RuntimeCore {
         // phase-isolated native event boundary.
         let sink = Rc::new(RuntimeEventSink::new(runtime_handle.clone()));
         renderer.set_sink(sink.clone());
+        let paint_scale = runtime_handle.paint_scale_context();
+        renderer.set_paint_scale(paint_scale.get());
 
         dom.provide_root_context(runtime_handle.clone());
         // Liveness for hook-owned native integrations. The root renderer owns
@@ -218,7 +222,15 @@ impl RuntimeCore {
         dom.rebuild(&mut renderer);
         renderer.finish_mutation_batch();
 
-        (Self { dom, renderer }, sink, liveness)
+        (
+            Self {
+                dom,
+                renderer,
+                paint_scale,
+            },
+            sink,
+            liveness,
+        )
     }
 
     /// Arm the one-shot appear replay for `inner`.
@@ -855,6 +867,9 @@ impl ArkRuntime {
                         }
                         if refresh_window_metrics {
                             let next = WindowMetrics::from_app(&metrics_app, keyboard_height_px);
+                            if let Some(handle) = loop_runtime.upgrade() {
+                                RuntimeHandle::from_inner(handle).update_paint_scale(next.scale);
+                            }
                             if let Some(metrics) = loop_metrics.upgrade() {
                                 if WindowMetricsHandle::from_inner(metrics).update(next) {
                                     inner.borrow_mut().core.dom.mark_all_dirty();

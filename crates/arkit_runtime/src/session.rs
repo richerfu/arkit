@@ -27,6 +27,7 @@ impl RuntimeId {
 
 pub(crate) struct RuntimeSessionState {
     id: RuntimeId,
+    paint_scale: Rc<Cell<f32>>,
     next_registration: Cell<u64>,
     active: Cell<bool>,
     ui_waker: RefCell<Option<Rc<dyn Fn()>>>,
@@ -78,6 +79,7 @@ impl RuntimeHandle {
     ) -> Self {
         let state = RuntimeSessionState {
             id,
+            paint_scale: Rc::new(Cell::new(crate::window::normalized_scale(app.scale()))),
             next_registration: Cell::new(0),
             active: Cell::new(true),
             ui_waker: RefCell::new(None),
@@ -103,6 +105,16 @@ impl RuntimeHandle {
 
     pub fn id(&self) -> RuntimeId {
         self.state.id
+    }
+
+    pub(crate) fn paint_scale_context(&self) -> Rc<Cell<f32>> {
+        self.state.paint_scale.clone()
+    }
+
+    pub(crate) fn update_paint_scale(&self, scale: f32) {
+        self.state
+            .paint_scale
+            .set(crate::window::normalized_scale(scale));
     }
 
     /// Weak reference for process-lifetime closures (UI loop, back-press

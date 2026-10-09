@@ -61,7 +61,7 @@
 //! ownership rather than a simplification, so the ordering is recorded here
 //! instead.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::ffi::c_void;
 use std::rc::Rc;
 
@@ -93,8 +93,10 @@ mod element_ref;
 mod focus;
 mod focus_model;
 mod geometry;
+mod paint;
 use focus::{FocusRegistry, FocusScope, FocusTarget};
 use focus_model::FocusId;
+use paint::PaintScale;
 mod native;
 pub use element_ref::{
     AnimatedAttributeClaimError, AnimatedAttributeGuard, AnimatedAttributeOwner, LayoutFramePx,
@@ -396,6 +398,7 @@ pub struct ArkUIRenderer {
     animation_restore_handler: SharedAnimationRestoreHandler,
     focus: Rc<RefCell<FocusRegistry>>,
     next_focus_id: std::cell::Cell<usize>,
+    paint_scale: Rc<Cell<PaintScale>>,
 }
 
 #[derive(Default)]
@@ -588,8 +591,13 @@ impl ArkUIRenderer {
     }
 
     fn from_root(root: Rc<RefCell<ArkUINode>>, root_mount: RendererRootMount) -> Self {
+        let paint_scale = Rc::new(Cell::new(PaintScale::default()));
         let mut hosts = HostTree::new(NativeHostState::default());
         let root_host = hosts.root();
+        hosts[root_host]
+            .desired_attrs
+            .borrow_mut()
+            .bind_paint_scale(paint_scale.clone());
         hosts[root_host].native = Some(root);
         hosts[root_host].native_attached = true;
 
@@ -606,6 +614,34 @@ impl ArkUIRenderer {
             animation_restore_handler: Rc::new(RefCell::new(None)),
             focus: Rc::new(RefCell::new(FocusRegistry::default())),
             next_focus_id: std::cell::Cell::new(0),
+            paint_scale,
+        }
+    }
+
+    /// Set the current physical-pixel density for CSS-like custom shadows.
+    /// Native platform presets and the explicit seven-value ArkUI form keep
+    /// their native unit contract. Existing logical shadows repaint on change.
+    pub fn set_paint_scale(&mut self, scale: f32) {
+        let scale = PaintScale::new(scale);
+        if scale == self.paint_scale.get() {
+            return;
+        }
+        self.paint_scale.set(scale);
+        if !self.inert {
+            self.replay_shadow_subtree(self.hosts.root());
+        }
+    }
+
+    fn replay_shadow_subtree(&self, host: HostId) {
+        if let Some(native) = self.hosts[host].native.as_ref() {
+            self.hosts[host].desired_attrs.borrow().apply_named(
+                &mut native.borrow_mut(),
+                self.hosts[host].tag(),
+                &["custom_shadow"],
+            );
+        }
+        for &child in &self.hosts[host].children {
+            self.replay_shadow_subtree(child);
         }
     }
 
@@ -658,7 +694,12 @@ impl ArkUIRenderer {
     // -- host arena helpers ------------------------------------------------
 
     fn alloc_host(&mut self, kind: HostKind) -> HostId {
-        self.hosts.alloc(kind)
+        let host = self.hosts.alloc(kind);
+        self.hosts[host]
+            .desired_attrs
+            .borrow_mut()
+            .bind_paint_scale(self.paint_scale.clone());
+        host
     }
 
     /// Detach pushed hosts from any existing parent before inserting them at a
