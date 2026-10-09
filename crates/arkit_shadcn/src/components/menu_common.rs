@@ -10,6 +10,7 @@
 //! panel, matching the legacy interaction contract without making callers track
 //! submenu state.
 
+use super::popup_shadow::{PopupShadow, PopupShadowKind};
 use crate::theme::*;
 use arkit_prelude::*;
 
@@ -559,46 +560,51 @@ fn MenuContentPanel(
     };
 
     rsx! {
-        column {
-            accessibility_role: "menu",
-            focus_scope: true,
-            focus_navigation: "vertical",
-            key_capture: "escape",
+        PopupShadow {
             width: style.width,
-            align_self: "start",
-            align_items: "start",
-            onkey: move |event| {
-                if event.data().action == dioxus_elements::event::KeyAction::Down
-                    && event.data().key == dioxus_elements::event::KeyboardKey::Escape
-                {
-                    event.stop_propagation();
-                    on_dismiss.call(());
-                } else if event.data().is_down() && matches!(event.data().key, dioxus_elements::event::KeyboardKey::ArrowLeft | dioxus_elements::event::KeyboardKey::ArrowRight) {
-                    if let Some(navigation) = navigation { event.stop_propagation(); navigation.on_key.call(event.data().key); }
+            radius: theme.radii.md,
+            background: colors.popover,
+            kind: PopupShadowKind::Md,
+            column {
+                accessibility_role: "menu",
+                focus_scope: true,
+                focus_navigation: "vertical",
+                key_capture: "escape",
+                width: style.width,
+                align_self: "start",
+                align_items: "start",
+                onkey: move |event| {
+                    if event.data().action == dioxus_elements::event::KeyAction::Down
+                        && event.data().key == dioxus_elements::event::KeyboardKey::Escape
+                    {
+                        event.stop_propagation();
+                        on_dismiss.call(());
+                    } else if event.data().is_down() && matches!(event.data().key, dioxus_elements::event::KeyboardKey::ArrowLeft | dioxus_elements::event::KeyboardKey::ArrowRight) {
+                        if let Some(navigation) = navigation { event.stop_propagation(); navigation.on_key.call(event.data().key); }
+                    }
+                },
+                padding_top: spacing::XXS,
+                padding_right: spacing::XXS,
+                padding_bottom: spacing::XXS,
+                padding_left: spacing::XXS,
+                border_radius: theme.radii.md,
+                border_width: 1.0,
+                border_color: colors.border,
+                clip: false,
+                background_color: colors.popover,
+                super::panel_viewport::PanelViewport {
+                    max_height,
+                for (index, entry) in entries.iter().enumerate() {
+                    {
+                        render_menu_entry(
+                            entry,
+                            index,
+                            &[],
+                            render_context,
+                        )
+                    }
                 }
-            },
-            padding_top: spacing::XXS,
-            padding_right: spacing::XXS,
-            padding_bottom: spacing::XXS,
-            padding_left: spacing::XXS,
-            border_radius: theme.radii.md,
-            border_width: 1.0,
-            border_color: colors.border,
-            clip: false,
-            background_color: colors.popover,
-            shadow: shadow::MD,
-            super::panel_viewport::PanelViewport {
-                max_height,
-            for (index, entry) in entries.iter().enumerate() {
-                {
-                    render_menu_entry(
-                        entry,
-                        index,
-                        &[],
-                        render_context,
-                    )
                 }
-            }
             }
         }
     }
@@ -946,6 +952,11 @@ fn render_submenu_entry(
             }
             ExpandPresence {
                 open: submenu_open,
+                PopupShadow {
+                    width: submenu_min_width.max(min_width),
+                    radius: theme.radii.md,
+                    background: colors.popover,
+                    kind: PopupShadowKind::Lg,
                     column {
                         focus_scope: submenu_open,
                         focus_navigation: "vertical",
@@ -971,7 +982,6 @@ fn render_submenu_entry(
                         border_color: colors.border,
                         clip: false,
                         background_color: colors.popover,
-                        shadow: shadow::LG,
                         for (child_index, child) in entry.items.iter().enumerate() {
                             {
                                 render_menu_entry(
@@ -986,6 +996,7 @@ fn render_submenu_entry(
                             }
                         }
                     }
+                }
             }
         }
     }

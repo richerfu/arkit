@@ -13,6 +13,7 @@ use super::floating_layer::{
     FLOATING_CAPTURE_COLOR,
 };
 use super::motion::{OverlayPresence, FLOATING_ENTER_MS, FLOATING_EXIT_MS};
+use super::popup_shadow::{PopupShadow, PopupShadowKind};
 use crate::theme::*;
 use arkit_prelude::*;
 use dioxus_core_macro::component;
@@ -151,27 +152,33 @@ fn popover_overlay_content(
             background_color: FLOATING_CAPTURE_COLOR,
             hit_test_behavior: "default",
             onclick: move |_| on_dismiss.call(()),
-            column {
-                accessibility_role: "group",
-                focus_scope: true,
-                key_capture: "escape",
-                onkey: move |event| {
-                    if event.data().is_down() && event.data().key == dioxus_elements::event::KeyboardKey::Escape {
-                        event.stop_propagation();
-                        on_dismiss.call(());
-                    }
-                },
-                position: format!("{left},{top}"),
+            PopupShadow {
+                position: Some(format!("{left},{top}")),
                 width: panel_width,
-                onclick: move |evt| evt.stop_propagation(),
-                align_items: "start",
-                padding: panel_padding,
-                border_radius: theme.radii.md,
-                border_width: 1.0,
-                border_color: theme.colors.border,
-                background_color: theme.colors.popover,
-                shadow: shadow::MD,
-                super::panel_viewport::PanelViewport { max_height, {children} }
+                radius: theme.radii.md,
+                background: theme.colors.popover,
+                kind: PopupShadowKind::Md,
+                column {
+                    accessibility_role: "group",
+                    focus_scope: true,
+                    key_capture: "escape",
+                    onkey: move |event| {
+                        if event.data().is_down() && event.data().key == dioxus_elements::event::KeyboardKey::Escape {
+                            event.stop_propagation();
+                            on_dismiss.call(());
+                        }
+                    },
+                    width: panel_width,
+                    onclick: move |evt| evt.stop_propagation(),
+                    align_items: "start",
+                    padding: panel_padding,
+                    border_radius: theme.radii.md,
+                    border_width: 1.0,
+                    border_color: theme.colors.border,
+                    background_color: theme.colors.popover,
+                    clip: false,
+                    super::panel_viewport::PanelViewport { max_height, {children} }
+                }
             }
         }
     }

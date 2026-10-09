@@ -12,6 +12,7 @@ use super::floating_layer::{
     trigger_frame_for_anchor, FloatingAlign, FloatingPanelPlacement, FloatingSide,
 };
 use super::motion::{OverlayPresence, FLOATING_ENTER_MS, FLOATING_EXIT_MS};
+use super::popup_shadow::{PopupShadow, PopupShadowKind};
 use crate::theme::*;
 use arkit_prelude::*;
 use dioxus_core_macro::component;
@@ -154,28 +155,34 @@ fn hover_card_overlay_content(
             background_color: if pinned { super::floating_layer::FLOATING_CAPTURE_COLOR } else { 0x00000000 },
             hit_test_behavior: if pinned { "default" } else { "none" },
             onclick: move |_| { if pinned { outside.dismiss(); } },
-            column {
-                accessibility_role: "group",
-                focus_scope: pinned,
-                key_capture: "escape",
-                onhover: move |event| panel_hover.panel_hover(event.data().is_hovering),
-                onfocusin: move |_| panel_focus.panel_focus(true),
-                onfocusout: move |_| panel_blur.panel_focus(false),
-                onkey: move |event| {
-                    if event.data().is_down() && event.data().key == dioxus_elements::event::KeyboardKey::Escape { event.stop_propagation(); panel_key.dismiss(); }
-                },
-                onclick: move |event| event.stop_propagation(),
-                position: format!("{left},{top}"),
+            PopupShadow {
+                position: Some(format!("{left},{top}")),
                 width: panel_width,
-                align_items: "start",
-                hit_test_behavior: "default",
-                padding: spacing::LG,
-                border_radius: theme.radii.md,
-                border_width: 1.0,
-                border_color: theme.colors.border,
-                background_color: theme.colors.popover,
-                shadow: shadow::MD,
-                super::panel_viewport::PanelViewport { max_height, {children} }
+                radius: theme.radii.md,
+                background: theme.colors.popover,
+                kind: PopupShadowKind::Md,
+                column {
+                    accessibility_role: "group",
+                    focus_scope: pinned,
+                    key_capture: "escape",
+                    onhover: move |event| panel_hover.panel_hover(event.data().is_hovering),
+                    onfocusin: move |_| panel_focus.panel_focus(true),
+                    onfocusout: move |_| panel_blur.panel_focus(false),
+                    onkey: move |event| {
+                        if event.data().is_down() && event.data().key == dioxus_elements::event::KeyboardKey::Escape { event.stop_propagation(); panel_key.dismiss(); }
+                    },
+                    onclick: move |event| event.stop_propagation(),
+                    width: panel_width,
+                    align_items: "start",
+                    hit_test_behavior: "default",
+                    padding: spacing::LG,
+                    border_radius: theme.radii.md,
+                    border_width: 1.0,
+                    border_color: theme.colors.border,
+                    background_color: theme.colors.popover,
+                    clip: false,
+                    super::panel_viewport::PanelViewport { max_height, {children} }
+                }
             }
         }
     }

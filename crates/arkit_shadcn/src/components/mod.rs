@@ -61,6 +61,7 @@ mod navigation_menu;
 mod pagination;
 mod panel_viewport;
 mod popover;
+mod popup_shadow;
 mod progress;
 mod radio_group;
 mod refresh;
