@@ -102,7 +102,8 @@ pub fn Checkbox(props: CheckboxProps) -> Element {
                 border_style: ARKUI_BORDER_STYLE_SOLID,
                 border_color: checked_color,
                 background_color: if current { checked_color } else { theme.colors.background },
-                clip: true,
+                shadow: shadow::XS,
+                clip: false,
                 if current {
                     {arkit_icon::icon(
                         "check",

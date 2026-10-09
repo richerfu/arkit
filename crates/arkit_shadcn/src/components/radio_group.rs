@@ -25,7 +25,8 @@ fn radio_indicator(checked: bool, theme: &Theme) -> Element {
             border_style: ARKUI_BORDER_STYLE_SOLID,
             border_color: theme.colors.primary,
             background_color: theme.colors.background,
-            clip: true,
+            shadow: shadow::XS,
+            clip: false,
             if checked {
                 row {
                     width: RADIO_DOT_SIZE,

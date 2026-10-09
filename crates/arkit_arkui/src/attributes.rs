@@ -40,9 +40,22 @@ enum EncodedAttrValue {
     String(String),
     VecF32(Vec<f32>),
     VecI32(Vec<i32>),
-    ScrollOffset { x: f32, y: f32, options: Vec<i32> },
+    ScrollOffset {
+        x: f32,
+        y: f32,
+        options: Vec<i32>,
+    },
     FlexOptionPart(usize, i32),
     Shadow(i32),
+    CustomShadow {
+        blur_radius: f32,
+        coloring_strategy: i32,
+        offset_x: f32,
+        offset_y: f32,
+        shadow_type: i32,
+        color: u32,
+        fill: u32,
+    },
 }
 
 impl EncodedAttrValue {
@@ -64,6 +77,23 @@ impl EncodedAttrValue {
             }
             Self::FlexOptionPart(index, value) => flex_option_with(*index, *value).into(),
             Self::Shadow(v) => vec![*v].into(),
+            Self::CustomShadow {
+                blur_radius,
+                coloring_strategy,
+                offset_x,
+                offset_y,
+                shadow_type,
+                color,
+                fill,
+            } => ArkUINodeAttributeItem::NumberValue(vec![
+                ArkUINodeAttributeNumber::Float(*blur_radius),
+                ArkUINodeAttributeNumber::Int(*coloring_strategy),
+                ArkUINodeAttributeNumber::Float(*offset_x),
+                ArkUINodeAttributeNumber::Float(*offset_y),
+                ArkUINodeAttributeNumber::Int(*shadow_type),
+                ArkUINodeAttributeNumber::Uint(*color),
+                ArkUINodeAttributeNumber::Uint(*fill),
+            ]),
         }
     }
 }
@@ -231,7 +261,9 @@ impl DesiredAttrs {
             }
             _ => {}
         }
-        if matches!(value, dioxus_core::AttributeValue::None) {
+        if matches!(value, dioxus_core::AttributeValue::None)
+            || requests_attribute_reset(name, value)
+        {
             return self
                 .attrs
                 .iter()
@@ -1067,11 +1099,61 @@ mod tests {
         assert_eq!(op.value, EncodedAttrValue::F32(0.5));
         assert!(
             encode_attr("column", "shadow", &AttributeValue::Text("none".into())).is_none(),
-            "shadow none is no-op"
+            "shadow none is handled as an explicit reset by DesiredAttrs"
         );
         let sh =
             encode_attr("column", "shadow", &AttributeValue::Text("sm".into())).expect("shadow sm");
         assert_eq!(sh.value, EncodedAttrValue::Shadow(1));
+
+        let custom = encode_attr(
+            "column",
+            "custom_shadow",
+            &AttributeValue::Text("0 4 12 #1A000000".into()),
+        )
+        .expect("custom shadow");
+        assert_eq!(custom.ty, ArkUINodeAttributeType::CustomShadow);
+        assert_eq!(
+            custom.value,
+            EncodedAttrValue::CustomShadow {
+                blur_radius: 12.0,
+                coloring_strategy: 0,
+                offset_x: 0.0,
+                offset_y: 4.0,
+                shadow_type: 0,
+                color: 0x1A00_0000,
+                fill: 0,
+            }
+        );
+    }
+
+    #[test]
+    fn none_removes_existing_shadow_attributes() {
+        let mut attrs = DesiredAttrs::default();
+        assert!(matches!(
+            attrs.set("column", "shadow", &AttributeValue::Text("sm".into())),
+            AttrMutation::Set
+        ));
+        assert!(matches!(
+            attrs.set("column", "shadow", &AttributeValue::Text("none".into())),
+            AttrMutation::Removed(ArkUINodeAttributeType::Shadow)
+        ));
+
+        assert!(matches!(
+            attrs.set(
+                "column",
+                "custom_shadow",
+                &AttributeValue::Text("0 4 12 #1A000000".into()),
+            ),
+            AttrMutation::Set
+        ));
+        assert!(matches!(
+            attrs.set(
+                "column",
+                "custom_shadow",
+                &AttributeValue::Text("none".into()),
+            ),
+            AttrMutation::Removed(ArkUINodeAttributeType::CustomShadow)
+        ));
     }
 
     #[test]
@@ -1441,6 +1523,7 @@ fn attr_group(name: &str) -> AttrGroup {
         | "corner_radius"
         | "border_style"
         | "shadow"
+        | "custom_shadow"
         | "opacity"
         | "clip"
         | "visibility"
@@ -1456,6 +1539,52 @@ fn attr_group(name: &str) -> AttrGroup {
         | "toggle_unselected_color"
         | "toggle_switch_point_color" => AttrGroup::Visual,
         _ => AttrGroup::Layout,
+    }
+}
+
+fn requests_attribute_reset(name: &str, value: &dioxus_core::AttributeValue) -> bool {
+    let dioxus_core::AttributeValue::Text(text) = value else {
+        return false;
+    };
+    match name {
+        "shadow" => css_value::shadow_keyword(text).is_some_and(|value| value < 0),
+        "custom_shadow" => text.trim().eq_ignore_ascii_case("none"),
+        _ => false,
+    }
+}
+
+/// Parses either the CSS-like public form `x y blur color` or the complete
+/// ArkUI form `blur strategy x y type color fill` (commas are optional).
+fn parse_custom_shadow(
+    value: &dioxus_core::AttributeValue,
+) -> Option<(f32, i32, f32, f32, i32, u32, u32)> {
+    let dioxus_core::AttributeValue::Text(text) = value else {
+        return None;
+    };
+    let parts: Vec<_> = text
+        .split(|ch: char| ch == ',' || ch.is_ascii_whitespace())
+        .filter(|part| !part.is_empty())
+        .collect();
+    match parts.as_slice() {
+        [offset_x, offset_y, blur_radius, color] => Some((
+            blur_radius.parse().ok()?,
+            0,
+            offset_x.parse().ok()?,
+            offset_y.parse().ok()?,
+            0,
+            parse_color(color).ok()?,
+            0,
+        )),
+        [blur_radius, strategy, offset_x, offset_y, shadow_type, color, fill] => Some((
+            blur_radius.parse().ok()?,
+            strategy.parse().ok()?,
+            offset_x.parse().ok()?,
+            offset_y.parse().ok()?,
+            shadow_type.parse().ok()?,
+            parse_color(color).ok()?,
+            fill.parse().ok()?,
+        )),
+        _ => None,
     }
 }
 
@@ -1801,6 +1930,23 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
                 name,
                 ArkUINodeAttributeType::Shadow,
                 EncodedAttrValue::Shadow(v),
+            )
+        }
+        "custom_shadow" => {
+            let (blur_radius, coloring_strategy, offset_x, offset_y, shadow_type, color, fill) =
+                parse_custom_shadow(value)?;
+            EncodedAttr::new(
+                name,
+                ArkUINodeAttributeType::CustomShadow,
+                EncodedAttrValue::CustomShadow {
+                    blur_radius,
+                    coloring_strategy,
+                    offset_x,
+                    offset_y,
+                    shadow_type,
+                    color,
+                    fill,
+                },
             )
         }
         "enabled" => EncodedAttr::new(

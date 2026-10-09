@@ -63,7 +63,7 @@ pub fn AlertDialog(
                 border_width: 1.0,
                 border_color: theme.colors.border,
                 background_color: theme.colors.background,
-                shadow: "sm",
+                shadow: shadow::LG,
                 column {
                     width: "100%",
                     text {

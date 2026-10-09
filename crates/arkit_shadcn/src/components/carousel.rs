@@ -92,7 +92,7 @@ impl Default for CarouselStyle {
             viewport_border_color: None,
             viewport_border_width: 0.0,
             viewport_radius: None,
-            viewport_shadow: true,
+            viewport_shadow: false,
             controls_background: None,
             controls_height: control::HEIGHT_LG,
             controls_gap: spacing::SM,
@@ -335,6 +335,10 @@ pub fn Carousel(props: CarouselProps) -> Element {
     let viewport = rsx! {
         stack {
             width: "100%",
+            background_color: style.viewport_background,
+            border_radius: style.viewport_radius,
+            shadow: if style.viewport_shadow { shadow::SM } else { "none" },
+            clip: false,
             accessibility_role: "swiper",
             accessibility_text: if let Some(label) = props.accessibility_label.clone() { label },
             accessibility_group: true,
@@ -380,7 +384,6 @@ pub fn Carousel(props: CarouselProps) -> Element {
                 border_width: style.viewport_border_width,
                 border_color: style.viewport_border_color,
                 border_radius: style.viewport_radius,
-                shadow: if style.viewport_shadow { "sm" },
                 clip: true,
                 onswiperchange: move |event| {
                     let index = usize::try_from(event.data().index).unwrap_or_default();

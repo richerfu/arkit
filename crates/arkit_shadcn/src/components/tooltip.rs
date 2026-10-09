@@ -168,14 +168,12 @@ fn tooltip_overlay_content(
                 padding_bottom: 4.0,
                 padding_left: 10.0,
                 border_radius: theme.radii.md,
-                border_width: 1.0,
-                border_color: theme.colors.border,
-                background_color: theme.colors.popover,
-                shadow: super::floating_layer::SHADOW_SM,
+                border_width: 0.0,
+                background_color: theme.colors.foreground,
                 text {
                     content: content,
                     font_size: typography::XS,
-                    font_color: theme.colors.popover_foreground,
+                    font_color: theme.colors.background,
                     line_height: 16.0,
                     max_lines: 1,
                 }

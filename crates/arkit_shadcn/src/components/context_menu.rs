@@ -4,7 +4,7 @@
 //! native ArkUI long-press recognizer; ordinary taps remain available to its
 //! child content. The menu panel renders through a root-projected portal.
 
-use crate::components::floating_layer::trigger_frame_for_anchor;
+use crate::components::floating_layer::{trigger_frame_for_anchor, FloatingAlign};
 use crate::components::menu_common::{
     menu_closed_panel_height, menu_overlay_content, MenuEntry, MenuOverlayPlacement, MenuStyle,
 };
@@ -76,6 +76,7 @@ pub fn ContextMenu(
             viewport,
             style.width,
             panel_height,
+            FloatingAlign::Start,
             style.side_offset_vp,
         )
     });
@@ -128,6 +129,7 @@ pub fn ContextMenu(
                         viewport,
                         style.width,
                         panel_height,
+                        FloatingAlign::Start,
                         style.side_offset_vp,
                     )
                 });
@@ -173,6 +175,7 @@ pub fn ContextMenu(
                             viewport,
                             style.width,
                             panel_height,
+                            FloatingAlign::Start,
                             style.side_offset_vp,
                         )
                     });

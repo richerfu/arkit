@@ -89,6 +89,7 @@ pub fn TabsTrigger(props: TabsTriggerProps) -> Element {
             border_color: TRANSPARENT,
             background_color: background,
             focus_on_touch: true,
+            shadow: if props.active { shadow::SM } else { "none" },
             onclick: move |_| on_press.call(()),
             onkey: move |event| {
                 if event.data().activates() {

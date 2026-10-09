@@ -188,6 +188,7 @@ pub fn Input(props: InputProps) -> Element {
             border_width: 1.0,
             border_color: if invalid { theme.colors.destructive } else { theme.colors.input },
             border_radius: theme.radii.md,
+            shadow: shadow::XS,
             background_color: theme.colors.background,
             opacity: if disabled { 0.5 } else { 1.0 },
             enabled: !disabled,
