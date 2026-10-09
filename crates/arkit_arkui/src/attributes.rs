@@ -2467,6 +2467,12 @@ impl DesiredAttrs {
     pub(crate) fn apply_control_roles(&self, node: &mut ArkUINode, tag: &str) {
         if tag == "button" {
             let _ = node.set_attribute(ArkUINodeAttributeType::Focusable, true.into());
+            // Container projections are focus scopes by default. Make the
+            // semantic button itself a keyboard stop, respecting opt-outs.
+            let _ = node.set_attribute(
+                ArkUINodeAttributeType::TabStop,
+                self.bool_value("tab_stop").unwrap_or(true).into(),
+            );
             let _ = node.set_attribute(ArkUINodeAttributeType::FocusOnTouch, true.into());
             let _ = node.set_attribute(
                 ArkUINodeAttributeType::AccessibilityRole,

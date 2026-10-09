@@ -130,7 +130,7 @@ pub fn kind_from_tag(tag: &str) -> Option<NodeKind> {
 /// Unknown tags fall back to a `Stack` container (matching the renderer's
 /// placeholder behavior) and emit a warning.
 pub fn create_node_by_tag(tag: &str) -> ArkUIResult<ArkUINode> {
-    match kind_from_tag(tag) {
+    match projection_kind_from_tag(tag) {
         Some(kind) => create_node(kind),
         None => {
             ohos_hilog_binding::warn(format!(
@@ -139,6 +139,18 @@ pub fn create_node_by_tag(tag: &str) -> ArkUIResult<ArkUINode> {
             Stack::new().map(Into::into)
         }
     }
+}
+
+/// Native Button's layout overwrites the common border-radius attribute from
+/// its private button layout property. A semantic Dioxus button therefore owns
+/// its visual surface in a Stack. The renderer supplies the content Row,
+/// explicit button accessibility role, focus policy, and Enter/Space routing.
+/// Advanced `create_node(NodeKind::Button)` still constructs a native Button.
+fn projection_kind_from_tag(tag: &str) -> Option<NodeKind> {
+    kind_from_tag(tag).map(|kind| match kind {
+        NodeKind::Button => NodeKind::Stack,
+        kind => kind,
+    })
 }
 
 /// Resolve a tag string to its canonical static form for storage.
@@ -201,7 +213,18 @@ pub fn parse_color(s: &str) -> Result<u32, ()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{canonical_tag, kind_from_tag, NodeKind};
+    use super::{canonical_tag, kind_from_tag, projection_kind_from_tag, NodeKind};
+
+    #[test]
+    fn semantic_buttons_keep_common_corner_geometry_without_native_skin() {
+        assert_eq!(kind_from_tag("button"), Some(NodeKind::Button));
+        assert_eq!(projection_kind_from_tag("button"), Some(NodeKind::Stack));
+        assert_eq!(projection_kind_from_tag("row"), Some(NodeKind::Row));
+        assert_eq!(
+            projection_kind_from_tag("textinput"),
+            Some(NodeKind::TextInput)
+        );
+    }
 
     #[test]
     fn loading_progress_tag_maps_to_native_kind() {
