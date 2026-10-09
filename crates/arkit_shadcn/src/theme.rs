@@ -511,14 +511,14 @@ pub mod typography {
 
 /// Elevation tokens used by the New York component recipes.
 ///
-/// Generic tiers map to ArkUI's platform shadow presets. Sonner is the one
-/// intentional custom value: its upstream stylesheet specifies exactly
-/// `0 4px 12px rgba(0, 0, 0, 0.1)`.
+/// Logical CSS-like primary layers; the renderer handles paint density.
+/// Popup surfaces render both layers and spread from the md/lg recipes.
+/// Sonner's stylesheet specifies `0 4px 12px rgba(0, 0, 0, 0.1)`.
 pub mod shadow {
-    pub const XS: &str = "xs";
-    pub const SM: &str = "sm";
-    pub const MD: &str = "md";
-    pub const LG: &str = "lg";
+    pub const XS: &str = "0 1 2 #0D000000";
+    pub const SM: &str = "0 1 3 #1A000000";
+    pub const MD: &str = "0 4 6 #1A000000";
+    pub const LG: &str = "0 10 15 #1A000000";
     pub const SONNER: &str = "0 4 12 #1A000000";
 }
 

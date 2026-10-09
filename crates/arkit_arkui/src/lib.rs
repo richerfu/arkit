@@ -637,7 +637,7 @@ impl ArkUIRenderer {
             self.hosts[host].desired_attrs.borrow().apply_named(
                 &mut native.borrow_mut(),
                 self.hosts[host].tag(),
-                &["custom_shadow"],
+                &["custom_shadow", "shadow"],
             );
         }
         for &child in &self.hosts[host].children {

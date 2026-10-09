@@ -1940,6 +1940,32 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
             EncodedAttrValue::I32(i32_or_keyword(value, css_value::border_style_keyword)?),
         ),
         "shadow" => {
+            if let Some((
+                blur_radius,
+                coloring_strategy,
+                offset_x,
+                offset_y,
+                shadow_type,
+                color,
+                fill,
+                scale_with_density,
+            )) = parse_custom_shadow(value)
+            {
+                return Some(EncodedAttr::new(
+                    name,
+                    ArkUINodeAttributeType::CustomShadow,
+                    EncodedAttrValue::CustomShadow {
+                        blur_radius,
+                        coloring_strategy,
+                        offset_x,
+                        offset_y,
+                        shadow_type,
+                        color,
+                        fill,
+                        scale_with_density,
+                    },
+                ));
+            }
             let v = i32_or_keyword(value, css_value::shadow_keyword)?;
             if v < 0 {
                 // "none" — treat as no-op encode so callers can pass the keyword
