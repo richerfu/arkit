@@ -13,7 +13,6 @@ description: "多行文本输入，适合备注和较长说明。"
 Textarea {
     placeholder: Some("备注".into()),
     value: Some(notes()),
-    width: "100%",
     on_change: move |v| notes.set(v),
 }
 ```
@@ -25,7 +24,8 @@ Textarea {
 | `placeholder` | `Option<String>`               | `None`  | 占位文案                        |
 | `value`       | `Option<String>`               | `None`  | 受控值                          |
 | `height`      | `Option<f32>`                  | `64`    | 固定高度 vp                     |
-| `width`       | `Option<String>`               | `None`  | CSS 宽度（`"100%"` 表示占满）   |
+| `width`       | `Option<String>`               | `None`  | 显式 CSS 宽度，优先于 `full`    |
+| `full`        | `bool`                         | `true`  | 默认占满父容器可用宽度          |
 | `invalid`     | `bool`                         | `false` | 校验失败时使用 destructive 边框 |
 | `disabled`    | `bool`                         | `false` | 禁止编辑，保留尺寸              |
 | `on_change`   | `Option<EventHandler<String>>` | `None`  | 文本变更                        |

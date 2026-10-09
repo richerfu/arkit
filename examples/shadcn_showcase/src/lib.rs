@@ -14,23 +14,25 @@ use arkit::shadcn::components::{
     use_anchor, Accordion, AccordionItemSpec, Alert, AlertDescription, AlertDialog,
     AlertDialogAction, AlertList, AlertTitle, AlertVariant, Anchor, AnchorItem, AnchorSection,
     AspectRatio, Avatar, AvatarFallback, Badge, BadgeVariant, BottomNavigation,
-    BottomNavigationItem, BottomSheet, BottomSheetTextInput, Button, ButtonSize, ButtonVariant,
-    Calendar, CalendarDayContext, CalendarDayDecoration, CalendarDayEvent, CalendarDayEventKind,
-    CalendarDayEventResponse, CalendarDayStyle, CalendarPlugin, CalendarPluginLayout,
-    CalendarYearRange, Card, CardContent, CardFooter, CardHeader, Carousel,
+    BottomNavigationItem, BottomSheet, BottomSheetTextInput, Breadcrumb, Button, ButtonSize,
+    ButtonVariant, Calendar, CalendarDayContext, CalendarDayDecoration, CalendarDayEvent,
+    CalendarDayEventKind, CalendarDayEventResponse, CalendarDayStyle, CalendarPlugin,
+    CalendarPluginLayout, CalendarYearRange, Card, CardContent, CardFooter, CardHeader, Carousel,
     CarouselControlsPlacement, CarouselIndicatorVariant, CarouselStyle, Checkbox, Code,
-    Collapsible, ContextMenu, DatePicker, Dialog, DialogFooter, DialogHeader, DropdownMenu, Field,
-    FieldContent, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldOrientation,
-    FieldSeparator, FieldSet, FieldTitle, FloatingSide, Guide, GuideStep, GuideTarget, HoverCard,
-    Index, IndexBarSlot, IndexHeaderContext, IndexItemContext, IndexItemSpec, InfiniteScroll,
-    Input, InputMode, InputOtp, InputOtpMode, InputOtpSeparator, Label, LoadMoreIndicator,
-    LoadMoreState, Markdown, MenuEntry, Menubar, MenubarMenuSpec, MultiSlider, Popover, Progress,
-    PullToRefresh, RadioGroup, RangeSlider, SecureKeyboardMode, SecureKeyboardSheet, Select,
-    Separator, Skeleton, Slider, SliderOrientation, SliderStyle, Sonner, SonnerPosition,
-    SonnerToast, Spinner, Switch, Table, Tabs, Text, TextVariant, Textarea, TimePicker,
-    TimePickerFormat, TimeValue, Timeline, TimelineAlign, TimelineItem, TimelineOrientation,
-    ToastAppearance, Toggle, ToggleGroup, ToggleVariant, Tooltip, Watermark, WatermarkBlendMode,
-    WatermarkFontStyle, WatermarkShadow, WatermarkSource, WatermarkStroke, WatermarkStyle,
+    Collapsible, Combobox, Command, ContextMenu, DatePicker, Dialog, DialogFooter, DialogHeader,
+    Drawer, DropdownMenu, Field, FieldContent, FieldDescription, FieldError, FieldGroup,
+    FieldLabel, FieldOrientation, FieldSeparator, FieldSet, FieldTitle, FloatingLayer,
+    FloatingSide, Guide, GuideStep, GuideTarget, HoverCard, Index, IndexBarSlot,
+    IndexHeaderContext, IndexItemContext, IndexItemSpec, InfiniteScroll, Input, InputMode,
+    InputOtp, InputOtpMode, InputOtpSeparator, Label, LoadMoreIndicator, LoadMoreState, Markdown,
+    MenuEntry, Menubar, MenubarMenuSpec, MultiSlider, NavigationItem, NavigationMenu, Popover,
+    Progress, PullToRefresh, RadioGroup, RangeSlider, SecureKeyboardMode, SecureKeyboardSheet,
+    Select, Separator, Sheet, Skeleton, Slider, SliderOrientation, SliderStyle, Sonner,
+    SonnerPosition, SonnerToast, Spinner, Switch, Table, Tabs, Text, TextVariant, Textarea,
+    TimePicker, TimePickerFormat, TimeValue, Timeline, TimelineAlign, TimelineItem,
+    TimelineOrientation, ToastAppearance, Toggle, ToggleGroup, ToggleVariant, Tooltip, Watermark,
+    WatermarkBlendMode, WatermarkFontStyle, WatermarkShadow, WatermarkSource, WatermarkStroke,
+    WatermarkStyle,
 };
 use arkit::shadcn::icon::icon_placeholder;
 use arkit::shadcn::theme::{
@@ -41,6 +43,8 @@ use arkit_calendar_icu::{use_chinese_lunar_plugin, ChineseLunarOptions};
 const HOME_HEADER_HEIGHT: f32 = 56.0;
 const DETAIL_HEADER_HEIGHT: f32 = 44.0;
 const CATALOG_MAX_WIDTH: f32 = 512.0;
+const PC_CATALOG_MAX_WIDTH: f32 = 1200.0;
+const PC_DEMO_MAX_WIDTH: f32 = 640.0;
 const HEADER_ICON_BUTTON: f32 = 36.0;
 const HEADER_ICON_SIZE: f32 = 16.0;
 const TRACKING_TIGHT: f32 = -0.35;
@@ -214,6 +218,10 @@ const COMPONENTS: &[ComponentSpec] = &[
         name: "Bottom Sheet",
     },
     ComponentSpec {
+        slug: "breadcrumb",
+        name: "Breadcrumb",
+    },
+    ComponentSpec {
         slug: "button",
         name: "Button",
     },
@@ -236,6 +244,14 @@ const COMPONENTS: &[ComponentSpec] = &[
     ComponentSpec {
         slug: "collapsible",
         name: "Collapsible",
+    },
+    ComponentSpec {
+        slug: "combobox",
+        name: "Combobox",
+    },
+    ComponentSpec {
+        slug: "command",
+        name: "Command",
     },
     ComponentSpec {
         slug: "context-menu",
@@ -266,8 +282,16 @@ const COMPONENTS: &[ComponentSpec] = &[
         name: "Dropdown Menu",
     },
     ComponentSpec {
+        slug: "drawer",
+        name: "Drawer",
+    },
+    ComponentSpec {
         slug: "form",
         name: "Form",
+    },
+    ComponentSpec {
+        slug: "floating-layer",
+        name: "Floating Layer",
     },
     ComponentSpec {
         slug: "guide",
@@ -310,6 +334,10 @@ const COMPONENTS: &[ComponentSpec] = &[
         name: "Menubar",
     },
     ComponentSpec {
+        slug: "navigation-menu",
+        name: "Navigation Menu",
+    },
+    ComponentSpec {
         slug: "popover",
         name: "Popover",
     },
@@ -336,6 +364,10 @@ const COMPONENTS: &[ComponentSpec] = &[
     ComponentSpec {
         slug: "separator",
         name: "Separator",
+    },
+    ComponentSpec {
+        slug: "sheet",
+        name: "Sheet",
     },
     ComponentSpec {
         slug: "skeleton",
@@ -407,6 +439,8 @@ struct ShowcaseState {
     custom: Signal<bool>,
     theme_menu_open: Signal<bool>,
     language_menu_open: Signal<bool>,
+    layout_menu_open: Signal<bool>,
+    adaptive_mode: Signal<AdaptiveMode>,
     query: Signal<String>,
 }
 
@@ -419,6 +453,8 @@ pub fn ShadcnShowcasePage() -> Element {
         custom: use_signal(|| false),
         theme_menu_open: use_signal(|| false),
         language_menu_open: use_signal(|| false),
+        layout_menu_open: use_signal(|| false),
+        adaptive_mode: use_signal(|| AdaptiveMode::Auto),
         query: use_signal(String::new),
     };
     use_context_provider(|| state);
@@ -426,9 +462,12 @@ pub fn ShadcnShowcasePage() -> Element {
     let theme = resolve_theme((state.mode)(), (state.preset)(), (state.custom)());
 
     rsx! {
-        ThemeProvider {
-            theme,
-            MemoryRouter::<Route> {}
+        AdaptiveProvider {
+            config: AdaptiveConfig::new((state.adaptive_mode)()),
+            ThemeProvider {
+                theme,
+                MemoryRouter::<Route> {}
+            }
         }
     }
 }
@@ -439,6 +478,7 @@ fn ShowcaseShell() -> Element {
     let state = use_context::<ShowcaseState>();
     let navigator = use_navigator();
     let mut language_menu_open = state.language_menu_open;
+    let mut layout_menu_open = state.layout_menu_open;
     let mut theme_menu_open = state.theme_menu_open;
 
     let scoped_back_press = dioxus_hooks::use_callback(move |()| {
@@ -448,6 +488,10 @@ fn ShowcaseShell() -> Element {
         }
         if theme_menu_open() {
             theme_menu_open.set(false);
+            return true;
+        }
+        if layout_menu_open() {
+            layout_menu_open.set(false);
             return true;
         }
         if navigator.can_go_back() {
@@ -473,6 +517,7 @@ fn Home() -> Element {
     let mut custom = state.custom;
     let mut theme_menu_open = state.theme_menu_open;
     let mut language_menu_open = state.language_menu_open;
+    let mut layout_menu_open = state.layout_menu_open;
     let route_key = "home";
 
     rsx! {
@@ -498,12 +543,14 @@ fn Home() -> Element {
                     theme_menu_open.set(value);
                     if value {
                         language_menu_open.set(false);
+                        layout_menu_open.set(false);
                     }
                 },
                 on_language_menu_open: move |value| {
                     language_menu_open.set(value);
                     if value {
                         theme_menu_open.set(false);
+                        layout_menu_open.set(false);
                     }
                 },
                 on_mode: move |value| {
@@ -533,6 +580,7 @@ fn Detail(slug: String) -> Element {
     let mut custom = state.custom;
     let mut theme_menu_open = state.theme_menu_open;
     let mut language_menu_open = state.language_menu_open;
+    let mut layout_menu_open = state.layout_menu_open;
     let slug = COMPONENTS
         .iter()
         .find(|item| item.slug == slug)
@@ -557,12 +605,14 @@ fn Detail(slug: String) -> Element {
                     theme_menu_open.set(value);
                     if value {
                         language_menu_open.set(false);
+                        layout_menu_open.set(false);
                     }
                 },
                 on_language_menu_open: move |value| {
                     language_menu_open.set(value);
                     if value {
                         theme_menu_open.set(false);
+                        layout_menu_open.set(false);
                     }
                 },
                 on_mode: move |value| {
@@ -584,14 +634,13 @@ fn Detail(slug: String) -> Element {
 }
 
 fn resolve_theme(mode: ThemeMode, preset: ThemePreset, custom: bool) -> Theme {
-    let theme = if custom {
+    if custom {
         Theme::custom(custom_theme_colors(mode))
             .with_mode(mode)
             .with_radius(RadiusTokens::from_base(10.0))
     } else {
         Theme::preset(preset, mode)
-    };
-    theme
+    }
 }
 
 fn custom_theme_colors(mode: ThemeMode) -> ColorTokens {
@@ -642,12 +691,22 @@ fn HomeView(
     on_custom: EventHandler<bool>,
 ) -> Element {
     let theme = arkit_shadcn::theme::use_theme();
+    let adaptive = use_adaptive_layout();
     let q = query.to_ascii_lowercase();
     let items = COMPONENTS
         .iter()
         .copied()
         .filter(|item| q.is_empty() || item.name.to_ascii_lowercase().contains(&q))
         .collect::<Vec<_>>();
+    let pc = adaptive.is_pc();
+    let columns = if adaptive.width_vp >= 1280.0 { 3 } else { 2 };
+    let rows = items.len().div_ceil(columns);
+    let grid_height = rows as f32 * 48.0 + rows.saturating_sub(1) as f32 * spacing::SM;
+    let grid_columns = if columns == 3 {
+        "1fr 1fr 1fr"
+    } else {
+        "1fr 1fr"
+    };
 
     rsx! {
         column {
@@ -674,13 +733,13 @@ fn HomeView(
                     width: "100%",
                     align_items: "center",
                     justify_content: "start",
-                    padding_top: spacing::MD,
-                    padding_right: spacing::LG,
+                    padding_top: adaptive.select(spacing::MD, spacing::XL),
+                    padding_right: adaptive.select(spacing::LG, spacing::XXL),
                     padding_bottom: spacing::XXL,
-                    padding_left: spacing::LG,
+                    padding_left: adaptive.select(spacing::LG, spacing::XXL),
                     column {
                         width: "100%",
-                        max_width_constraint: CATALOG_MAX_WIDTH,
+                        max_width_constraint: adaptive.select(CATALOG_MAX_WIDTH, PC_CATALOG_MAX_WIDTH),
                         align_items: "start",
                         justify_content: "start",
                         Input {
@@ -697,6 +756,25 @@ fn HomeView(
                                     description: "Try a different keyword".to_string(),
                                 }
                             }
+                        } else if pc {
+                            grid {
+                                width: "100%",
+                                height: grid_height,
+                                grid_column_template: grid_columns,
+                                grid_column_gap: spacing::SM,
+                                grid_row_gap: spacing::SM,
+                                for item in items {
+                                    griditem {
+                                        ComponentListItem {
+                                            spec: item,
+                                            first: true,
+                                            last: true,
+                                            standalone: true,
+                                            on_select,
+                                        }
+                                    }
+                                }
+                            }
                         } else {
                             column {
                                 width: "100%",
@@ -707,6 +785,7 @@ fn HomeView(
                                         spec: *item,
                                         first: index == 0,
                                         last: index + 1 == items.len(),
+                                        standalone: false,
                                         on_select,
                                     }
                                 }
@@ -830,6 +909,8 @@ fn NavBar(
                     }
                 }
             }
+            LayoutMenu {}
+            row { width: spacing::SM }
             ThemeMenu {
                 mode,
                 preset,
@@ -846,6 +927,101 @@ fn NavBar(
                 on_open: on_language_open,
             }
         }
+    }
+}
+
+#[component]
+fn LayoutMenu() -> Element {
+    let theme = arkit_shadcn::theme::use_theme();
+    let adaptive = use_adaptive_layout();
+    let state = use_context::<ShowcaseState>();
+    let mut adaptive_mode = state.adaptive_mode;
+    let mut layout_menu_open = state.layout_menu_open;
+    let mut theme_menu_open = state.theme_menu_open;
+    let mut language_menu_open = state.language_menu_open;
+    let selected = adaptive_mode_key(adaptive_mode()).to_string();
+    let items = vec![
+        MenuEntry::label("Layout"),
+        MenuEntry::radio(
+            "Auto",
+            "auto",
+            selected.clone(),
+            EventHandler::new(move |_| adaptive_mode.set(AdaptiveMode::Auto)),
+        )
+        .close_on_select(),
+        MenuEntry::radio(
+            "Phone",
+            "phone",
+            selected.clone(),
+            EventHandler::new(move |_| adaptive_mode.set(AdaptiveMode::Phone)),
+        )
+        .close_on_select(),
+        MenuEntry::radio(
+            "PC",
+            "pc",
+            selected,
+            EventHandler::new(move |_| adaptive_mode.set(AdaptiveMode::Pc)),
+        )
+        .close_on_select(),
+    ];
+    let mode_label = match adaptive.mode {
+        AdaptiveMode::Auto => "Auto",
+        AdaptiveMode::Phone => "Phone",
+        AdaptiveMode::Pc => "PC",
+    };
+    let style_label = if adaptive.is_pc() { "PC" } else { "Phone" };
+    let icon = if adaptive.is_pc() {
+        "monitor"
+    } else {
+        "smartphone"
+    };
+
+    rsx! {
+        DropdownMenu {
+            items,
+            open: Some(layout_menu_open()),
+            default_open: false,
+            on_open_change: Some(EventHandler::new(move |value| {
+                layout_menu_open.set(value);
+                if value {
+                    theme_menu_open.set(false);
+                    language_menu_open.set(false);
+                }
+            })),
+            trigger_capture: Some(false),
+            width: Some(176.0),
+            row {
+                width: adaptive.select(HEADER_ICON_BUTTON, 116.0),
+                height: HEADER_ICON_BUTTON,
+                align_items: "center",
+                justify_content: "center",
+                padding_right: if adaptive.is_pc() { spacing::SM } else { 0.0 },
+                padding_left: if adaptive.is_pc() { spacing::SM } else { 0.0 },
+                border_radius: theme.radii.md,
+                border_width: 1.0,
+                border_color: theme.colors.border,
+                background_color: theme.colors.background,
+                {icon_placeholder(icon, HEADER_ICON_SIZE, theme.colors.foreground)}
+                if adaptive.is_pc() {
+                    row { width: spacing::XS }
+                    text {
+                        content: format!("{mode_label} · {style_label}"),
+                        font_size: typography::XS,
+                        font_weight: 500_i32,
+                        font_color: theme.colors.foreground,
+                        max_lines: 1_i32,
+                    }
+                }
+            }
+        }
+    }
+}
+
+const fn adaptive_mode_key(mode: AdaptiveMode) -> &'static str {
+    match mode {
+        AdaptiveMode::Auto => "auto",
+        AdaptiveMode::Phone => "phone",
+        AdaptiveMode::Pc => "pc",
     }
 }
 
@@ -986,35 +1162,46 @@ fn ComponentListItem(
     spec: ComponentSpec,
     first: bool,
     last: bool,
+    standalone: bool,
     on_select: EventHandler<&'static str>,
 ) -> Element {
     let theme = arkit_shadcn::theme::use_theme();
+    let adaptive = use_adaptive_layout();
+    let mut hovering = use_signal(|| false);
     let radius = theme.radii.lg;
-    let top_radius = if first { radius } else { 0.0 };
-    let bottom_radius = if last { radius } else { 0.0 };
+    let top_radius = if first || standalone { radius } else { 0.0 };
+    let bottom_radius = if last || standalone { radius } else { 0.0 };
     let radius_value = format!("{top_radius},{top_radius},{bottom_radius},{bottom_radius}");
-    let bottom_border = if last { 1.0 } else { 0.0 };
+    let bottom_border = if last || standalone { 1.0 } else { 0.0 };
     let border_width = format!("1,1,{bottom_border},1");
     let row_background = arkit_shadcn::theme::with_alpha(theme.colors.secondary, 0x66);
+    let hover_background = arkit_shadcn::theme::with_alpha(theme.colors.secondary, 0xCC);
     let row_border = arkit_shadcn::theme::with_alpha(theme.colors.foreground, 0x0D);
     let icon_color = arkit_shadcn::theme::with_alpha(theme.colors.foreground, 0x80);
 
     rsx! {
         row {
             width: "100%",
-            height: 44.0,
+            height: if standalone { 48.0 } else { 44.0 },
             align_items: "center",
             justify_content: "space_between",
             padding_top: 0.0,
             padding_right: spacing::SM,
             padding_bottom: 0.0,
             padding_left: spacing::MD,
-            background_color: row_background,
+            background_color: if adaptive.is_pc() && hovering() { hover_background } else { row_background },
             border_width: border_width,
             border_color: row_border,
             border_style: "solid",
             border_radius: radius_value,
             clip: true,
+            focusable: adaptive.is_pc(),
+            focus_on_touch: false,
+            onhover: move |event| {
+                if adaptive.is_pc() {
+                    hovering.set(event.data().is_hovering);
+                }
+            },
             onclick: move |_| on_select.call(spec.slug),
             text {
                 content: spec.name.to_string(),
@@ -1034,6 +1221,7 @@ fn ComponentListItem(
 #[component]
 fn DemoCanvas(slug: &'static str) -> Element {
     let theme = arkit_shadcn::theme::use_theme();
+    let adaptive = use_adaptive_layout();
     let policy = demo_canvas_policy(slug);
     let catalog = !policy.full_bleed;
     let pad = policy.padding;
@@ -1056,7 +1244,7 @@ fn DemoCanvas(slug: &'static str) -> Element {
                     column {
                         width: "100%",
                         height: if fill { "100%" },
-                        max_width_constraint: CATALOG_MAX_WIDTH,
+                        max_width_constraint: adaptive.select(CATALOG_MAX_WIDTH, PC_DEMO_MAX_WIDTH),
                         align_items: "stretch",
                         ComponentDemo { slug }
                     }
@@ -1216,6 +1404,12 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let mut context_person = use_signal(|| "pedro".to_string());
     let mut context_outside_clicks = use_signal(|| 0_u32);
     let mut menubar_active = use_signal(|| None::<usize>);
+    let mut navigation_active = use_signal(|| 0_usize);
+    let mut combobox_open = use_signal(|| false);
+    let mut combobox_value = use_signal(|| "Rust".to_string());
+    let mut command_query = use_signal(String::new);
+    let mut drawer_open = use_signal(|| false);
+    let mut sheet_open = use_signal(|| false);
     let mut select_open = use_signal(|| false);
     let mut selected_fruit = use_signal(|| "Apple".to_string());
     let mut accordion_value = use_signal(|| Some("item-1".to_string()));
@@ -1262,9 +1456,11 @@ fn ComponentDemo(slug: &'static str) -> Element {
     let mut invite_code = use_signal(|| "A7".to_string());
     let mut secure_pin = use_signal(String::new);
     let mut secure_keyboard_open = use_signal(|| false);
+    let secure_keyboard_trigger_ref = use_native_element_ref();
     let mut secure_keyboard_status = use_signal(|| "No PIN has been submitted.".to_string());
     let mut secure_text = use_signal(String::new);
     let mut secure_text_open = use_signal(|| false);
+    let secure_text_trigger_ref = use_native_element_ref();
     let mut secure_text_status =
         use_signal(|| "Letters, numbers, spaces, and symbols are accepted.".to_string());
     let mut form_name = use_signal(|| "Avery Stone".to_string());
@@ -1366,34 +1562,31 @@ fn ComponentDemo(slug: &'static str) -> Element {
             }
         },
         "alert" => rsx! {
-            fixed_width {
-                width: 576.0,
-                column {
-                    width: "100%",
-                    Alert {
-                        icon: "circle-check".to_string(),
-                        AlertTitle { content: "Success! Your changes have been saved".to_string() }
-                        AlertDescription { content: "This is an alert with icon, title and description.".to_string() }
-                    }
-                    v_gap { height: spacing::LG }
-                    Alert {
-                        icon: "terminal".to_string(),
-                        AlertTitle { content: "This Alert has no description.".to_string() }
-                    }
-                    v_gap { height: spacing::LG }
-                    Alert {
-                        icon: "circle-alert".to_string(),
+            column {
+                width: "100%",
+                Alert {
+                    icon: "circle-check".to_string(),
+                    AlertTitle { content: "Success! Your changes have been saved".to_string() }
+                    AlertDescription { content: "This is an alert with icon, title and description.".to_string() }
+                }
+                v_gap { height: spacing::LG }
+                Alert {
+                    icon: "terminal".to_string(),
+                    AlertTitle { content: "This Alert has no description.".to_string() }
+                }
+                v_gap { height: spacing::LG }
+                Alert {
+                    icon: "circle-alert".to_string(),
+                    variant: AlertVariant::Destructive,
+                    AlertTitle { content: "Unable to process your payment.".to_string(), variant: AlertVariant::Destructive }
+                    AlertDescription { content: "Please verify your billing information and try again.".to_string(), variant: AlertVariant::Destructive }
+                    AlertList {
+                        items: vec![
+                            "Check your card details".to_string(),
+                            "Ensure sufficient funds".to_string(),
+                            "Verify billing address".to_string(),
+                        ],
                         variant: AlertVariant::Destructive,
-                        AlertTitle { content: "Unable to process your payment.".to_string(), variant: AlertVariant::Destructive }
-                        AlertDescription { content: "Please verify your billing information and try again.".to_string(), variant: AlertVariant::Destructive }
-                        AlertList {
-                            items: vec![
-                                "Check your card details".to_string(),
-                                "Ensure sufficient funds".to_string(),
-                                "Verify billing address".to_string(),
-                            ],
-                            variant: AlertVariant::Destructive,
-                        }
                     }
                 }
             }
@@ -1768,29 +1961,29 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     title: "Variants".to_string(),
                     detail: Some("Default, secondary, outline, ghost, link, destructive.".to_string()),
                 }
-                Button { width: "100%", onclick: move |_| {}, "Default" }
+                Button { full: true, onclick: move |_| {}, "Default" }
                 v_gap { height: spacing::SM }
-                Button { width: "100%", variant: ButtonVariant::Secondary, onclick: move |_| {}, "Secondary" }
+                Button { full: true, variant: ButtonVariant::Secondary, onclick: move |_| {}, "Secondary" }
                 v_gap { height: spacing::SM }
-                Button { width: "100%", variant: ButtonVariant::Outline, onclick: move |_| {}, "Outline" }
+                Button { full: true, variant: ButtonVariant::Outline, onclick: move |_| {}, "Outline" }
                 v_gap { height: spacing::SM }
-                Button { width: "100%", variant: ButtonVariant::Ghost, onclick: move |_| {}, "Ghost" }
+                Button { full: true, variant: ButtonVariant::Ghost, onclick: move |_| {}, "Ghost" }
                 v_gap { height: spacing::SM }
-                Button { width: "100%", variant: ButtonVariant::Link, onclick: move |_| {}, "Link" }
+                Button { full: true, variant: ButtonVariant::Link, onclick: move |_| {}, "Link" }
                 v_gap { height: spacing::SM }
-                Button { width: "100%", variant: ButtonVariant::Destructive, onclick: move |_| {}, "Destructive" }
+                Button { full: true, variant: ButtonVariant::Destructive, onclick: move |_| {}, "Destructive" }
                 v_gap { height: spacing::SM }
-                Button { width: "100%", variant: ButtonVariant::Destructive, disabled: Some(true), onclick: move |_| {}, "Disabled" }
+                Button { full: true, variant: ButtonVariant::Destructive, disabled: Some(true), onclick: move |_| {}, "Disabled" }
                 {demo_mode_divider()}
                 demo_mode_label {
                     title: "Sizes".to_string(),
                     detail: Some("Default 36vp, Sm 32vp, Lg 40vp, Icon 36×36.".to_string()),
                 }
-                Button { width: "100%", size: ButtonSize::Sm, onclick: move |_| {}, "Small" }
+                Button { full: true, size: ButtonSize::Sm, onclick: move |_| {}, "Small" }
                 v_gap { height: spacing::SM }
-                Button { width: "100%", onclick: move |_| {}, "Default" }
+                Button { full: true, onclick: move |_| {}, "Default" }
                 v_gap { height: spacing::SM }
-                Button { width: "100%", size: ButtonSize::Lg, onclick: move |_| {}, "Large" }
+                Button { full: true, size: ButtonSize::Lg, onclick: move |_| {}, "Large" }
                 v_gap { height: spacing::SM }
                 Button {
                     size: ButtonSize::Icon,
@@ -2228,6 +2421,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 DatePicker {
                     selected: date_picker_selected(),
                     open: Some(date_picker_open()),
+                    full: true,
                     calendar_year_range: CalendarYearRange::new(1900, 2100),
                     calendar_plugins: vec![lunar_calendar_plugin],
                     on_change: move |date| date_picker_selected.set(date),
@@ -2268,6 +2462,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                 TimePicker {
                     selected: time_picker_selected(),
                     open: Some(time_picker_open()),
+                    full: true,
                     minute_step: 5,
                     on_change: move |time| time_picker_selected.set(time),
                     on_open_change: move |open| time_picker_open.set(open),
@@ -3129,7 +3324,6 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     Input {
                         placeholder: Some("Email".to_string()),
                         value: Some(input_controlled()),
-                        width: "100%",
                         on_change: Some(EventHandler::new(move |value| input_controlled.set(value))),
                     }
                     {demo_mode_divider()}
@@ -3139,7 +3333,6 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     Input {
                         placeholder: Some("Uncontrolled input".to_string()),
-                        width: "100%",
                     }
                     {demo_mode_divider()}
                     demo_mode_label {
@@ -3150,7 +3343,6 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         mode: InputMode::Password,
                         placeholder: Some("Password".to_string()),
                         value: Some(input_password()),
-                        width: "100%",
                         on_change: move |value| input_password.set(value),
                     }
                     {demo_mode_divider()}
@@ -3162,7 +3354,6 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         mode: InputMode::Number,
                         placeholder: Some("Digits only".to_string()),
                         value: Some(input_number()),
-                        width: "100%",
                         on_change: move |value| input_number.set(value),
                     }
                 }
@@ -3315,6 +3506,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     v_gap { height: spacing::XXL }
                     Input {
+                        native_ref: secure_keyboard_trigger_ref.clone(),
                         value: Some("•".repeat(secure_pin().chars().count())),
                         placeholder: Some("Tap to enter payment PIN".to_string()),
                         width: "100%",
@@ -3322,6 +3514,8 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         on_click: move |_| secure_keyboard_open.set(true),
                     }
                     SecureKeyboardSheet {
+                        anchor: secure_keyboard_trigger_ref,
+                        fixed_bottom_on_pc: true,
                         value: Some(secure_pin()),
                         open: Some(secure_keyboard_open()),
                         max_length: 6,
@@ -3395,6 +3589,7 @@ fn ComponentDemo(slug: &'static str) -> Element {
                     }
                     v_gap { height: spacing::LG }
                     Input {
+                        native_ref: secure_text_trigger_ref.clone(),
                         value: Some(secure_text()),
                         placeholder: Some("Tap to enter secure text".to_string()),
                         width: "100%",
@@ -3402,6 +3597,8 @@ fn ComponentDemo(slug: &'static str) -> Element {
                         on_click: move |_| secure_text_open.set(true),
                     }
                     SecureKeyboardSheet {
+                        anchor: secure_text_trigger_ref,
+                        fixed_bottom_on_pc: true,
                         value: Some(secure_text()),
                         open: Some(secure_text_open()),
                         mode: SecureKeyboardMode::Full,
@@ -4969,6 +5166,215 @@ fn ComponentDemo(slug: &'static str) -> Element {
                             "Hover/Press"
                         }
                     },
+                }
+            }
+        },
+        "breadcrumb" => rsx! {
+            fixed_width {
+                width: 520.0,
+                column {
+                    width: "100%",
+                    align_items: "start",
+                    demo_mode_label {
+                        title: "Path".to_string(),
+                        detail: Some("Muted ancestors and a foreground current page.".to_string()),
+                    }
+                    Breadcrumb {
+                        items: vec![
+                            "Home".to_string(),
+                            "Components".to_string(),
+                            "Breadcrumb".to_string(),
+                        ],
+                    }
+                }
+            }
+        },
+        "combobox" => rsx! {
+            fixed_width {
+                width: 320.0,
+                column {
+                    width: "100%",
+                    align_items: "start",
+                    demo_mode_label {
+                        title: "Controlled".to_string(),
+                        detail: Some(format!("selected = {}", combobox_value())),
+                    }
+                    Combobox {
+                        options: vec![
+                            "Rust".to_string(),
+                            "ArkTS".to_string(),
+                            "TypeScript".to_string(),
+                            "Kotlin".to_string(),
+                            "Swift".to_string(),
+                        ],
+                        placeholder: Some("Select a language".to_string()),
+                        label: Some("Languages".to_string()),
+                        selected: combobox_value(),
+                        open: Some(combobox_open()),
+                        default_open: false,
+                        on_open_change: Some(EventHandler::new(move |value| combobox_open.set(value))),
+                        on_select: Some(EventHandler::new(move |value| combobox_value.set(value))),
+                    }
+                }
+            }
+        },
+        "command" => rsx! {
+            fixed_width {
+                width: 420.0,
+                column {
+                    width: "100%",
+                    align_items: "start",
+                    demo_mode_label {
+                        title: "Command palette".to_string(),
+                        detail: Some("Type to filter, then activate an item.".to_string()),
+                    }
+                    Command {
+                        query: command_query(),
+                        options: vec![
+                            "Open settings".to_string(),
+                            "Create project".to_string(),
+                            "Invite teammate".to_string(),
+                            "Toggle theme".to_string(),
+                        ],
+                        placeholder: Some("Type a command…".to_string()),
+                        on_query_change: Some(EventHandler::new(move |value| command_query.set(value))),
+                    }
+                }
+            }
+        },
+        "drawer" => rsx! {
+            column {
+                width: "100%",
+                align_items: "start",
+                demo_mode_label {
+                    title: "Bottom drawer".to_string(),
+                    detail: Some("A modal task surface attached to the bottom edge.".to_string()),
+                }
+                Button {
+                    variant: ButtonVariant::Outline,
+                    onclick: move |_| drawer_open.set(true),
+                    "Open drawer"
+                }
+            }
+            Drawer {
+                title: "Move goal".to_string(),
+                side: Some("bottom".to_string()),
+                open: Some(drawer_open()),
+                default_open: Some(false),
+                on_close: Some(EventHandler::new(move |_| drawer_open.set(false))),
+                column {
+                    width: "100%",
+                    Text {
+                        content: "Choose a destination for this goal.".to_string(),
+                        variant: TextVariant::Muted,
+                    }
+                    v_gap { height: spacing::XL }
+                    Button {
+                        width: "100%",
+                        onclick: move |_| drawer_open.set(false),
+                        "Move to workspace"
+                    }
+                }
+            }
+        },
+        "floating-layer" => rsx! {
+            fixed_width {
+                width: 420.0,
+                FloatingLayer {
+                    default_open: Some(false),
+                    side: Some(FloatingSide::Bottom),
+                    align: Some(arkit::shadcn::components::FloatingAlign::Start),
+                    width: Some(280.0),
+                    estimated_height: Some(96.0),
+                    hover: Some(false),
+                    trigger: rsx! {
+                        Button {
+                            variant: ButtonVariant::Outline,
+                            onclick: move |_| {},
+                            "Open floating layer"
+                        }
+                    },
+                    column {
+                        width: 280.0,
+                        padding: spacing::LG,
+                        background_color: theme.colors.popover,
+                        border_width: 1.0,
+                        border_color: theme.colors.border,
+                        border_radius: theme.radii.md,
+                        shadow: "sm",
+                        align_items: "start",
+                        Text { content: "Floating layer".to_string(), variant: TextVariant::Small }
+                        v_gap { height: spacing::SM }
+                        Text {
+                            content: "A reusable anchored desktop surface.".to_string(),
+                            variant: TextVariant::Muted,
+                        }
+                    }
+                }
+            }
+        },
+        "navigation-menu" => rsx! {
+            column {
+                width: "100%",
+                align_items: "start",
+                demo_mode_label {
+                    title: "Desktop navigation".to_string(),
+                    detail: Some("Tab through items or activate with Enter / Space.".to_string()),
+                }
+                NavigationMenu {
+                    NavigationItem {
+                        title: "Overview".to_string(),
+                        active: Some(navigation_active() == 0),
+                        onclick: move |_| navigation_active.set(0),
+                    }
+                    NavigationItem {
+                        title: "Components".to_string(),
+                        active: Some(navigation_active() == 1),
+                        onclick: move |_| navigation_active.set(1),
+                    }
+                    NavigationItem {
+                        title: "Examples".to_string(),
+                        active: Some(navigation_active() == 2),
+                        onclick: move |_| navigation_active.set(2),
+                    }
+                }
+            }
+        },
+        "sheet" => rsx! {
+            column {
+                width: "100%",
+                align_items: "start",
+                demo_mode_label {
+                    title: "Desktop sheet".to_string(),
+                    detail: Some("A fixed-width side panel on PC.".to_string()),
+                }
+                Button {
+                    variant: ButtonVariant::Outline,
+                    onclick: move |_| sheet_open.set(true),
+                    "Open sheet"
+                }
+            }
+            Sheet {
+                title: "Edit settings".to_string(),
+                side: Some("right".to_string()),
+                open: Some(sheet_open()),
+                default_open: Some(false),
+                on_close: Some(EventHandler::new(move |_| sheet_open.set(false))),
+                column {
+                    width: "100%",
+                    Label { content: "Display name".to_string() }
+                    v_gap { height: spacing::SM }
+                    Input {
+                        value: Some(dialog_name()),
+                        width: "100%",
+                        on_change: move |value| dialog_name.set(value),
+                    }
+                    v_gap { height: spacing::XL }
+                    Button {
+                        width: "100%",
+                        onclick: move |_| sheet_open.set(false),
+                        "Save changes"
+                    }
                 }
             }
         },

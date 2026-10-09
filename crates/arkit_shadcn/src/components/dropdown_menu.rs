@@ -50,7 +50,8 @@ pub fn DropdownMenu(
         }
     });
 
-    let panel_width = width.unwrap_or(MENU_PANEL_WIDTH);
+    let panel_width =
+        super::panel_viewport::bounded_panel_width(viewport, width.unwrap_or(MENU_PANEL_WIDTH));
     let style = MenuStyle {
         width: panel_width,
         submenu_width: panel_width - (spacing::XXS * 2.0),
@@ -86,6 +87,15 @@ pub fn DropdownMenu(
             accessibility_selected: current_open,
             focusable: true,
             onclick: move |_| set_open.call(!current_open),
+            onkey: move |event| {
+                if event.data().key == dioxus_elements::event::KeyboardKey::Escape
+                    && event.data().is_down()
+                {
+                    set_open.call(false);
+                } else if event.data().activates() {
+                    set_open.call(!current_open);
+                }
+            },
             {children}
         }
         OverlayPresence {
@@ -96,7 +106,7 @@ pub fn DropdownMenu(
             distance: Some(FLOATING_DISTANCE),
             fill: Some(true),
             layer: Some(arkit_hooks::OverlayLayer::Floating),
-            {menu_overlay_content(style, theme, dismiss, items, placement, None)}
+            {menu_overlay_content(style, theme, dismiss, items, placement, None, None)}
         }
     }
 }

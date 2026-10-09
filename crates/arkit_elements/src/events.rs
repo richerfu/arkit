@@ -8,8 +8,9 @@
 //! [`ArkEventData`](crate::event::ArkEventData) into the typed event data.
 
 use crate::event::{
-    AccessibilityActionData, AreaData, ArkEventKind, ChangeData, ClickData, FocusData, HoverData,
-    PointerData, ReachEndData, RefreshData, ScrollData, SubmitData, SwiperChangeData,
+    AccessibilityActionData, AreaData, ArkEventKind, AxisData, ChangeData, ClickData, FocusData,
+    HoverData, KeyData, MouseData, PointerData, ReachEndData, RefreshData, ScrollData, SubmitData,
+    SwiperChangeData,
 };
 
 /// Define every RSX listener, its payload type, and its semantic identity.
@@ -87,8 +88,14 @@ impl_events! {
     HoverData;
     onhover => Hover;
     FocusData;
-    onfocus => Focus, onblur => Blur;
+    onfocus => Focus, onblur => Blur, onfocusin => FocusIn, onfocusout => FocusOut;
     PointerData;
     onhovermove => HoverMove, ondragstart => DragStart, ondragmove => DragMove,
     ondragend => DragEnd, ondragleave => DragLeave, ondragenter => DragEnter, ontouch => Touch;
+    KeyData;
+    onkey => Key, onkeypreime => KeyPreIme;
+    MouseData;
+    onmouse => Mouse;
+    AxisData;
+    onaxis => Axis;
 }

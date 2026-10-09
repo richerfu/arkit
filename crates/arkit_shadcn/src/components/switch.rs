@@ -54,6 +54,14 @@ pub fn Switch(props: SwitchProps) -> Element {
             clip: true,
             width: SWITCH_WIDTH,
             height: SWITCH_HEIGHT,
+            onkey: move |event| {
+                if !disabled && event.data().activates() {
+                    event.stop_propagation();
+                    let next = !current;
+                    if !controlled { internal.set(next); }
+                    if let Some(handler) = on_change { handler.call(next); }
+                }
+            },
             onclick: move |_| {
                 if disabled {
                     return;

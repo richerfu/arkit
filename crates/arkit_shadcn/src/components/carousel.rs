@@ -333,7 +333,7 @@ pub fn Carousel(props: CarouselProps) -> Element {
     let mut touch_emitted = last_emitted_index;
 
     let viewport = rsx! {
-        swiper {
+        stack {
             width: "100%",
             accessibility_role: "swiper",
             accessibility_text: if let Some(label) = props.accessibility_label.clone() { label },
@@ -343,88 +343,108 @@ pub fn Carousel(props: CarouselProps) -> Element {
             accessibility_value_current: (active_index + 1) as i32,
             accessibility_value_text: format!("Slide {} of {}", active_index + 1, slide_count.max(1)),
             height: props.height.max(1.0),
-            swiper_index: active_index_i32,
-            swiper_swipe_to_index: active_index_i32,
-            swiper_loop: looping,
-            swiper_auto_play: props.autoplay && slide_count > 1,
-            swiper_show_indicator: false,
-            swiper_disable_swipe: !props.swipe_enabled || slide_count < 2,
-            swiper_cached_count: cached_count,
-            swiper_display_count: 1_i32,
-            swiper_vertical: false,
-            swiper_interval: props.interval_ms.max(0),
-            swiper_duration: props.duration_ms.max(0),
-            swiper_curve: props.transition_curve.arkui_value(),
-            swiper_item_space: props.item_spacing.max(0.0),
-            background_color: style.viewport_background,
-            border_style: ARKUI_BORDER_STYLE_SOLID,
-            border_width: style.viewport_border_width,
-            border_color: style.viewport_border_color,
-            border_radius: style.viewport_radius,
-            shadow: if style.viewport_shadow { "sm" },
-            clip: true,
-            onswiperchange: move |event| {
-                let index = usize::try_from(event.data().index).unwrap_or_default();
-                let index = normalized_index(index, slide_count);
-                if index != active_index {
-                    if !controlled {
-                        native_local.set(index);
+            focusable: slide_count > 1,
+            focus_on_touch: true,
+            onkey: move |event| {
+                if !event.data().is_down() {
+                    return;
+                }
+                match event.data().key {
+                    dioxus_elements::event::KeyboardKey::ArrowLeft => on_previous.call(()),
+                    dioxus_elements::event::KeyboardKey::ArrowRight => on_next.call(()),
+                    dioxus_elements::event::KeyboardKey::Home => on_select.call(0),
+                    dioxus_elements::event::KeyboardKey::End if slide_count > 0 => {
+                        on_select.call(slide_count - 1)
                     }
-                    if *native_emitted.read() != index {
-                        native_emitted.set(index);
-                        on_change.call(index);
-                    }
+                    _ => {}
                 }
             },
-            ontouch: move |event| {
-                let Some(pointer) = event.data().pointer else {
-                    return;
-                };
-                let pointer_x = if pointer.has_window_position() {
-                    pointer.window_x
-                } else {
-                    pointer.x
-                };
-                match pointer.action {
-                    dioxus_elements::event::PointerAction::Down => {
-                        touch_start_x.set(Some(pointer_x));
-                        touch_last_x.set(Some(pointer_x));
-                    }
-                    dioxus_elements::event::PointerAction::Move => {
-                        touch_last_x.set(Some(pointer_x));
-                    }
-                    dioxus_elements::event::PointerAction::Up => {
-                        let end_x = touch_last_x().unwrap_or(pointer_x);
-                        let start_x = touch_start_x().unwrap_or(end_x);
-                        let threshold = (pointer.target_width * 0.12).max(24.0);
-                        let delta = end_x - start_x;
-                        let target = if delta <= -threshold {
-                            next
-                        } else if delta >= threshold {
-                            previous
-                        } else {
-                            active_index
-                        };
-                        touch_start_x.set(None);
-                        touch_last_x.set(None);
-                        if target != active_index {
-                            if !controlled {
-                                touch_local.set(target);
-                            }
-                            if *touch_emitted.read() != target {
-                                touch_emitted.set(target);
-                                on_change.call(target);
-                            }
+            swiper {
+                width: "100%",
+                height: props.height.max(1.0),
+                swiper_index: active_index_i32,
+                swiper_swipe_to_index: active_index_i32,
+                swiper_loop: looping,
+                swiper_auto_play: props.autoplay && slide_count > 1,
+                swiper_show_indicator: false,
+                swiper_disable_swipe: !props.swipe_enabled || slide_count < 2,
+                swiper_cached_count: cached_count,
+                swiper_display_count: 1_i32,
+                swiper_vertical: false,
+                swiper_interval: props.interval_ms.max(0),
+                swiper_duration: props.duration_ms.max(0),
+                swiper_curve: props.transition_curve.arkui_value(),
+                swiper_item_space: props.item_spacing.max(0.0),
+                background_color: style.viewport_background,
+                border_style: ARKUI_BORDER_STYLE_SOLID,
+                border_width: style.viewport_border_width,
+                border_color: style.viewport_border_color,
+                border_radius: style.viewport_radius,
+                shadow: if style.viewport_shadow { "sm" },
+                clip: true,
+                onswiperchange: move |event| {
+                    let index = usize::try_from(event.data().index).unwrap_or_default();
+                    let index = normalized_index(index, slide_count);
+                    if index != active_index {
+                        if !controlled {
+                            native_local.set(index);
+                        }
+                        if *native_emitted.read() != index {
+                            native_emitted.set(index);
+                            on_change.call(index);
                         }
                     }
-                    dioxus_elements::event::PointerAction::Cancel => {
-                        touch_start_x.set(None);
-                        touch_last_x.set(None);
+                },
+                ontouch: move |event| {
+                    let Some(pointer) = event.data().pointer else {
+                        return;
+                    };
+                    let pointer_x = if pointer.has_window_position() {
+                        pointer.window_x
+                    } else {
+                        pointer.x
+                    };
+                    match pointer.action {
+                        dioxus_elements::event::PointerAction::Down => {
+                            touch_start_x.set(Some(pointer_x));
+                            touch_last_x.set(Some(pointer_x));
+                        }
+                        dioxus_elements::event::PointerAction::Move => {
+                            touch_last_x.set(Some(pointer_x));
+                        }
+                        dioxus_elements::event::PointerAction::Up => {
+                            let end_x = touch_last_x().unwrap_or(pointer_x);
+                            let start_x = touch_start_x().unwrap_or(end_x);
+                            let threshold = (pointer.target_width * 0.12).max(24.0);
+                            let delta = end_x - start_x;
+                            let target = if delta <= -threshold {
+                                next
+                            } else if delta >= threshold {
+                                previous
+                            } else {
+                                active_index
+                            };
+                            touch_start_x.set(None);
+                            touch_last_x.set(None);
+                            if target != active_index {
+                                if !controlled {
+                                    touch_local.set(target);
+                                }
+                                if *touch_emitted.read() != target {
+                                    touch_emitted.set(target);
+                                    on_change.call(target);
+                                }
+                            }
+                        }
+                        dioxus_elements::event::PointerAction::Cancel => {
+                            touch_start_x.set(None);
+                            touch_last_x.set(None);
+                        }
+                        dioxus_elements::event::PointerAction::Unknown => {}
                     }
-                    dioxus_elements::event::PointerAction::Unknown => {}
-                }
-            },
-            {slides}
+                },
+                {slides}
+            }
         }
     };
 
@@ -543,6 +563,11 @@ fn render_controls(
                             focusable: true,
                             focus_on_touch: true,
                             onclick: move |_| on_select.call(index),
+                            onkey: move |event| {
+                                if event.data().activates() {
+                                    on_select.call(index);
+                                }
+                            },
                             row {
                                 width: visual_width,
                                 height: style.indicator_size,
@@ -625,6 +650,11 @@ fn CarouselNavigationButton(
             border_radius: theme.radii.full,
             opacity: if disabled { style.navigation_disabled_opacity } else { 1.0 },
             onclick: move |_| onclick.call(()),
+            onkey: move |event| {
+                if !disabled && event.data().activates() {
+                    onclick.call(());
+                }
+            },
             {icon_placeholder(icon.as_str(), 16.0, style.navigation_foreground)}
         }
     }

@@ -65,6 +65,8 @@ pub fn RadioGroup(props: RadioGroupProps) -> Element {
         .selected
         .clone()
         .unwrap_or_else(|| local.read().clone());
+    let count = props.options.len();
+    let focus = arkit_hooks::use_keyboard_focus_list(count);
 
     let rows: Vec<Element> = props
         .options
@@ -76,10 +78,14 @@ pub fn RadioGroup(props: RadioGroupProps) -> Element {
             let on_select = props.on_select;
             let mut local = local;
             let click_value = option.clone();
+            let key_value = option.clone();
+            let options = props.options.clone();
+            let navigation = focus.clone();
             let label_color = theme.colors.foreground;
             let top_margin = if index == 0 { 0.0 } else { spacing::SM };
             let row = rsx! {
                 row {
+                    native_ref: focus.native_ref(index),
                     accessibility_role: "radio",
                     accessibility_text: option.clone(),
                     accessibility_group: true,
@@ -87,15 +93,38 @@ pub fn RadioGroup(props: RadioGroupProps) -> Element {
                     accessibility_checked: checked,
                     accessibility_selected: checked,
                     focusable: true,
+                    tab_stop: checked || (selected.is_empty() && index == 0),
+                    key_capture: "enter space left right up down home end",
                     width: "100%",
                     align_items: "center",
                     justify_content: "start",
                     margin_top: top_margin,
+                    padding: spacing::XXS,
+                    border_radius: theme.radii.md,
+                    focus_on_touch: true,
                     onclick: move |_| {
                         if !controlled {
                             local.set(click_value.clone());
                         }
                         on_select.call(click_value.clone());
+                    },
+                    onkey: move |event| {
+                        if event.data().activates() {
+                            event.stop_propagation();
+                            if !controlled {
+                                local.set(key_value.clone());
+                            }
+                            on_select.call(key_value.clone());
+                        } else if event.data().is_down() {
+                            use dioxus_elements::event::{KeyboardKey, KeyboardNavigation};
+                            let key = match event.data().key { KeyboardKey::ArrowLeft => KeyboardKey::ArrowUp, KeyboardKey::ArrowRight => KeyboardKey::ArrowDown, key => key };
+                            if let Some(next) = navigation.navigate(index, key, KeyboardNavigation::Vertical, &vec![true; count]) {
+                                event.stop_propagation();
+                                let value = options[next].clone();
+                                if !controlled { local.set(value.clone()); }
+                                on_select.call(value);
+                            }
+                        }
                     },
                     {indicator}
                     row {

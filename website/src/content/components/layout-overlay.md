@@ -26,7 +26,7 @@ Dialog、Popover、Select、Menu 和 Sonner 都使用 renderer 原生支持的�
 
 ## SafeArea 与键盘
 
-Modal panel 使用 safe viewport；backdrop 可以覆盖完整 surface。BottomSheet、Drawer 和 Sonner 会避让安全边距。包含输入框的底部面板还要考虑 IME area，长内容放 ScrollArea。
+Modal panel 使用 safe viewport；backdrop 可以覆盖完整 surface。BottomSheet、Drawer 和 Sonner 会避让安全边距。包含输入框的底部面板还要考虑 IME area，长内容直接使用原生 `scroll`。
 
 ## 锚点定位
 

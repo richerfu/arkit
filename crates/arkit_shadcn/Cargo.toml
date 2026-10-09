@@ -39,7 +39,6 @@ ohos-arkui-binding = { workspace = true }
 ohos-display-binding = { workspace = true }
 ohos-drawing-binding = { workspace = true }
 ohos-hilog-binding = { workspace = true }
-ohos-native-drawing-sys = { workspace = true }
 tokio = { workspace = true }
 pulldown-cmark = { workspace = true, optional = true }
 smallvec = { workspace = true, optional = true }

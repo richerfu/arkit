@@ -161,6 +161,22 @@ macro_rules! define_element {
         pub trait $extension: dioxus_core::HasAttributes + Sized {
             define_accessibility_extension_methods!();
 
+            fn focus_scope(self, value: impl dioxus_core::IntoAttributeValue) -> Self {
+                self.push_attribute("focus_scope", None, value, false)
+            }
+            fn focus_trap(self, value: impl dioxus_core::IntoAttributeValue) -> Self {
+                self.push_attribute("focus_trap", None, value, false)
+            }
+            fn focus_navigation(self, value: impl dioxus_core::IntoAttributeValue) -> Self {
+                self.push_attribute("focus_navigation", None, value, false)
+            }
+            fn key_capture(self, value: impl dioxus_core::IntoAttributeValue) -> Self {
+                self.push_attribute("key_capture", None, value, false)
+            }
+            fn axis_capture(self, value: impl dioxus_core::IntoAttributeValue) -> Self {
+                self.push_attribute("axis_capture", None, value, false)
+            }
+
             $(
                 fn $attr(
                     self,
@@ -193,6 +209,16 @@ macro_rules! define_element {
             pub const native_ref: $crate::AttributeDescription = ("native_ref", None, false);
 
             define_accessibility_attributes!();
+            /// Move focus into this subtree on mount and restore it on removal.
+            pub const focus_scope: $crate::AttributeDescription = ("focus_scope", None, false);
+            /// Keep Tab and Shift+Tab within the active focus scope.
+            pub const focus_trap: $crate::AttributeDescription = ("focus_trap", None, false);
+            /// Native roving focus for a `vertical` or `horizontal` list.
+            pub const focus_navigation: $crate::AttributeDescription = ("focus_navigation", None, false);
+            /// Keys consumed synchronously before ArkUI's default behavior.
+            pub const key_capture: $crate::AttributeDescription = ("key_capture", None, false);
+            /// Consume wheel/touchpad events before ancestor scrolling.
+            pub const axis_capture: $crate::AttributeDescription = ("axis_capture", None, false);
 
             $(
                 pub const $attr: $crate::AttributeDescription = (stringify!($attr), None, false);
@@ -215,6 +241,7 @@ define_element! {
 define_element! {
     /// Native media surface (ArkUI `XComponent`, surface mode).
     xcomponent => "xcomponent" {
+        focusable, focus_on_touch, default_focus, tab_stop, focused,
         background_color, margin, margin_top, margin_bottom, margin_left,
         margin_right, margin_x, margin_y, margin_horizontal, margin_vertical, width, height,
         opacity, border_radius, border_width, border_color, visibility,
@@ -230,7 +257,7 @@ define_element! {
         width, height, max_width_constraint, constraint_size, min_width, max_width, min_height, max_height, align_items, justify_content,
         align_self, item_alignment, layout_weight, opacity, border_radius, border_width,
         border_color, border_style, shadow, visibility, enabled, clip, focusable,
-        focus_on_touch, hit_test_behavior, alignment, aspect_ratio, position, z_index,
+        focus_on_touch, default_focus, tab_stop, hit_test_behavior, alignment, aspect_ratio, position, z_index,
     }
 }
 
@@ -242,7 +269,7 @@ define_element! {
         width, height, max_width_constraint, constraint_size, min_width, max_width, min_height, max_height, align_items, justify_content,
         align_self, item_alignment, layout_weight, opacity, border_radius, border_width,
         border_color, border_style, shadow, visibility, enabled, clip, focusable,
-        focus_on_touch, hit_test_behavior, alignment, aspect_ratio, position, z_index,
+        focus_on_touch, default_focus, tab_stop, hit_test_behavior, alignment, aspect_ratio, position, z_index,
     }
 }
 
@@ -269,7 +296,7 @@ define_element! {
         margin_top, margin_bottom, margin_left, margin_right, margin_x, margin_y, margin_horizontal, margin_vertical,
         width, height, max_width_constraint, constraint_size, min_width, max_width, min_height, max_height, alignment, opacity,
         border_radius, border_width, border_color, border_style, shadow, visibility,
-        enabled, clip, focusable, focus_on_touch, hit_test_behavior, aspect_ratio,
+        enabled, clip, focusable, focus_on_touch, default_focus, tab_stop, hit_test_behavior, aspect_ratio,
         position, z_index,
     }
 }
@@ -282,7 +309,7 @@ define_element! {
         width, height, max_width_constraint, constraint_size, min_width, max_width, min_height, max_height, align_items, justify_content,
         align_self, item_alignment, flex_direction, flex_wrap, flex_align_content,
         layout_weight, opacity, border_radius, border_width, border_color, border_style,
-        shadow, visibility, enabled, clip, focusable, focus_on_touch,
+        shadow, visibility, enabled, clip, focusable, focus_on_touch, default_focus, tab_stop,
         hit_test_behavior, aspect_ratio, position, z_index,
     }
 }
@@ -296,7 +323,7 @@ define_element! {
         margin_top, margin_bottom, margin_left, margin_right, margin_x, margin_y, margin_horizontal, margin_vertical,
         width, height, max_width_constraint, constraint_size, min_width, max_width, min_height, max_height, opacity, border_radius,
         border_width, border_color, border_style, shadow, visibility, enabled, clip,
-        focusable, focus_on_touch, hit_test_behavior, aspect_ratio, position, z_index,
+        focusable, focus_on_touch, default_focus, tab_stop, hit_test_behavior, aspect_ratio, position, z_index,
     }
 }
 
@@ -307,7 +334,7 @@ define_element! {
         margin_top, margin_bottom, margin_left, margin_right, margin_x, margin_y, margin_horizontal, margin_vertical,
         width, height, max_width_constraint, constraint_size, min_width, max_width, min_height, max_height, button_type, label,
         opacity, border_radius, border_width, border_color, border_style, shadow,
-        visibility, enabled, clip, focusable, focus_on_touch, hit_test_behavior,
+        visibility, enabled, clip, focusable, focus_on_touch, default_focus, tab_stop, focused, focus_status, hit_test_behavior,
         align_self, item_alignment, alignment, aspect_ratio, position, z_index,
     }
 }
@@ -319,7 +346,7 @@ define_element! {
         margin_top, margin_bottom, margin_left, margin_right, margin_x, margin_y, margin_horizontal, margin_vertical,
         width, height, opacity, border_radius,
         border_width, border_color, border_style, shadow, visibility, enabled, clip,
-        focusable, focus_on_touch, hit_test_behavior, aspect_ratio, position, z_index,
+        focusable, focus_on_touch, default_focus, tab_stop, hit_test_behavior, aspect_ratio, position, z_index,
     }
 }
 
@@ -539,7 +566,7 @@ define_element! {
         padding_top, padding_right, padding_bottom, padding_left, padding_x, padding_y, padding_horizontal, padding_vertical, margin, margin_top, margin_bottom,
         margin_left, margin_right, margin_x, margin_y, margin_horizontal, margin_vertical,
         width, height, opacity, border_radius, border_width,
-        border_color, border_style, visibility, enabled, clip, focusable, focus_on_touch,
+        border_color, border_style, visibility, enabled, clip, focusable, focus_on_touch, default_focus, tab_stop,
         focused, focus_status,
         hit_test_behavior, aspect_ratio, position, z_index,
     }
@@ -553,7 +580,7 @@ define_element! {
         padding_top, padding_right, padding_bottom, padding_left, padding_x, padding_y, padding_horizontal, padding_vertical, margin, margin_top, margin_bottom,
         margin_left, margin_right, margin_x, margin_y, margin_horizontal, margin_vertical,
         width, height, opacity, border_radius, border_width,
-        border_color, border_style, visibility, enabled, clip, focusable, focus_on_touch,
+        border_color, border_style, visibility, enabled, clip, focusable, focus_on_touch, default_focus, tab_stop,
         focused, focus_status,
         hit_test_behavior, aspect_ratio, position, z_index,
     }

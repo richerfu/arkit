@@ -74,10 +74,6 @@ impl ComponentI18n {
         self.tr(messages::calendar_back_to_days())
     }
 
-    pub(crate) fn chart_series(self, number: usize) -> String {
-        self.tr(messages::chart_series(number))
-    }
-
     pub(crate) fn combobox_placeholder(self) -> String {
         self.tr(messages::combobox_placeholder())
     }
@@ -239,7 +235,6 @@ mod tests {
         assert_eq!(i18n.calendar_months()[6], "July");
         assert_eq!(i18n.calendar_month_title_template(), "{month} {year}");
         assert_eq!(i18n.calendar_back_to_days(), "Back to dates");
-        assert_eq!(i18n.chart_series(2), "Series 2");
         assert_eq!(i18n.guide_previous(), "Previous");
         assert_eq!(i18n.guide_next(), "Next");
         assert_eq!(i18n.guide_skip(), "Skip");
@@ -262,7 +257,6 @@ mod tests {
         assert_eq!(i18n.calendar_months()[6], "七月");
         assert_eq!(i18n.calendar_month_title_template(), "{year}年{month}");
         assert_eq!(i18n.calendar_back_to_days(), "返回日期");
-        assert_eq!(i18n.chart_series(2), "系列 2");
         assert_eq!(i18n.guide_previous(), "上一步");
         assert_eq!(i18n.guide_next(), "下一步");
         assert_eq!(i18n.guide_skip(), "跳过");

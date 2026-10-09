@@ -68,7 +68,16 @@ pub fn Pagination(props: PaginationProps) -> Element {
             padding_bottom: 0.0,
             padding_left: 0.0,
             alignment: "center",
-            onclick: move |_| on_prev.call(prev_target),
+            onclick: move |_| {
+                if current > 1 {
+                    on_prev.call(prev_target);
+                }
+            },
+            onkey: move |event| {
+                if current > 1 && event.data().activates() {
+                    on_prev.call(prev_target);
+                }
+            },
             text {
                 content: previous_label,
                 font_size: typography::SM,
@@ -134,6 +143,11 @@ pub fn Pagination(props: PaginationProps) -> Element {
                 alignment: "center",
                 shadow: if is_active { "sm" },
                 onclick: move |_| on_page.call(number),
+                onkey: move |event| {
+                    if event.data().activates() {
+                        on_page.call(number);
+                    }
+                },
                 text {
                     content: number.to_string(),
                     font_size: typography::SM,
@@ -168,7 +182,16 @@ pub fn Pagination(props: PaginationProps) -> Element {
             padding_bottom: 0.0,
             padding_left: 0.0,
             alignment: "center",
-            onclick: move |_| on_next.call(next_target),
+            onclick: move |_| {
+                if current < total_pages {
+                    on_next.call(next_target);
+                }
+            },
+            onkey: move |event| {
+                if current < total_pages && event.data().activates() {
+                    on_next.call(next_target);
+                }
+            },
             text {
                 content: next_label,
                 font_size: typography::SM,

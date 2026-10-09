@@ -9,6 +9,9 @@ use crate::theme::*;
 use arkit_prelude::*;
 
 const BAR_HEIGHT: f32 = 64.0;
+const DESKTOP_BAR_HEIGHT: f32 = 56.0;
+const DESKTOP_ITEM_HEIGHT: f32 = 40.0;
+const DESKTOP_CONTENT_MAX_WIDTH: f32 = 640.0;
 const ICON_SIZE: f32 = 22.0;
 const ICON_LABEL_GAP: f32 = 3.0;
 const TRANSPARENT: u32 = 0x00000000;
@@ -53,6 +56,7 @@ fn normalized_index(index: usize, item_count: usize) -> usize {
 #[component]
 pub fn BottomNavigation(props: BottomNavigationProps) -> Element {
     let theme = use_theme();
+    let desktop = arkit_hooks::use_adaptive_layout().is_pc();
     let item_count = props.items.len();
     let initial = normalized_index(props.default_selected, item_count);
     let mut local = use_signal(move || initial);
@@ -83,30 +87,54 @@ pub fn BottomNavigation(props: BottomNavigationProps) -> Element {
                     accessibility_actions: "click",
                     accessibility_selected: active,
                     layout_weight: 1.0,
-                    height: "100%",
+                    height: if desktop { format!("{DESKTOP_ITEM_HEIGHT}") } else { "100%".to_string() },
                     align_items: "center",
                     justify_content: "center",
+                    padding_left: if desktop { spacing::SM } else { 0.0 },
+                    padding_right: if desktop { spacing::SM } else { 0.0 },
+                    border_radius: if desktop { theme.radii.md } else { 0.0 },
                     focusable: true,
                     focus_on_touch: true,
-                    background_color: TRANSPARENT,
+                    background_color: if desktop && active { theme.colors.accent } else { TRANSPARENT },
                     onclick: move |_| {
                         if !controlled {
                             local.set(index);
                         }
                         on_select.call(index);
                     },
-                    column {
-                        align_items: "center",
-                        justify_content: "center",
-                        {icon_placeholder(icon_name.as_str(), ICON_SIZE, foreground)}
-                        row { height: ICON_LABEL_GAP }
+                    onkey: move |event| {
+                        if event.data().activates() {
+                            if !controlled {
+                                local.set(index);
+                            }
+                            on_select.call(index);
+                        }
+                    },
+                    if desktop {
+                        {icon_placeholder(icon_name.as_str(), 16.0, foreground)}
                         text {
-                            content: label,
-                            font_size: typography::XS,
+                            margin_left: spacing::XS,
+                            content: label.clone(),
+                            font_size: typography::SM,
                             font_weight: if active { 600_i32 } else { 500_i32 },
                             font_color: foreground,
-                            line_height: 14.0,
+                            line_height: 20.0,
                             text_align: "center",
+                        }
+                    } else {
+                        column {
+                            align_items: "center",
+                            justify_content: "center",
+                            {icon_placeholder(icon_name.as_str(), ICON_SIZE, foreground)}
+                            row { height: ICON_LABEL_GAP }
+                            text {
+                                content: label.clone(),
+                                font_size: typography::XS,
+                                font_weight: if active { 600_i32 } else { 500_i32 },
+                                font_color: foreground,
+                                line_height: 14.0,
+                                text_align: "center",
+                            }
                         }
                     }
                 }
@@ -119,13 +147,24 @@ pub fn BottomNavigation(props: BottomNavigationProps) -> Element {
             width: "100%",
             accessibility_role: "tablist",
             accessibility_group: false,
-            height: BAR_HEIGHT,
+            height: if desktop { DESKTOP_BAR_HEIGHT } else { BAR_HEIGHT },
             align_items: "center",
-            justify_content: "start",
+            justify_content: "center",
             background_color: theme.colors.background,
             border_width: "1,0,0,0",
             border_color: theme.colors.border,
-            {destinations.into_iter()}
+            row {
+                width: "100%",
+                height: "100%",
+                max_width_constraint: if desktop { DESKTOP_CONTENT_MAX_WIDTH },
+                align_items: "center",
+                justify_content: "start",
+                padding_top: if desktop { spacing::SM } else { 0.0 },
+                padding_right: if desktop { spacing::SM } else { 0.0 },
+                padding_bottom: if desktop { spacing::SM } else { 0.0 },
+                padding_left: if desktop { spacing::SM } else { 0.0 },
+                {destinations.into_iter()}
+            }
         }
     }
 }

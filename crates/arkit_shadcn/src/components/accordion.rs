@@ -76,6 +76,9 @@ pub fn Accordion(
                     let current_value_inner = current_value.clone();
                     let collapsible_inner = collapsible;
                     let set_value_inner = set_value;
+                    let set_value_from_key = set_value;
+                    let key_value = item.value.clone();
+                    let current_value_from_key = current_value.clone();
                     let title = item.title.clone();
                     let disabled = item.disabled;
                     let content = item.content.clone();
@@ -111,6 +114,15 @@ pub fn Accordion(
                                         Some(item_value.clone())
                                     };
                                     set_value_inner.call(next);
+                                },
+                                onkey: move |event| {
+                                    if disabled || !event.data().activates() { return; }
+                                    let next = if current_value_from_key.as_deref() == Some(key_value.as_str()) {
+                                        if collapsible_inner { None } else { Some(key_value.clone()) }
+                                    } else {
+                                        Some(key_value.clone())
+                                    };
+                                    set_value_from_key.call(next);
                                 },
                                 column {
                                     accessibility_mode: "disabled_for_descendants",

@@ -138,6 +138,15 @@ fn variant_style(variant: ButtonVariant, theme: &Theme) -> ButtonVariantStyle {
     }
 }
 
+fn hover_background(variant: ButtonVariant, theme: &Theme, background: u32) -> u32 {
+    match variant {
+        ButtonVariant::Default | ButtonVariant::Destructive => with_alpha(background, 0xE6),
+        ButtonVariant::Secondary => with_alpha(background, 0xCC),
+        ButtonVariant::Outline | ButtonVariant::Ghost => theme.colors.accent,
+        ButtonVariant::Link => TRANSPARENT,
+    }
+}
+
 /// Props for [`Button`].
 #[derive(Props, Clone, PartialEq)]
 pub struct ButtonProps {
@@ -154,6 +163,9 @@ pub struct ButtonProps {
     pub disabled: Option<bool>,
     /// CSS width (`"100%"`, `"48%"`, `"120"`). When unset, size defaults apply.
     pub width: Option<String>,
+    /// Fill the available parent width. An explicit `width` takes precedence.
+    #[props(default)]
+    pub full: bool,
     /// Override elevation. New York variants are flat by default; pass `true`
     /// to opt into a small drop shadow.
     #[props(default)]
@@ -179,11 +191,17 @@ pub struct ButtonProps {
 #[component]
 pub fn Button(props: ButtonProps) -> Element {
     let theme = use_theme();
+    let mut hovering = use_signal(|| false);
     let vs = variant_style(props.variant, &theme);
     let ss = size_style(props.size);
     let disabled = props.disabled.unwrap_or(false);
     let shadow = props.shadow.unwrap_or(vs.shadow);
     let onclick = props.onclick;
+    let background = if hovering() && !disabled {
+        hover_background(props.variant, &theme, vs.background)
+    } else {
+        vs.background
+    };
 
     rsx! {
         button {
@@ -198,6 +216,8 @@ pub fn Button(props: ButtonProps) -> Element {
             height: props.height.unwrap_or(ss.height),
             width: if let Some(w) = props.width {
                 w
+            } else if props.full {
+                "100%".to_string()
             } else if let Some(w) = ss.width {
                 format!("{w}")
             },
@@ -209,7 +229,7 @@ pub fn Button(props: ButtonProps) -> Element {
             font_weight: 500,
             font_color: vs.foreground,
             foreground_color: vs.foreground,
-            background_color: vs.background,
+            background_color: background,
             border_style: ARKUI_BORDER_STYLE_SOLID,
             border_width: vs.border_width,
             border_color: vs.border_color,
@@ -219,8 +239,20 @@ pub fn Button(props: ButtonProps) -> Element {
             shadow: if shadow { "sm" },
             opacity: if disabled { 0.5 } else { 1.0 },
             enabled: !disabled,
+            onhover: move |event| {
+                if !disabled {
+                    hovering.set(event.data().is_hovering);
+                }
+            },
             onclick: move |_| {
                 if !disabled {
+                    if let Some(handler) = onclick {
+                        handler.call(());
+                    }
+                }
+            },
+            onkey: move |event| {
+                if !disabled && event.data().activates() {
                     if let Some(handler) = onclick {
                         handler.call(());
                     }

@@ -51,6 +51,7 @@ pub(crate) fn dialog_portal(open: bool, panel: Element, on_dismiss: EventHandler
             dismiss_on_backdrop: true,
             backdrop_color: OVERLAY_BACKDROP_COLOR,
             viewport_inset: DIALOG_VIEWPORT_INSET,
+            panel_max_width: DIALOG_MAX_WIDTH,
             on_dismiss,
             preset: Some(arkit_animation::TransitionPreset::ZoomIn),
             duration_ms: Some(OVERLAY_ENTER_MS),
@@ -131,6 +132,11 @@ pub fn Dialog(
                         alignment: "center",
                         opacity: 0.7_f32,
                         onclick: move |_| close.call(()),
+                        onkey: move |event| {
+                            if event.data().activates() {
+                                close.call(());
+                            }
+                        },
                         {icon_placeholder("x", 18.0, theme.colors.muted_foreground)}
                     }
                 }

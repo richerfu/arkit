@@ -1,13 +1,14 @@
-//! Time Picker — an outline trigger backed by a bottom-sheet time selector.
+//! Time Picker — an outline trigger backed by a responsive time selector.
 //!
-//! The component keeps the same mobile interaction model as [`super::DatePicker`]:
-//! a compact trigger opens a bottom sheet, while the picker itself offers
-//! independently scrollable hour and minute columns plus an optional AM/PM
-//! column.
+//! A compact trigger opens a bottom sheet on Phone/Pad or an anchored popover
+//! on PC. The picker offers independently scrollable hour and minute columns
+//! plus an optional AM/PM column.
 
 use std::fmt;
 
-use super::{BottomSheet, Button, ButtonSize, ButtonVariant, ARKUI_BORDER_STYLE_SOLID};
+use super::{
+    bottom_sheet::AdaptivePickerSheet, Button, ButtonSize, ButtonVariant, ARKUI_BORDER_STYLE_SOLID,
+};
 use crate::i18n::{use_component_i18n, ComponentI18n};
 use crate::icon::icon_placeholder;
 use crate::theme::{spacing, typography, use_theme, Theme};
@@ -139,6 +140,9 @@ pub struct TimePickerProps {
     pub default_open: bool,
     #[props(default)]
     pub disabled: bool,
+    /// Fill the available parent width instead of using the trigger's content width.
+    #[props(default)]
+    pub full: bool,
     #[props(default)]
     pub on_change: EventHandler<Option<TimeValue>>,
     #[props(default)]
@@ -150,6 +154,7 @@ pub struct TimePickerProps {
 pub fn TimePicker(props: TimePickerProps) -> Element {
     let theme = use_theme();
     let i18n = use_component_i18n();
+    let trigger_ref = arkit_hooks::use_native_element_ref();
     let mut internal_selected = use_signal(|| props.default_selected);
     let mut internal_open = use_signal(|| props.default_open);
     let open_controlled = props.open.is_some();
@@ -225,7 +230,9 @@ pub fn TimePicker(props: TimePickerProps) -> Element {
 
     rsx! {
         Button {
+            native_ref: trigger_ref.clone(),
             variant: ButtonVariant::Outline,
+            full: props.full,
             disabled: Some(disabled),
             accessibility_label: trigger_label.clone(),
             accessibility_description: if open { "expanded" } else { "collapsed" },
@@ -251,11 +258,13 @@ pub fn TimePicker(props: TimePickerProps) -> Element {
                 }
             }
         }
-        BottomSheet {
+        AdaptivePickerSheet {
             title: String::new(),
             open: Some(open),
             default_open: Some(false),
             show_header: Some(false),
+            anchor: trigger_ref,
+            width: 384.0,
             on_close: move |_| set_open.call(false),
             column {
                 width: "100%",
@@ -429,6 +438,11 @@ fn time_picker_column(
                                         theme.colors.foreground
                                     },
                                     onclick: move |_| on_select.call(value),
+                                    onkey: move |event| {
+                                        if event.data().activates() {
+                                            on_select.call(value);
+                                        }
+                                    },
                                     {option.label.clone()}
                                 }
                             }
@@ -513,6 +527,11 @@ fn period_button(
                 theme.colors.foreground
             },
             onclick: move |_| on_select.call(is_pm),
+            onkey: move |event| {
+                if event.data().activates() {
+                    on_select.call(is_pm);
+                }
+            },
             {label.clone()}
         }
     }

@@ -603,6 +603,11 @@ fn CalendarHeaderButton(label: String, expanded: bool, onclick: EventHandler<()>
             border_width: 0.0,
             border_color: TRANSPARENT,
             onclick: move |_| onclick.call(()),
+            onkey: move |event| {
+                if event.data().activates() {
+                    onclick.call(());
+                }
+            },
             row {
                 align_items: "center",
                 justify_content: "center",
@@ -650,6 +655,11 @@ fn CalendarPickerBackButton(label: String, onclick: EventHandler<()>) -> Element
                 border_color: theme.colors.border,
                 border_radius: theme.radii.md,
                 onclick: move |_| onclick.call(()),
+                onkey: move |event| {
+                    if event.data().activates() {
+                        onclick.call(());
+                    }
+                },
                 row {
                     align_items: "center",
                     justify_content: "center",
@@ -697,6 +707,11 @@ fn CalendarNavigationButton(
             border_color: TRANSPARENT,
             opacity: if disabled { 0.36 } else { 1.0 },
             onclick: move |_| onclick.call(()),
+            onkey: move |event| {
+                if !disabled && event.data().activates() {
+                    onclick.call(());
+                }
+            },
             {icon_placeholder(icon.as_str(), 18.0, accent)}
         }
     }
@@ -723,8 +738,36 @@ fn CalendarDays(
         ThemeMode::Dark => 0xFF000000,
     };
     let dates = month.grid_dates();
-    let weeks = dates.chunks_exact(7).map(|week| {
-        let cells = week.iter().copied().map(|date| {
+    let focus = arkit_hooks::use_keyboard_focus_list(dates.len());
+    let mut pending_focus = use_signal(|| None::<(CalendarMonth, u8)>);
+    let month_focus = focus.clone();
+    use_effect(use_reactive((&month,), move |(month,)| {
+        let pending = *pending_focus.peek();
+        if let Some((expected, day)) = pending {
+            if expected == month {
+                let index = month
+                    .grid_dates()
+                    .iter()
+                    .enumerate()
+                    .rfind(|(_, date)| date.calendar_month() == month && date.day() <= day)
+                    .map(|(index, _)| index);
+                if let Some(index) = index {
+                    month_focus.focus(index);
+                }
+            }
+            pending_focus.set(None);
+        }
+    }));
+
+    let navigation_enabled = dates
+        .iter()
+        .map(|date| year_range.contains(date.year()))
+        .collect::<Vec<_>>();
+    let weeks = dates.as_chunks::<7>().0.iter().enumerate().map(|(week_index, week)| {
+        let cells = week.iter().copied().enumerate().map(|(column_index, date)| {
+            let cell_index = week_index * 7 + column_index;
+            let navigation = focus.clone();
+            let navigation_enabled = navigation_enabled.clone();
             let date_string = date.to_string();
             let is_selected = selected_dates.iter().any(|value| value == &date_string);
             let is_today = date == today;
@@ -794,7 +837,9 @@ fn CalendarDays(
             let overlay_content = decoration.overlays;
             let replacement_content = decoration.replacement;
             let pressed_date = date_string.clone();
+            let key_pressed_date = date_string.clone();
             let press_plugins = plugins.clone();
+            let key_press_plugins = plugins.clone();
             let long_press_plugins = plugins.clone();
 
             rsx! {
@@ -805,6 +850,8 @@ fn CalendarDays(
                     align_items: "center",
                     justify_content: "center",
                     button {
+                        native_ref: focus.native_ref(cell_index),
+                        key_capture: "enter space left right up down home end page_up page_down",
                         button_type: "normal",
                         accessibility_text: date_string.clone(),
                         accessibility_actions: "click|long_click",
@@ -813,7 +860,8 @@ fn CalendarDays(
                         focusable: enabled,
                         focus_on_touch: true,
                         enabled,
-                        width: day_size,
+                        width: "100%",
+                        max_width_constraint: day_size,
                         height: day_size,
                         padding_top: 0.0,
                         padding_right: 0.0,
@@ -840,6 +888,37 @@ fn CalendarDays(
                                         on_visible_month.call(date.calendar_month());
                                     }
                                     on_day_press.call(pressed_date.clone());
+                                }
+                            }
+                        },
+                        onkey: move |event| {
+
+                            if enabled && event.data().is_down() && matches!(event.data().key, dioxus_elements::event::KeyboardKey::PageUp | dioxus_elements::event::KeyboardKey::PageDown) {
+                                event.stop_propagation();
+                                let next = if event.data().key == dioxus_elements::event::KeyboardKey::PageUp { month.previous() } else { month.next() };
+                                if year_range.contains(next.year) { pending_focus.set(Some((next, date.day()))); on_visible_month.call(next); }
+                                return;
+                            }
+                            if event.data().is_down() && !event.data().activates() {
+                                if navigation.navigate(cell_index, event.data().key, dioxus_elements::event::KeyboardNavigation::Grid(7), &navigation_enabled).is_some() {
+                                    event.stop_propagation();
+                                }
+                                return;
+                            }
+                            if enabled && event.data().activates() {
+                                event.stop_propagation();
+                                let response = dispatch_plugins_for_day(
+                                    &key_press_plugins,
+                                    CalendarDayEvent {
+                                        context,
+                                        kind: CalendarDayEventKind::Press,
+                                    },
+                                );
+                                if !response.prevent_default {
+                                    if is_outside {
+                                        on_visible_month.call(date.calendar_month());
+                                    }
+                                    on_day_press.call(key_pressed_date.clone());
                                 }
                             }
                         },
@@ -997,6 +1076,8 @@ fn CalendarMonthGrid(
     on_select: EventHandler<u8>,
 ) -> Element {
     let theme = use_theme();
+    let count = labels.len();
+    let focus = arkit_hooks::use_keyboard_focus_list(count);
     let selected_text = match theme.mode {
         ThemeMode::Light => 0xFFFFFFFF,
         ThemeMode::Dark => 0xFF000000,
@@ -1015,6 +1096,7 @@ fn CalendarMonthGrid(
                     for column_index in 0..PICKER_COLUMN_COUNT {
                         {
                             let index = row_index * PICKER_COLUMN_COUNT + column_index;
+                            let navigation = focus.clone();
                             let month_number = (index + 1) as u8;
                             let selected = active_month == Some(month_number);
                             let label = labels[index].clone();
@@ -1025,6 +1107,8 @@ fn CalendarMonthGrid(
                                     align_items: "center",
                                     justify_content: "center",
                                     button {
+                                        native_ref: focus.native_ref(index),
+                                        key_capture: "enter space left right up down home end",
                                         button_type: "normal",
                                         accessibility_text: label.clone(),
                                         accessibility_selected: selected,
@@ -1047,6 +1131,16 @@ fn CalendarMonthGrid(
                                         border_color: TRANSPARENT,
                                         border_radius: theme.radii.md,
                                         onclick: move |_| on_select.call(month_number),
+                                        onkey: move |event| {
+                                                if event.data().is_down() && !event.data().activates() {
+                                                    if navigation.navigate(index, event.data().key, dioxus_elements::event::KeyboardNavigation::Grid(PICKER_COLUMN_COUNT), &vec![true; count]).is_some() { event.stop_propagation(); }
+                                                    return;
+                                                }
+                                            if event.data().activates() {
+                                                    event.stop_propagation();
+                                                on_select.call(month_number);
+                                            }
+                                        },
                                         text {
                                             content: label,
                                             font_size: typography::SM,
@@ -1079,6 +1173,8 @@ fn CalendarYearGrid(
     on_select: EventHandler<i32>,
 ) -> Element {
     let theme = use_theme();
+    let count = years.len();
+    let focus = arkit_hooks::use_keyboard_focus_list(count);
     let selected_text = match theme.mode {
         ThemeMode::Light => 0xFFFFFFFF,
         ThemeMode::Dark => 0xFF000000,
@@ -1097,6 +1193,7 @@ fn CalendarYearGrid(
                     for column_index in 0..PICKER_COLUMN_COUNT {
                         {
                             let index = row_index * PICKER_COLUMN_COUNT + column_index;
+                            let navigation = focus.clone();
                             if let Some(year) = years.get(index).copied() {
                                 let selected = year == active_year;
                                 rsx! {
@@ -1106,6 +1203,8 @@ fn CalendarYearGrid(
                                         align_items: "center",
                                         justify_content: "center",
                                         button {
+                                        native_ref: focus.native_ref(index),
+                                        key_capture: "enter space left right up down home end",
                                             button_type: "normal",
                                             accessibility_text: year.to_string(),
                                             accessibility_selected: selected,
@@ -1128,6 +1227,16 @@ fn CalendarYearGrid(
                                             border_color: TRANSPARENT,
                                             border_radius: theme.radii.md,
                                             onclick: move |_| on_select.call(year),
+                                            onkey: move |event| {
+                                                if event.data().is_down() && !event.data().activates() {
+                                                    if navigation.navigate(index, event.data().key, dioxus_elements::event::KeyboardNavigation::Grid(PICKER_COLUMN_COUNT), &vec![true; count]).is_some() { event.stop_propagation(); }
+                                                    return;
+                                                }
+                                                if event.data().activates() {
+                                                    event.stop_propagation();
+                                                    on_select.call(year);
+                                                }
+                                            },
                                             text {
                                                 content: year.to_string(),
                                                 font_size: typography::SM,

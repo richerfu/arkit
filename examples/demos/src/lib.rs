@@ -58,14 +58,44 @@ fn AppShell() -> Element {
     let marker = (root_state.marker)();
 
     rsx! {
-        Outlet::<Route> {}
+        AdaptiveProvider {
+            config: AdaptiveConfig::default(),
+            Outlet::<Route> {}
 
-        // These are direct AppShell siblings so their native parent is the
-        // renderer's synthetic root. The regression route first activates the
-        // portal, then toggles the trailing placeholder into an ordinary node.
-        if active {
-            Portal {
-                layer: OverlayLayer::Transient,
+            // These are direct AppShell siblings so their native parent is the
+            // renderer's synthetic root. The regression route first activates the
+            // portal, then toggles the trailing placeholder into an ordinary node.
+            if active {
+                Portal {
+                    layer: OverlayLayer::Transient,
+                    stack {
+                        width: "100%",
+                        height: "100%",
+                        alignment: "bottom-end",
+                        hit_test_behavior: "none",
+                        padding_right: 14.0,
+                        padding_bottom: 18.0,
+                        if marker {
+                            row {
+                                width: 168.0,
+                                height: 54.0,
+                                align_items: "center",
+                                justify_content: "center",
+                                background_color: "#E6DC2626",
+                                border_radius: 9.0,
+                                text {
+                                    font_size: 12.0,
+                                    font_weight: 700,
+                                    font_color: "#FFFFFFFF",
+                                    "PASS: PORTAL TOP"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if active && marker {
                 stack {
                     width: "100%",
                     height: "100%",
@@ -73,46 +103,19 @@ fn AppShell() -> Element {
                     hit_test_behavior: "none",
                     padding_right: 14.0,
                     padding_bottom: 18.0,
-                    if marker {
-                        row {
-                            width: 168.0,
-                            height: 54.0,
-                            align_items: "center",
-                            justify_content: "center",
-                            background_color: "#E6DC2626",
-                            border_radius: 9.0,
-                            text {
-                                font_size: 12.0,
-                                font_weight: 700,
-                                font_color: "#FFFFFFFF",
-                                "PASS: PORTAL TOP"
-                            }
+                    row {
+                        width: 168.0,
+                        height: 54.0,
+                        align_items: "center",
+                        justify_content: "center",
+                        background_color: "#E62563EB",
+                        border_radius: 9.0,
+                        text {
+                            font_size: 12.0,
+                            font_weight: 700,
+                            font_color: "#FFFFFFFF",
+                            "FAIL: ROOT ON TOP"
                         }
-                    }
-                }
-            }
-        }
-
-        if active && marker {
-            stack {
-                width: "100%",
-                height: "100%",
-                alignment: "bottom-end",
-                hit_test_behavior: "none",
-                padding_right: 14.0,
-                padding_bottom: 18.0,
-                row {
-                    width: 168.0,
-                    height: 54.0,
-                    align_items: "center",
-                    justify_content: "center",
-                    background_color: "#E62563EB",
-                    border_radius: 9.0,
-                    text {
-                        font_size: 12.0,
-                        font_weight: 700,
-                        font_color: "#FFFFFFFF",
-                        "FAIL: ROOT ON TOP"
                     }
                 }
             }

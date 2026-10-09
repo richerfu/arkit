@@ -356,6 +356,8 @@ fn SliderTrack(props: SliderTrackProps) -> Element {
     };
     let mut live_values = use_signal(|| props.values.values.clone());
     let mut active_drag = use_signal(|| None::<ActiveDrag>);
+    let keyboard_focus = use_signal(|| None::<usize>);
+    let thumb_focus = arkit_hooks::use_keyboard_focus_list(props.values.values.len());
     let mut measured_length = use_signal(|| initial_length);
     let active = active_drag();
     let display_values = if active.is_some() {
@@ -387,7 +389,8 @@ fn SliderTrack(props: SliderTrackProps) -> Element {
                 value_fraction(*value, props.values.min, props.values.max, props.reversed),
                 props.orientation,
                 style,
-                active.is_some_and(|drag| drag.thumb_index == index),
+                active.is_some_and(|drag| drag.thumb_index == index)
+                    || keyboard_focus() == Some(index),
                 measured_length(),
             )
         })
@@ -418,8 +421,12 @@ fn SliderTrack(props: SliderTrackProps) -> Element {
                 }
             });
             let values = values.clone();
+            let key_values = values.clone();
             rsx! {
                 slider {
+                    native_ref: thumb_focus.native_ref(index),
+                    onfocus: move |_| { let mut focused = keyboard_focus; focused.set(Some(index)); },
+                    onblur: move |_| { let mut focused = keyboard_focus; if *focused.peek() == Some(index) { focused.set(None); } },
                     accessibility_text: if let Some(label) = label { label },
                     accessibility_description: semantic_value_text.clone(),
                     slider_value: value,
@@ -435,6 +442,45 @@ fn SliderTrack(props: SliderTrackProps) -> Element {
                     selected_color: 0x0000_0000_u32,
                     track_color: 0x0000_0000_u32,
                     hit_test_behavior: "none",
+                    key_capture: "left right up down home end",
+                    onkey: move |event| {
+                        if disabled || !event.data().is_down() || key_values.values.is_empty() {
+                            return;
+                        }
+                        let current = key_values.values[index];
+                        let increasing = matches!(
+                            event.data().key,
+                            dioxus_elements::event::KeyboardKey::ArrowRight
+                                | dioxus_elements::event::KeyboardKey::ArrowUp
+                        );
+                        let decreasing = matches!(
+                            event.data().key,
+                            dioxus_elements::event::KeyboardKey::ArrowLeft
+                                | dioxus_elements::event::KeyboardKey::ArrowDown
+                        );
+                        let target = match event.data().key {
+                            dioxus_elements::event::KeyboardKey::Home => key_values.min,
+                            dioxus_elements::event::KeyboardKey::End => key_values.max,
+                            _ if increasing || decreasing => {
+                                let direction = if increasing { 1.0 } else { -1.0 };
+                                let direction = if reversed { -direction } else { direction };
+                                current + (key_values.step * direction)
+                            }
+                            _ => return,
+                        };
+                        event.stop_propagation();
+                        let next = update_thumb_value(
+                            &key_values.values,
+                            index,
+                            target,
+                            key_values.min,
+                            key_values.max,
+                            key_values.step,
+                        );
+                        if next != key_values.values {
+                            on_change.call(next);
+                        }
+                    },
                     onchange: move |event: dioxus_core::Event<dioxus_elements::event::ChangeData>| {
                         if disabled {
                             return;
@@ -467,6 +513,8 @@ fn SliderTrack(props: SliderTrackProps) -> Element {
             height: native_height.max(style.touch_target),
             alignment: "top-start",
             enabled: !disabled,
+            focusable: false,
+            focus_on_touch: false,
             onarea: move |event| {
                 let frame = event.data().frame;
                 if !frame.is_measured() {
@@ -507,6 +555,7 @@ fn SliderTrack(props: SliderTrackProps) -> Element {
                             return;
                         };
                         let thumb_index = nearest_thumb_index(&values.values, value);
+                        thumb_focus.focus(thumb_index);
                         let next = update_thumb_value(
                             &values.values,
                             thumb_index,

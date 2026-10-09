@@ -4,6 +4,14 @@
 
 The workspace MSRV is Rust 1.88, matching the resolved OpenHarmony N-API toolchain dependencies.
 
+The Rust Ability core and WebView facade are pinned together to the
+`feat/ohos-adaptation-runtime-fixes` revision in `Cargo.toml`. The `app/` shell
+uses the matching HAR sources from the local `openharmony-ability` checkout
+at `../../southorange/openharmony-ability` (relative to this repository).
+Keep that checkout on the same revision; the published HAR does not yet
+provide the branch's window ID callbacks. Native bindings come from crates.io
+without Cargo patches.
+
 ```rust
 use arkit::prelude::*;
 
@@ -30,6 +38,55 @@ fn app() -> Element {
 ```
 
 The complete runnable version is in [examples/counter](examples/counter/src/lib.rs).
+
+## Adaptive Phone and PC layouts
+
+Arkit resolves adaptive styles from the current application-window width, so
+freeform and split-screen windows can change style without relying on the
+physical device category. `Auto` switches to the PC style at 840vp by default;
+applications can override the mode or breakpoint for a subtree.
+
+```rust
+use arkit::prelude::*;
+
+#[component]
+fn App() -> Element {
+    rsx! {
+        AdaptiveProvider {
+            config: AdaptiveConfig::new(AdaptiveMode::Auto)
+                .with_pc_min_width(840.0),
+            ResponsiveContent {}
+        }
+    }
+}
+
+#[component]
+fn ResponsiveContent() -> Element {
+    let layout = use_adaptive_layout();
+
+    rsx! {
+        column {
+            padding: layout.select(16.0, 32.0),
+            AdaptiveView {
+                phone: rsx! { text { "Phone navigation" } },
+                pc: rsx! { text { "PC navigation" } },
+            }
+        }
+    }
+}
+```
+
+Use `AdaptiveMode::Phone` or `AdaptiveMode::Pc` to provide an explicit user or
+application preference. Components without a structural difference can read
+`use_adaptive_layout()` and select only the affected dimensions or interaction
+states.
+
+The mode selects presentation, not input devices: narrow PC windows retain
+keyboard and hover support, and wide tablet windows retain touch gestures.
+Modal panels move focus inside, contain Tab/Shift+Tab, dismiss with Escape,
+and restore focus to their live trigger. Picker and menu popups provide
+directional navigation; floating content is bounded and scrolls within the
+current window, including split-screen and keyboard avoid areas.
 
 Applications can register their own openharmony-ability bridge plugins
 (`BridgePlugin` facades) through `#[entry(plugins = [...])]` or by taking an

@@ -20,8 +20,11 @@ pub struct TextareaProps {
     pub placeholder: Option<String>,
     pub value: Option<String>,
     pub height: Option<f32>,
-    /// CSS width (`"100%"`, `"50%"`). Unset leaves the field content-sized.
+    /// CSS width (`"100%"`, `"50%"`). Takes precedence over `full`.
     pub width: Option<String>,
+    /// Fill the available parent width, matching shadcn's `w-full` default.
+    #[props(default = true)]
+    pub full: bool,
     /// Uses the destructive border treatment for validation failures.
     #[props(default)]
     pub invalid: bool,
@@ -45,6 +48,9 @@ pub fn Textarea(props: TextareaProps) -> Element {
     let on_click = props.on_click;
     let disabled = props.disabled;
     let click_to_focus = props.click_to_focus;
+    let width = props
+        .width
+        .or_else(|| props.full.then(|| "100%".to_string()));
     let mut focus_request = use_signal(|| false);
     let accessibility_description = props
         .accessibility_description
@@ -83,7 +89,7 @@ pub fn Textarea(props: TextareaProps) -> Element {
             padding_right: spacing::MD,
             padding_bottom: spacing::SM,
             padding_left: spacing::MD,
-            width: if let Some(w) = props.width { w },
+            width: if let Some(w) = width { w },
             onchange: move |evt| {
                 if !disabled {
                     if let Some(handler) = on_change {

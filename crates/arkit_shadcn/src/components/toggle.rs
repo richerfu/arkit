@@ -50,6 +50,7 @@ pub(crate) struct ToggleVisualStyle {
 }
 
 pub(crate) struct ToggleSurfaceStyle {
+    pub(crate) native_ref: Option<arkit_arkui::NativeElementRef>,
     pub(crate) active: bool,
     pub(crate) variant: ToggleVariant,
     pub(crate) size: ToggleSizeStyle,
@@ -173,7 +174,8 @@ pub(crate) fn toggle_surface(
     content: Element,
     style: ToggleSurfaceStyle,
     accessibility_label: String,
-    on_click: impl FnMut() + 'static,
+    on_click: EventHandler<()>,
+    on_navigation: Option<EventHandler<dioxus_elements::event::KeyData>>,
     theme: &Theme,
 ) -> Element {
     let _ = theme;
@@ -186,7 +188,6 @@ pub(crate) fn toggle_surface(
     let border_color = visual.border_color;
     let background = paint_or_hit_fill(style.background.unwrap_or(visual.background));
     let shadow_on = style.shadow.unwrap_or(visual.shadow);
-    let mut on_click = on_click;
     // Prefer CSS width when provided (stretched group segments); otherwise
     // explicit size width (icon-only). Avoid always emitting `width: Option`.
     let fixed_width = style.size.width;
@@ -194,6 +195,8 @@ pub(crate) fn toggle_surface(
     rsx! {
         row {
             accessibility_role: "toggle",
+            native_ref: style.native_ref,
+            key_capture: if on_navigation.is_some() { "enter space left right home end" } else { "enter space" },
             accessibility_text: accessibility_label,
             accessibility_group: true,
             accessibility_actions: "click",
@@ -224,7 +227,16 @@ pub(crate) fn toggle_surface(
             // are excluded so icon content cannot absorb the press without
             // bubbling `onclick` to the surface.
             hit_test_behavior: "block",
-            onclick: move |_| on_click(),
+            focus_on_touch: true,
+            onclick: move |_| on_click.call(()),
+            onkey: move |event| {
+                if event.data().activates() {
+                    event.stop_propagation();
+                    on_click.call(());
+                } else if event.data().is_down() && !event.data().modifiers.ctrl && !event.data().modifiers.alt {
+                    if let Some(handler) = on_navigation { event.stop_propagation(); handler.call(event.data().as_ref().clone()); }
+                }
+            },
             {content}
         }
     }
@@ -291,6 +303,7 @@ pub fn Toggle(props: ToggleProps) -> Element {
         {toggle_surface(
             content,
             ToggleSurfaceStyle {
+                native_ref: None,
                 active,
                 variant,
                 size: size_style,
@@ -301,14 +314,15 @@ pub fn Toggle(props: ToggleProps) -> Element {
                 background: None,
             },
             props.label.clone(),
-            move || {
+            EventHandler::new(move |_: ()| {
                 let current = checked_prop.unwrap_or_else(|| *local.read());
                 let next = !current;
                 if checked_prop.is_none() {
                     local.set(next);
                 }
                 on_change.call(next);
-            },
+            }),
+            None,
             &theme,
         )}
     }

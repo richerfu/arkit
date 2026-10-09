@@ -173,6 +173,11 @@ impl ListScrollToIndexCommand {
 #[derive(Default, Clone, Debug)]
 pub(crate) struct DesiredAttrs {
     attrs: Vec<EncodedAttr>,
+    pub(crate) focus_scope: bool,
+    pub(crate) focus_trap: bool,
+    pub(crate) focus_navigation: Option<dioxus_elements::event::KeyboardNavigation>,
+    pub(crate) key_capture: dioxus_elements::event::KeyboardCapture,
+    pub(crate) axis_capture: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -189,6 +194,43 @@ impl DesiredAttrs {
         name: &str,
         value: &dioxus_core::AttributeValue,
     ) -> AttrMutation {
+        match name {
+            "axis_capture" => {
+                self.axis_capture = attribute_bool(value).unwrap_or(false);
+                return AttrMutation::Unchanged;
+            }
+            "focus_scope" => {
+                self.focus_scope = attribute_bool(value).unwrap_or(false);
+                return AttrMutation::Unchanged;
+            }
+            "focus_trap" => {
+                self.focus_trap = attribute_bool(value).unwrap_or(false);
+                return AttrMutation::Unchanged;
+            }
+            "key_capture" => {
+                self.key_capture = match value {
+                    dioxus_core::AttributeValue::Text(names) => {
+                        dioxus_elements::event::KeyboardCapture::from_names(names)
+                    }
+                    _ => Default::default(),
+                };
+                return AttrMutation::Unchanged;
+            }
+            "focus_navigation" => {
+                self.focus_navigation = match value {
+                    dioxus_core::AttributeValue::Text(value) => match value.as_str() {
+                        "vertical" => Some(dioxus_elements::event::KeyboardNavigation::Vertical),
+                        "horizontal" => {
+                            Some(dioxus_elements::event::KeyboardNavigation::Horizontal)
+                        }
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                return AttrMutation::Unchanged;
+            }
+            _ => {}
+        }
         if matches!(value, dioxus_core::AttributeValue::None) {
             return self
                 .attrs
@@ -215,18 +257,18 @@ impl DesiredAttrs {
         self.attrs.iter().find(|attr| attr.name == name)
     }
 
-    fn has_any(&self, names: &[&str]) -> bool {
-        names.iter().any(|name| self.get(name).is_some())
-    }
-
-    fn bool_value(&self, name: &str) -> Option<bool> {
+    pub(crate) fn bool_value(&self, name: &str) -> Option<bool> {
         match &self.get(name)?.value {
             EncodedAttrValue::Bool(value) => Some(*value),
             _ => None,
         }
     }
 
-    fn i32_value(&self, name: &str) -> Option<i32> {
+    fn has_any(&self, names: &[&str]) -> bool {
+        names.iter().any(|name| self.get(name).is_some())
+    }
+
+    pub(crate) fn i32_value(&self, name: &str) -> Option<i32> {
         match &self.get(name)?.value {
             EncodedAttrValue::I32(value) => Some(*value),
             _ => None,
@@ -802,6 +844,19 @@ impl DesiredAttrs {
     }
 }
 
+fn attribute_bool(value: &dioxus_core::AttributeValue) -> Option<bool> {
+    match value {
+        dioxus_core::AttributeValue::Bool(value) => Some(*value),
+        dioxus_core::AttributeValue::Int(value) => Some(*value != 0),
+        dioxus_core::AttributeValue::Text(value) => match css_value::enum_token(value).as_str() {
+            "true" | "yes" | "on" => Some(true),
+            "false" | "no" | "off" => Some(false),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 fn is_button_text_native_type(attribute: ArkUINodeAttributeType) -> bool {
     matches!(
         attribute,
@@ -950,6 +1005,19 @@ mod tests {
         let of = encode_attr("image", "object_fit", &AttributeValue::Text("cover".into()))
             .expect("object_fit");
         assert_eq!(of.value, EncodedAttrValue::I32(1));
+    }
+
+    #[test]
+    fn tab_stop_maps_to_native_keyboard_focus_attribute() {
+        let tab_stop =
+            encode_attr("row", "tab_stop", &AttributeValue::Bool(true)).expect("tab_stop");
+        assert_eq!(tab_stop.ty, ArkUINodeAttributeType::TabStop);
+        assert_eq!(tab_stop.value, EncodedAttrValue::Bool(true));
+
+        let default_focus = encode_attr("row", "default_focus", &AttributeValue::Bool(true))
+            .expect("default_focus");
+        assert_eq!(default_focus.ty, ArkUINodeAttributeType::DefaultFocus);
+        assert_eq!(default_focus.value, EncodedAttrValue::Bool(true));
     }
 
     #[test]
@@ -1324,7 +1392,9 @@ enum AttrGroup {
 
 fn attr_group(name: &str) -> AttrGroup {
     match name {
-        "focusable"
+        "default_focus"
+        | "tab_stop"
+        | "focusable"
         | "focus_on_touch"
         | "focused"
         | "focus_status"
@@ -1756,6 +1826,16 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
         "focus_on_touch" => EncodedAttr::new(
             name,
             ArkUINodeAttributeType::FocusOnTouch,
+            EncodedAttrValue::Bool(as_bool(value)?),
+        ),
+        "default_focus" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::DefaultFocus,
+            EncodedAttrValue::Bool(as_bool(value)?),
+        ),
+        "tab_stop" => EncodedAttr::new(
+            name,
+            ArkUINodeAttributeType::TabStop,
             EncodedAttrValue::Bool(as_bool(value)?),
         ),
         // ArkUI NODE_FOCUS_STATUS: 1 = request focus.
@@ -2387,6 +2467,7 @@ impl DesiredAttrs {
     pub(crate) fn apply_control_roles(&self, node: &mut ArkUINode, tag: &str) {
         if tag == "button" {
             let _ = node.set_attribute(ArkUINodeAttributeType::Focusable, true.into());
+            let _ = node.set_attribute(ArkUINodeAttributeType::FocusOnTouch, true.into());
             let _ = node.set_attribute(
                 ArkUINodeAttributeType::AccessibilityRole,
                 ohos_arkui_sys::ArkUI_NodeType_ARKUI_NODE_BUTTON.into(),
@@ -2397,6 +2478,9 @@ impl DesiredAttrs {
                 ohos_arkui_sys::ArkUI_AccessibilityActionType_ARKUI_ACCESSIBILITY_ACTION_CLICK
                     .into(),
             );
+        } else if matches!(tag, "textinput" | "textarea") {
+            let _ = node.set_attribute(ArkUINodeAttributeType::Focusable, true.into());
+            let _ = node.set_attribute(ArkUINodeAttributeType::FocusOnTouch, true.into());
         }
     }
 

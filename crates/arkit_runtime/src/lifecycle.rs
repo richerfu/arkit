@@ -49,17 +49,32 @@ impl ApplicationLifecycleEvent {
             AbilityEvent::Pause => Self::Paused,
             AbilityEvent::GainedFocus => Self::FocusGained,
             AbilityEvent::LostFocus => Self::FocusLost,
+            AbilityEvent::WindowFocusChanged {
+                window_id: 0,
+                focused: true,
+            } => Self::FocusGained,
+            AbilityEvent::WindowFocusChanged {
+                window_id: 0,
+                focused: false,
+            } => Self::FocusLost,
             AbilityEvent::SurfaceCreate => Self::SurfaceCreated,
             AbilityEvent::SurfaceDestroy => Self::SurfaceDestroyed,
             AbilityEvent::LowMemory => Self::LowMemory,
             AbilityEvent::WindowRedraw(_)
-            | AbilityEvent::WindowResize(_)
+            | AbilityEvent::SubWindowRedraw { .. }
+            | AbilityEvent::WindowResize { .. }
+            | AbilityEvent::WindowFocusChanged { .. }
+            | AbilityEvent::SubWindowSurfaceCreate(_)
+            | AbilityEvent::SubWindowSurfaceDestroy(_)
+            | AbilityEvent::SubWindowClosed(_)
             | AbilityEvent::ContentRectChange(_)
             | AbilityEvent::AvoidAreaChange(_)
             | AbilityEvent::ConfigChanged(_)
             | AbilityEvent::SaveState(_)
             | AbilityEvent::Input(_)
+            | AbilityEvent::SubWindowInput { .. }
             | AbilityEvent::KeyboardEvent(_)
+            | AbilityEvent::NewWant { .. }
             | AbilityEvent::UserEvent => return None,
         })
     }

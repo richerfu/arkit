@@ -172,6 +172,35 @@ impl MountedNodeLease {
         self.reference.node_for_epoch(self.epoch).is_some()
     }
 
+    /// Request keyboard focus only while this exact mount generation is live.
+    pub fn request_focus(&self) -> bool {
+        use ohos_arkui_binding::component::attribute::ArkUICommonAttribute;
+        let Some(node) = self.reference.node_for_epoch(self.epoch) else {
+            return false;
+        };
+        for attribute in [
+            ArkUINodeAttributeType::Focusable,
+            ArkUINodeAttributeType::Enabled,
+        ] {
+            if let Ok(ohos_arkui_binding::common::attribute::ArkUINodeAttributeItem::NumberValue(
+                values,
+            )) = node.borrow().get_attribute(attribute)
+            {
+                if matches!(
+                    values.first(),
+                    Some(ohos_arkui_binding::common::attribute::ArkUINodeAttributeNumber::Int(0))
+                ) {
+                    return false;
+                }
+            }
+        }
+        let result = node
+            .borrow()
+            .set_attribute(ArkUINodeAttributeType::FocusStatus, 1_i32.into())
+            .is_ok();
+        result
+    }
+
     pub fn layout_frame_px(&self) -> Option<LayoutFramePx> {
         let node = self.reference.node_for_epoch(self.epoch)?;
         let node = node.borrow();

@@ -58,6 +58,8 @@ pub fn ToggleGroup(props: ToggleGroupProps) -> Element {
         .unwrap_or_else(|| local.read().clone());
 
     let total = props.options.len();
+    let focus = arkit_hooks::use_keyboard_focus_list(total);
+    let navigation_options = std::rc::Rc::new(props.options.clone());
     let multi = props.multi;
     let icons = props.icons;
     let stretched = props.width.is_some();
@@ -85,9 +87,12 @@ pub fn ToggleGroup(props: ToggleGroupProps) -> Element {
         let click_value = option.clone();
         let current_selected = selected.clone();
         let mut local = local;
+        let navigation = focus.clone();
+        let navigation_options = navigation_options.clone();
         let surface = toggle_surface(
             content,
             ToggleSurfaceStyle {
+                native_ref: Some(focus.native_ref(index)),
                 active,
                 variant: TOGGLE_GROUP_VARIANT,
                 size: size_style,
@@ -100,7 +105,7 @@ pub fn ToggleGroup(props: ToggleGroupProps) -> Element {
                 background: Some(0x00000000),
             },
             option.clone(),
-            move || {
+            EventHandler::new(move |_: ()| {
                 let next = if multi {
                     let mut v = current_selected.clone();
                     if let Some(pos) = v.iter().position(|value| value == &click_value) {
@@ -116,7 +121,25 @@ pub fn ToggleGroup(props: ToggleGroupProps) -> Element {
                     local.set(next.clone());
                 }
                 on_change.call(next);
-            },
+            }),
+            Some(EventHandler::new(
+                move |key: dioxus_elements::event::KeyData| {
+                    if let Some(next) = navigation.navigate(
+                        index,
+                        key.key,
+                        dioxus_elements::event::KeyboardNavigation::Horizontal,
+                        &vec![true; total],
+                    ) {
+                        if !multi {
+                            let selected = vec![navigation_options[next].clone()];
+                            if !controlled {
+                                local.set(selected.clone());
+                            }
+                            on_change.call(selected);
+                        }
+                    }
+                },
+            )),
             &theme,
         );
         // Selection chrome is painted on the segment shell; the inner surface

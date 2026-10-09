@@ -44,19 +44,15 @@ pub(crate) struct MenuOverlayPassThroughRegion {
 impl MenuOverlayPassThroughRegion {
     pub(crate) fn from_frame(
         frame: arkit_arkui::LayoutFramePx,
-        overlay: arkit_arkui::LayoutFramePx,
+        viewport: arkit_hooks::OverlayViewport,
     ) -> Option<Self> {
         if !frame.is_measured() {
             return None;
         }
 
-        let scale = super::floating_layer::viewport_scale(arkit_hooks::OverlayViewport {
-            frame: overlay,
-            safe_area: Default::default(),
-            scale: 0.0,
-        });
-        let measured_overlay = if overlay.is_measured() {
-            overlay
+        let scale = super::floating_layer::viewport_scale(viewport);
+        let measured_overlay = if viewport.frame.is_measured() {
+            viewport.frame
         } else {
             Default::default()
         };
@@ -163,28 +159,35 @@ impl MenuOverlayPlacement {
         viewport: arkit_hooks::OverlayViewport,
         panel_width: f32,
         panel_height: f32,
-        side_offset: f32,
+        _side_offset: f32,
     ) -> Option<Self> {
         if !pointer.has_window_position() {
             return None;
         }
-        // Window coords may already be logical (vp) on some devices; prefer
-        // treating them as physical when they match layout magnitude, else vp.
         let scale = super::floating_layer::viewport_scale(viewport);
-        let (x, y) = cursor_to_physical(pointer.window_x, pointer.window_y, scale);
-        let cursor = arkit_arkui::LayoutFramePx {
-            x,
-            y,
-            width: scale,
-            height: scale,
-        };
-        Some(Self::from_trigger(
-            cursor,
-            viewport,
+        let metrics = super::floating_layer::overlay_metrics_vp(
+            viewport.frame,
+            scale,
             panel_width,
             panel_height,
-            side_offset,
-        ))
+        );
+        let cursor = super::floating_layer::overlay_local_vp(
+            arkit_arkui::WindowPxPoint::new(pointer.window_x, pointer.window_y),
+            metrics.origin,
+            scale,
+        );
+        let edge = MENU_VIEWPORT_PADDING;
+        let min_x = viewport.safe_area.left.max(0.0) + edge;
+        let min_y = viewport.safe_area.top.max(0.0) + edge;
+        let max_x = (metrics.size.width - viewport.safe_area.right.max(0.0) - panel_width - edge)
+            .max(min_x);
+        let max_y =
+            (metrics.size.height - viewport.safe_area.bottom.max(0.0) - panel_height - edge)
+                .max(min_y);
+        Some(Self {
+            x: cursor.x.clamp(min_x, max_x),
+            y: cursor.y.clamp(min_y, max_y),
+        })
     }
 
     pub(crate) fn fallback(viewport: arkit_hooks::OverlayViewport) -> Self {
@@ -192,17 +195,6 @@ impl MenuOverlayPlacement {
             x: viewport.safe_area.left + MENU_VIEWPORT_PADDING,
             y: (viewport.safe_area.top + MENU_VIEWPORT_PADDING).max(96.0),
         }
-    }
-}
-
-fn cursor_to_physical(window_x: f32, window_y: f32, scale: f32) -> (f32, f32) {
-    // If values already look like physical pixels (large vs density), keep them.
-    // Otherwise treat as vp and expand.
-    let scale = scale.max(f32::EPSILON);
-    if window_x > 600.0 || window_y > 1000.0 || scale <= 1.01 {
-        (window_x, window_y)
-    } else {
-        (window_x * scale, window_y * scale)
     }
 }
 
@@ -514,13 +506,18 @@ pub(crate) fn menu_content(
     theme: &Theme,
     on_dismiss: EventHandler<()>,
     entries: &[MenuEntry],
+    top: f32,
+    navigation: Option<MenuHorizontalNavigation>,
 ) -> Element {
     rsx! {
         MenuContentPanel {
+            key: "menu-{navigation.map(|navigation| navigation.identity).unwrap_or(0)}",
             style,
             theme: *theme,
             on_dismiss,
             entries: entries.to_vec(),
+            top,
+            navigation,
         }
     }
 }
@@ -531,6 +528,8 @@ fn MenuContentPanel(
     theme: Theme,
     on_dismiss: EventHandler<()>,
     entries: Vec<MenuEntry>,
+    top: f32,
+    navigation: Option<MenuHorizontalNavigation>,
 ) -> Element {
     let mut open_path = use_signal(Vec::<usize>::new);
     let current_open_path = open_path.read().clone();
@@ -538,6 +537,10 @@ fn MenuContentPanel(
         open_path.set(next);
     });
     let colors = &theme.colors;
+    let viewport = arkit_hooks::use_overlay_viewport();
+    let max_height = (super::panel_viewport::panel_available_height(viewport, top)
+        - spacing::XXS * 2.0)
+        .max(1.0);
     let reserve_leading_slot = menu_entries_need_leading_slot(&entries);
     let render_context = MenuRenderContext {
         open_path: &current_open_path,
@@ -551,9 +554,22 @@ fn MenuContentPanel(
     rsx! {
         column {
             accessibility_role: "menu",
+            focus_scope: true,
+            focus_navigation: "vertical",
+            key_capture: "escape",
             width: style.width,
             align_self: "start",
             align_items: "start",
+            onkey: move |event| {
+                if event.data().action == dioxus_elements::event::KeyAction::Down
+                    && event.data().key == dioxus_elements::event::KeyboardKey::Escape
+                {
+                    event.stop_propagation();
+                    on_dismiss.call(());
+                } else if event.data().is_down() && matches!(event.data().key, dioxus_elements::event::KeyboardKey::ArrowLeft | dioxus_elements::event::KeyboardKey::ArrowRight) {
+                    if let Some(navigation) = navigation { event.stop_propagation(); navigation.on_key.call(event.data().key); }
+                }
+            },
             padding_top: spacing::XXS,
             padding_right: spacing::XXS,
             padding_bottom: spacing::XXS,
@@ -564,6 +580,8 @@ fn MenuContentPanel(
             clip: true,
             background_color: colors.popover,
             shadow: "sm",
+            super::panel_viewport::PanelViewport {
+                max_height,
             for (index, entry) in entries.iter().enumerate() {
                 {
                     render_menu_entry(
@@ -574,6 +592,7 @@ fn MenuContentPanel(
                     )
                 }
             }
+            }
         }
     }
 }
@@ -583,6 +602,12 @@ fn MenuContentPanel(
 /// The root overlay is the one valid stack here: it layers a full-screen
 /// dismiss region behind an anchored panel. Menu item layout below this point
 /// uses row/column, matching the legacy builder implementation.
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) struct MenuHorizontalNavigation {
+    pub identity: usize,
+    pub on_key: EventHandler<dioxus_elements::event::KeyboardKey>,
+}
+
 pub(crate) fn menu_overlay_content(
     style: MenuStyle,
     theme: Theme,
@@ -590,6 +615,7 @@ pub(crate) fn menu_overlay_content(
     entries: Vec<MenuEntry>,
     placement: MenuOverlayPlacement,
     pass_through_region: Option<MenuOverlayPassThroughRegion>,
+    navigation: Option<MenuHorizontalNavigation>,
 ) -> Element {
     let top = placement.y.max(0.0);
     let left = placement.x.max(0.0);
@@ -656,7 +682,7 @@ pub(crate) fn menu_overlay_content(
                 column {
                     position: format!("{left},0"),
                     onclick: move |evt| evt.stop_propagation(),
-                    {menu_content(style, &theme, on_dismiss, &entries)}
+                    {menu_content(style, &theme, on_dismiss, &entries, top, navigation)}
                 }
             }
         }
@@ -671,6 +697,82 @@ struct MenuRenderContext<'a> {
     theme: &'a Theme,
     on_dismiss: EventHandler<()>,
     reserve_leading_slot: bool,
+}
+
+/// Shared desktop interaction shell for actionable menu rows. Keeping hover,
+/// focus, click, and keyboard activation here prevents the four entry variants
+/// from drifting apart visually or behaviorally.
+#[component]
+fn MenuItemSurface(
+    accessibility_label: String,
+    #[props(default = "menuitem".to_string())] accessibility_role: String,
+    #[props(default)] accessibility_checked: Option<bool>,
+    #[props(default)] accessibility_selected: bool,
+    width: f32,
+    height: f32,
+    radius: f32,
+    background: u32,
+    interactive_background: u32,
+    opacity: f32,
+    disabled: bool,
+    on_activate: EventHandler<()>,
+    #[props(default)] on_navigation: Option<EventHandler<dioxus_elements::event::KeyboardKey>>,
+    children: Element,
+) -> Element {
+    let mut hovering = use_signal(|| false);
+    let mut focused = use_signal(|| false);
+    rsx! {
+        row {
+            accessibility_role,
+            accessibility_text: accessibility_label,
+            accessibility_group: true,
+            accessibility_actions: "click",
+            accessibility_disabled: disabled,
+            accessibility_checked: if let Some(checked) = accessibility_checked { checked },
+            accessibility_selected,
+            enabled: !disabled,
+            width,
+            height,
+            align_self: "start",
+            align_items: "center",
+            justify_content: "start",
+            padding_top: 8.0,
+            padding_right: 8.0,
+            padding_bottom: 8.0,
+            padding_left: 8.0,
+            border_radius: radius,
+            clip: true,
+            background_color: if !disabled && (hovering() || focused()) {
+                interactive_background
+            } else {
+                background
+            },
+            opacity,
+            focusable: !disabled,
+            key_capture: "enter space left right escape",
+            focus_on_touch: true,
+            onclick: move |event| {
+                event.stop_propagation();
+                if !disabled {
+                    on_activate.call(());
+                }
+            },
+            onkey: move |event| {
+                if !disabled && event.data().activates() {
+                    event.stop_propagation();
+                    on_activate.call(());
+                } else if !disabled && event.data().is_down() {
+                    if let Some(handler) = on_navigation {
+                        if event.data().key == dioxus_elements::event::KeyboardKey::ArrowRight { event.stop_propagation(); handler.call(event.data().key); }
+                    }
+                }
+            },
+            onhover: move |event| hovering.set(event.data().is_hovering),
+            onfocus: move |_| focused.set(true),
+            onblur: move |_| focused.set(false),
+            {children}
+        }
+    }
 }
 
 fn render_menu_entry(
@@ -727,31 +829,16 @@ fn render_action_entry(
     let sm = theme.radii.sm;
 
     rsx! {
-        row {
-            accessibility_role: "menuitem",
-            accessibility_text: title.clone(),
-            accessibility_group: true,
-            accessibility_actions: "click",
-            accessibility_disabled: disabled,
-            focusable: !disabled,
-            enabled: !disabled,
+        MenuItemSurface {
+            accessibility_label: title.clone(),
             width: min_width,
             height: MENU_ROW_HEIGHT,
-            align_self: "start",
-            align_items: "center",
-            justify_content: "start",
-            padding_top: 8.0,
-            padding_right: 8.0,
-            padding_bottom: 8.0,
-            padding_left: 8.0,
-            border_radius: sm,
-            clip: true,
-            background_color: TRANSPARENT,
+            radius: sm,
+            background: TRANSPARENT,
+            interactive_background: colors.accent,
             opacity: if disabled { 0.5f32 } else { 1.0f32 },
-            onclick: move |_: dioxus_core::Event<_>| {
-                if disabled {
-                    return;
-                }
+            disabled,
+            on_activate: move |_| {
                 if let Some(on_select) = on_select {
                     on_select.call(());
                 }
@@ -810,36 +897,28 @@ fn render_submenu_entry(
         "chevron-down"
     };
     let child_reserve_leading_slot = menu_entries_need_leading_slot(&entry.items);
+    let keyboard_open_path = branch_path.clone();
+    let keyboard_parent_path = parent_path.to_vec();
 
     rsx! {
         column {
             width: menu_subtree_min_width(&style),
             align_self: "start",
             align_items: "start",
-            row {
-                accessibility_role: "menuitem",
-                accessibility_text: title.clone(),
-                accessibility_description: if submenu_open { "Expanded submenu" } else { "Collapsed submenu" },
-                accessibility_group: true,
-                accessibility_actions: "click",
+            MenuItemSurface {
+            accessibility_label: title.clone(),
                 accessibility_selected: submenu_open,
-                focusable: true,
                 width: min_width,
                 height: MENU_ROW_HEIGHT,
-                align_self: "start",
-                align_items: "center",
-                justify_content: "start",
-                padding_top: 8.0,
-                padding_right: 8.0,
-                padding_bottom: 8.0,
-                padding_left: 8.0,
-                border_radius: sm,
-                clip: true,
-                background_color: if submenu_open { colors.accent } else { TRANSPARENT },
-                onclick: move |evt: dioxus_core::Event<_>| {
-                    evt.stop_propagation();
+                radius: sm,
+                background: if submenu_open { colors.accent } else { TRANSPARENT },
+                interactive_background: colors.accent,
+                opacity: 1.0,
+                disabled: false,
+                on_activate: move |_| {
                     set_open_path.call(next_open_path.clone());
                 },
+                on_navigation: move |_| set_open_path.call(keyboard_open_path.clone()),
                 row {
                     layout_weight: 1.0,
                     clip: true,
@@ -864,6 +943,16 @@ fn render_submenu_entry(
             ExpandPresence {
                 open: submenu_open,
                     column {
+                        focus_scope: submenu_open,
+                        focus_navigation: "vertical",
+                        enabled: submenu_open,
+                        key_capture: "left escape",
+                        onkey: move |event| {
+                            if event.data().is_down() && matches!(event.data().key, dioxus_elements::event::KeyboardKey::ArrowLeft | dioxus_elements::event::KeyboardKey::Escape) {
+                                event.stop_propagation();
+                                set_open_path.call(keyboard_parent_path.clone());
+                            }
+                        },
                         width: submenu_min_width.max(min_width),
                         align_self: "start",
                         align_items: "start",
@@ -914,26 +1003,18 @@ fn render_checkbox_entry(
     let sm = theme.radii.sm;
 
     rsx! {
-        row {
+        MenuItemSurface {
+            accessibility_label: title.clone(),
             accessibility_role: "checkbox",
-            accessibility_text: title.clone(),
-            accessibility_group: true,
-            accessibility_actions: "click",
-            accessibility_checked: checked,
-            focusable: true,
+            accessibility_checked: Some(checked),
             width: min_width,
             height: MENU_ROW_HEIGHT,
-            align_self: "start",
-            align_items: "center",
-            justify_content: "start",
-            padding_top: 8.0,
-            padding_right: 8.0,
-            padding_bottom: 8.0,
-            padding_left: 8.0,
-            border_radius: sm,
-            clip: true,
-            background_color: TRANSPARENT,
-            onclick: move |_: dioxus_core::Event<_>| {
+            radius: sm,
+            background: TRANSPARENT,
+            interactive_background: colors.accent,
+            opacity: 1.0,
+            disabled: false,
+            on_activate: move |_| {
                 on_toggle.call(!checked);
                 if close_on_select {
                     on_dismiss.call(());
@@ -975,27 +1056,19 @@ fn render_radio_entry(
     let full_radius = theme.radii.full;
 
     rsx! {
-        row {
+        MenuItemSurface {
+            accessibility_label: title.clone(),
             accessibility_role: "radio",
-            accessibility_text: title.clone(),
-            accessibility_group: true,
-            accessibility_actions: "click",
-            accessibility_checked: selected,
+            accessibility_checked: Some(selected),
             accessibility_selected: selected,
-            focusable: true,
             width: min_width,
             height: MENU_ROW_HEIGHT,
-            align_self: "start",
-            align_items: "center",
-            justify_content: "start",
-            padding_top: 8.0,
-            padding_right: 8.0,
-            padding_bottom: 8.0,
-            padding_left: 8.0,
-            border_radius: sm,
-            clip: true,
-            background_color: TRANSPARENT,
-            onclick: move |_: dioxus_core::Event<_>| {
+            radius: sm,
+            background: TRANSPARENT,
+            interactive_background: colors.accent,
+            opacity: 1.0,
+            disabled: false,
+            on_activate: move |_| {
                 on_select.call(value.clone());
                 if close_on_select {
                     on_dismiss.call(());
@@ -1189,4 +1262,59 @@ fn menu_branch_is_open(open_path: &[usize], branch_path: &[usize]) -> bool {
             .iter()
             .zip(branch_path.iter())
             .all(|(open, branch)| open == branch)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pc_viewport() -> arkit_hooks::OverlayViewport {
+        arkit_hooks::OverlayViewport {
+            frame: arkit_arkui::LayoutFramePx {
+                x: 24.0,
+                y: 70.0,
+                width: 1000.0,
+                height: 700.0,
+            },
+            safe_area: arkit_hooks::EdgeInsets::default(),
+            scale: 2.0,
+        }
+    }
+
+    fn trigger() -> arkit_arkui::LayoutFramePx {
+        arkit_arkui::LayoutFramePx {
+            x: 224.0,
+            y: 270.0,
+            width: 200.0,
+            height: 40.0,
+        }
+    }
+
+    #[test]
+    fn menu_and_pass_through_share_the_portal_coordinate_space() {
+        let viewport = pc_viewport();
+        let placement = MenuOverlayPlacement::from_trigger(trigger(), viewport, 100.0, 80.0, 4.0);
+        let pass_through = MenuOverlayPassThroughRegion::from_frame(trigger(), viewport).unwrap();
+
+        assert!((placement.x - 100.0).abs() < 0.01);
+        assert!((placement.y - 124.0).abs() < 0.01);
+        assert!((pass_through.x - 100.0).abs() < 0.01);
+        assert!((pass_through.y - 100.0).abs() < 0.01);
+        assert!((pass_through.width - 100.0).abs() < 0.01);
+        assert!((pass_through.height - 20.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn context_cursor_uses_native_window_pixels_without_magnitude_guessing() {
+        let pointer = dioxus_elements::event::PointerPayload {
+            window_x: 224.0,
+            window_y: 270.0,
+            ..Default::default()
+        };
+        let placement =
+            MenuOverlayPlacement::from_cursor(pointer, pc_viewport(), 100.0, 80.0, 4.0).unwrap();
+
+        assert!((placement.x - 100.0).abs() < 0.01);
+        assert!((placement.y - 100.0).abs() < 0.01);
+    }
 }

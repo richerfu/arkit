@@ -16,6 +16,27 @@ export interface WebviewCallbackOptions {
   downloadStart: boolean
   downloadEnd: boolean
   titleChange: boolean
+  /** True when any drag callback (enter/over/drop/leave) is registered. */
+  dragDrop: boolean
+  /** True when a new-window callback is registered. */
+  newWindow: boolean
+  /** True when a page-begin callback is registered. */
+  pageBegin: boolean
+  /** True when a page-end callback is registered. */
+  pageEnd: boolean
+}
+
+/**
+  * Response for `capture-webview`: the viewport snapshot (the on-screen area, not the
+  * full scrollable page) encoded as a base64 PNG string plus its pixel dimensions.
+  * base64 (not raw bytes) — a `Vec<u8>` in a napi object would
+  * serialize as `Array<number>`, inflating a multi-hundred-KB PNG ~8x in memory.
+  * Requests reuse [`WebviewControllerRequest`].
+  */
+export interface WebviewCaptureResponse {
+  pngBase64: string
+  width: number
+  height: number
 }
 
 /** Controller lifecycle signal delivered directly from the ArkTS WebView host. */
@@ -36,6 +57,14 @@ export interface WebviewControllerRequest {
   html?: string
   headers?: Record<string, string>
   zoom?: number
+  /** Optional bounds x position (vp). Used by the `set-bounds` action. */
+  x?: number
+  /** Optional bounds y position (vp). Used by the `set-bounds` action. */
+  y?: number
+  /** Optional bounds width (vp). Used by the `set-bounds` action. */
+  width?: number
+  /** Optional bounds height (vp). Used by the `set-bounds` action. */
+  height?: number
 }
 
 export interface WebviewCreateRequest {
@@ -46,16 +75,22 @@ export interface WebviewCreateRequest {
     * module's DefaultXComponent root.
     */
   parentHandle?: number
+  /**
+    * OHOS window ID for sub-window webview mounting. When non-zero, the webview's FrameNode
+    * is mounted into the specified window's component root (from WindowManager) instead of
+    * this module's DefaultXComponent root.
+    */
+  windowId?: number
   url?: string
   html?: string
   style: WebviewStyle
   javascriptEnabled?: boolean
+  devtools?: boolean
   /**
     * Enables ArkWeb DOM storage (localStorage/sessionStorage). ArkWeb disables it by
     * default; when unset, DOM storage stays disabled, so callers opt in with `true`.
     */
   domStorageAccess?: boolean
-  devtools?: boolean
   userAgent?: string
   autoplay?: boolean
   initializationScripts?: Array<WebviewInitializationScript>
@@ -65,6 +100,27 @@ export interface WebviewCreateRequest {
     * background color takes precedence.
     */
   transparent?: boolean
+  /**
+    * Enable ArkWeb native clipboard (Ctrl+C/V/X/A/Z/Y). Defaults to true (ArkWeb default).
+    * false disables native clipboard so accelerator_matcher can intercept clipboard shortcuts.
+    */
+  clipboard?: boolean
+  /** Enable zoom hotkeys (Ctrl+/-/0). Defaults to false. */
+  zoomHotkeys?: boolean
+  /**
+    * Use a transparent Stack overlay to receive drag events (instead of binding directly on the
+    * Web component). Defaults to false. Use when ArkWeb drag events are unreliable.
+    */
+  dragDropOverlay?: boolean
+  /**
+    * https-scheme protocols to intercept at create time. Seeds the ArkTS
+    * `httpsInterceptProtocols` Set before the first `loadUrl`, fixing the
+    * create-vs-register race that left the Set empty and caused `onInterceptRequest`
+    * to early-return null → ArkWeb fetched the consumer-registered custom protocol for real →
+    * `arkweb-error://webdata/` → `isSecureContext=false`. Late `register_https_intercept`
+    * remains as a runtime add path (Set.add is idempotent).
+    */
+  httpsInterceptProtocolList?: Array<string>
   eventOptions: WebviewCallbackOptions
 }
 
@@ -97,6 +153,24 @@ export interface WebviewDownloadStartResponse {
   tempPath?: string
 }
 
+/** Drag enter/over/leave event (no file paths; `getData()` is only valid in onDrop). */
+export interface WebviewDragEvent {
+  id: string
+  nativeTag: string
+  x: number
+  y: number
+}
+
+/** Drop event carrying extracted file paths from UDMF records. */
+export interface WebviewDropEvent {
+  id: string
+  nativeTag: string
+  x: number
+  y: number
+  /** Extracted absolute file paths. Empty for enter/over/leave. */
+  paths: Array<string>
+}
+
 /** Engine lifecycle signal delivered directly from the ArkTS WebView host. */
 export interface WebviewEngineLifecycleEvent {
   phase: string
@@ -118,6 +192,33 @@ export interface WebviewEventAcknowledgement {
   accepted: boolean
 }
 
+/**
+  * Synchronous https intercept request delivered from ArkWeb `onInterceptRequest`.
+  *
+  * When the request URL matches `https://<protocol>.localhost/<path>` and `<protocol>` is in the
+  * WebView's live protocol set, ArkTS dispatches this event synchronously through
+  * `context.invokeNativeSync`. The Rust handler must produce a response before the NAPI environment
+  * is released, because `onInterceptRequest` is a synchronous ArkWeb callback.
+  */
+export interface WebviewHttpsInterceptRequest {
+  id: string
+  /** Process-unique controller generation used to reject callbacks from a replaced WebView. */
+  nativeTag: string
+  url: string
+}
+
+/**
+  * Synchronous https intercept response. `handled: false` lets ArkWeb fall through to its default
+  * network stack; `handled: true` returns the embedded response to ArkWeb.
+  */
+export interface WebviewHttpsInterceptResponse {
+  handled: boolean
+  status: number
+  mimeType: string
+  /** Raw response body bytes transported as `Uint8Array` across the NAPI boundary. */
+  body: Array<number>
+}
+
 /** A document-start script and the URL rules for pages where ArkWeb may inject it. */
 export interface WebviewInitializationScript {
   script: string
@@ -137,6 +238,105 @@ export interface WebviewNavigationResponse {
   intercept: boolean
 }
 
+/** Request delivered when ArkWeb asks to open a new window. */
+export interface WebviewNewWindowRequest {
+  id: string
+  nativeTag: string
+  targetUrl: string
+  isAlert: boolean
+  isUserTrigger: boolean
+}
+
+/** Synchronous new-window decision. */
+export interface WebviewNewWindowResponse {
+  allow: boolean
+}
+
+/** Page navigation event (begin or end) carrying the page URL. */
+export interface WebviewPageEvent {
+  id: string
+  nativeTag: string
+  url: string
+}
+
+/**
+  * Optional PDF generation configuration, mirroring `webview.PdfConfiguration`.
+  * Every field is optional — when `None`, the ArkTS side falls back to its
+  * defaults (A4 8.27×11.69in, zero margins, background printing on).
+  */
+export interface WebviewPdfConfig {
+  /** Page width in inches. */
+  width?: number
+  /** Page height in inches. */
+  height?: number
+  marginTop?: number
+  marginBottom?: number
+  marginLeft?: number
+  marginRight?: number
+  /** Page scale factor (e.g. 1.0). */
+  scale?: number
+  /** Whether to print background colors/images. */
+  shouldPrintBackground?: boolean
+}
+
+/**
+  * Response for `pick-color`: the pixel at snapshot coordinates (x, y). The ArkTS side
+  * reads a 1px region via `readPixels` (which always outputs BGRA_8888 bytes regardless
+  * of the PixelMap format) and converts the channels to RGBA before crossing the bridge.
+  */
+export interface WebviewPickColorResponse {
+  r: number
+  g: number
+  b: number
+  a: number
+}
+
+/** Request to generate a PDF file from the current WebView page. */
+export interface WebviewPrintRequest {
+  id: string
+  /** Target PDF file absolute path on the device filesystem. */
+  path: string
+  /**
+    * Optional PDF layout configuration. When absent the ArkTS side uses
+    * fixed A4 defaults; when present the provided values override per-field.
+    */
+  pdfConfig?: WebviewPdfConfig
+}
+
+/** Response for create-pdf. `success` indicates the PDF was written to `path`. */
+export interface WebviewPrintResponse {
+  success: boolean
+}
+
+/**
+  * Terminal state of an OHOS system print job (PrintTask event).
+  *
+  * Pushed from ArkTS `WebviewPlugin.ets` PrintTask `.on("succeed"|"fail"|"cancel"|"block")`
+  * handlers through the `print-state` main-thread event. Decoded on the NAPI main thread and
+  * forwarded through a process-wide crossbeam channel — never blocked on from the main
+  * thread (the consumer polls on a worker thread, see `print_state_receiver`).
+  */
+export interface WebviewPrintStateEvent {
+  /** The WebView id that initiated `printPdf` (correlation key for the consumer). */
+  id: string
+  /** One of: `"succeed"`, `"fail"`, `"cancel"`, `"block"`. */
+  state: string
+  /** Error message for `state == "fail"` (absent otherwise). */
+  error?: string
+}
+
+/**
+  * Outbound request that registers custom-protocol names for https interception on a WebView.
+  *
+  * Rust (typically the webview consumer's `with_webview` hook) sends this async action so ArkTS merges the protocol
+  * names into the WebView's live protocol set. Subsequent `onInterceptRequest` callbacks check this
+  * set before dispatching through the bridge.
+  */
+export interface WebviewRegisterHttpsInterceptRequest {
+  id: string
+  protocols: Array<string>
+}
+
 export interface WebviewSchemeDeclaration {
   scheme: string
   options: number
@@ -149,6 +349,31 @@ export interface WebviewScriptRequest {
 
 export interface WebviewScriptResponse {
   result?: string
+}
+
+/** Request to set a cookie for a specific URL via `WebCookieManager.configCookieSync`. */
+export interface WebviewSetCookieRequest {
+  id: string
+  url: string
+  /** Set-Cookie formatted value string (RFC 6265). */
+  value: string
+}
+
+/** Request to capture a WebView snapshot (RGBA pixel data). */
+export interface WebviewSnapshotRequest {
+  id: string
+}
+
+/**
+  * Response for web-page-snapshot. `rgba_len` is the byte count of the RGBA
+  * pixel buffer (width * height * 4), verified without transferring the full buffer.
+  * The full RGBA is NOT sent across the bridge for efficiency (1.9MB for 800×600).
+  */
+export interface WebviewSnapshotResponse {
+  success: boolean
+  width: number
+  height: number
+  rgbaLen: number
 }
 
 export interface WebviewStringResponse {
@@ -181,11 +406,19 @@ export interface WebviewTitleChangeEvent {
   title: string
 }
 
+/** Request to set the WebView's custom user agent string. */
+export interface WebviewUserAgentRequest {
+  id: string
+  userAgent: string
+}
+
 export interface AbilityInitContext {
   basePath?: string
   prefPath?: string
   preferredLocales?: string
   moduleName?: string
+  sdkApiVersion?: number
+  distributionOSApiVersion?: number
 }
 
 export interface ApplicationLifecycle {
@@ -246,6 +479,17 @@ export interface NodeMountIntoRootRequest {
   handle: number
 }
 
+export interface PreviewTextEventData {
+  text: string
+  start: number
+  end: number
+}
+
+export interface SelectionEventData {
+  start: number
+  end: number
+}
+
 export interface WindowStageEventCallback {
   onWindowStageCreate: () => void
   onWindowStageDestroy: () => void
@@ -256,8 +500,78 @@ export interface WindowStageEventCallback {
   onWindowStageEvent: (arg: number) => void
   onWindowSizeChange: (arg: object) => void
   onWindowRectChange: (arg: object) => void
+  onWindowFocusChange: (arg: object) => void
   onAvoidAreaChange: (arg: object) => void
+  onNewWant: (arg: object) => void
+  onAbilityCreateWithWant: (arg: object) => void
 }
+
+/**
+  * Reads the last windowId reported by a subsequent instance. Returns -1 if no
+  * subsequent instance has registered yet. Used by automated tests.
+  */
+export declare function getLastUiAbilityWindowId(): number
+
+export declare function isDesktopDevice(): boolean
+
+/**
+  * NAPI function called from ArkTS to request a window close.
+  * This queues the OHOS window ID for processing by the Rust event loop,
+  * ensuring proper lifecycle events (close-requested, destroyed) are emitted.
+  *
+  * Timing: ArkTS calls this synchronously before `destroyWindow()` (async).
+  * The Rust event loop drains the queue at the start of the next iteration,
+  * processing window IDs before the async OHOS destruction completes.
+  * The Rust side only uses the ID to look up the matching window —
+  * it never accesses the OHOS window object directly, so destroyed windows are safe.
+  */
+export declare function notifyWindowClose(windowId: number): void
+
+/**
+  * NAPI function called from ArkTS `windowStatusChange` callbacks to report a
+  * window status change. Queues (window_id, status) for the Rust event loop.
+  *
+  * `status` is the raw OHOS `WindowStatusType` value (transparently forwarded):
+  * FULL_SCREEN=1, MAXIMIZE=2, MINIMIZE=3, FLOATING=4, SPLIT_SCREEN=5.
+  * Semantic decoding happens on the tao side (`apply_window_status`); this layer
+  * only transports the integer.
+  */
+export declare function notifyWindowStatus(windowId: number, status: number): void
+
+/**
+  * NAPI function called from the ArkTS `onContinue` lifecycle callback to
+  * synchronously read the source-side continuation snapshot (pre-registered
+  * via `setContinuationData`). `onContinue` is a synchronous callback, so the
+  * read must be a plain NAPI call — no Promise, no bridge round-trip. Empty
+  * string means "nothing registered" (the caller refuses with MISMATCH).
+  */
+export declare function readContinueSnapshot(): string
+
+/**
+  * Register the ArkTS `createSubWindow` wrapper as a ThreadsafeFunction.
+  *
+  * Called from `ProcessInitializer.initialize()` after native modules are loaded.
+  * The ArkTS wrapper is an arrow function that captures `WindowManager.getInstance()`
+  * and calls `createSubWindow(config)`, returning a `Promise<number>`.
+  *
+  * After registration, `create_os_window` can fire-and-forget sub-window creation
+  * from any thread (TSFN is threadsafe).
+  */
+export declare function registerCreateSubWindowTsfn(createFn: (config: ESObject) => Promise<number>): void
+
+/**
+  * NAPI: Called by the new EntryAbility instance's `onWindowStageCreate` (via
+  * ArkTS `WindowManager.registerUIAbilityStage`) to report the windowId
+  * it received from want.parameters. Records the id globally so automated tests
+  * can poll `get_last_ui_ability_window_id` and verify want-parameter forwarding.
+  */
+export declare function registerUiAbilityStage(windowId: number): void
+
+/**
+  * NAPI function called from the ArkTS `onMouse` handler (Move/Press) to
+  * update the tracked cursor position. Coordinates are MainPage-relative vp.
+  */
+export declare function updateCursorPosition(x: number, y: number): void
 
 export declare function disposeAllRenders(): void
 

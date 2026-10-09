@@ -33,6 +33,7 @@ pub fn Select(
     default_selected: String,
     open: Option<bool>,
     default_open: bool,
+    #[props(default = true)] full: bool,
     on_open_change: Option<EventHandler<bool>>,
     on_select: Option<EventHandler<String>>,
 ) -> Element {
@@ -84,23 +85,22 @@ pub fn Select(
     } else {
         colors.muted_foreground
     };
-    let count = options.len();
-    let has_panel_label = label.as_deref() != Some("");
     let accessible_name = accessibility_label
         .or_else(|| label.clone())
         .unwrap_or_else(|| i18n.select_label());
-    let accessible_value = if has_value {
-        current_selected.clone()
-    } else {
-        trigger_label.clone()
-    };
+    let accessible_value = trigger_label.clone();
+    let count = options.len();
+    let has_panel_label = label.as_deref() != Some("");
 
     let frame = if current_open {
         trigger_frame_for_anchor(&trigger_ref, *trigger_frame.read())
     } else {
         *trigger_frame.read()
     };
-    let panel_width = trigger_width_vp(frame, viewport, SELECT_PANEL_FALLBACK_WIDTH);
+    let panel_width = super::panel_viewport::bounded_panel_width(
+        viewport,
+        trigger_width_vp(frame, viewport, SELECT_PANEL_FALLBACK_WIDTH),
+    );
     let panel_height = select_panel_estimated_height(count, has_panel_label);
     let placement = FloatingPanelPlacement::resolve(
         frame,
@@ -123,11 +123,18 @@ pub fn Select(
             accessibility_group: true,
             accessibility_actions: "click",
             accessibility_disabled: disabled,
-            focusable: !disabled,
             enabled: !disabled,
-            width: "100%",
-            onclick: move |_| {
-                if !disabled {
+            width: if full { Some("100%") } else { None },
+            focusable: !disabled,
+            focus_on_touch: true,
+            onclick: move |_| { if !disabled { set_open.call(!current_open); } },
+            onkey: move |event| {
+                if disabled { return; }
+                if event.data().action == dioxus_elements::event::KeyAction::Down
+                    && event.data().key == dioxus_elements::event::KeyboardKey::Escape
+                {
+                    set_open.call(false);
+                } else if event.data().activates() {
                     set_open.call(!current_open);
                 }
             },
@@ -211,69 +218,66 @@ fn select_overlay_content(content: SelectOverlayContent) -> Element {
         .or_else(|| Some(i18n.select_label()))
         .filter(|label| !label.is_empty());
     let colors = theme.colors;
-    let scroll_list = options.len() > 8;
     let top = placement.y.max(0.0);
     let left = placement.x.max(0.0);
-
+    let viewport = arkit_hooks::use_overlay_viewport();
+    let natural_height =
+        select_panel_estimated_height(options.len(), label.is_some()) - spacing::XXS * 2.0;
+    let max_height = (super::panel_viewport::panel_available_height(viewport, top)
+        - spacing::XXS * 2.0)
+        .min(
+            SELECT_PANEL_SCROLL_HEIGHT
+                + if label.is_some() {
+                    SELECT_PANEL_HEADER_HEIGHT
+                } else {
+                    0.0
+                },
+        )
+        .max(1.0);
     rsx! {
-        // Full-screen hit plane; panel uses absolute position so left/top match
-        // trigger coordinates in overlay-local vp space (no padding/margin skew).
         stack {
             width: "100%",
             height: "100%",
+            accessibility_mode: "disabled",
             background_color: FLOATING_CAPTURE_COLOR,
             hit_test_behavior: "default",
             onclick: move |_| on_dismiss.call(()),
             column {
                 accessibility_role: "list",
+                focus_scope: true,
+                focus_navigation: "vertical",
+                key_capture: "escape",
                 position: format!("{left},{top}"),
                 width: panel_width,
                 align_items: "start",
-                onclick: move |evt| evt.stop_propagation(),
+                onclick: move |event| event.stop_propagation(),
+                onkey: move |event| {
+                    if event.data().is_down() && event.data().key == dioxus_elements::event::KeyboardKey::Escape {
+                        event.stop_propagation();
+                        on_dismiss.call(());
+                    }
+                },
                 background_color: colors.popover,
                 border_radius: theme.radii.md,
                 border_width: 1.0,
                 border_color: colors.border,
                 shadow: "sm",
-                padding_top: spacing::XXS,
-                padding_right: spacing::XXS,
-                padding_bottom: spacing::XXS,
-                padding_left: spacing::XXS,
-                if let Some(label) = label {
-                    row {
-                        width: "100%",
-                        padding_top: 6.0,
-                        padding_right: spacing::SM,
-                        padding_bottom: 6.0,
-                        padding_left: spacing::SM,
-                        text {
-                            font_size: typography::XS,
-                            font_color: colors.muted_foreground,
-                            line_height: 16.0,
-                            max_lines: SELECT_TEXT_MAX_LINES,
-                            text_overflow: SELECT_TEXT_OVERFLOW_ELLIPSIS,
-                            {label}
-                        }
-                    }
-                }
-                if scroll_list {
-                    scroll {
-                        width: "100%",
-                        height: SELECT_PANEL_SCROLL_HEIGHT,
-                        scroll_enabled: true,
-                        column {
+                padding: spacing::XXS,
+                super::panel_viewport::PanelViewport {
+                    max_height,
+                    estimated_height: natural_height,
+                    if let Some(label) = label {
+                        row {
                             width: "100%",
-                            for option in options.iter() {
-                                {select_option_row(option, selected.as_str(), &theme, set_selected, on_dismiss)}
-                            }
+                            height: SELECT_PANEL_HEADER_HEIGHT,
+                            padding_left: spacing::SM,
+                            padding_right: spacing::SM,
+                            align_items: "center",
+                            text { font_size: typography::XS, font_color: colors.muted_foreground, max_lines: SELECT_TEXT_MAX_LINES, text_overflow: SELECT_TEXT_OVERFLOW_ELLIPSIS, {label} }
                         }
                     }
-                } else {
-                    column {
-                        width: "100%",
-                        for option in options.iter() {
-                            {select_option_row(option, selected.as_str(), &theme, set_selected, on_dismiss)}
-                        }
+                    for option in options.iter() {
+                        SelectOptionRow { option: option.clone(), selected: selected.clone(), theme, set_selected, on_dismiss }
                     }
                 }
             }
@@ -281,16 +285,20 @@ fn select_overlay_content(content: SelectOverlayContent) -> Element {
     }
 }
 
-fn select_option_row(
-    option: &str,
-    selected: &str,
-    theme: &Theme,
+#[component]
+fn SelectOptionRow(
+    option: String,
+    selected: String,
+    theme: Theme,
     set_selected: EventHandler<String>,
     on_dismiss: EventHandler<()>,
 ) -> Element {
+    let mut hovering = use_signal(|| false);
+    let mut focused = use_signal(|| false);
     let colors = &theme.colors;
     let active = selected == option;
-    let opt = option.to_owned();
+    let click_opt = option.clone();
+    let key_opt = option.clone();
     let fg = if active {
         colors.accent_foreground
     } else {
@@ -300,12 +308,11 @@ fn select_option_row(
     rsx! {
         row {
             accessibility_role: "radio",
-            accessibility_text: option.to_owned(),
+            accessibility_text: option.clone(),
             accessibility_group: true,
             accessibility_actions: "click",
             accessibility_checked: active,
             accessibility_selected: active,
-            focusable: true,
             width: "100%",
             height: SELECT_OPTION_HEIGHT,
             align_items: "center",
@@ -315,11 +322,22 @@ fn select_option_row(
             padding_bottom: 6.0,
             padding_left: spacing::SM,
             border_radius: theme.radii.sm,
-            background_color: if active { colors.accent } else { 0x00000000 },
+            background_color: if active || hovering() || focused() { colors.accent } else { 0x00000000 },
+            focusable: true,
+            focus_on_touch: true,
             onclick: move |_: dioxus_core::Event<_>| {
-                set_selected.call(opt.clone());
+                set_selected.call(click_opt.clone());
                 on_dismiss.call(());
             },
+            onkey: move |event| {
+                if event.data().activates() {
+                    set_selected.call(key_opt.clone());
+                    on_dismiss.call(());
+                }
+            },
+            onhover: move |event| hovering.set(event.data().is_hovering),
+            onfocus: move |_| focused.set(true),
+            onblur: move |_| focused.set(false),
             row {
                 layout_weight: 1.0,
                 clip: true,
@@ -330,7 +348,7 @@ fn select_option_row(
                     line_height: 20.0,
                     max_lines: SELECT_TEXT_MAX_LINES,
                     text_overflow: SELECT_TEXT_OVERFLOW_ELLIPSIS,
-                    {option.to_owned()}
+                    {option.clone()}
                 }
             }
             if active {

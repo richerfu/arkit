@@ -19,7 +19,6 @@ calendar-month-november = 十一月
 calendar-month-december = 十二月
 calendar-month-title-template = { "{" }year{ "}" }年{ "{" }month{ "}" }
 calendar-back-to-days = 返回日期
-chart-series = 系列 { $number }
 combobox-placeholder = 搜索选项
 combobox-label = 建议
 command-placeholder = 搜索命令…

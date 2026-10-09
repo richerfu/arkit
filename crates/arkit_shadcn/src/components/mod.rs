@@ -24,7 +24,6 @@ mod calendar;
 mod calendar_plugin;
 mod card;
 mod carousel;
-mod chart;
 mod checkbox;
 /// Standalone syntax-highlighted code block (`code` feature).
 #[cfg(feature = "code")]
@@ -43,10 +42,12 @@ mod date_picker;
 mod dialog;
 mod drawer;
 mod dropdown_menu;
+mod floating_geometry;
 mod floating_layer;
 mod form;
 mod guide;
 mod hover_card;
+mod hover_surface;
 mod index;
 mod input;
 mod input_otp;
@@ -58,17 +59,15 @@ mod menubar;
 mod motion;
 mod navigation_menu;
 mod pagination;
+mod panel_viewport;
 mod popover;
 mod progress;
 mod radio_group;
 mod refresh;
-mod resizable;
-mod scroll_area;
 mod secure_keyboard;
 mod select;
 mod separator;
 mod sheet;
-mod sidebar;
 mod skeleton;
 mod slider;
 mod spinner;
@@ -118,7 +117,6 @@ pub use carousel::{
     Carousel, CarouselControlsPlacement, CarouselIndicatorVariant, CarouselProps, CarouselStyle,
     CarouselTransitionCurve,
 };
-pub use chart::{Chart, ChartCard, ChartCardProps, ChartProps};
 pub use checkbox::{Checkbox, CheckboxProps};
 #[cfg(feature = "code")]
 pub use code::{Code, CodeProps, CodeStyle};
@@ -179,8 +177,6 @@ pub use refresh::{
     InfiniteScroll, InfiniteScrollProps, LoadMoreIndicator, LoadMoreIndicatorProps, LoadMoreLabels,
     LoadMoreState, PullToRefresh, PullToRefreshProps,
 };
-pub use resizable::{Resizable, ResizableProps};
-pub use scroll_area::{ScrollArea, ScrollAreaProps};
 pub use secure_keyboard::{
     SecureKeyboard, SecureKeyboardLabels, SecureKeyboardMode, SecureKeyboardProps,
     SecureKeyboardSheet, SecureKeyboardSheetProps, SecureKeyboardStyle,
@@ -188,7 +184,6 @@ pub use secure_keyboard::{
 pub use select::{Select, SelectProps};
 pub use separator::{Separator, SeparatorProps};
 pub use sheet::{Sheet, SheetProps};
-pub use sidebar::{Sidebar, SidebarItem, SidebarItemProps, SidebarProps};
 pub use skeleton::{Skeleton, SkeletonProps};
 pub use slider::{
     MultiSlider, MultiSliderProps, RangeSlider, RangeSliderProps, Slider, SliderOrientation,
@@ -196,8 +191,8 @@ pub use slider::{
 };
 pub use spinner::{Spinner, SpinnerProps};
 pub use surfaces::{
-    Sonner, SonnerPosition, SonnerProps, SonnerStyle, SonnerToast, Toast, ToastAppearance,
-    ToastProps, ToastStyle, ToastSwipeDirection, ToastVariant,
+    Sonner, SonnerPosition, SonnerProps, SonnerStyle, SonnerToast, ToastAppearance, ToastStyle,
+    ToastSwipeDirection, ToastVariant,
 };
 pub use switch::{Switch, SwitchProps};
 pub use table::{Table, TableProps};

@@ -8,7 +8,7 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use super::{BottomSheet, Button, ButtonVariant, ARKUI_BORDER_STYLE_SOLID};
+use super::{bottom_sheet::AdaptivePickerSheet, Button, ButtonVariant, ARKUI_BORDER_STYLE_SOLID};
 use crate::i18n::{use_component_i18n, ComponentI18n};
 use crate::icon::icon_placeholder;
 use crate::theme::{spacing, typography, use_theme};
@@ -162,6 +162,12 @@ pub struct SecureKeyboardSheetProps {
     pub title: Option<String>,
     /// Controlled sheet state.
     pub open: Option<bool>,
+    /// Trigger anchor used by the PC popover presentation.
+    pub anchor: Option<arkit_arkui::NativeElementRef>,
+    /// Keep the keyboard attached to the bottom edge on PC instead of opening
+    /// it as an anchored popover.
+    #[props(default)]
+    pub fixed_bottom_on_pc: bool,
     #[props(default)]
     pub default_open: bool,
     pub value: Option<String>,
@@ -234,13 +240,16 @@ pub fn SecureKeyboardSheet(props: SecureKeyboardSheetProps) -> Element {
     });
 
     rsx! {
-        BottomSheet {
+        AdaptivePickerSheet {
             title: String::new(),
             open: Some(open),
             default_open: Some(false),
             show_header: Some(false),
             show_backdrop: Some(false),
             show_handle: Some(false),
+            anchor: props.anchor,
+            width: 520.0,
+            fixed_bottom_on_pc: props.fixed_bottom_on_pc,
             on_close: move |_| set_open.call(false),
             column {
                 width: "100%",
@@ -1085,6 +1094,11 @@ fn SecureKeyboardKey(props: SecureKeyboardKeyProps) -> Element {
                 opacity: if disabled { 0.4 } else { 1.0 },
                 onclick: move |_| {
                     if !disabled {
+                        onclick.call(());
+                    }
+                },
+                onkey: move |event| {
+                    if !disabled && event.data().activates() {
                         onclick.call(());
                     }
                 },

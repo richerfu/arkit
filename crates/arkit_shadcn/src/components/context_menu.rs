@@ -8,9 +8,7 @@ use crate::components::floating_layer::trigger_frame_for_anchor;
 use crate::components::menu_common::{
     menu_closed_panel_height, menu_overlay_content, MenuEntry, MenuOverlayPlacement, MenuStyle,
 };
-use crate::components::motion::{
-    OverlayPresence, FLOATING_DISTANCE, FLOATING_ENTER_MS, FLOATING_EXIT_MS,
-};
+use crate::components::motion::{OverlayPresence, FLOATING_ENTER_MS, FLOATING_EXIT_MS};
 use crate::theme::*;
 use arkit_prelude::*;
 
@@ -54,7 +52,8 @@ pub fn ContextMenu(
         }
     });
 
-    let panel_width = width.unwrap_or(MENU_PANEL_WIDTH);
+    let panel_width =
+        super::panel_viewport::bounded_panel_width(viewport, width.unwrap_or(MENU_PANEL_WIDTH));
     let style = MenuStyle {
         width: panel_width,
         submenu_width: panel_width - (spacing::XXS * 2.0),
@@ -63,7 +62,6 @@ pub fn ContextMenu(
 
     let dismiss = EventHandler::new(move |_: ()| {
         set_open.call(false);
-        cursor_placement.set(None);
     });
 
     let panel_height = menu_closed_panel_height(&items);
@@ -88,6 +86,8 @@ pub fn ContextMenu(
             "Long press to open context menu".to_string()
         }
     });
+    let mouse_trigger_ref = trigger_ref.clone();
+    let long_press_trigger_ref = trigger_ref.clone();
 
     rsx! {
         row {
@@ -100,12 +100,61 @@ pub fn ContextMenu(
             accessibility_selected: current_open,
             focusable: true,
             focus_on_touch: true,
+            onmouse: move |evt| {
+                let mouse = evt.data();
+                if !mouse.secondary_down() {
+                    return;
+                }
+                evt.stop_propagation();
+                let pointer = dioxus_elements::event::PointerPayload {
+                    action: mouse.action,
+                    x: mouse.x,
+                    y: mouse.y,
+                    window_x: mouse.window_x,
+                    window_y: mouse.window_y,
+                    ..Default::default()
+                };
+                let placement = MenuOverlayPlacement::from_cursor(
+                    pointer,
+                    viewport,
+                    style.width,
+                    panel_height,
+                    style.side_offset_vp,
+                )
+                .unwrap_or_else(|| {
+                    let frame = trigger_frame_for_anchor(&mouse_trigger_ref, *trigger_frame.read());
+                    MenuOverlayPlacement::resolve(
+                        frame,
+                        viewport,
+                        style.width,
+                        panel_height,
+                        style.side_offset_vp,
+                    )
+                });
+                cursor_placement.set(Some(placement));
+                set_open.call(true);
+            },
+            onkey: move |event| {
+                if !event.data().is_down() {
+                    return;
+                }
+                if event.data().key == dioxus_elements::event::KeyboardKey::Escape {
+                    dismiss.call(());
+                } else if event.data().key == dioxus_elements::event::KeyboardKey::Menu
+                    || (event.data().key == dioxus_elements::event::KeyboardKey::F10
+                        && event.data().modifiers.shift)
+                {
+                    cursor_placement.set(None);
+                    set_open.call(true);
+                }
+            },
             onlongpress: move |evt: dioxus_core::Event<dioxus_elements::event::ClickData>| {
+                evt.stop_propagation();
                 if current_open {
                     dismiss.call(());
                     return;
                 }
-                let frame = trigger_frame_for_anchor(&trigger_ref, *trigger_frame.read());
+                let frame = trigger_frame_for_anchor(&long_press_trigger_ref, *trigger_frame.read());
                 let placement = evt
                     .data()
                     .pointer
@@ -144,13 +193,15 @@ pub fn ContextMenu(
         }
         OverlayPresence {
             open: current_open,
-            preset: Some(arkit_animation::TransitionPreset::SlideUp),
+            // The capture plane must not translate: moving the full-screen
+            // hit layer shifts a cursor-anchored menu and can consume the
+            // release event that completed a long press.
+            preset: Some(arkit_animation::TransitionPreset::Fade),
             duration_ms: Some(FLOATING_ENTER_MS),
             exit_duration_ms: Some(FLOATING_EXIT_MS),
-            distance: Some(FLOATING_DISTANCE),
             fill: Some(true),
             layer: Some(arkit_hooks::OverlayLayer::Floating),
-            {menu_overlay_content(style, theme, dismiss, items, placement, None)}
+            {menu_overlay_content(style, theme, dismiss, items, placement, None, None)}
         }
     }
 }

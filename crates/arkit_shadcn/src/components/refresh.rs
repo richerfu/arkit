@@ -163,6 +163,11 @@ pub fn LoadMoreIndicator(props: LoadMoreIndicatorProps) -> Element {
                     on_retry.call(());
                 }
             },
+            onkey: move |event| {
+                if can_retry && event.data().activates() {
+                    on_retry.call(());
+                }
+            },
             if props.state == LoadMoreState::Loading {
                 loadingprogress {
                     width: 16.0,

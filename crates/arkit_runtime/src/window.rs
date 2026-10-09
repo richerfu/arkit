@@ -111,10 +111,38 @@ impl Default for WindowMetrics {
 }
 
 impl WindowMetrics {
+    /// Current content width in ArkUI virtual pixels (vp).
+    ///
+    /// The measured Arkit content rect is authoritative. Before the root's
+    /// first layout pass, fall back to the host window rect so responsive
+    /// components can still choose a useful initial layout.
+    pub fn content_width_vp(self) -> f32 {
+        self.content_size_vp().0
+    }
+
+    /// Current content height in ArkUI virtual pixels (vp).
+    pub fn content_height_vp(self) -> f32 {
+        self.content_size_vp().1
+    }
+
+    /// Current content size in ArkUI virtual pixels (vp).
+    pub fn content_size_vp(self) -> (f32, f32) {
+        let rect = if self.content_rect.is_empty() {
+            self.window_rect
+        } else {
+            self.content_rect
+        };
+        let scale = normalized_scale(self.scale);
+        (
+            rect.width.max(0) as f32 / scale,
+            rect.height.max(0) as f32 / scale,
+        )
+    }
+
     pub(crate) fn from_app(app: &OpenHarmonyApp, keyboard_height_px: Option<i32>) -> Self {
         let scale = normalized_scale(app.scale());
         let content_rect = PhysicalRect::from(app.content_rect());
-        let window_rect = PhysicalRect::from(app.window_rect());
+        let window_rect = PhysicalRect::from(app.window_rect_for(0));
         let mut avoid_areas = AvoidAreas::default();
         for (area_type, area) in app.avoid_areas() {
             avoid_areas.set(area_type, area);
@@ -240,10 +268,15 @@ impl WindowMetricsHandle {
     }
 
     pub(crate) fn update(&self, mut metrics: WindowMetrics) -> bool {
-        if metrics.content_rect.is_empty() {
-            if let Some(reported) = self.0.reported_content_rect.get() {
-                metrics = metrics.with_content_rect(reported);
-            }
+        // The native surface callback reports the XComponent rect in surface
+        // coordinates. Native node layout frames (and renderer portals) use
+        // application-window coordinates instead. Once the renderer root has
+        // supplied that authoritative frame, keep it across window/config/
+        // avoid-area refreshes; otherwise a later surface event can reset the
+        // title-bar/content offset to zero and shift every anchored overlay.
+        // A subsequent root layout pass replaces the frame after a resize.
+        if let Some(reported) = self.0.reported_content_rect.get() {
+            metrics = metrics.with_content_rect(reported);
         }
         self.update_and_notify(metrics)
     }
@@ -527,6 +560,62 @@ mod tests {
     }
 
     #[test]
+    fn native_refresh_preserves_the_measured_root_coordinate_space() {
+        let measured = PhysicalRect {
+            left: 24,
+            top: 70,
+            width: 1000,
+            height: 700,
+        };
+        let handle = WindowMetricsHandle::new(WindowMetrics::default());
+        assert!(handle.report_content_rect(measured));
+
+        let refreshed = WindowMetrics {
+            window_rect: PhysicalRect {
+                left: 480,
+                top: 220,
+                width: 1000,
+                height: 770,
+            },
+            // XComponent surface callbacks use a different origin on PC.
+            content_rect: PhysicalRect {
+                left: 0,
+                top: 0,
+                width: 1000,
+                height: 700,
+            },
+            scale: 2.0,
+            ..WindowMetrics::default()
+        };
+
+        assert!(handle.update(refreshed));
+        let current = handle.get();
+        assert_eq!(current.content_rect, measured);
+        assert_eq!(current.window_rect, refreshed.window_rect);
+        assert_eq!(current.scale, refreshed.scale);
+    }
+
+    #[test]
+    fn a_new_root_layout_replaces_the_preserved_frame_after_resize() {
+        let handle = WindowMetricsHandle::new(WindowMetrics::default());
+        assert!(handle.report_content_rect(PhysicalRect {
+            left: 0,
+            top: 70,
+            width: 1000,
+            height: 700,
+        }));
+
+        let resized = PhysicalRect {
+            left: 0,
+            top: 70,
+            width: 1400,
+            height: 900,
+        };
+        assert!(handle.report_content_rect(resized));
+        assert_eq!(handle.get().content_rect, resized);
+    }
+
+    #[test]
     fn subscribers_receive_changed_metrics() {
         let handle = WindowMetricsHandle::new(WindowMetrics::default());
         let observed = Rc::new(Cell::new(PhysicalRect::default()));
@@ -543,5 +632,39 @@ mod tests {
 
         assert!(handle.report_content_rect(expected));
         assert_eq!(observed.get(), expected);
+    }
+
+    #[test]
+    fn content_size_is_reported_in_vp() {
+        let metrics = WindowMetrics {
+            content_rect: PhysicalRect {
+                left: 40,
+                top: 60,
+                width: 1680,
+                height: 1200,
+            },
+            scale: 2.0,
+            ..WindowMetrics::default()
+        };
+
+        assert_eq!(metrics.content_size_vp(), (840.0, 600.0));
+        assert_eq!(metrics.content_width_vp(), 840.0);
+        assert_eq!(metrics.content_height_vp(), 600.0);
+    }
+
+    #[test]
+    fn content_size_falls_back_to_window_before_root_layout() {
+        let metrics = WindowMetrics {
+            window_rect: PhysicalRect {
+                left: 0,
+                top: 0,
+                width: 1200,
+                height: 800,
+            },
+            scale: 2.0,
+            ..WindowMetrics::default()
+        };
+
+        assert_eq!(metrics.content_size_vp(), (600.0, 400.0));
     }
 }

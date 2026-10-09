@@ -2,11 +2,11 @@
 //! `floating_panel` helper.
 //!
 //! The legacy implementation drove ArkUI's native floating-overlay system
-//! (`floating_overlay_with_surfaces`). In the dioxus migration we render
-//! inline: the trigger is mounted normally, and when `open` an optional
-//! full-size outside-dismiss layer is stacked over the trigger area. Passive
-//! hover surfaces remain pass-through; click-opened surfaces consume an
-//! outside click to dismiss while the panel itself keeps normal interaction.
+//! (`floating_overlay_with_surfaces`). The dioxus implementation keeps the
+//! trigger in normal flow and projects the panel into the app overlay so it is
+//! positioned in window coordinates and cannot be clipped by its parent.
+//! Passive hover surfaces remain pass-through; click-opened surfaces consume
+//! one outside click to dismiss.
 //!
 //! Shared constants/enums here are consumed by the overlay components
 //! (`popover`, `tooltip`, `hover_card`, `dialog`, `drawer`, `sheet`,
@@ -15,6 +15,7 @@
 use arkit_prelude::*;
 use dioxus_core_macro::component;
 
+use super::motion::{OverlayPresence, FLOATING_ENTER_MS, FLOATING_EXIT_MS};
 use crate::theme::spacing;
 
 /// Backdrop color for modal overlays (50% black).
@@ -30,42 +31,7 @@ pub(crate) const HIT_TEST_NONE: &str = "none";
 /// Small outer shadow preset (`shadow: "sm"`).
 pub(crate) const SHADOW_SM: &str = "sm";
 
-// CSS-style stack `alignment` keywords.
-pub(crate) const ALIGN_TOP: &str = "top";
-pub(crate) const ALIGN_START: &str = "start";
-pub(crate) const ALIGN_END: &str = "end";
-pub(crate) const ALIGN_BOTTOM: &str = "bottom";
-
-/// Side of the trigger the floating panel anchors to.
-///
-/// Maps to an ArkUI `Alignment` int used on the capture-layer `stack`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum FloatingSide {
-    Top,
-    #[default]
-    Bottom,
-    Left,
-    Right,
-}
-
-/// Cross-axis alignment of the floating panel relative to the trigger.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum FloatingAlign {
-    Start,
-    #[default]
-    Center,
-    End,
-}
-
-/// Resolve a [`FloatingSide`] to a CSS `alignment` keyword.
-pub(crate) fn side_alignment(side: FloatingSide) -> &'static str {
-    match side {
-        FloatingSide::Top => ALIGN_TOP,
-        FloatingSide::Bottom => ALIGN_BOTTOM,
-        FloatingSide::Left => ALIGN_START,
-        FloatingSide::Right => ALIGN_END,
-    }
-}
+pub use super::floating_geometry::{FloatingAlign, FloatingSide};
 
 /// Resolve a side name (`"top"` / `"bottom"` / `"left"` / `"right"`) to a
 /// [`FloatingSide`]. Falls back to [`FloatingSide::Bottom`].
@@ -141,29 +107,28 @@ impl FloatingPanelPlacement {
         // Keep panels on-screen with a small edge pad; do NOT force page-level
         // LG inset here — that was shifting start-aligned panels off the trigger.
         let edge = spacing::SM;
-        let min_x = viewport.safe_area.left.max(0.0) + edge;
-        let min_y = viewport.safe_area.top.max(0.0) + edge;
-        let max_x = (metrics.size.width - viewport.safe_area.right.max(0.0) - panel_width - edge)
-            .max(min_x);
-        let max_y =
-            (metrics.size.height - viewport.safe_area.bottom.max(0.0) - panel_height - edge)
-                .max(min_y);
-
-        let raw_x = match align {
-            FloatingAlign::Start => trigger_x,
-            FloatingAlign::Center => trigger_x + ((trigger_width - panel_width) / 2.0),
-            FloatingAlign::End => trigger_x + trigger_width - panel_width,
-        };
-        let raw_y = match side {
-            FloatingSide::Top => trigger_y - panel_height - side_offset,
-            FloatingSide::Bottom => trigger_y + trigger_height + side_offset,
-            FloatingSide::Left | FloatingSide::Right => trigger_y,
-        };
-
-        let x = clamp_preserving_start(raw_x, min_x, max_x, align);
-        let y = raw_y.clamp(min_y, max_y);
-
-        Self { x, y }
+        let placement = super::floating_geometry::PanelPlacement::resolve(
+            super::floating_geometry::AnchorRect {
+                x: trigger_x,
+                y: trigger_y,
+                width: trigger_width,
+                height: trigger_height,
+            },
+            super::floating_geometry::PanelBounds {
+                left: viewport.safe_area.left.max(0.0) + edge,
+                top: viewport.safe_area.top.max(0.0) + edge,
+                right: metrics.size.width - viewport.safe_area.right.max(0.0) - edge,
+                bottom: metrics.size.height - viewport.safe_area.bottom.max(0.0) - edge,
+            },
+            (panel_width, panel_height),
+            side,
+            align,
+            side_offset,
+        );
+        Self {
+            x: placement.x,
+            y: placement.y,
+        }
     }
 
     pub(crate) fn fallback(viewport: arkit_hooks::OverlayViewport) -> Self {
@@ -174,28 +139,7 @@ impl FloatingPanelPlacement {
     }
 }
 
-/// Clamp horizontal placement while preferring start alignment when possible.
-fn clamp_preserving_start(raw_x: f32, min_x: f32, max_x: f32, align: FloatingAlign) -> f32 {
-    match align {
-        FloatingAlign::Start => {
-            if raw_x < min_x {
-                min_x
-            } else if raw_x > max_x {
-                max_x
-            } else {
-                raw_x
-            }
-        }
-        FloatingAlign::Center | FloatingAlign::End => raw_x.clamp(min_x, max_x),
-    }
-}
-
 /// Convert a window-space point into overlay-local vp.
-///
-/// `content_rect` (used as overlay origin) can lag the native portal frame. If
-/// subtracting it puts the trigger well outside the portal, the origin is in a
-/// different space than the trigger — fall back to window/scale so the panel
-/// does not clamp to (0,0).
 pub(crate) fn overlay_local_vp(
     window: arkit_arkui::WindowPxPoint,
     overlay_origin: arkit_arkui::WindowPxPoint,
@@ -207,13 +151,7 @@ pub(crate) fn overlay_local_vp(
         y: overlay_origin.y,
         ..Default::default()
     };
-    let local =
-        arkit_arkui::LocalVpPoint::from_window_px(window, overlay_frame, scale).unwrap_or_default();
-    if local.x >= -1.0 && local.y >= -1.0 {
-        return local;
-    }
-    arkit_arkui::LocalVpPoint::from_window_px(window, arkit_arkui::LayoutFramePx::default(), scale)
-        .unwrap_or(local)
+    arkit_arkui::LocalVpPoint::from_window_px(window, overlay_frame, scale).unwrap_or_default()
 }
 
 /// Prefer a live native window frame over the last area-change sample.
@@ -255,10 +193,7 @@ pub(crate) fn overlay_metrics_vp(
             .expect("validated viewport scale must convert measured overlay dimensions");
         OverlayMetrics {
             origin: arkit_arkui::WindowPxPoint::new(overlay.x, overlay.y),
-            size: arkit_arkui::LogicalSizeVp::new(
-                size.width.max(panel_width + spacing::SM * 2.0),
-                size.height.max(panel_height + spacing::SM * 2.0),
-            ),
+            size: arkit_arkui::LogicalSizeVp::new(size.width, size.height),
         }
     } else {
         OverlayMetrics {
@@ -286,8 +221,8 @@ pub(crate) fn trigger_width_vp(
     (trigger.width / scale.max(f32::EPSILON)).max(1.0)
 }
 
-/// Generic floating layer: renders `trigger` and, when open, a capture layer
-/// holding `children` (the panel) aligned to `side`.
+/// Generic floating layer: renders `trigger` and, when open, projects
+/// `children` into the app overlay and anchors the panel to the trigger.
 ///
 /// `hover` selects the trigger activation mode: when `true`, hovering the
 /// trigger opens the panel (tooltip/hover-card behaviour); otherwise the
@@ -301,10 +236,22 @@ pub fn FloatingLayer(
     open: Option<bool>,
     default_open: Option<bool>,
     on_close: Option<EventHandler<()>>,
+    on_open_change: Option<EventHandler<bool>>,
     side: Option<FloatingSide>,
+    align: Option<FloatingAlign>,
+    width: Option<f32>,
+    estimated_height: Option<f32>,
+    side_offset: Option<f32>,
     hover: Option<bool>,
     children: Element,
 ) -> Element {
+    let viewport = arkit_hooks::use_overlay_viewport();
+    let trigger_ref = arkit_hooks::use_native_element_ref();
+    let trigger_frame = use_signal(arkit_arkui::LayoutFramePx::default);
+    arkit_hooks::use_layout_frame(trigger_ref.clone(), move |frame| {
+        let mut trigger_frame = trigger_frame;
+        trigger_frame.set(frame);
+    });
     let mut internal = use_signal(|| default_open.unwrap_or(false));
     let current = match open {
         Some(v) => v,
@@ -312,17 +259,33 @@ pub fn FloatingLayer(
     };
     let controlled = open.is_some();
     let hover = hover.unwrap_or(false);
-    let alignment = side_alignment(side.unwrap_or_default());
+    let side = side.unwrap_or_default();
+    let panel_width = super::panel_viewport::bounded_panel_width(viewport, width.unwrap_or(288.0));
+    let panel_height = estimated_height.unwrap_or(132.0);
+    let frame = if current {
+        trigger_frame_for_anchor(&trigger_ref, *trigger_frame.read())
+    } else {
+        *trigger_frame.read()
+    };
+    let placement = FloatingPanelPlacement::resolve(
+        frame,
+        viewport,
+        panel_width,
+        panel_height,
+        side,
+        align.unwrap_or_default(),
+        side_offset.unwrap_or(spacing::XXS),
+    );
 
-    let open_up = EventHandler::new(move |_: ()| {
-        if !controlled {
-            internal.set(true);
+    let set_open = EventHandler::new(move |next: bool| {
+        if next == current {
+            return;
         }
-    });
-    let toggle = EventHandler::new(move |_: ()| {
-        let next = !current;
         if !controlled {
             internal.set(next);
+        }
+        if let Some(handler) = on_open_change {
+            handler.call(next);
         }
         if !next {
             if let Some(handler) = on_close {
@@ -330,72 +293,79 @@ pub fn FloatingLayer(
             }
         }
     });
-    let close = EventHandler::new(move |_: ()| {
-        if !controlled {
-            internal.set(false);
-        }
-        if let Some(handler) = on_close {
-            handler.call(());
-        }
+    let surface = super::hover_surface::use_hover_surface(set_open);
+    let trigger_hover = surface.clone();
+    let trigger_focus = surface.clone();
+    let trigger_blur = surface.clone();
+    let trigger_click = surface.clone();
+    let trigger_key = surface.clone();
+    let panel_hover = surface.clone();
+    let panel_focus = surface.clone();
+    let panel_blur = surface.clone();
+    let panel_key = surface.clone();
+    let outside_hover = surface.clone();
+    let pinned = surface.pinned();
+    let toggle = EventHandler::new(move |_: ()| {
+        set_open.call(!current);
     });
+    let close = EventHandler::new(move |_: ()| set_open.call(false));
 
     rsx! {
-        stack {
-            width: "100%",
-            height: "100%",
-            alignment: "top",
-            hit_test_behavior: "none",
-            if hover {
-                row {
-                    accessibility_role: "button",
-                    accessibility_text: if let Some(label) = accessibility_label.clone() { label },
-                    accessibility_description: if current { "expanded" } else { "collapsed" },
-                    accessibility_group: true,
-                    accessibility_actions: "click",
-                    accessibility_selected: current,
-                    focusable: true,
-                    focus_on_touch: true,
-                    onclick: move |_| toggle.call(()),
-                    onhover: move |_| open_up.call(()),
-                    {trigger}
+        row {
+            native_ref: trigger_ref,
+            accessibility_role: "button",
+            accessibility_text: if let Some(label) = accessibility_label { label },
+            accessibility_description: if current { "expanded" } else { "collapsed" },
+            accessibility_group: true,
+            accessibility_actions: "click",
+            accessibility_selected: current,
+            focusable: true,
+            focus_on_touch: true,
+            key_capture: "enter space escape",
+            onclick: move |_| { if hover { trigger_click.toggle_pin(current); } else { toggle.call(()); } },
+            onhover: move |event| { if hover { trigger_hover.trigger_hover(event.data().is_hovering); } },
+            onfocusin: move |_| { if hover { trigger_focus.trigger_focus(true); } },
+            onfocusout: move |_| { if hover { trigger_blur.trigger_focus(false); } },
+            onkey: move |event| {
+                if event.data().action == dioxus_elements::event::KeyAction::Down && event.data().key == dioxus_elements::event::KeyboardKey::Escape {
+                    event.stop_propagation(); if hover { trigger_key.dismiss(); } else { close.call(()); }
+                } else if event.data().activates() {
+                    event.stop_propagation(); if hover { trigger_key.toggle_pin(current); } else { toggle.call(()); }
                 }
-            } else {
-                row {
-                    accessibility_role: "button",
-                    accessibility_text: if let Some(label) = accessibility_label { label },
-                    accessibility_description: if current { "expanded" } else { "collapsed" },
-                    accessibility_group: true,
-                    accessibility_actions: "click",
-                    accessibility_selected: current,
-                    focusable: true,
-                    focus_on_touch: true,
-                    onclick: move |_| toggle.call(()),
-                    {trigger}
-                }
-            }
-            if current {
-                if hover {
-                    stack {
-                        width: "100%",
-                        accessibility_mode: "disabled",
-                        height: "100%",
-                        alignment: alignment,
-                        hit_test_behavior: "none",
-                        {children}
-                    }
-                } else {
-                    stack {
-                        width: "100%",
-                        height: "100%",
-                        background_color: FLOATING_CAPTURE_COLOR,
-                        alignment: alignment,
-                        hit_test_behavior: "default",
-                        onclick: move |_| close.call(()),
-                        stack {
-                            onclick: move |evt| evt.stop_propagation(),
-                            {children}
+            },
+            {trigger}
+        }
+        OverlayPresence {
+            open: current,
+            preset: Some(arkit_animation::TransitionPreset::Fade),
+            duration_ms: Some(FLOATING_ENTER_MS),
+            exit_duration_ms: Some(FLOATING_EXIT_MS),
+            fill: Some(true),
+            layer: Some(arkit_hooks::OverlayLayer::Floating),
+            stack {
+                width: "100%",
+                height: "100%",
+                background_color: if hover && !pinned { 0x00000000 } else { FLOATING_CAPTURE_COLOR },
+                hit_test_behavior: if hover && !pinned { HIT_TEST_NONE } else { HIT_TEST_DEFAULT },
+                onclick: move |_| {
+                    if hover { if pinned { outside_hover.dismiss(); } } else { close.call(()); }
+                },
+                stack {
+                    position: format!("{},{}", placement.x.max(0.0), placement.y.max(0.0)),
+                    width: panel_width,
+                    focus_scope: !hover || pinned,
+                    key_capture: "escape",
+                    onhover: move |event| { if hover { panel_hover.panel_hover(event.data().is_hovering); } },
+                    onfocusin: move |_| { if hover { panel_focus.panel_focus(true); } },
+                    onfocusout: move |_| { if hover { panel_blur.panel_focus(false); } },
+                    onkey: move |event| {
+                        if event.data().action == dioxus_elements::event::KeyAction::Down && event.data().key == dioxus_elements::event::KeyboardKey::Escape {
+                            event.stop_propagation(); if hover { panel_key.dismiss(); } else { close.call(()); }
                         }
-                    }
+                    },
+                    hit_test_behavior: HIT_TEST_DEFAULT,
+                    onclick: move |event| event.stop_propagation(),
+                    super::panel_viewport::PanelViewport { max_height: super::panel_viewport::panel_available_height(viewport, placement.y), {children} }
                 }
             }
         }
@@ -405,14 +375,6 @@ pub fn FloatingLayer(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn side_alignment_maps_to_arkui_alignment_ints() {
-        assert_eq!(side_alignment(FloatingSide::Top), ALIGN_TOP);
-        assert_eq!(side_alignment(FloatingSide::Bottom), ALIGN_BOTTOM);
-        assert_eq!(side_alignment(FloatingSide::Left), ALIGN_START);
-        assert_eq!(side_alignment(FloatingSide::Right), ALIGN_END);
-    }
 
     #[test]
     fn side_from_name_defaults_to_bottom() {
@@ -559,49 +521,8 @@ mod tests {
         assert!((placement.y - (200.0 / 3.0 + 120.0 / 3.0 + 4.0)).abs() < 0.01);
     }
 
-    /// Pre-fix conversion: subtract overlay origin then clamp negatives to 0.
-    fn legacy_overlay_local_vp(
-        window: arkit_arkui::WindowPxPoint,
-        overlay_origin: arkit_arkui::WindowPxPoint,
-        scale: f32,
-    ) -> arkit_arkui::LocalVpPoint {
-        let local = arkit_arkui::LocalVpPoint::from_window_px(
-            window,
-            arkit_arkui::LayoutFramePx {
-                x: overlay_origin.x,
-                y: overlay_origin.y,
-                ..Default::default()
-            },
-            scale,
-        )
-        .unwrap_or_default();
-        arkit_arkui::LocalVpPoint::new(local.x.max(0.0), local.y.max(0.0))
-    }
-
     #[test]
-    fn before_fix_mismatched_origin_pinned_trigger_to_zero() {
-        let window = arkit_arkui::WindowPxPoint::new(80.0, 120.0);
-        let mismatched_origin = arkit_arkui::WindowPxPoint::new(0.0, 400.0);
-        let old = legacy_overlay_local_vp(window, mismatched_origin, 1.0);
-        let new = overlay_local_vp(window, mismatched_origin, 1.0);
-        assert_eq!(old.x, 80.0);
-        assert_eq!(old.y, 0.0);
-        assert!((new.x - 80.0).abs() < 0.01);
-        assert!((new.y - 120.0).abs() < 0.01);
-        assert!((new.y - old.y).abs() > 50.0);
-    }
-
-    #[test]
-    fn overlay_local_falls_back_when_origin_is_not_in_trigger_space() {
-        let window = arkit_arkui::WindowPxPoint::new(80.0, 120.0);
-        let mismatched_origin = arkit_arkui::WindowPxPoint::new(0.0, 400.0);
-        let local = overlay_local_vp(window, mismatched_origin, 1.0);
-        assert!((local.x - 80.0).abs() < 0.01);
-        assert!((local.y - 120.0).abs() < 0.01);
-    }
-
-    #[test]
-    fn overlay_local_keeps_matching_origin() {
+    fn overlay_local_subtracts_the_measured_portal_origin() {
         let window = arkit_arkui::WindowPxPoint::new(105.0, 105.0);
         let origin = arkit_arkui::WindowPxPoint::new(70.0, 35.0);
         let local = overlay_local_vp(window, origin, 3.5);
@@ -610,33 +531,42 @@ mod tests {
     }
 
     #[test]
-    fn mismatched_overlay_origin_does_not_pin_panel_to_zero() {
+    fn overlay_local_keeps_negative_points_in_the_same_coordinate_space() {
+        let window = arkit_arkui::WindowPxPoint::new(80.0, 120.0);
+        let origin = arkit_arkui::WindowPxPoint::new(0.0, 400.0);
+        let local = overlay_local_vp(window, origin, 2.0);
+        assert!((local.x - 40.0).abs() < 0.01);
+        assert!((local.y + 140.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn placement_uses_the_nonzero_pc_content_origin_once() {
         let viewport = arkit_hooks::OverlayViewport {
             frame: arkit_arkui::LayoutFramePx {
-                x: 0.0,
-                y: 400.0,
-                width: 400.0,
-                height: 800.0,
+                x: 24.0,
+                y: 70.0,
+                width: 1000.0,
+                height: 700.0,
             },
             safe_area: arkit_hooks::EdgeInsets::default(),
-            scale: 1.0,
+            scale: 2.0,
         };
         let placement = FloatingPanelPlacement::from_trigger(
             arkit_arkui::LayoutFramePx {
-                x: 80.0,
-                y: 120.0,
+                x: 224.0,
+                y: 270.0,
                 width: 200.0,
                 height: 40.0,
             },
             viewport,
-            200.0,
+            100.0,
             100.0,
             FloatingSide::Bottom,
             FloatingAlign::Start,
             4.0,
         );
-        assert!((placement.x - 80.0).abs() < 0.5);
-        assert!((placement.y - (120.0 + 40.0 + 4.0)).abs() < 0.5);
+        assert!((placement.x - 100.0).abs() < 0.01);
+        assert!((placement.y - 124.0).abs() < 0.01);
     }
 
     #[test]

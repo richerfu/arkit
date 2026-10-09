@@ -1,19 +1,19 @@
 //! Sheet — a panel that slides in from a screen side (default: right).
 //!
-//! Migrated from the legacy Elm builder API. Same shape as `Drawer` but
-//! narrow (`SHEET_WIDTH` 384), full-height, with a close (`✕`) button instead
-//! of a drag handle. The `side` prop (`"top"` / `"bottom"` / `"left"` /
-//! `"right"`) selects the capture-layer alignment (left=3, right=5, top=1,
-//! bottom=7). Original styling preserved: `spacing::XXL` padding, `lg` radius,
-//! 1px border, `background`/`border` tokens, small outer shadow.
+//! The panel is projected into the root modal layer, is 384vp wide on PC for
+//! left/right presentation, and has a close (`✕`) button instead of a drag
+//! handle. The `side` prop accepts `"top"`, `"bottom"`, `"left"`, or `"right"`.
+//! Side sheets follow shadcn's flush viewport-edge shape rather than inheriting
+//! the caller's rounded content canvas.
 
 use super::dialog::DialogHeader;
-use super::floating_layer::{side_alignment, side_from_name, OVERLAY_BACKDROP};
-use super::motion::{slide_in_from, OVERLAY_ENTER_MS, OVERLAY_EXIT_MS, SHEET_DISTANCE};
+use super::floating_layer::{side_from_name, FloatingSide, OVERLAY_BACKDROP};
+use super::motion::{
+    slide_in_from, AnimatedEdgeModal, OVERLAY_ENTER_MS, OVERLAY_EXIT_MS, SHEET_DISTANCE,
+};
 use super::ARKUI_BORDER_STYLE_SOLID;
 use crate::icon::icon_placeholder;
 use crate::theme::*;
-use arkit_animation::{use_presence_visibility, PresenceTransition};
 use arkit_prelude::*;
 use dioxus_core_macro::component;
 
@@ -30,6 +30,7 @@ pub fn Sheet(
     children: Element,
 ) -> Element {
     let theme = use_theme();
+    let adaptive = arkit_hooks::use_adaptive_layout();
     let mut internal = use_signal(|| default_open.unwrap_or(false));
     let current = match open {
         Some(v) => v,
@@ -37,7 +38,7 @@ pub fn Sheet(
     };
     let controlled = open.is_some();
     let side = side_from_name(side.as_deref().unwrap_or("right"));
-    let alignment = side_alignment(side);
+    let horizontal = matches!(side, FloatingSide::Left | FloatingSide::Right);
 
     let close = EventHandler::new(move |_: ()| {
         if !controlled {
@@ -48,37 +49,29 @@ pub fn Sheet(
         }
     });
 
-    let visibility = use_presence_visibility(current);
-    if !visibility.mounted {
-        return rsx! {};
-    }
-
     rsx! {
-        stack {
-            width: "100%",
-            accessibility_mode: "disabled",
-            height: "100%",
-            background_color: OVERLAY_BACKDROP,
-            alignment: alignment,
-            onclick: move |_| close.call(()),
-            PresenceTransition {
-                phase: visibility.phase,
-                on_terminal: visibility.on_terminal,
-                preset: Some(slide_in_from(side)),
-                duration_ms: Some(OVERLAY_ENTER_MS),
-                exit_duration_ms: Some(OVERLAY_EXIT_MS),
-                distance: Some(SHEET_DISTANCE),
+        AnimatedEdgeModal {
+            open: current,
+            side,
+            on_dismiss: close,
+            backdrop_color: OVERLAY_BACKDROP,
+            viewport_inset: 0.0,
+            panel_width: if horizontal && adaptive.is_pc() { Some(SHEET_WIDTH) } else { None },
+            preset: Some(slide_in_from(side)),
+            duration_ms: Some(OVERLAY_ENTER_MS),
+            exit_duration_ms: Some(OVERLAY_EXIT_MS),
+            distance: Some(SHEET_DISTANCE),
             stack {
-                onclick: move |evt| { evt.stop_propagation(); },
                 accessibility_role: "dialog",
                 accessibility_text: title.clone(),
-                width: SHEET_WIDTH,
-                height: "100%",
+                width: "100%",
+                max_width: if horizontal && adaptive.is_pc() { SHEET_WIDTH },
+                height: if horizontal { "100%" } else { "auto" },
                 padding_top: spacing::XXL,
                 padding_right: spacing::XXL,
                 padding_bottom: spacing::XXL,
                 padding_left: spacing::XXL,
-                border_radius: theme.radii.lg,
+                border_radius: 0.0,
                 border_width: 1.0,
                 border_color: theme.colors.border,
                 background_color: theme.colors.background,
@@ -116,11 +109,15 @@ pub fn Sheet(
                         alignment: "center",
                         opacity: 0.7_f32,
                         onclick: move |_| close.call(()),
+                        onkey: move |event| {
+                            if event.data().activates() {
+                                close.call(());
+                            }
+                        },
                         {icon_placeholder("x", 16.0, theme.colors.foreground)}
                     }
                 }
             }
-        }
         }
     }
 }

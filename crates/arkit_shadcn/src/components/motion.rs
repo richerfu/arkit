@@ -33,6 +33,177 @@ pub(crate) fn slide_in_from(side: FloatingSide) -> TransitionPreset {
     }
 }
 
+/// Root-projected modal placed against an explicit viewport edge.
+///
+/// This is used by Drawer and Sheet instead of stack `alignment` strings: the
+/// explicit row/column justification makes edge placement deterministic on
+/// ArkUI and keeps the backdrop independent of the page's content width.
+#[component]
+pub(crate) fn AnimatedEdgeModal(
+    open: bool,
+    side: FloatingSide,
+    on_dismiss: EventHandler<()>,
+    children: Element,
+    #[props(default = true)] dismiss_on_backdrop: bool,
+    #[props(default = 0x80000000)] backdrop_color: u32,
+    #[props(default = 0.0)] viewport_inset: f32,
+    #[props(default)] panel_width: Option<f32>,
+    #[props(default)] panel_width_fraction: Option<f32>,
+    #[props(default)] preset: Option<TransitionPreset>,
+    #[props(default)] duration_ms: Option<i32>,
+    #[props(default)] exit_duration_ms: Option<i32>,
+    #[props(default)] distance: Option<f32>,
+) -> Element {
+    let visibility = use_presence_visibility(open);
+    let safe_area = arkit_hooks::use_safe_area();
+    if !visibility.mounted {
+        return rsx! {};
+    }
+    let inset_top = viewport_inset + safe_area.top;
+    let inset_right = viewport_inset + safe_area.right;
+    let inset_bottom = viewport_inset + safe_area.bottom;
+    let inset_left = viewport_inset + safe_area.left;
+    let allow_dismiss = dismiss_on_backdrop;
+    let dismiss = on_dismiss;
+    let viewport = arkit_hooks::use_overlay_viewport();
+    let max_height =
+        super::panel_viewport::panel_available_height(viewport, inset_top) - inset_bottom;
+    let children = rsx! { super::panel_viewport::PanelViewport { max_height, estimated_height: max_height, center: true, {children} } };
+    let edge_width = panel_width
+        .filter(|width| width.is_finite() && *width > 0.0)
+        .map(|width| {
+            format!(
+                "{}",
+                super::panel_viewport::bounded_panel_width(viewport, width).min(
+                    (viewport.frame.width / viewport.scale.max(f32::EPSILON)
+                        - inset_left
+                        - inset_right)
+                        .max(1.0)
+                )
+            )
+        })
+        .or_else(|| {
+            panel_width_fraction
+                .filter(|fraction| fraction.is_finite() && *fraction > 0.0)
+                .map(|fraction| format!("{}%", (fraction.clamp(0.0, 1.0) * 100.0).round()))
+        })
+        .unwrap_or_else(|| "100%".to_string());
+
+    let panel = rsx! {
+        PresenceTransition {
+            phase: visibility.phase,
+            on_terminal: visibility.on_terminal,
+            preset,
+            duration_ms,
+            exit_duration_ms,
+            distance,
+            {children}
+        }
+    };
+    let placed = match side {
+        FloatingSide::Left => rsx! {
+            row {
+                width: "100%",
+                height: "100%",
+                justify_content: "start",
+                padding_top: inset_top,
+                padding_right: inset_right,
+                padding_bottom: inset_bottom,
+                padding_left: inset_left,
+                hit_test_behavior: "transparent",
+                column { width: edge_width.clone(), height: "100%", clip: false, hit_test_behavior: "transparent", {panel} }
+            }
+        },
+        FloatingSide::Right => rsx! {
+            row {
+                width: "100%",
+                height: "100%",
+                justify_content: "end",
+                padding_top: inset_top,
+                padding_right: inset_right,
+                padding_bottom: inset_bottom,
+                padding_left: inset_left,
+                hit_test_behavior: "transparent",
+                column { width: edge_width, height: "100%", clip: false, hit_test_behavior: "transparent", {panel} }
+            }
+        },
+        FloatingSide::Top => rsx! {
+            column {
+                width: "100%",
+                height: "100%",
+                justify_content: "start",
+                align_items: "center",
+                padding_top: inset_top,
+                padding_right: inset_right,
+                padding_bottom: inset_bottom,
+                padding_left: inset_left,
+                hit_test_behavior: "transparent",
+                row { width: "100%", justify_content: "center", clip: false, hit_test_behavior: "transparent", {panel} }
+            }
+        },
+        FloatingSide::Bottom => rsx! {
+            column {
+                width: "100%",
+                height: "100%",
+                justify_content: "end",
+                align_items: "center",
+                padding_top: inset_top,
+                padding_right: inset_right,
+                padding_bottom: inset_bottom,
+                padding_left: inset_left,
+                hit_test_behavior: "transparent",
+                row { width: "100%", justify_content: "center", clip: false, hit_test_behavior: "transparent", {panel} }
+            }
+        },
+    };
+
+    rsx! {
+        arkit_hooks::Portal {
+            layer: arkit_hooks::OverlayLayer::Modal,
+            stack {
+                width: "100%",
+                height: "100%",
+                alignment: "top-start",
+                clip: false,
+                focusable: true,
+                focus_scope: open,
+                focus_trap: true,
+                enabled: open,
+                key_capture: "escape",
+                focus_on_touch: false,
+                onkey: move |event| {
+                    if event.data().action == dioxus_elements::event::KeyAction::Down
+                        && event.data().key == dioxus_elements::event::KeyboardKey::Escape
+                    {
+                        event.stop_propagation();
+                        dismiss.call(());
+                    }
+                },
+                PresenceTransition {
+                    phase: visibility.phase,
+                    preset: Some(TransitionPreset::Fade),
+                    duration_ms,
+                    exit_duration_ms,
+                    fill: Some(true),
+                    row {
+                        width: "100%",
+                        height: "100%",
+                        background_color: backdrop_color,
+                        hit_test_behavior: "default",
+                        onclick: move |event| {
+                            event.stop_propagation();
+                            if allow_dismiss {
+                                dismiss.call(());
+                            }
+                        },
+                    }
+                }
+                {placed}
+            }
+        }
+    }
+}
+
 /// Keep a portaled overlay mounted through its hide timeline.
 #[component]
 pub(crate) fn OverlayPresence(
@@ -50,15 +221,21 @@ pub(crate) fn OverlayPresence(
         return rsx! {};
     }
     let body = rsx! {
-        PresenceTransition {
-            phase: visibility.phase,
-            on_terminal: visibility.on_terminal,
-            preset,
-            duration_ms,
-            exit_duration_ms,
-            distance,
-            fill,
-            {children}
+        stack {
+            width: if fill == Some(true) { "100%" },
+            height: if fill == Some(true) { "100%" },
+            enabled: open,
+            hit_test_behavior: "transparent",
+            PresenceTransition {
+                phase: visibility.phase,
+                on_terminal: visibility.on_terminal,
+                preset,
+                duration_ms,
+                exit_duration_ms,
+                distance,
+                fill,
+                {children}
+            }
         }
     };
     match layer {
@@ -86,6 +263,7 @@ pub(crate) fn AnimatedModal(
     #[props(default = true)] dismiss_on_backdrop: bool,
     #[props(default = 0x80000000)] backdrop_color: u32,
     #[props(default = 16.0)] viewport_inset: f32,
+    #[props(default)] panel_max_width: Option<f32>,
     #[props(default)] preset: Option<TransitionPreset>,
     #[props(default)] duration_ms: Option<i32>,
     #[props(default)] exit_duration_ms: Option<i32>,
@@ -102,19 +280,27 @@ pub(crate) fn AnimatedModal(
     let inset_left = viewport_inset + safe_area.left;
     let allow_dismiss = dismiss_on_backdrop;
     let dismiss = on_dismiss;
+    let viewport = arkit_hooks::use_overlay_viewport();
+    let max_height =
+        (viewport.frame.height / viewport.scale.max(f32::EPSILON) - inset_top - inset_bottom)
+            .max(1.0);
+    let children =
+        rsx! { super::panel_viewport::PanelViewport { max_height, center: true, {children} } };
     let placed = match presentation {
         arkit_hooks::ModalPresentation::CenteredDialog => rsx! {
-            stack {
+            column {
                 width: "100%",
                 height: "100%",
-                alignment: "center",
+                justify_content: "center",
+                align_items: "center",
                 padding_top: inset_top,
                 padding_right: inset_right,
                 padding_bottom: inset_bottom,
                 padding_left: inset_left,
                 hit_test_behavior: "transparent",
-                stack {
+                column {
                     width: "100%",
+                    max_width: panel_max_width,
                     clip: false,
                     hit_test_behavior: "transparent",
                     PresenceTransition {
@@ -170,6 +356,7 @@ pub(crate) fn AnimatedModal(
                 }
                 column {
                     width: "100%",
+                    align_items: "center",
                     clip: false,
                     hit_test_behavior: "transparent",
                     PresenceTransition {
@@ -193,6 +380,20 @@ pub(crate) fn AnimatedModal(
                 height: "100%",
                 alignment: "top-start",
                 clip: false,
+                focusable: true,
+                focus_scope: open,
+                focus_trap: true,
+                enabled: open,
+                key_capture: "escape",
+                focus_on_touch: false,
+                onkey: move |event| {
+                    if event.data().action == dioxus_elements::event::KeyAction::Down
+                        && event.data().key == dioxus_elements::event::KeyboardKey::Escape
+                    {
+                        event.stop_propagation();
+                        dismiss.call(());
+                    }
+                },
                 PresenceTransition {
                     phase: visibility.phase,
                     preset: Some(TransitionPreset::Fade),

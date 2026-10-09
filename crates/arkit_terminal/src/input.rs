@@ -86,6 +86,8 @@ pub enum MouseButton {
     Left,
     Right,
     Middle,
+    WheelUp,
+    WheelDown,
 }
 
 /// Terminal modes the encoder needs and the embedder must not track itself.
@@ -155,11 +157,43 @@ pub fn encode_key_chord(state: EncodeState, chord: KeyChord) -> TerminalResult<V
             return Ok(utf8.as_bytes().to_vec());
         }
     }
-    if let Some(bytes) = encode_named(&chord.name, chord.mods, state.app_cursor) {
+    if let Some(mut bytes) = encode_named(&chord.name, chord.mods, state.app_cursor) {
+        if chord.name == "space" && chord.mods.ctrl {
+            bytes = vec![0];
+        }
+        if chord.mods.alt
+            && matches!(
+                chord.name.as_str(),
+                "enter" | "return" | "backspace" | "space"
+            )
+        {
+            bytes.insert(0, 0x1b);
+        }
         return Ok(bytes);
     }
     if let Some(ref utf8) = chord.utf8 {
-        return Ok(utf8.as_bytes().to_vec());
+        let mut bytes = utf8.as_bytes().to_vec();
+        if chord.mods.ctrl && utf8.chars().count() == 1 {
+            if let Some(character) = utf8.chars().next().filter(char::is_ascii) {
+                let character = character.to_ascii_uppercase() as u8;
+                let control = match character {
+                    b'@'..=b'_' => Some(character & 0x1f),
+                    b' ' | b'2' => Some(0),
+                    b'3'..=b'7' => Some(character - b'3' + 0x1b),
+                    b'8' | b'?' => Some(0x7f),
+                    b'/' => Some(0x1f),
+                    0..=0x1f => Some(character),
+                    _ => None,
+                };
+                if let Some(control) = control {
+                    bytes = vec![control];
+                }
+            }
+        }
+        if chord.mods.alt {
+            bytes.insert(0, 0x1b);
+        }
+        return Ok(bytes);
     }
     Ok(Vec::new())
 }
@@ -179,6 +213,8 @@ pub fn encode_mouse(
         MouseButton::Left => 0,
         MouseButton::Middle => 1,
         MouseButton::Right => 2,
+        MouseButton::WheelUp => 64,
+        MouseButton::WheelDown => 65,
         MouseButton::Unknown => 3,
     };
     match event.action {
@@ -191,7 +227,7 @@ pub fn encode_mouse(
             }
         }
         MouseAction::Press | MouseAction::Release => {
-            if state.x10_mouse && (event.action != MouseAction::Press || button > 2) {
+            if state.x10_mouse && (event.action != MouseAction::Press || button == 3) {
                 return Ok(Vec::new());
             }
         }
@@ -257,6 +293,18 @@ fn is_named_key(name: &str) -> bool {
             | "page_down"
             | "delete"
             | "space"
+            | "f1"
+            | "f2"
+            | "f3"
+            | "f4"
+            | "f5"
+            | "f6"
+            | "f7"
+            | "f8"
+            | "f9"
+            | "f10"
+            | "f11"
+            | "f12"
     )
 }
 
@@ -326,7 +374,72 @@ fn encode_named(name: &str, mods: KeyMods, app_cursor: bool) -> Option<Vec<u8>> 
                 b"\x1b[3~".to_vec()
             }
         }
+        "f1" => csi(b'P', true),
+        "f2" => csi(b'Q', true),
+        "f3" => csi(b'R', true),
+        "f4" => csi(b'S', true),
+        "f5" | "f6" | "f7" | "f8" | "f9" | "f10" | "f11" | "f12" => {
+            let number = match name {
+                "f5" => 15,
+                "f6" => 17,
+                "f7" => 18,
+                "f8" => 19,
+                "f9" => 20,
+                "f10" => 21,
+                "f11" => 23,
+                _ => 24,
+            };
+            if modified {
+                format!("\x1b[{number};{param}~").into_bytes()
+            } else {
+                format!("\x1b[{number}~").into_bytes()
+            }
+        }
         _ => return None,
+    })
+}
+
+pub(crate) fn physical_key_chord(
+    key: &arkit_prelude::dioxus_elements::event::KeyData,
+) -> Option<KeyChord> {
+    use arkit_prelude::dioxus_elements::event::KeyboardKey;
+    let name = match key.key {
+        KeyboardKey::Enter => "enter".to_string(),
+        KeyboardKey::Space => "space".to_string(),
+        KeyboardKey::Tab => "tab".to_string(),
+        KeyboardKey::Escape => "escape".to_string(),
+        KeyboardKey::ArrowUp => "up".to_string(),
+        KeyboardKey::ArrowDown => "down".to_string(),
+        KeyboardKey::ArrowLeft => "left".to_string(),
+        KeyboardKey::ArrowRight => "right".to_string(),
+        KeyboardKey::Home => "home".to_string(),
+        KeyboardKey::End => "end".to_string(),
+        KeyboardKey::PageUp => "page_up".to_string(),
+        KeyboardKey::PageDown => "page_down".to_string(),
+        KeyboardKey::Backspace => "backspace".to_string(),
+        KeyboardKey::Delete => "delete".to_string(),
+        KeyboardKey::Function(number) => format!("f{number}"),
+        KeyboardKey::F10 => "f10".to_string(),
+        KeyboardKey::Character(character) => character.to_string(),
+        _ => return None,
+    };
+    let utf8 = match key.key {
+        KeyboardKey::Character(character) => Some(if key.text.is_empty() {
+            character.to_string()
+        } else {
+            key.text.clone()
+        }),
+        _ => None,
+    };
+    Some(KeyChord {
+        name,
+        utf8,
+        mods: KeyMods {
+            ctrl: key.modifiers.ctrl,
+            shift: key.modifiers.shift,
+            alt: key.modifiers.alt,
+            super_key: false,
+        },
     })
 }
 

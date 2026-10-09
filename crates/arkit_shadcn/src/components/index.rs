@@ -416,6 +416,11 @@ pub fn Index(props: IndexProps) -> Element {
                         focus_on_touch: true,
                         background_color: row_bg,
                         onclick: move |_| on_select.call(item_index),
+                        onkey: move |event| {
+                            if event.data().activates() {
+                                on_select.call(item_index);
+                            }
+                        },
                         {inner}
                     }
                 }

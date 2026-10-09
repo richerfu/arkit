@@ -76,8 +76,11 @@ pub struct InputProps {
     pub mode: InputMode,
     #[props(default)]
     pub height: Option<f32>,
-    /// CSS width (`"100%"`, `"50%"`). Unset leaves the field content-sized.
+    /// CSS width (`"100%"`, `"50%"`). Takes precedence over `full`.
     pub width: Option<String>,
+    /// Fill the available parent width, matching shadcn's `w-full` default.
+    #[props(default = true)]
+    pub full: bool,
     /// Uses the destructive border treatment for validation failures.
     #[props(default)]
     pub invalid: bool,
@@ -92,6 +95,8 @@ pub struct InputProps {
     /// Pair with `on_click` to use the field as a custom-keyboard trigger.
     #[props(default)]
     pub read_only: bool,
+    /// Optional exact reference forwarded to the native text-input root.
+    pub native_ref: Option<arkit_arkui::NativeElementRef>,
     /// Requires an explicit click to focus instead of grabbing focus on any
     /// touch-down. Intended for long scrolling forms: a drag that starts on
     /// the field scrolls the parent `Scroll` instead of focusing the input
@@ -118,10 +123,12 @@ pub fn Input(props: InputProps) -> Element {
         mode,
         height,
         width,
+        full,
         invalid,
         required,
         disabled,
         read_only,
+        native_ref,
         click_to_focus,
         on_change,
         on_click,
@@ -140,6 +147,7 @@ pub fn Input(props: InputProps) -> Element {
     let input_type = mode.native_input_type(password_is_visible);
     let input_filter = mode.native_input_filter();
     let field_height = height.unwrap_or(control::HEIGHT);
+    let width = width.or_else(|| full.then(|| "100%".to_string()));
     let field_width = width.clone();
     let accessibility_description = accessibility_description
         .into_iter()
@@ -160,6 +168,7 @@ pub fn Input(props: InputProps) -> Element {
             accessibility_text: if let Some(label) = accessibility_label { label },
             accessibility_description: if !accessibility_description.is_empty() { accessibility_description },
             accessibility_disabled: disabled,
+            native_ref,
             value: if let Some(value) = value { value },
             placeholder: if let Some(placeholder) = placeholder { placeholder },
             input_type,
@@ -252,6 +261,11 @@ pub fn Input(props: InputProps) -> Element {
                     enabled: !disabled,
                     onclick: move |_| {
                         if !disabled {
+                            password_visible.toggle();
+                        }
+                    },
+                    onkey: move |event| {
+                        if !disabled && event.data().activates() {
                             password_visible.toggle();
                         }
                     },

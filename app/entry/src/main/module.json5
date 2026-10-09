@@ -17,6 +17,11 @@
         "label": "$string:EntryAbility_label",
         "startWindowIcon": "$media:startIcon",
         "startWindowBackground": "$color:start_window_background",
+        "supportWindowMode": ["fullscreen", "split", "floating"],
+        "minWindowWidth": 320,
+        "minWindowHeight": 240,
+        "maxWindowWidth": 2560,
+        "maxWindowHeight": 1600,
         "exported": true,
         "skills": [
           {

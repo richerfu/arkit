@@ -6,9 +6,6 @@ use std::time::Instant;
 use arkit_arkui::MountedNodeLease;
 use ohos_native_window_binding::NativeWindow;
 use ohos_xcomponent_binding::{NativeXComponent, WindowRaw, XComponentRaw};
-use ohos_xcomponent_sys::{
-    OH_NativeXComponent_GetNativeXComponent, OH_NativeXComponent_UnregisterOnFrameCallback,
-};
 
 use crate::worker::WorkerMessage;
 use crate::{LottieError, LottieErrorKind, LottieResult};
@@ -31,29 +28,18 @@ impl SurfaceRegistration {
         frames_per_second: u16,
         liveness: Option<arkit_runtime::NativeLiveness>,
     ) -> LottieResult<Self> {
-        // SAFETY: context lookup is synchronous inside the generation-checked
-        // borrow. The returned XComponent is retained by the registration,
-        // whose owner is tied to this lease's native teardown.
-        let raw = unsafe {
-            node.with_native(|node| {
-                OH_NativeXComponent_GetNativeXComponent(node.raw_handle().cast())
-            })
-        }
-        .ok_or_else(|| {
-            LottieError::new(
-                LottieErrorKind::SurfaceUnavailable,
-                "SurfaceRegistration::attach",
-                "XComponent is no longer mounted",
-            )
-        })?;
-        if raw.is_null() {
-            return Err(LottieError::new(
-                LottieErrorKind::SurfaceUnavailable,
-                "OH_NativeXComponent_GetNativeXComponent",
-                "ArkUI did not return a native XComponent handle",
-            ));
-        }
-        let component = NativeXComponent::new(XComponentRaw(raw));
+        // SAFETY: component lookup is synchronous inside the
+        // generation-checked borrow. The returned wrapper is retained by the
+        // registration, whose owner is tied to this lease's native teardown.
+        let component = unsafe { node.with_native(|node| node.native_xcomponent()) }
+            .flatten()
+            .ok_or_else(|| {
+                LottieError::new(
+                    LottieErrorKind::SurfaceUnavailable,
+                    "SurfaceRegistration::attach",
+                    "XComponent is not mounted or has no native surface",
+                )
+            })?;
         component.id().map_err(|error| {
             LottieError::new(
                 LottieErrorKind::SurfaceUnavailable,
@@ -162,15 +148,9 @@ impl Drop for SurfaceRegistration {
         self.component.on_surface_created(|_, _| Ok(()));
         self.component.on_surface_changed(|_, _| Ok(()));
         self.component.on_surface_destroyed(|_, _| Ok(()));
-        // Replace the multi-mode callback-map closure so it releases its worker
-        // sender, then unregister native frame delivery.
-        let _ = self.component.on_frame_callback(|_, _, _| Ok(()));
-        // SAFETY: `component.raw()` remains valid while the mounted native node
-        // and this registration are alive. Unregister is idempotent for this
-        // callback slot and prevents delivery after component teardown.
-        unsafe {
-            OH_NativeXComponent_UnregisterOnFrameCallback(self.component.raw());
-        }
+        // Stop native delivery before releasing the worker sender captured by
+        // the registered Rust callback.
+        let _ = self.component.unregister_frame_callback();
     }
 }
 
