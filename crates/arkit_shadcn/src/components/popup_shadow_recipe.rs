@@ -63,8 +63,15 @@ impl ShadowLayer {
         )
     }
 
-    pub(super) fn native_value(self) -> String {
-        format!("0 {} {} #1A000000", self.offset_y, self.blur)
+    pub(super) fn native_value(self, scale: f32) -> String {
+        // Unlike the underlay's layout dimensions, NODE_CUSTOM_SHADOW offsets
+        // and the radius passed through to Rosen are physical paint values.
+        // Keep the CSS recipe in logical vp and convert at the paint boundary.
+        format!(
+            "0 {} {} #1A000000",
+            self.offset_y * scale,
+            self.blur * scale
+        )
     }
 }
 
@@ -80,7 +87,7 @@ mod tests {
             (bounds.width, bounds.height, bounds.radius),
             (220.0, 96.0, 4.0)
         );
-        assert_eq!(layer.native_value(), "0 2 4 #1A000000");
+        assert_eq!(layer.native_value(1.0), "0 2 4 #1A000000");
     }
 
     #[test]
@@ -90,5 +97,17 @@ mod tests {
         assert!(layer.bounds(6.0, 6.0, 6.0).is_none());
         assert!(layer.bounds(f32::NAN, 100.0, 6.0).is_none());
         assert_eq!(layer.bounds(224.0, 100.0, 2.0).unwrap().radius, 0.0);
+    }
+
+    #[test]
+    fn native_paint_keeps_the_same_logical_recipe_at_phone_density() {
+        let layer = PopupShadowKind::Md.layers()[0];
+        assert_eq!(layer.native_value(1.0), "0 4 6 #1A000000");
+        assert_eq!(layer.native_value(1.5), "0 6 9 #1A000000");
+        assert_eq!(layer.native_value(3.25), "0 13 19.5 #1A000000");
+        assert_eq!(
+            PopupShadowKind::Md.layers()[1].native_value(3.25),
+            "0 6.5 13 #1A000000"
+        );
     }
 }

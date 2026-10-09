@@ -45,7 +45,7 @@ pub(crate) fn PopupShadow(
                         position: format!("{},{}", layer.inset, layer.inset),
                         border_radius: bounds.radius,
                         background_color: background,
-                        custom_shadow: layer.native_value(),
+                        custom_shadow: layer.native_value(scale),
                         clip: false,
                         hit_test_behavior: "none",
                         accessibility_mode: "disabled",
