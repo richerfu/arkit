@@ -428,7 +428,8 @@ define_element! {
     scroll => "scroll" {
         scroll_bar, scroll_direction, scroll_enabled, scroll_edge_effect, scroll_offset, background_color, padding, margin,
         margin_top, margin_bottom, margin_left, margin_right, margin_x, margin_y, margin_horizontal, margin_vertical,
-        width, height, layout_weight, opacity, border_radius,
+        width, height, constraint_size, min_width, max_width, min_height, max_height,
+        layout_weight, opacity, border_radius,
         border_width, border_color, visibility, enabled, clip, hit_test_behavior,
         alignment, aspect_ratio, position, z_index,
     }

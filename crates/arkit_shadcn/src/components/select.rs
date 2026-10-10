@@ -223,8 +223,6 @@ fn select_overlay_content(content: SelectOverlayContent) -> Element {
     let top = placement.y.max(0.0);
     let left = placement.x.max(0.0);
     let viewport = arkit_hooks::use_overlay_viewport();
-    let natural_height =
-        select_panel_estimated_height(options.len(), label.is_some()) - spacing::XXS * 2.0;
     let max_height = (super::panel_viewport::panel_available_height(viewport, top)
         - spacing::XXS * 2.0)
         .min(
@@ -272,7 +270,6 @@ fn select_overlay_content(content: SelectOverlayContent) -> Element {
                     padding: spacing::XXS,
                     super::panel_viewport::PanelViewport {
                         max_height,
-                        estimated_height: natural_height,
                         if let Some(label) = label {
                             row {
                                 width: "100%",
