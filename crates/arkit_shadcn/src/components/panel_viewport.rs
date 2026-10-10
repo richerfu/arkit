@@ -30,29 +30,18 @@ pub(crate) fn panel_available_height(viewport: arkit_hooks::OverlayViewport, top
 #[component]
 pub(crate) fn PanelViewport(
     max_height: f32,
-    #[props(default = 132.0)] estimated_height: f32,
     #[props(default)] center: bool,
     children: Element,
 ) -> Element {
-    let reference = arkit_hooks::use_native_element_ref();
-    let scale = arkit_hooks::use_window_metrics().scale.max(f32::EPSILON);
-    let content_height = use_signal(|| estimated_height.max(1.0));
-    arkit_hooks::use_layout_size(reference.clone(), move |size| {
-        let mut content_height = content_height;
-        let next = size.height / scale;
-        if next.is_finite() && next > 0.0 && (next - *content_height.peek()).abs() > 0.5 {
-            content_height.set(next);
-        }
-    });
-    let height = content_height().min(max_height.max(1.0));
+    // ArkUI Scroll measures its child when no explicit height is supplied,
+    // then constrains that size. Let the same native layout pass determine
+    // overflow instead of painting an estimated height and resizing later.
     rsx! {
         scroll {
             width: "100%",
-            height,
+            max_height: max_height.max(1.0),
             scroll_bar: "auto",
-            scroll_enabled: content_height() > height + 0.5,
             column {
-                native_ref: reference,
                 width: "100%",
                 align_items: if center { "center" } else { "start" },
                 {children}

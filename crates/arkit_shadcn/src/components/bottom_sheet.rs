@@ -464,8 +464,8 @@ fn BottomSheetPanel(props: BottomSheetPanelProps) -> Element {
             border_color: theme.colors.border,
             border_style: ARKUI_BORDER_STYLE_SOLID,
             background_color: if desktop { theme.colors.popover } else { theme.colors.card },
-            shadow: if desktop { "lg" } else { "sm" },
-            clip: true,
+            shadow: shadow::LG,
+            clip: false,
             ontouch: move |evt| {
                 if !props.bottom_attached { return; }
                 let Some(pointer) = evt.data().pointer else {

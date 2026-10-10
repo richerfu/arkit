@@ -509,6 +509,19 @@ pub mod typography {
     pub const XXL: f32 = 24.0;
 }
 
+/// Elevation tokens used by the New York component recipes.
+///
+/// Logical CSS-like primary layers; the renderer handles paint density.
+/// Popup surfaces render both layers and spread from the md/lg recipes.
+/// Sonner's stylesheet specifies `0 4px 12px rgba(0, 0, 0, 0.1)`.
+pub mod shadow {
+    pub const XS: &str = "0 1 2 #0D000000";
+    pub const SM: &str = "0 1 3 #1A000000";
+    pub const MD: &str = "0 4 6 #1A000000";
+    pub const LG: &str = "0 10 15 #1A000000";
+    pub const SONNER: &str = "0 4 12 #1A000000";
+}
+
 /// Interactive control geometry aligned with shadcn/ui New York.
 ///
 /// Values are vp (1vp ≈ 1 CSS px at the ArkUI baseline). The previous

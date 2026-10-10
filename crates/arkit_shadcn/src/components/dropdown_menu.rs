@@ -5,7 +5,7 @@
 //! the trigger's parent layout and trigger children remain ordinary shadcn
 //! buttons.
 
-use crate::components::floating_layer::trigger_frame_for_anchor;
+use crate::components::floating_layer::{trigger_frame_for_anchor, FloatingAlign};
 use crate::components::menu_common::{
     menu_closed_panel_height, menu_overlay_content, MenuEntry, MenuOverlayPlacement, MenuStyle,
 };
@@ -73,6 +73,7 @@ pub fn DropdownMenu(
         viewport,
         style.width,
         panel_height,
+        FloatingAlign::Center,
         style.side_offset_vp,
     );
 

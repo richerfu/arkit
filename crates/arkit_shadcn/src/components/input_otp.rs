@@ -235,7 +235,8 @@ pub fn InputOtp(props: InputOtpProps) -> Element {
                 border_width: slot_border_width,
                 border_color: if is_active { active_border } else { border },
                 border_radius: slot_radius,
-                clip: true,
+                shadow: shadow::XS,
+                clip: false,
                 hit_test_behavior: "transparent",
                 if let Some(displayed) = displayed {
                     text {

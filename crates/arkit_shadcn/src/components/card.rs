@@ -49,7 +49,7 @@ pub fn Card(props: CardProps) -> Element {
             border_width: 1.0,
             border_color: theme.colors.border,
             border_radius: theme.radii.lg,
-            shadow: if shadow { "sm" },
+            shadow: if shadow { shadow::SM } else { "none" },
             {props.children}
         }
     }
@@ -176,11 +176,7 @@ pub fn CardContent(props: CardContentProps) -> Element {
             padding_right: spacing::LG,
             padding_bottom: spacing::LG,
             padding_left: spacing::LG,
-            row {
-                width: "100%",
-                justify_content: "start",
-                {props.children}
-            }
+            {props.children}
         }
     }
 }

@@ -11,6 +11,7 @@ use super::floating_layer::{
     FloatingSide, FLOATING_CAPTURE_COLOR,
 };
 use super::motion::{OverlayPresence, FLOATING_DISTANCE, FLOATING_ENTER_MS, FLOATING_EXIT_MS};
+use super::popup_shadow::{PopupShadow, PopupShadowKind};
 use crate::{i18n::use_component_i18n, theme::*};
 use arkit_prelude::*;
 
@@ -151,6 +152,7 @@ pub fn Select(
                 border_radius: md,
                 border_width: 1.0,
                 border_color: colors.border,
+                shadow: shadow::XS,
                 row {
                     layout_weight: 1.0,
                     clip: true,
@@ -221,8 +223,6 @@ fn select_overlay_content(content: SelectOverlayContent) -> Element {
     let top = placement.y.max(0.0);
     let left = placement.x.max(0.0);
     let viewport = arkit_hooks::use_overlay_viewport();
-    let natural_height =
-        select_panel_estimated_height(options.len(), label.is_some()) - spacing::XXS * 2.0;
     let max_height = (super::panel_viewport::panel_available_height(viewport, top)
         - spacing::XXS * 2.0)
         .min(
@@ -242,42 +242,47 @@ fn select_overlay_content(content: SelectOverlayContent) -> Element {
             background_color: FLOATING_CAPTURE_COLOR,
             hit_test_behavior: "default",
             onclick: move |_| on_dismiss.call(()),
-            column {
-                accessibility_role: "list",
-                focus_scope: true,
-                focus_navigation: "vertical",
-                key_capture: "escape",
-                position: format!("{left},{top}"),
+            PopupShadow {
+                position: Some(format!("{left},{top}")),
                 width: panel_width,
-                align_items: "start",
-                onclick: move |event| event.stop_propagation(),
-                onkey: move |event| {
-                    if event.data().is_down() && event.data().key == dioxus_elements::event::KeyboardKey::Escape {
-                        event.stop_propagation();
-                        on_dismiss.call(());
-                    }
-                },
-                background_color: colors.popover,
-                border_radius: theme.radii.md,
-                border_width: 1.0,
-                border_color: colors.border,
-                shadow: "sm",
-                padding: spacing::XXS,
-                super::panel_viewport::PanelViewport {
-                    max_height,
-                    estimated_height: natural_height,
-                    if let Some(label) = label {
-                        row {
-                            width: "100%",
-                            height: SELECT_PANEL_HEADER_HEIGHT,
-                            padding_left: spacing::SM,
-                            padding_right: spacing::SM,
-                            align_items: "center",
-                            text { font_size: typography::XS, font_color: colors.muted_foreground, max_lines: SELECT_TEXT_MAX_LINES, text_overflow: SELECT_TEXT_OVERFLOW_ELLIPSIS, {label} }
+                radius: theme.radii.md,
+                background: colors.popover,
+                kind: PopupShadowKind::Md,
+                column {
+                    accessibility_role: "list",
+                    focus_scope: true,
+                    focus_navigation: "vertical",
+                    key_capture: "escape",
+                    width: panel_width,
+                    align_items: "start",
+                    onclick: move |event| event.stop_propagation(),
+                    onkey: move |event| {
+                        if event.data().is_down() && event.data().key == dioxus_elements::event::KeyboardKey::Escape {
+                            event.stop_propagation();
+                            on_dismiss.call(());
                         }
-                    }
-                    for option in options.iter() {
-                        SelectOptionRow { option: option.clone(), selected: selected.clone(), theme, set_selected, on_dismiss }
+                    },
+                    background_color: colors.popover,
+                    border_radius: theme.radii.md,
+                    border_width: 1.0,
+                    border_color: colors.border,
+                    clip: false,
+                    padding: spacing::XXS,
+                    super::panel_viewport::PanelViewport {
+                        max_height,
+                        if let Some(label) = label {
+                            row {
+                                width: "100%",
+                                height: SELECT_PANEL_HEADER_HEIGHT,
+                                padding_left: spacing::SM,
+                                padding_right: spacing::SM,
+                                align_items: "center",
+                                text { font_size: typography::XS, font_color: colors.muted_foreground, max_lines: SELECT_TEXT_MAX_LINES, text_overflow: SELECT_TEXT_OVERFLOW_ELLIPSIS, {label} }
+                            }
+                        }
+                        for option in options.iter() {
+                            SelectOptionRow { option: option.clone(), selected: selected.clone(), theme, set_selected, on_dismiss }
+                        }
                     }
                 }
             }

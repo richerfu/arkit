@@ -356,7 +356,7 @@ impl Drop for WindowMetricsSubscriptionInner {
     }
 }
 
-fn normalized_scale(scale: f32) -> f32 {
+pub(crate) fn normalized_scale(scale: f32) -> f32 {
     if scale.is_finite() && scale > 0.0 {
         scale
     } else {

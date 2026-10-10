@@ -16,7 +16,9 @@ use crate::css_value::{
     self, expand_box_shorthand, i32_or_keyword, map_font_weight_to_arkui, object_fit_value,
     parse_css_color, parse_length, parse_opacity, parse_vp, CssLength,
 };
+use crate::paint::PaintScale;
 use crate::parse_color;
+use std::{cell::Cell, rc::Rc};
 
 const ROW_ALIGN_CENTER: i32 = 1;
 const JUSTIFY_CENTER: i32 = 2;
@@ -40,13 +42,27 @@ enum EncodedAttrValue {
     String(String),
     VecF32(Vec<f32>),
     VecI32(Vec<i32>),
-    ScrollOffset { x: f32, y: f32, options: Vec<i32> },
+    ScrollOffset {
+        x: f32,
+        y: f32,
+        options: Vec<i32>,
+    },
     FlexOptionPart(usize, i32),
     Shadow(i32),
+    CustomShadow {
+        blur_radius: f32,
+        coloring_strategy: i32,
+        offset_x: f32,
+        offset_y: f32,
+        shadow_type: i32,
+        color: u32,
+        fill: u32,
+        scale_with_density: bool,
+    },
 }
 
 impl EncodedAttrValue {
-    fn to_item(&self) -> ArkUINodeAttributeItem {
+    fn to_item(&self, paint_scale: PaintScale) -> ArkUINodeAttributeItem {
         match self {
             Self::F32(v) => (*v).into(),
             Self::I32(v) => (*v).into(),
@@ -64,6 +80,31 @@ impl EncodedAttrValue {
             }
             Self::FlexOptionPart(index, value) => flex_option_with(*index, *value).into(),
             Self::Shadow(v) => vec![*v].into(),
+            Self::CustomShadow {
+                blur_radius,
+                coloring_strategy,
+                offset_x,
+                offset_y,
+                shadow_type,
+                color,
+                fill,
+                scale_with_density,
+            } => {
+                let scale = if *scale_with_density {
+                    paint_scale
+                } else {
+                    PaintScale::default()
+                };
+                ArkUINodeAttributeItem::NumberValue(vec![
+                    ArkUINodeAttributeNumber::Float(scale.physical(*blur_radius)),
+                    ArkUINodeAttributeNumber::Int(*coloring_strategy),
+                    ArkUINodeAttributeNumber::Float(scale.physical(*offset_x)),
+                    ArkUINodeAttributeNumber::Float(scale.physical(*offset_y)),
+                    ArkUINodeAttributeNumber::Int(*shadow_type),
+                    ArkUINodeAttributeNumber::Uint(*color),
+                    ArkUINodeAttributeNumber::Uint(*fill),
+                ])
+            }
         }
     }
 }
@@ -88,12 +129,12 @@ impl EncodedAttr {
         &self.name
     }
 
-    fn apply(&self, node: &mut ArkUINode, tag: &str) -> ArkUIResult<()> {
+    fn apply(&self, node: &mut ArkUINode, tag: &str, paint_scale: PaintScale) -> ArkUIResult<()> {
         if tag == "button" && is_button_text_attr(self.name()) {
             return Ok(());
         }
         let ty = self.ty;
-        let result = node.set_attribute(ty, self.value.to_item());
+        let result = node.set_attribute(ty, self.value.to_item(paint_scale));
         if let Err(error) = &result {
             ohos_hilog_binding::error(format!(
                 "arkit_arkui: failed to apply `{}` to <{tag}> ({ty:?}): {error}",
@@ -135,7 +176,7 @@ impl ScrollOffsetCommand {
                 options: self.options.clone(),
             },
         )
-        .apply(node, "scroll")
+        .apply(node, "scroll", PaintScale::default())
     }
 }
 
@@ -166,13 +207,14 @@ impl ListScrollToIndexCommand {
             ArkUINodeAttributeType::ListScrollToIndex,
             EncodedAttrValue::VecI32(vec![self.index, self.smooth, self.align]),
         )
-        .apply(node, "list")
+        .apply(node, "list", PaintScale::default())
     }
 }
 
 #[derive(Default, Clone, Debug)]
 pub(crate) struct DesiredAttrs {
     attrs: Vec<EncodedAttr>,
+    paint_scale: Rc<Cell<PaintScale>>,
     pub(crate) focus_scope: bool,
     pub(crate) focus_trap: bool,
     pub(crate) focus_navigation: Option<dioxus_elements::event::KeyboardNavigation>,
@@ -188,6 +230,10 @@ pub(crate) enum AttrMutation {
 }
 
 impl DesiredAttrs {
+    pub(crate) fn bind_paint_scale(&mut self, scale: Rc<Cell<PaintScale>>) {
+        self.paint_scale = scale;
+    }
+
     pub(crate) fn set(
         &mut self,
         tag: &str,
@@ -231,7 +277,9 @@ impl DesiredAttrs {
             }
             _ => {}
         }
-        if matches!(value, dioxus_core::AttributeValue::None) {
+        if matches!(value, dioxus_core::AttributeValue::None)
+            || requests_attribute_reset(name, value)
+        {
             return self
                 .attrs
                 .iter()
@@ -447,7 +495,7 @@ impl DesiredAttrs {
                 .filter(|attr| !is_composite_accessibility_attr(attr.name()))
                 .filter(|attr| !skip.contains(&attr.ty))
             {
-                let _ = attr.apply(node, tag);
+                let _ = attr.apply(node, tag, self.paint_scale.get());
             }
             self.apply_box(node, "padding", ArkUINodeAttributeType::Padding);
             self.apply_box(node, "margin", ArkUINodeAttributeType::Margin);
@@ -463,7 +511,7 @@ impl DesiredAttrs {
                 .filter(|attr| !is_composite_accessibility_attr(attr.name()))
                 .filter(|attr| !skip.contains(&attr.ty))
             {
-                let _ = attr.apply(node, tag);
+                let _ = attr.apply(node, tag, self.paint_scale.get());
             }
             return;
         }
@@ -480,10 +528,10 @@ impl DesiredAttrs {
                 deferred.push(attr);
                 continue;
             }
-            let _ = attr.apply(node, tag);
+            let _ = attr.apply(node, tag, self.paint_scale.get());
         }
         for attr in deferred {
-            let _ = attr.apply(node, tag);
+            let _ = attr.apply(node, tag, self.paint_scale.get());
         }
     }
 
@@ -508,7 +556,7 @@ impl DesiredAttrs {
                     deferred.push(attr);
                     continue;
                 }
-                let _ = attr.apply(node, tag);
+                let _ = attr.apply(node, tag, self.paint_scale.get());
             }
         }
         if wants_padding {
@@ -535,7 +583,7 @@ impl DesiredAttrs {
             self.apply_flex_option(node);
         }
         for attr in deferred {
-            let _ = attr.apply(node, tag);
+            let _ = attr.apply(node, tag, self.paint_scale.get());
         }
         if wants_accessibility_state {
             self.reconcile_accessibility_state(node);
@@ -604,11 +652,11 @@ impl DesiredAttrs {
                 if is_deferred_attr(attr.name()) {
                     deferred.push(attr);
                 } else {
-                    let _ = attr.apply(node, tag);
+                    let _ = attr.apply(node, tag, self.paint_scale.get());
                 }
             }
             for attr in deferred {
-                let _ = attr.apply(node, tag);
+                let _ = attr.apply(node, tag, self.paint_scale.get());
             }
         }
         if types.contains(&ArkUINodeAttributeType::AccessibilityState) {
@@ -1067,11 +1115,62 @@ mod tests {
         assert_eq!(op.value, EncodedAttrValue::F32(0.5));
         assert!(
             encode_attr("column", "shadow", &AttributeValue::Text("none".into())).is_none(),
-            "shadow none is no-op"
+            "shadow none is handled as an explicit reset by DesiredAttrs"
         );
         let sh =
             encode_attr("column", "shadow", &AttributeValue::Text("sm".into())).expect("shadow sm");
         assert_eq!(sh.value, EncodedAttrValue::Shadow(1));
+
+        let custom = encode_attr(
+            "column",
+            "custom_shadow",
+            &AttributeValue::Text("0 4 12 #1A000000".into()),
+        )
+        .expect("custom shadow");
+        assert_eq!(custom.ty, ArkUINodeAttributeType::CustomShadow);
+        assert_eq!(
+            custom.value,
+            EncodedAttrValue::CustomShadow {
+                blur_radius: 12.0,
+                coloring_strategy: 0,
+                offset_x: 0.0,
+                offset_y: 4.0,
+                shadow_type: 0,
+                color: 0x1A00_0000,
+                fill: 0,
+                scale_with_density: true,
+            }
+        );
+    }
+
+    #[test]
+    fn none_removes_existing_shadow_attributes() {
+        let mut attrs = DesiredAttrs::default();
+        assert!(matches!(
+            attrs.set("column", "shadow", &AttributeValue::Text("sm".into())),
+            AttrMutation::Set
+        ));
+        assert!(matches!(
+            attrs.set("column", "shadow", &AttributeValue::Text("none".into())),
+            AttrMutation::Removed(ArkUINodeAttributeType::Shadow)
+        ));
+
+        assert!(matches!(
+            attrs.set(
+                "column",
+                "custom_shadow",
+                &AttributeValue::Text("0 4 12 #1A000000".into()),
+            ),
+            AttrMutation::Set
+        ));
+        assert!(matches!(
+            attrs.set(
+                "column",
+                "custom_shadow",
+                &AttributeValue::Text("none".into()),
+            ),
+            AttrMutation::Removed(ArkUINodeAttributeType::CustomShadow)
+        ));
     }
 
     #[test]
@@ -1441,6 +1540,7 @@ fn attr_group(name: &str) -> AttrGroup {
         | "corner_radius"
         | "border_style"
         | "shadow"
+        | "custom_shadow"
         | "opacity"
         | "clip"
         | "visibility"
@@ -1456,6 +1556,54 @@ fn attr_group(name: &str) -> AttrGroup {
         | "toggle_unselected_color"
         | "toggle_switch_point_color" => AttrGroup::Visual,
         _ => AttrGroup::Layout,
+    }
+}
+
+fn requests_attribute_reset(name: &str, value: &dioxus_core::AttributeValue) -> bool {
+    let dioxus_core::AttributeValue::Text(text) = value else {
+        return false;
+    };
+    match name {
+        "shadow" => css_value::shadow_keyword(text).is_some_and(|value| value < 0),
+        "custom_shadow" => text.trim().eq_ignore_ascii_case("none"),
+        _ => false,
+    }
+}
+
+/// Parses either the CSS-like public form `x y blur color` or the complete
+/// ArkUI form `blur strategy x y type color fill` (commas are optional).
+fn parse_custom_shadow(
+    value: &dioxus_core::AttributeValue,
+) -> Option<(f32, i32, f32, f32, i32, u32, u32, bool)> {
+    let dioxus_core::AttributeValue::Text(text) = value else {
+        return None;
+    };
+    let parts: Vec<_> = text
+        .split(|ch: char| ch == ',' || ch.is_ascii_whitespace())
+        .filter(|part| !part.is_empty())
+        .collect();
+    match parts.as_slice() {
+        [offset_x, offset_y, blur_radius, color] => Some((
+            blur_radius.parse().ok()?,
+            0,
+            offset_x.parse().ok()?,
+            offset_y.parse().ok()?,
+            0,
+            parse_color(color).ok()?,
+            0,
+            true,
+        )),
+        [blur_radius, strategy, offset_x, offset_y, shadow_type, color, fill] => Some((
+            blur_radius.parse().ok()?,
+            strategy.parse().ok()?,
+            offset_x.parse().ok()?,
+            offset_y.parse().ok()?,
+            shadow_type.parse().ok()?,
+            parse_color(color).ok()?,
+            fill.parse().ok()?,
+            false,
+        )),
+        _ => None,
     }
 }
 
@@ -1792,6 +1940,32 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
             EncodedAttrValue::I32(i32_or_keyword(value, css_value::border_style_keyword)?),
         ),
         "shadow" => {
+            if let Some((
+                blur_radius,
+                coloring_strategy,
+                offset_x,
+                offset_y,
+                shadow_type,
+                color,
+                fill,
+                scale_with_density,
+            )) = parse_custom_shadow(value)
+            {
+                return Some(EncodedAttr::new(
+                    name,
+                    ArkUINodeAttributeType::CustomShadow,
+                    EncodedAttrValue::CustomShadow {
+                        blur_radius,
+                        coloring_strategy,
+                        offset_x,
+                        offset_y,
+                        shadow_type,
+                        color,
+                        fill,
+                        scale_with_density,
+                    },
+                ));
+            }
             let v = i32_or_keyword(value, css_value::shadow_keyword)?;
             if v < 0 {
                 // "none" — treat as no-op encode so callers can pass the keyword
@@ -1801,6 +1975,32 @@ fn encode_attr(tag: &str, name: &str, value: &dioxus_core::AttributeValue) -> Op
                 name,
                 ArkUINodeAttributeType::Shadow,
                 EncodedAttrValue::Shadow(v),
+            )
+        }
+        "custom_shadow" => {
+            let (
+                blur_radius,
+                coloring_strategy,
+                offset_x,
+                offset_y,
+                shadow_type,
+                color,
+                fill,
+                scale_with_density,
+            ) = parse_custom_shadow(value)?;
+            EncodedAttr::new(
+                name,
+                ArkUINodeAttributeType::CustomShadow,
+                EncodedAttrValue::CustomShadow {
+                    blur_radius,
+                    coloring_strategy,
+                    offset_x,
+                    offset_y,
+                    shadow_type,
+                    color,
+                    fill,
+                    scale_with_density,
+                },
             )
         }
         "enabled" => EncodedAttr::new(
@@ -2467,6 +2667,12 @@ impl DesiredAttrs {
     pub(crate) fn apply_control_roles(&self, node: &mut ArkUINode, tag: &str) {
         if tag == "button" {
             let _ = node.set_attribute(ArkUINodeAttributeType::Focusable, true.into());
+            // Container projections are focus scopes by default. Make the
+            // semantic button itself a keyboard stop, respecting opt-outs.
+            let _ = node.set_attribute(
+                ArkUINodeAttributeType::TabStop,
+                self.bool_value("tab_stop").unwrap_or(true).into(),
+            );
             let _ = node.set_attribute(ArkUINodeAttributeType::FocusOnTouch, true.into());
             let _ = node.set_attribute(
                 ArkUINodeAttributeType::AccessibilityRole,

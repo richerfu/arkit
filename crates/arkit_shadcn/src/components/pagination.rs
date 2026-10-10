@@ -141,7 +141,8 @@ pub fn Pagination(props: PaginationProps) -> Element {
                 border_color: border_color,
                 border_radius: theme.radii.md,
                 alignment: "center",
-                shadow: if is_active { "sm" },
+                shadow: if is_active { shadow::XS } else { "none" },
+                clip: false,
                 onclick: move |_| on_page.call(number),
                 onkey: move |event| {
                     if event.data().activates() {

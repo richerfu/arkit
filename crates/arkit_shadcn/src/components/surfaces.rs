@@ -502,8 +502,8 @@ fn Toast(props: ToastProps) -> Element {
                 border_color: palette.border,
                 border_style: ARKUI_BORDER_STYLE_SOLID,
                 border_radius,
-                shadow: if show_shadow { "sm" },
-                clip: true,
+                custom_shadow: if show_shadow { shadow::SONNER } else { "none" },
+                clip: false,
                 hit_test_behavior: "default",
                 ontouch: move |event| {
                     handle_toast_touch(
@@ -567,8 +567,8 @@ fn Toast(props: ToastProps) -> Element {
             border_color: palette.border,
             border_style: ARKUI_BORDER_STYLE_SOLID,
             border_radius,
-            shadow: if show_shadow { "sm" },
-            clip: true,
+            custom_shadow: if show_shadow { shadow::SONNER } else { "none" },
+            clip: false,
             // The Sonner layer is intentionally pass-through. Re-enable hit
             // testing on the card itself so ArkUI delivers touch sequences to
             // the swipe recognizer while the empty overlay remains inert.

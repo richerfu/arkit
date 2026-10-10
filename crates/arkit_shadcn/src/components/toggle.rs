@@ -116,7 +116,7 @@ pub(crate) fn toggle_visual_style(
                 theme.colors.foreground
             },
             border_color: theme.colors.input,
-            shadow: false,
+            shadow: true,
         },
     }
 }
@@ -204,7 +204,7 @@ pub(crate) fn toggle_surface(
             accessibility_selected: style.active,
             focusable: true,
             border_radius: style.border_radius,
-            clip: true,
+            clip: false,
             border_style: ARKUI_BORDER_STYLE_SOLID,
             border_width: style.border_width,
             border_color: border_color,
@@ -222,7 +222,7 @@ pub(crate) fn toggle_surface(
             } else if let Some(w) = fixed_width {
                 format!("{w}")
             },
-            shadow: if shadow_on { "sm" },
+            shadow: if shadow_on { shadow::XS } else { "none" },
             // HitTestMode::Block — this node takes the hit; children (Image/Text)
             // are excluded so icon content cannot absorb the press without
             // bubbling `onclick` to the surface.

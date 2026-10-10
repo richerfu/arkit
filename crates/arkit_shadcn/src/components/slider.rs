@@ -830,6 +830,7 @@ fn render_thumb(
             border_width,
             border_color: style.thumb_border_color,
             border_radius: style.thumb_size / 2.0,
+            shadow: shadow::SM,
             hit_test_behavior: "transparent",
         }
     }

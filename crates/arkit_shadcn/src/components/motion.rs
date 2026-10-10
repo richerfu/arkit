@@ -68,7 +68,8 @@ pub(crate) fn AnimatedEdgeModal(
     let viewport = arkit_hooks::use_overlay_viewport();
     let max_height =
         super::panel_viewport::panel_available_height(viewport, inset_top) - inset_bottom;
-    let children = rsx! { super::panel_viewport::PanelViewport { max_height, estimated_height: max_height, center: true, {children} } };
+    let children =
+        rsx! { super::panel_viewport::PanelViewport { max_height, center: true, {children} } };
     let edge_width = panel_width
         .filter(|width| width.is_finite() && *width > 0.0)
         .map(|width| {

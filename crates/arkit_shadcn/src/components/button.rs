@@ -112,7 +112,7 @@ fn variant_style(variant: ButtonVariant, theme: &Theme) -> ButtonVariantStyle {
             foreground: theme.colors.foreground,
             border_width: 1.0,
             border_color: theme.colors.border,
-            shadow: false,
+            shadow: true,
         },
         ButtonVariant::Ghost => ButtonVariantStyle {
             background: TRANSPARENT,
@@ -166,8 +166,7 @@ pub struct ButtonProps {
     /// Fill the available parent width. An explicit `width` takes precedence.
     #[props(default)]
     pub full: bool,
-    /// Override elevation. New York variants are flat by default; pass `true`
-    /// to opt into a small drop shadow.
+    /// Override elevation. New York's outline variant uses `shadow-xs`.
     #[props(default)]
     pub shadow: Option<bool>,
     /// Exact reference forwarded to the button's native root.
@@ -234,9 +233,9 @@ pub fn Button(props: ButtonProps) -> Element {
             border_width: vs.border_width,
             border_color: vs.border_color,
             border_radius: props.border_radius.unwrap_or(theme.radii.md),
-            clip: true,
+            clip: false,
             alignment: "center",
-            shadow: if shadow { "sm" },
+            shadow: if shadow { shadow::XS } else { "none" },
             opacity: if disabled { 0.5 } else { 1.0 },
             enabled: !disabled,
             onhover: move |event| {
@@ -292,17 +291,17 @@ mod tests {
     }
 
     #[test]
-    fn filled_variants_are_flat() {
+    fn only_outline_variant_uses_new_york_elevation() {
         let theme = Theme::default();
         for variant in [
             ButtonVariant::Default,
             ButtonVariant::Secondary,
-            ButtonVariant::Outline,
             ButtonVariant::Destructive,
             ButtonVariant::Ghost,
             ButtonVariant::Link,
         ] {
             assert!(!variant_style(variant, &theme).shadow);
         }
+        assert!(variant_style(ButtonVariant::Outline, &theme).shadow);
     }
 }

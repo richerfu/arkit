@@ -418,7 +418,6 @@ pub fn Calendar(props: CalendarProps) -> Element {
             border_color: theme.colors.border,
             border_style: ARKUI_BORDER_STYLE_SOLID,
             border_radius: if embedded { 0.0 } else { theme.radii.lg },
-            shadow: if !embedded { "sm" },
             clip: true,
             padding_top: CALENDAR_PADDING,
             padding_right: CALENDAR_PADDING,

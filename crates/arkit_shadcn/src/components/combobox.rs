@@ -74,6 +74,7 @@ pub fn Combobox(
             border_radius: md,
             border_width: 1.0,
             border_color: colors.border,
+            shadow: shadow::XS,
             row {
                 align_items: "center",
                 {crate::icon::icon_placeholder("search", 16.0, colors.muted_foreground)}

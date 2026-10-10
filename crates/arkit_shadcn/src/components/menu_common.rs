@@ -10,22 +10,26 @@
 //! panel, matching the legacy interaction contract without making callers track
 //! submenu state.
 
+use super::popup_shadow::{PopupShadow, PopupShadowKind};
 use crate::theme::*;
 use arkit_prelude::*;
 
-use super::floating_layer::FLOATING_CAPTURE_COLOR;
+use super::floating_layer::{FloatingAlign, FLOATING_CAPTURE_COLOR};
 use super::motion::ExpandPresence;
 
 pub(crate) const TRANSPARENT: u32 = 0x00000000;
 const MENU_PANEL_HORIZONTAL_PADDING: f32 = spacing::XXS * 2.0;
 const MENU_PANEL_VERTICAL_PADDING: f32 = spacing::XXS * 2.0;
 const MENU_ROW_HEIGHT: f32 = control::HEIGHT_SM;
+const MENU_ROW_HORIZONTAL_PADDING: f32 = spacing::SM;
+const MENU_ROW_VERTICAL_PADDING: f32 = spacing::XS;
 const MENU_SEPARATOR_HEIGHT: f32 = 9.0;
 const MENU_TEXT_MAX_LINES: i32 = 1;
 const MENU_TEXT_OVERFLOW_ELLIPSIS: &str = "ellipsis";
+const MENU_TEXT_LINE_HEIGHT: f32 = 20.0;
 const MENU_TRAILING_GAP: f32 = spacing::SM;
 const MENU_VIEWPORT_PADDING: f32 = spacing::LG;
-const MENU_ICON_SIZE: f32 = 14.0;
+const MENU_ICON_SIZE: f32 = 16.0;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct MenuOverlayPlacement {
@@ -74,10 +78,6 @@ impl MenuOverlayPassThroughRegion {
     fn top(self) -> f32 {
         self.y.max(0.0)
     }
-
-    fn bottom(self) -> f32 {
-        (self.y + self.height).max(self.top())
-    }
 }
 
 impl MenuOverlayPlacement {
@@ -86,6 +86,7 @@ impl MenuOverlayPlacement {
         viewport: arkit_hooks::OverlayViewport,
         panel_width: f32,
         panel_height: f32,
+        align: FloatingAlign,
         side_offset: f32,
     ) -> Self {
         let scale = super::floating_layer::viewport_scale(viewport);
@@ -102,6 +103,7 @@ impl MenuOverlayPlacement {
         );
         let trigger_x = trigger_origin.x;
         let trigger_y = trigger_origin.y;
+        let trigger_width = trigger.width / scale;
         let trigger_height = trigger.height / scale;
         let edge = MENU_VIEWPORT_PADDING;
         let min_x = viewport.safe_area.left.max(0.0) + edge;
@@ -123,16 +125,14 @@ impl MenuOverlayPlacement {
             above_y
         };
 
-        let x = if trigger_x < min_x {
-            min_x
-        } else if trigger_x > max_x {
-            max_x
-        } else {
-            trigger_x
+        let raw_x = match align {
+            FloatingAlign::Start => trigger_x,
+            FloatingAlign::Center => trigger_x + ((trigger_width - panel_width) / 2.0),
+            FloatingAlign::End => trigger_x + trigger_width - panel_width,
         };
 
         Self {
-            x,
+            x: raw_x.clamp(min_x, max_x),
             y: y.clamp(min_y, max_y),
         }
     }
@@ -144,10 +144,18 @@ impl MenuOverlayPlacement {
         viewport: arkit_hooks::OverlayViewport,
         panel_width: f32,
         panel_height: f32,
+        align: FloatingAlign,
         side_offset: f32,
     ) -> Self {
         if trigger.is_measured() {
-            Self::from_trigger(trigger, viewport, panel_width, panel_height, side_offset)
+            Self::from_trigger(
+                trigger,
+                viewport,
+                panel_width,
+                panel_height,
+                align,
+                side_offset,
+            )
         } else {
             Self::fallback(viewport)
         }
@@ -552,46 +560,51 @@ fn MenuContentPanel(
     };
 
     rsx! {
-        column {
-            accessibility_role: "menu",
-            focus_scope: true,
-            focus_navigation: "vertical",
-            key_capture: "escape",
+        PopupShadow {
             width: style.width,
-            align_self: "start",
-            align_items: "start",
-            onkey: move |event| {
-                if event.data().action == dioxus_elements::event::KeyAction::Down
-                    && event.data().key == dioxus_elements::event::KeyboardKey::Escape
-                {
-                    event.stop_propagation();
-                    on_dismiss.call(());
-                } else if event.data().is_down() && matches!(event.data().key, dioxus_elements::event::KeyboardKey::ArrowLeft | dioxus_elements::event::KeyboardKey::ArrowRight) {
-                    if let Some(navigation) = navigation { event.stop_propagation(); navigation.on_key.call(event.data().key); }
+            radius: theme.radii.md,
+            background: colors.popover,
+            kind: PopupShadowKind::Md,
+            column {
+                accessibility_role: "menu",
+                focus_scope: true,
+                focus_navigation: "vertical",
+                key_capture: "escape",
+                width: style.width,
+                align_self: "start",
+                align_items: "start",
+                onkey: move |event| {
+                    if event.data().action == dioxus_elements::event::KeyAction::Down
+                        && event.data().key == dioxus_elements::event::KeyboardKey::Escape
+                    {
+                        event.stop_propagation();
+                        on_dismiss.call(());
+                    } else if event.data().is_down() && matches!(event.data().key, dioxus_elements::event::KeyboardKey::ArrowLeft | dioxus_elements::event::KeyboardKey::ArrowRight) {
+                        if let Some(navigation) = navigation { event.stop_propagation(); navigation.on_key.call(event.data().key); }
+                    }
+                },
+                padding_top: spacing::XXS,
+                padding_right: spacing::XXS,
+                padding_bottom: spacing::XXS,
+                padding_left: spacing::XXS,
+                border_radius: theme.radii.md,
+                border_width: 1.0,
+                border_color: colors.border,
+                clip: false,
+                background_color: colors.popover,
+                super::panel_viewport::PanelViewport {
+                    max_height,
+                for (index, entry) in entries.iter().enumerate() {
+                    {
+                        render_menu_entry(
+                            entry,
+                            index,
+                            &[],
+                            render_context,
+                        )
+                    }
                 }
-            },
-            padding_top: spacing::XXS,
-            padding_right: spacing::XXS,
-            padding_bottom: spacing::XXS,
-            padding_left: spacing::XXS,
-            border_radius: theme.radii.md,
-            border_width: 1.0,
-            border_color: colors.border,
-            clip: true,
-            background_color: colors.popover,
-            shadow: "sm",
-            super::panel_viewport::PanelViewport {
-                max_height,
-            for (index, entry) in entries.iter().enumerate() {
-                {
-                    render_menu_entry(
-                        entry,
-                        index,
-                        &[],
-                        render_context,
-                    )
                 }
-            }
             }
         }
     }
@@ -621,69 +634,66 @@ pub(crate) fn menu_overlay_content(
     let left = placement.x.max(0.0);
     let pass_through_region =
         pass_through_region.filter(|region| region.width > 0.0 && region.height > 0.0);
-    let reserved_above_panel = pass_through_region
-        .map(|region| region.bottom())
-        .unwrap_or(0.0)
-        .clamp(0.0, top);
-    let backdrop_top_padding = (top - reserved_above_panel).max(0.0);
     rsx! {
-        column {
+        stack {
             width: "100%",
             height: "100%",
-            align_items: "start",
+            alignment: "top-start",
             hit_test_behavior: "none",
-            if let Some(region) = pass_through_region {
-                if region.top() > 0.0 {
-                    row {
-                        width: "100%",
-                        height: region.top(),
-                        background_color: FLOATING_CAPTURE_COLOR,
-                        hit_test_behavior: "default",
-                        onclick: move |_| on_dismiss.call(()),
-                    }
-                }
-                row {
-                    width: "100%",
-                    height: region.height,
-                    hit_test_behavior: "none",
-                    if region.x > 0.0 {
+            column {
+                width: "100%",
+                height: "100%",
+                align_items: "start",
+                hit_test_behavior: "none",
+                if let Some(region) = pass_through_region {
+                    if region.top() > 0.0 {
                         row {
-                            width: region.x,
-                            height: "100%",
+                            width: "100%",
+                            height: region.top(),
                             background_color: FLOATING_CAPTURE_COLOR,
                             hit_test_behavior: "default",
                             onclick: move |_| on_dismiss.call(()),
                         }
                     }
                     row {
-                        width: region.width,
-                        height: "100%",
+                        width: "100%",
+                        height: region.height,
                         hit_test_behavior: "none",
+                        if region.x > 0.0 {
+                            row {
+                                width: region.x,
+                                height: "100%",
+                                background_color: FLOATING_CAPTURE_COLOR,
+                                hit_test_behavior: "default",
+                                onclick: move |_| on_dismiss.call(()),
+                            }
+                        }
+                        row {
+                            width: region.width,
+                            height: "100%",
+                            hit_test_behavior: "none",
+                        }
+                        row {
+                            layout_weight: 1.0,
+                            height: "100%",
+                            background_color: FLOATING_CAPTURE_COLOR,
+                            hit_test_behavior: "default",
+                            onclick: move |_| on_dismiss.call(()),
+                        }
                     }
-                    row {
-                        layout_weight: 1.0,
-                        height: "100%",
-                        background_color: FLOATING_CAPTURE_COLOR,
-                        hit_test_behavior: "default",
-                        onclick: move |_| on_dismiss.call(()),
-                    }
+                }
+                column {
+                    width: "100%",
+                    layout_weight: 1.0,
+                    background_color: FLOATING_CAPTURE_COLOR,
+                    hit_test_behavior: "default",
+                    onclick: move |_| on_dismiss.call(()),
                 }
             }
             column {
-                width: "100%",
-                layout_weight: 1.0,
-                align_items: "start",
-                padding_top: backdrop_top_padding,
-                background_color: FLOATING_CAPTURE_COLOR,
-                hit_test_behavior: "default",
-                onclick: move |_| on_dismiss.call(()),
-                // Keep horizontal anchor via absolute position (margin_left was
-                // sensitive to intermediate row shrink-wrapping).
-                column {
-                    position: format!("{left},0"),
-                    onclick: move |evt| evt.stop_propagation(),
-                    {menu_content(style, &theme, on_dismiss, &entries, top, navigation)}
-                }
+                position: format!("{left},{top}"),
+                onclick: move |evt| evt.stop_propagation(),
+                {menu_content(style, &theme, on_dismiss, &entries, top, navigation)}
             }
         }
     }
@@ -736,10 +746,10 @@ fn MenuItemSurface(
             align_self: "start",
             align_items: "center",
             justify_content: "start",
-            padding_top: 8.0,
-            padding_right: 8.0,
-            padding_bottom: 8.0,
-            padding_left: 8.0,
+            padding_top: MENU_ROW_VERTICAL_PADDING,
+            padding_right: MENU_ROW_HORIZONTAL_PADDING,
+            padding_bottom: MENU_ROW_VERTICAL_PADDING,
+            padding_left: MENU_ROW_HORIZONTAL_PADDING,
             border_radius: radius,
             clip: true,
             background_color: if !disabled && (hovering() || focused()) {
@@ -935,13 +945,18 @@ fn render_submenu_entry(
                     align_items: "center",
                     justify_content: "center",
                     margin_left: MENU_TRAILING_GAP,
-                    width: 18.0,
-                    height: 18.0,
-                    {crate::icon::icon_placeholder(chevron, 18.0, colors.foreground)}
+                    width: MENU_ICON_SIZE,
+                    height: MENU_ICON_SIZE,
+                    {crate::icon::icon_placeholder(chevron, MENU_ICON_SIZE, colors.foreground)}
                 }
             }
             ExpandPresence {
                 open: submenu_open,
+                PopupShadow {
+                    width: submenu_min_width.max(min_width),
+                    radius: theme.radii.md,
+                    background: colors.popover,
+                    kind: PopupShadowKind::Lg,
                     column {
                         focus_scope: submenu_open,
                         focus_navigation: "vertical",
@@ -965,9 +980,8 @@ fn render_submenu_entry(
                         border_radius: theme.radii.md,
                         border_width: 1.0,
                         border_color: colors.border,
-                        clip: true,
+                        clip: false,
                         background_color: colors.popover,
-                        shadow: "sm",
                         for (child_index, child) in entry.items.iter().enumerate() {
                             {
                                 render_menu_entry(
@@ -982,6 +996,7 @@ fn render_submenu_entry(
                             }
                         }
                     }
+                }
             }
         }
     }
@@ -1117,10 +1132,10 @@ fn render_label_entry(
             align_self: "start",
             align_items: "center",
             justify_content: "start",
-            padding_top: 6.0,
-            padding_right: 8.0,
-            padding_bottom: 6.0,
-            padding_left: 8.0,
+            padding_top: MENU_ROW_VERTICAL_PADDING,
+            padding_right: MENU_ROW_HORIZONTAL_PADDING,
+            padding_bottom: MENU_ROW_VERTICAL_PADDING,
+            padding_left: MENU_ROW_HORIZONTAL_PADDING,
             border_radius: sm,
             clip: true,
             background_color: TRANSPARENT,
@@ -1158,13 +1173,15 @@ fn menu_item_text(content: String, color: u32, weight: i32) -> Element {
     rsx! {
         row {
             layout_weight: 1.0,
+            height: MENU_TEXT_LINE_HEIGHT,
+            align_items: "center",
             clip: true,
             text {
                 width: "100%",
                 font_size: typography::SM,
                 font_weight: weight,
                 font_color: color,
-                line_height: 20.0,
+                line_height: MENU_TEXT_LINE_HEIGHT,
                 max_lines: MENU_TEXT_MAX_LINES,
                 text_overflow: MENU_TEXT_OVERFLOW_ELLIPSIS,
                 {content}
@@ -1177,13 +1194,15 @@ fn menu_label_text(content: String, color: u32) -> Element {
     rsx! {
         row {
             layout_weight: 1.0,
+            height: MENU_TEXT_LINE_HEIGHT,
+            align_items: "center",
             clip: true,
             text {
                 width: "100%",
-                font_size: typography::XS,
-                font_weight: 600_i32,
+                font_size: typography::SM,
+                font_weight: 500_i32,
                 font_color: color,
-                line_height: 16.0,
+                line_height: MENU_TEXT_LINE_HEIGHT,
                 max_lines: MENU_TEXT_MAX_LINES,
                 text_overflow: MENU_TEXT_OVERFLOW_ELLIPSIS,
                 {content}
@@ -1223,10 +1242,12 @@ fn menu_icon_leading_slot(name: String, color: u32) -> Element {
 fn menu_leading_slot(child: Element) -> Element {
     rsx! {
         row {
-            margin_right: 8.0,
+            height: MENU_TEXT_LINE_HEIGHT,
+            align_items: "center",
+            margin_right: spacing::SM,
             row {
-                width: 16.0,
-                height: 16.0,
+                width: MENU_ICON_SIZE,
+                height: MENU_ICON_SIZE,
                 align_items: "center",
                 justify_content: "center",
                 {child}
@@ -1293,7 +1314,14 @@ mod tests {
     #[test]
     fn menu_and_pass_through_share_the_portal_coordinate_space() {
         let viewport = pc_viewport();
-        let placement = MenuOverlayPlacement::from_trigger(trigger(), viewport, 100.0, 80.0, 4.0);
+        let placement = MenuOverlayPlacement::from_trigger(
+            trigger(),
+            viewport,
+            100.0,
+            80.0,
+            FloatingAlign::Start,
+            4.0,
+        );
         let pass_through = MenuOverlayPassThroughRegion::from_frame(trigger(), viewport).unwrap();
 
         assert!((placement.x - 100.0).abs() < 0.01);
@@ -1316,5 +1344,75 @@ mod tests {
 
         assert!((placement.x - 100.0).abs() < 0.01);
         assert!((placement.y - 100.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn menu_row_content_box_matches_text_and_icon_metrics() {
+        let content_height = MENU_ROW_HEIGHT - MENU_ROW_VERTICAL_PADDING * 2.0;
+
+        assert_eq!(content_height, MENU_TEXT_LINE_HEIGHT);
+        assert_eq!(MENU_ICON_SIZE, 16.0);
+        assert!(MENU_ICON_SIZE <= content_height);
+    }
+
+    #[test]
+    fn centered_dropdown_uses_portal_local_coordinates() {
+        let viewport = arkit_hooks::OverlayViewport {
+            frame: arkit_arkui::LayoutFramePx {
+                x: 0.0,
+                y: 124.0,
+                width: 1260.0,
+                height: 2505.0,
+            },
+            safe_area: arkit_hooks::EdgeInsets::default(),
+            scale: 3.25,
+        };
+        let placement = MenuOverlayPlacement::from_trigger(
+            arkit_arkui::LayoutFramePx {
+                x: 510.0,
+                y: 467.0,
+                width: 240.0,
+                height: 117.0,
+            },
+            viewport,
+            288.0,
+            300.0,
+            FloatingAlign::Center,
+            spacing::XXS,
+        );
+
+        let window_x = viewport.frame.x + placement.x * viewport.scale;
+        let window_y = viewport.frame.y + placement.y * viewport.scale;
+        assert!((window_x - 162.0).abs() < 0.5);
+        assert!((window_y - 597.0).abs() < 0.5);
+    }
+
+    #[test]
+    fn start_aligned_menu_keeps_trigger_edge_when_space_allows() {
+        let viewport = arkit_hooks::OverlayViewport {
+            frame: arkit_arkui::LayoutFramePx {
+                x: 0.0,
+                y: 100.0,
+                width: 1200.0,
+                height: 2200.0,
+            },
+            safe_area: arkit_hooks::EdgeInsets::default(),
+            scale: 3.0,
+        };
+        let placement = MenuOverlayPlacement::from_trigger(
+            arkit_arkui::LayoutFramePx {
+                x: 300.0,
+                y: 400.0,
+                width: 180.0,
+                height: 90.0,
+            },
+            viewport,
+            224.0,
+            180.0,
+            FloatingAlign::Start,
+            spacing::SM,
+        );
+
+        assert!((placement.x - 100.0).abs() < 0.5);
     }
 }
