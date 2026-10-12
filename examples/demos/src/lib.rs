@@ -13,7 +13,7 @@ use arkit::prelude::*;
 // The Routable derive emits `::dioxus_router` paths. Bind that name through
 // arkit's supported router namespace instead of adding an internal crate edge.
 use arkit::router::dioxus_router;
-use arkit::router::{use_back_handler, Outlet, Routable, Router};
+use arkit::router::{use_back_handler, use_route, AnimatedOutlet, Outlet, Routable, Router};
 
 mod demo_page;
 mod home;
@@ -54,13 +54,22 @@ fn AppShell() -> Element {
         marker: use_signal(|| false),
     };
     use_context_provider(|| root_state);
+    let route = use_route::<Route>();
+    let regressions = matches!(route, Route::Demo { ref slug } if slug == "regressions");
     let active = (root_state.active)();
     let marker = (root_state.marker)();
 
     rsx! {
         AdaptiveProvider {
             config: AdaptiveConfig::default(),
-            Outlet::<Route> {}
+            // Keep the diagnostic route free of a native transition wrapper.
+            // Its trailing siblings exercise renderer-root placeholder replacement
+            // while an already-mounted portal is active.
+            if regressions {
+                Outlet::<Route> {}
+            } else {
+                AnimatedOutlet::<Route> {}
+            }
 
             // These are direct AppShell siblings so their native parent is the
             // renderer's synthetic root. The regression route first activates the
