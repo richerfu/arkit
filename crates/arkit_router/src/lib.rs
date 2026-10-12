@@ -29,6 +29,7 @@ pub use dioxus_router::{
 
 use std::rc::Rc;
 
+pub use arkit_animation::SpringSpec;
 pub use arkit_animation::TransitionPreset;
 use arkit_animation::{
     page_enter_spring, page_exit_spring, spring_duration_ms, use_animate_presence, PresenceKey,
@@ -80,7 +81,10 @@ pub struct RouteTransitionProps {
     /// Transition preset used when the route subtree mounts. Defaults to `Fade`.
     #[props(default)]
     pub preset: Option<TransitionPreset>,
-    /// Duration in milliseconds; defaults to the page enter spring's natural duration.
+    /// Enter curve. Defaults to the page enter spring.
+    #[props(default)]
+    pub spring: Option<SpringSpec>,
+    /// Duration in milliseconds; defaults to the selected spring's natural duration.
     #[props(default)]
     pub duration_ms: Option<i32>,
     /// Animation delay in milliseconds. Defaults to `0`.
@@ -102,7 +106,7 @@ pub struct RouteTransitionProps {
 #[component]
 pub fn RouteTransition<R: dioxus_router::Routable + Clone>(props: RouteTransitionProps) -> Element {
     let _ = std::marker::PhantomData::<R>;
-    let spring = page_enter_spring();
+    let spring = props.spring.unwrap_or_else(page_enter_spring);
     let preset = props.preset.or(Some(TransitionPreset::Fade));
     let duration_ms = props.duration_ms.or(Some(spring_duration_ms(spring)));
     let fill = props.fill.or(Some(true));
@@ -125,11 +129,21 @@ pub struct AnimatedOutletProps {
     /// Preset for both entering and leaving pages. Defaults to opacity-only `Fade`.
     #[props(default)]
     pub preset: Option<TransitionPreset>,
-    /// Entering fade duration in milliseconds; defaults to the page enter
-    /// spring's natural duration. The leaving fade uses the shorter exit spring
-    /// and never runs longer than this.
+    /// Curve for the entering page. Defaults to the page enter spring.
+    #[props(default)]
+    pub enter_spring: Option<SpringSpec>,
+    /// Curve for the leaving page. Defaults to the faster page exit spring.
+    #[props(default)]
+    pub exit_spring: Option<SpringSpec>,
+    /// Entering fade duration in milliseconds; defaults to the enter spring's
+    /// natural duration.
     #[props(default)]
     pub duration_ms: Option<i32>,
+    /// Leaving fade duration in milliseconds; defaults to the exit spring's
+    /// natural duration, capped at the entering duration so the old page
+    /// never outlives the new one.
+    #[props(default)]
+    pub exit_duration_ms: Option<i32>,
     /// Delay before the entering page fades in, in milliseconds. Defaults to
     /// `40` so the leaving page clears first. The leaving page never waits.
     #[props(default)]
@@ -167,12 +181,14 @@ pub fn AnimatedOutlet<R: dioxus_router::Routable + Clone>(props: AnimatedOutletP
     let preset = props.preset.or(Some(TransitionPreset::Fade));
     // The leaving page fades out immediately on a faster spring while the
     // entering page waits briefly, so their content barely overlaps.
-    let enter_spring = page_enter_spring();
-    let exit_spring = page_exit_spring();
+    let enter_spring = props.enter_spring.unwrap_or_else(page_enter_spring);
+    let exit_spring = props.exit_spring.unwrap_or_else(page_exit_spring);
     let enter_ms = props
         .duration_ms
         .unwrap_or_else(|| spring_duration_ms(enter_spring));
-    let exit_ms = spring_duration_ms(exit_spring).min(enter_ms);
+    let exit_ms = props
+        .exit_duration_ms
+        .unwrap_or_else(|| spring_duration_ms(exit_spring).min(enter_ms));
     let enter_delay_ms = props.delay_ms.unwrap_or(PAGE_ENTER_DELAY_MS);
     let fill = props.fill.unwrap_or(true);
     let mut entries = presence.entries();
@@ -477,6 +493,27 @@ mod transition_tests {
             NAVIGATOR.with(|slot| slot.replace(Some((current_scope_id(), navigator))))
         });
         rsx! { AnimatedOutlet::<Route> {} }
+    }
+
+    // Compile-time contract: every default is overridable from rsx.
+    #[allow(dead_code)]
+    #[component]
+    fn CustomShell() -> Element {
+        rsx! {
+            AnimatedOutlet::<Route> {
+                preset: TransitionPreset::Fade,
+                enter_spring: SpringSpec::from_response(0.5, 1.0).unwrap(),
+                exit_spring: SpringSpec::from_response(0.3, 1.0).unwrap(),
+                duration_ms: 300,
+                exit_duration_ms: 180,
+                delay_ms: 0,
+                fill: true,
+            }
+            RouteTransition::<Route> {
+                spring: SpringSpec::from_response(0.5, 1.0).unwrap(),
+                "page"
+            }
+        }
     }
 
     #[component]

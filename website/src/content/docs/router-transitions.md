@@ -27,11 +27,24 @@ fn AppShell() -> Element {
 
 首次挂载直接显示，不播放入场动画。之后 push、back 和路由参数变化都按 route 字符串区分页面，在同一个全尺寸 stack 中淡出、淡入。离场页面不接收输入；快速 A→B→C 时，每个旧页面各自完成离场并清理，不依赖固定 timeout。
 
-需要调整节奏时可覆盖 `duration_ms`（入场时长，离场不会超过它）、`delay_ms`（入场延迟）、`fill`，也保留显式 `preset` 覆盖；页面建议保持 `Fade`。设置 `duration_ms: 0` 可关闭动画。
+以上都是默认值，每一项都可以覆盖：
+
+| prop                         | 含义                                         |
+| ---------------------------- | -------------------------------------------- |
+| `preset`                     | 动画形式，页面建议保持 `Fade`                |
+| `enter_spring`/`exit_spring` | 入场/离场曲线（`SpringSpec`）                |
+| `duration_ms`                | 入场时长，默认取入场弹簧自然时长             |
+| `exit_duration_ms`           | 离场时长，默认取离场弹簧自然时长且不超过入场 |
+| `delay_ms`                   | 入场延迟，默认 40ms；离场始终立即开始        |
+| `fill`                       | 是否撑满父容器                               |
+
+设置 `duration_ms: 0` 可关闭动画（未显式设置时离场时长不超过入场，同样为 0）。
 
 ```rust
 AnimatedOutlet::<Route> {
-    duration_ms: 300,
+    enter_spring: SpringSpec::from_response(0.5, 1.0).unwrap(),
+    exit_spring: SpringSpec::from_response(0.3, 1.0).unwrap(),
+    delay_ms: 0,
 }
 ```
 
@@ -45,7 +58,7 @@ RouteTransition::<Route> {
 }
 ```
 
-它是仅入场的辅助组件，默认同样为 `Fade`、入场弹簧及其自然时长，没有延迟。调用方通过 key 控制重播；父组件卸载它时，无法保留旧页面或播放离场。需要完整切页转场时使用 `AnimatedOutlet`。
+它是仅入场的辅助组件，默认同样为 `Fade`、入场弹簧及其自然时长，没有延迟；可用 `spring`、`duration_ms`、`delay_ms` 覆盖。调用方通过 key 控制重播；父组件卸载它时，无法保留旧页面或播放离场。需要完整切页转场时使用 `AnimatedOutlet`。
 
 ## 验证
 
