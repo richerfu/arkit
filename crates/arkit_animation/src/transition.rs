@@ -2,7 +2,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use arkit_animation_core::{
-    Angle, AnimatableValue, BuiltinEase, EaseDirection, Easing, Length, TimeSpan, TimelinePosition,
+    Angle, AnimatableValue, Easing, Length, SpringSpec, TimeSpan, TimelinePosition,
 };
 use arkit_prelude::*;
 
@@ -108,15 +108,45 @@ impl TransitionValues {
     }
 }
 
-fn enter_easing() -> Easing {
-    // Official Sonner enter curve; tiny overshoot reads as a settle, not a bounce.
-    Easing::cubic_bezier(0.21, 1.02, 0.73, 1.0)
-        .unwrap_or(Easing::Builtin(BuiltinEase::Cubic(EaseDirection::Out)))
+/// System-style settling curve shared by overlay entrances and toast stacks.
+pub fn enter_easing() -> Easing {
+    Easing::Spring(SpringSpec::from_response(0.55, 0.825).expect("valid system enter spring"))
 }
 
 fn exit_easing() -> Easing {
-    Easing::cubic_bezier(0.32, 0.72, 0.0, 1.0)
-        .unwrap_or(Easing::Builtin(BuiltinEase::Cubic(EaseDirection::In)))
+    Easing::Spring(SpringSpec::from_response(0.347, 0.99).expect("valid system exit spring"))
+}
+
+// Opacity changes below ~4% are not perceptible; ending the timeline there
+// removes the invisible settling tail that kept leaving pages on screen.
+const PAGE_REST_SPEED: f32 = 1.0;
+const PAGE_REST_DISPLACEMENT: f32 = 0.04;
+
+/// Delay before an entering page starts fading in, so the leaving page is
+/// mostly gone first and the two pages' content barely overlaps.
+pub const PAGE_ENTER_DELAY_MS: i32 = 40;
+
+/// Spring for an entering page fade; use its natural duration unless overridden.
+pub fn page_enter_spring() -> SpringSpec {
+    // Critical damping keeps opacity monotonic. With the 40 ms delay the page is
+    // half visible at ~140 ms and 90% at ~265 ms, done by ~390 ms. A 0.6 s
+    // response ran ~925 ms and left both pages overlapping on device.
+    SpringSpec::from_response(0.36, 1.0)
+        .and_then(|spring| spring.with_rest_thresholds(PAGE_REST_SPEED, PAGE_REST_DISPLACEMENT))
+        .expect("valid page enter spring")
+}
+
+/// Spring for a leaving page fade: faster than the entrance so the old page
+/// clears (~225 ms) before the new one is substantially visible.
+pub fn page_exit_spring() -> SpringSpec {
+    SpringSpec::from_response(0.2, 1.0)
+        .and_then(|spring| spring.with_rest_thresholds(PAGE_REST_SPEED, PAGE_REST_DISPLACEMENT))
+        .expect("valid page exit spring")
+}
+
+/// Natural duration of `spring` in whole milliseconds.
+pub fn spring_duration_ms(spring: SpringSpec) -> i32 {
+    (spring.natural_duration_seconds() * 1000.0).round() as i32
 }
 
 fn configure_tween(animation: Animation, easing: Easing, delay: TimeSpan) -> Animation {
@@ -140,6 +170,7 @@ fn tween_property<T: AnimatableValue>(
     configure_tween(animation, easing, delay)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn transition_timeline(
     target: arkit_animation_core::TargetName,
     preset: TransitionPreset,
@@ -147,13 +178,18 @@ fn transition_timeline(
     delay: TimeSpan,
     phase: PresencePhase,
     distance: f32,
+    spring: Option<SpringSpec>,
+    resume: bool,
 ) -> Timeline {
     let hidden = preset.hidden(distance);
     let shown = TransitionValues::shown();
+    // `resume` re-enters an interrupted exit from its current values instead of
+    // snapping back to hidden first (e.g. A → B → A before A finished leaving).
     let (from, to, easing, from_current) = match phase {
         PresencePhase::Leaving => (shown, hidden, exit_easing(), true),
-        PresencePhase::Entering | PresencePhase::Present => (hidden, shown, enter_easing(), false),
+        PresencePhase::Entering | PresencePhase::Present => (hidden, shown, enter_easing(), resume),
     };
+    let easing = spring.map(Easing::Spring).unwrap_or(easing);
     let explicit = |value: f32| if from_current { None } else { Some(value) };
     let mut animation = tween_property(
         Animation::new(AnimationSelector::Target(target)),
@@ -223,6 +259,7 @@ fn transition_timeline(
 fn wrap_transition(
     target_ref: arkit_arkui::NativeElementRef,
     fill: bool,
+    opacity: f32,
     children: Element,
 ) -> Element {
     // Transparent: this wrapper is only an animation target. Hit testing must
@@ -231,6 +268,7 @@ fn wrap_transition(
         rsx! {
             column {
                 native_ref: target_ref,
+                opacity,
                 width: "100%",
                 height: "100%",
                 align_items: "start",
@@ -244,6 +282,7 @@ fn wrap_transition(
         rsx! {
             column {
                 native_ref: target_ref,
+                opacity,
                 width: "100%",
                 align_items: "stretch",
                 hit_test_behavior: "transparent",
@@ -253,14 +292,45 @@ fn wrap_transition(
     }
 }
 
+// Keep the first native paint hidden until the engine owns opacity. Updating
+// the declarative endpoint after its first frame is safe under that ownership
+// and prevents terminal cleanup from restoring the initial hidden value.
+fn use_transition_opacity(
+    controls: &crate::AnimationControls,
+    phase: PresencePhase,
+    duration: TimeSpan,
+) -> Signal<f32> {
+    let opacity = use_signal(|| {
+        if phase == PresencePhase::Entering && duration != TimeSpan::ZERO {
+            TransitionValues::hidden().opacity
+        } else {
+            TransitionValues::shown().opacity
+        }
+    });
+    controls.on_render(move |_| {
+        let mut opacity = opacity;
+        let endpoint = if phase == PresencePhase::Leaving {
+            0.0
+        } else {
+            1.0
+        };
+        if *opacity.peek() != endpoint {
+            opacity.set(endpoint);
+        }
+    });
+    opacity
+}
+
 /// Play a one-shot enter timeline when the wrapper mounts (or `replay_id` changes).
 ///
 /// Prefer [`PresenceTransition`] / [`VisibleTransition`] when the same node
 /// also needs a hide animation. This component is enter-only.
+/// `spring` overrides the shared system enter curve without changing duration.
 #[component]
 pub fn MountTransition(
     children: Element,
     #[props(default)] preset: Option<TransitionPreset>,
+    #[props(default)] spring: Option<SpringSpec>,
     #[props(default)] duration_ms: Option<i32>,
     #[props(default)] delay_ms: Option<i32>,
     #[props(default)] distance: Option<f32>,
@@ -286,13 +356,17 @@ pub fn MountTransition(
         delay,
         PresencePhase::Entering,
         selected_distance,
+        spring,
+        false,
     ));
+    let opacity = use_transition_opacity(&controls, PresencePhase::Entering, duration);
     let request = (
         selected_preset,
         duration,
         delay,
         selected_distance.to_bits(),
         replay_id.unwrap_or(0),
+        spring,
     );
     let mut active = use_signal(|| None);
     use_effect(use_reactive((&request,), move |(request,)| {
@@ -306,11 +380,13 @@ pub fn MountTransition(
             request.2,
             PresencePhase::Entering,
             f32::from_bits(request.3),
+            request.5,
+            false,
         ));
         active.set(Some(request));
         controls.restart();
     }));
-    wrap_transition(target_ref, fill.unwrap_or(false), children)
+    wrap_transition(target_ref, fill.unwrap_or(false), opacity(), children)
 }
 
 /// Play enter or exit for a presence-tracked child and report the terminal phase.
@@ -318,11 +394,13 @@ pub fn MountTransition(
 /// Call [`crate::PresenceHandle::mark_present`] on `Entering` and
 /// [`crate::PresenceHandle::settle_exit`] on `Leaving`. `Present` is a rest
 /// state and does not start a timeline.
+/// `spring` overrides both shared system curves without changing durations.
 #[component]
 pub fn PresenceTransition(
     children: Element,
     phase: PresencePhase,
     #[props(default)] preset: Option<TransitionPreset>,
+    #[props(default)] spring: Option<SpringSpec>,
     #[props(default)] duration_ms: Option<i32>,
     #[props(default)] exit_duration_ms: Option<i32>,
     #[props(default)] delay_ms: Option<i32>,
@@ -357,7 +435,10 @@ pub fn PresenceTransition(
         delay,
         phase,
         selected_distance,
+        spring,
+        false,
     ));
+    let mut opacity = use_transition_opacity(&controls, phase, duration);
     let request = (
         phase,
         selected_preset,
@@ -365,6 +446,7 @@ pub fn PresenceTransition(
         exit_duration,
         delay,
         selected_distance.to_bits(),
+        spring,
     );
     let mut active = use_signal(|| None);
     let started_phase = use_hook(|| Rc::new(Cell::new(None::<PresencePhase>)));
@@ -384,6 +466,10 @@ pub fn PresenceTransition(
         active.set(Some(request));
         let phase = request.0;
         if phase == PresencePhase::Present {
+            started_phase.set(None);
+            if *opacity.peek() != 1.0 {
+                opacity.set(1.0);
+            }
             return;
         }
         let duration = if phase == PresencePhase::Leaving {
@@ -391,7 +477,10 @@ pub fn PresenceTransition(
         } else {
             request.2
         };
+        let resume = started_phase.get() == Some(PresencePhase::Leaving);
         if duration == TimeSpan::ZERO {
+            // Settle synchronously; a zero-length timeline is not guaranteed to
+            // report completion, and presence would otherwise never settle.
             started_phase.set(Some(phase));
             if let Some(handler) = on_terminal {
                 handler.call(phase);
@@ -405,11 +494,13 @@ pub fn PresenceTransition(
             request.4,
             phase,
             f32::from_bits(request.5),
+            request.6,
+            resume,
         ));
-        controls.restart();
         started_phase.set(Some(phase));
+        controls.restart();
     }));
-    wrap_transition(target_ref, fill.unwrap_or(false), children)
+    wrap_transition(target_ref, fill.unwrap_or(false), opacity(), children)
 }
 
 /// Keep `children` mounted until the hide timeline finishes.
@@ -497,6 +588,74 @@ pub fn use_presence_visibility(visible: bool) -> PresenceVisibility {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn page_timelines_only_animate_opacity_with_the_given_spring() {
+        for (phase, page_spring) in [
+            (PresencePhase::Entering, page_enter_spring()),
+            (PresencePhase::Leaving, page_exit_spring()),
+        ] {
+            let timeline = transition_timeline(
+                crate::TargetName::static_name("page"),
+                TransitionPreset::Fade,
+                TimeSpan::from_millis(300),
+                TimeSpan::ZERO,
+                phase,
+                MOUNT_DISTANCE,
+                Some(page_spring),
+                false,
+            );
+            let [arkit_animation_core::TimelineNode::Animation { animation, .. }] =
+                timeline.source().nodes.as_slice()
+            else {
+                panic!("expected one page animation");
+            };
+            assert_eq!(animation.tweens.len(), 1);
+            assert_eq!(animation.tweens[0].property.as_str(), "opacity");
+            assert!(
+                matches!(animation.tweens[0].easing, Easing::Spring(spring) if spring == page_spring)
+            );
+        }
+    }
+
+    #[test]
+    fn page_fades_are_short_and_the_exit_clears_first() {
+        let enter = spring_duration_ms(page_enter_spring()) + PAGE_ENTER_DELAY_MS;
+        let exit = spring_duration_ms(page_exit_spring());
+        assert!(enter <= 420, "enter {enter} ms");
+        assert!(
+            exit < enter,
+            "exit {exit} ms must finish before enter {enter} ms"
+        );
+    }
+
+    #[test]
+    fn initial_native_opacity_is_hidden_only_for_animated_entrances() {
+        fn app() -> Element {
+            crate::engine::use_animation_host_provider();
+            rsx! {
+                MountTransition { preset: TransitionPreset::Fade, "mount" }
+                PresenceTransition { phase: PresencePhase::Entering, "enter" }
+                PresenceTransition { phase: PresencePhase::Present, fill: true, "present" }
+                PresenceTransition { phase: PresencePhase::Entering, duration_ms: 0, "instant" }
+            }
+        }
+        let mut dom = dioxus_core::VirtualDom::new(app);
+        let mutations = dom.rebuild_to_vec();
+        let opacities = mutations
+            .edits
+            .iter()
+            .filter_map(|edit| match edit {
+                dioxus_core::Mutation::SetAttribute {
+                    name: "opacity",
+                    value: dioxus_core::AttributeValue::Float(value),
+                    ..
+                } => Some(*value),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(opacities, [0.0, 0.0, 1.0, 1.0]);
+    }
 
     #[test]
     fn fade_hides_with_opacity_only() {

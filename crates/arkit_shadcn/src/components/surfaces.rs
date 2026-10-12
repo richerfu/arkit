@@ -15,10 +15,10 @@ use super::{Spinner, ARKUI_BORDER_STYLE_SOLID};
 use crate::icon::icon_placeholder;
 use crate::theme::*;
 use arkit_animation::{
-    use_animate_presence, use_animation, use_animation_target, Animation, AnimationSelector,
-    BuiltinEase, EaseDirection, Easing, Length, PresenceKey, PresenceMode, PresencePhase,
-    PresenceTransition, TargetName, TimeSpan, Timeline, TimelinePosition, TransitionPreset,
-    OPACITY, POSITION_X, POSITION_Y, WIDTH,
+    enter_easing, use_animate_presence, use_animation, use_animation_target, Animation,
+    AnimationSelector, Length, PresenceKey, PresenceMode, PresencePhase, PresenceTransition,
+    TargetName, TimeSpan, Timeline, TimelinePosition, TransitionPreset, OPACITY, POSITION_X,
+    POSITION_Y, WIDTH,
 };
 use arkit_prelude::*;
 
@@ -1112,14 +1112,9 @@ fn stack_motion_origin(
     }
 }
 
-fn stack_easing() -> Easing {
-    Easing::cubic_bezier(0.21, 1.02, 0.73, 1.0)
-        .unwrap_or(Easing::Builtin(BuiltinEase::Cubic(EaseDirection::Out)))
-}
-
 fn configure_stack_tween(animation: Animation) -> Animation {
     animation.configure_last(
-        stack_easing(),
+        enter_easing(),
         Default::default(),
         Default::default(),
         TimeSpan::ZERO,
