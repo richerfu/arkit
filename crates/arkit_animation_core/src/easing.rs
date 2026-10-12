@@ -104,6 +104,67 @@ pub struct SpringSpec {
 }
 
 impl SpringSpec {
+    /// Construct a zero-velocity spring using ArkUI `springMotion` parameters.
+    ///
+    /// `response_seconds` is the undamped period, not the settling duration.
+    /// With unit mass, stiffness is `(2π / response)²` and damping is
+    /// `4π * damping_fraction / response`. A damping fraction of `1` is
+    /// critically damped; smaller values can overshoot. Rest thresholds match
+    /// [`Self::default`].
+    ///
+    /// Returns [`EasingError::InvalidSpring`] for a non-finite or non-positive
+    /// response, a non-finite or negative damping fraction, or coefficients
+    /// that cannot be represented as a valid spring.
+    pub fn from_response(
+        response_seconds: f32,
+        damping_fraction: f32,
+    ) -> Result<Self, EasingError> {
+        if !response_seconds.is_finite()
+            || response_seconds <= 0.0
+            || !damping_fraction.is_finite()
+            || damping_fraction < 0.0
+        {
+            return Err(EasingError::InvalidSpring);
+        }
+        let omega = std::f32::consts::TAU / response_seconds;
+        Self::new(
+            1.0,
+            omega * omega,
+            2.0 * damping_fraction * omega,
+            0.0,
+            Self::DEFAULT_REST_SPEED,
+            Self::DEFAULT_REST_DISPLACEMENT,
+        )
+    }
+
+    const DEFAULT_REST_SPEED: f32 = 0.01;
+    const DEFAULT_REST_DISPLACEMENT: f32 = 0.005;
+
+    /// Return this spring with new rest thresholds and a recomputed natural
+    /// duration.
+    ///
+    /// The default thresholds suit spatial motion. For opacity the last few
+    /// percent are invisible, so looser thresholds end the timeline when the
+    /// change is no longer perceptible instead of holding an invisible tail.
+    /// The sampled curve still lands exactly on `1` at the end.
+    ///
+    /// Returns [`EasingError::InvalidSpring`] for non-finite or non-positive
+    /// thresholds.
+    pub fn with_rest_thresholds(
+        self,
+        rest_speed: f32,
+        rest_displacement: f32,
+    ) -> Result<Self, EasingError> {
+        Self::new(
+            self.mass,
+            self.stiffness,
+            self.damping,
+            self.initial_velocity,
+            rest_speed,
+            rest_displacement,
+        )
+    }
+
     pub fn new(
         mass: f32,
         stiffness: f32,
@@ -223,8 +284,8 @@ impl Default for SpringSpec {
             stiffness: 100.0,
             damping: 10.0,
             initial_velocity: 0.0,
-            rest_speed: 0.01,
-            rest_displacement: 0.005,
+            rest_speed: Self::DEFAULT_REST_SPEED,
+            rest_displacement: Self::DEFAULT_REST_DISPLACEMENT,
             natural_duration_seconds: 0.0,
         };
         spring.natural_duration_seconds = spring.compute_natural_duration_seconds();
@@ -556,6 +617,84 @@ mod tests {
         assert!(spring.natural_duration_seconds() > 0.0);
         assert_eq!(spring.sample(0.0), 0.0);
         assert_eq!(spring.sample(1.0), 1.0);
+    }
+
+    #[test]
+    fn response_spring_round_trips_system_parameters() {
+        let response = 0.55;
+        let damping_fraction = 0.825;
+        let spring = SpringSpec::from_response(response, damping_fraction).unwrap();
+        assert_eq!(spring.mass, 1.0);
+        assert_eq!(spring.initial_velocity, 0.0);
+        assert_eq!(spring.rest_speed, SpringSpec::default().rest_speed);
+        assert_eq!(
+            spring.rest_displacement,
+            SpringSpec::default().rest_displacement
+        );
+        let period = std::f32::consts::TAU / spring.stiffness.sqrt();
+        let ratio = spring.damping / (2.0 * spring.stiffness.sqrt());
+        assert!((period - response).abs() < 1e-6);
+        assert!((ratio - damping_fraction).abs() < 1e-6);
+        assert_eq!(spring.sample(0.0), 0.0);
+        assert_eq!(spring.sample(1.0), 1.0);
+    }
+
+    #[test]
+    fn response_spring_rejects_invalid_inputs() {
+        for response in [
+            0.0,
+            -0.1,
+            f32::NAN,
+            f32::INFINITY,
+            f32::NEG_INFINITY,
+            f32::MIN_POSITIVE,
+        ] {
+            assert_eq!(
+                SpringSpec::from_response(response, 1.0),
+                Err(EasingError::InvalidSpring)
+            );
+        }
+        for damping in [-0.1, f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+            assert_eq!(
+                SpringSpec::from_response(0.35, damping),
+                Err(EasingError::InvalidSpring)
+            );
+        }
+        assert!(SpringSpec::from_response(0.35, 0.0).is_ok());
+    }
+
+    #[test]
+    fn looser_rest_thresholds_shorten_the_natural_duration_only() {
+        let spring = SpringSpec::from_response(0.36, 1.0).unwrap();
+        let loose = spring.with_rest_thresholds(1.0, 0.04).unwrap();
+        assert!(loose.natural_duration_seconds() < spring.natural_duration_seconds());
+        assert_eq!(loose.stiffness, spring.stiffness);
+        assert_eq!(loose.damping, spring.damping);
+        assert_eq!(loose.sample(0.0), 0.0);
+        assert_eq!(loose.sample(1.0), 1.0);
+        assert_eq!(
+            spring.with_rest_thresholds(0.0, 0.04),
+            Err(EasingError::InvalidSpring)
+        );
+        assert_eq!(
+            spring.with_rest_thresholds(1.0, f32::NAN),
+            Err(EasingError::InvalidSpring)
+        );
+    }
+
+    #[test]
+    fn near_critical_response_springs_have_no_visible_opacity_overshoot() {
+        for response in [0.1, 0.347, 0.35, 0.55, 1.0] {
+            for damping in [0.99, 1.0, 1.01, 1.5, 2.0] {
+                let spring = SpringSpec::from_response(response, damping).unwrap();
+                assert_eq!(spring.sample(0.0), 0.0);
+                assert_eq!(spring.sample(1.0), 1.0);
+                for step in 0..=10_000 {
+                    let value = spring.sample(step as f32 / 10_000.0);
+                    assert!((0.0..=1.0 + 1e-3).contains(&value), "{spring:?}: {value}");
+                }
+            }
+        }
     }
 
     #[test]
