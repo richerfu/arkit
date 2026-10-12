@@ -7,6 +7,17 @@ use arkit_prelude::*;
 
 use crate::provider::RouteScrollStore;
 
+/// A retained page keeps its own scroll identity while the live route changes.
+#[derive(Clone, Default)]
+pub(crate) struct RouteScrollKey(pub Option<String>);
+
+pub(crate) fn use_scroll_route() -> String {
+    match use_context::<RouteScrollKey>().0 {
+        Some(route) => route,
+        None => dioxus_router::router().full_route_string(),
+    }
+}
+
 struct PageScroll {
     route: String,
     store: RouteScrollStore,
@@ -76,7 +87,7 @@ pub struct RouteProviderProps {
 pub fn RouteProvider(props: RouteProviderProps) -> Element {
     let runtime = arkit_runtime::use_runtime_handle();
     let store = use_context::<RouteScrollStore>();
-    let route = dioxus_router::router().full_route_string();
+    let route = use_scroll_route();
     let initial_route = route.clone();
     let initial_store = store;
     let page_scroll =

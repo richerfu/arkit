@@ -64,6 +64,8 @@ where
 {
     let scroll = use_hook(RouteScrollStore::default);
     use_context_provider(|| scroll);
+    // A nested router must not inherit its parent's retained page identity.
+    use_context_provider(crate::scroll::RouteScrollKey::default);
 
     let config = props.config;
     rsx! {
