@@ -13,6 +13,27 @@ mod input;
 use input::{EncodeState, KeyChord, KeyMods, MouseAction, MouseButton, MouseInput};
 
 #[test]
+fn native_key_names_never_enter_the_pty_byte_stream() {
+    use arkit_prelude::dioxus_elements::event::{KeyData, KeyboardKey};
+    for (character, native_name) in [
+        ('p', "KEYCODE_P"),
+        ('W', "KEYCODE_W"),
+        ('界', "KEYCODE_UNKNOWN"),
+    ] {
+        let event = KeyData {
+            key: KeyboardKey::Character(character),
+            text: native_name.into(),
+            ..Default::default()
+        };
+        let chord = input::physical_key_chord(&event).unwrap();
+        assert_eq!(
+            input::encode_key_chord(EncodeState::default(), chord).unwrap(),
+            character.to_string().as_bytes()
+        );
+    }
+}
+
+#[test]
 fn physical_ctrl_and_alt_letters_are_encoded_as_terminal_chords() {
     let ctrl = KeyMods {
         ctrl: true,

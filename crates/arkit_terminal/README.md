@@ -39,6 +39,8 @@ and walks the cell buffer in the vertex shader.
   presents the newest scroll position instead of replaying stale frames
 - Optionally captures soft-keyboard / pointer and emits **host-bound** bytes
   via `on_input` (never injects them into VT)
+- Uses Arkit native-element layout subscriptions; changing `config` updates
+  the engine and painted cell geometry even when the surface size is unchanged
 
 ### Controller
 
@@ -55,8 +57,42 @@ and walks the cell buffer in the vertex shader.
 // on_write_pty → write to SSH/PTY
 ```
 
-See `examples/terminal` for a local cooked shell + SSH demo (host lives in the
-example, not in this crate).
+See `examples/terminal` for a real local PTY, a built-in demo shell, and SSH.
+The example uses Arkit `use_layout_size` and `use_window_metrics` to derive
+the grid from its measured viewport, update `Terminal.config`, and send the
+same columns/rows to the local PTY or SSH session. Window and keyboard state
+remain owned by Arkit. Host I/O lives in the example, not in this crate.
+
+`Local PTY` opens an OS master/slave pair and starts an interactive shell
+(`/system/bin/sh` on OHOS). `PTY probe` checks the tty, working directory,
+`ls -la`, and a real pipeline before emitting its success marker;
+PTY errors are displayed without substituting the built-in demo shell.
+The backend uses nonblocking I/O, bounded queues, `TIOCSWINSZ`/`SIGWINCH`, and
+closes and reaps its child when the session is dropped. Ordinary HAP sandbox
+access to the PTY device and shell must be verified on the target OS.
+
+On OHOS, the shell starts with `HOME` and its working directory set to
+`/data/storage/el2/base/files/terminal`, inside the application's storage.
+The sandbox root `/` cannot be listed by a normal app; launching there makes
+`ls` report `Permission denied` even when the command itself runs correctly.
+System and user directories still follow their existing access permissions.
+
+Validated on DevEco's official MateBook emulator, HarmonyOS 7.0.0.107/API 26,
+with an unsigned normal HAP: `/dev/pts/0`, `ls -la`, a `printf | cat` pipeline,
+physical keyboard input, and Arkit layout resizing from 106×13 to 160×28.
+
+Run the production host tests on macOS/Linux without linking OHOS UI libraries
+(Python 3.11+ and Rust are required):
+
+```sh
+python3 scripts/test-terminal-host.py --toolchain 1.97.1 --offline \
+  --target-dir /tmp/arkit-terminal-host-target
+```
+
+This covers tty allocation, `TIOCSWINSZ`, Ctrl-C, exit status, child cleanup
+under output backpressure, and the production key/mouse encoders. The runner
+uses a temporary Cargo project and the workspace lockfile; it does not modify
+workspace manifests or test against a separate PTY implementation.
 
 ## Renderer
 

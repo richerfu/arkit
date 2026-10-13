@@ -1,6 +1,6 @@
 ---
 title: GPU 终端
-description: "嵌入 GPU 终端：组件只负责渲染，shell / SSH 由你自己接。"
+description: "嵌入 GPU 终端：Arkit 管理窗口与布局，应用接入真实 PTY 或 SSH。"
 ---
 
 # GPU 终端
@@ -23,21 +23,23 @@ use arkit::prelude::*;
 use arkit::terminal::{Terminal, TerminalController, TerminalProps};
 ```
 
-完整可跑的代码在 `examples/terminal`：本地 shell 回显和 SSH 两种宿主都有。UI 侧只接 `on_input` / `on_write_pty`，宿主输出再喂给 `controller.feed_vt`。
+完整代码在 `examples/terminal`，由 `examples/demos` 的入口编译到 HAP。示例包含真实本地 PTY、内置演示命令和 SSH。UI 侧接 `on_input` / `on_write_pty`，宿主输出再喂给 `controller.feed_vt`。
 
 ## 谁干什么
 
 ```text
-  Terminal.on_input     ──►  应用 Host（LocalShell | SSH write）
+  Terminal.on_input     ──►  应用 Host（PTY | SSH | 演示命令）
   Host 输出字节流       ──►  controller.feed_vt
   Terminal.on_write_pty ──►  同一 Host write（DA/DSR 等设备应答）
+  Arkit 布局变化        ──►  Terminal.config + Host 的 PTY 尺寸
 ```
 
-| 层                   | 负责                                      | 不负责                    |
-| -------------------- | ----------------------------------------- | ------------------------- |
-| `Terminal` 组件      | 栅格、光标、选区、IME gutter、焦点与绘制  | fork/exec、SSH 握手、密钥 |
-| `TerminalController` | `feed_vt`、resize、focus、选区/剪贴板协作 | 业务会话生命周期          |
-| 应用 Host            | PTY/shell、SSH channel、编码与重连策略    | VT 语义与 GPU 帧提交      |
+| 层                   | 负责                                     | 不负责                    |
+| -------------------- | ---------------------------------------- | ------------------------- |
+| Arkit                | 窗口状态、键盘避让数据、原生布局订阅     | shell 进程与命令执行      |
+| `Terminal` 组件      | VT 栅格、光标、输入编码、焦点与 GPU 绘制 | fork/exec、SSH 握手、密钥 |
+| `TerminalController` | `feed_vt`、`reconfigure`、键盘显示与隐藏 | 业务会话生命周期          |
+| 应用 Host            | PTY/shell、SSH channel、编码与重连策略   | VT 语义与 GPU 帧提交      |
 
 ## 最小接入
 
@@ -64,30 +66,58 @@ rsx! {
 // controller.feed_vt(&bytes);
 ```
 
-列/行应与布局区域匹配；示例采用接近卡片宽高比的 `40×24` 网格，避免单元格拉伸或底部空白带。
+列/行应与布局区域匹配。示例把 `use_native_element_ref` 绑定到终端容器，通过 `use_layout_size` 获取物理像素尺寸，再按 `use_window_metrics` 的比例换算行列数。布局变化同时更新 `Terminal.config`、本地 PTY 的 `TIOCSWINSZ` 和 SSH 的 `window_change`。组件也会应用挂载后的配置变化，不需要手动尺寸按钮。
+
+## 真实本地 PTY
+
+点击 `Local PTY` 会打开 OS 的 master/slave 伪终端，并启动 `/system/bin/sh -i`。后端通过 `setsid` 和 `TIOCSCTTY` 设置控制终端，用非阻塞 master 和有界队列传输原始字节。尺寸变化会通知前台进程组；断开或离开页面会关闭 master 并回收 shell。
+
+OHOS 下的初始目录与 `HOME` 都是应用自己的 `/data/storage/el2/base/files/terminal`。普通应用不能列出沙箱根目录 `/`：在该目录执行 `ls` 会出现 `Permission denied`，即使命令已经正常启动。应用目录支持普通文件操作；系统目录和用户目录仍遵循各自的访问权限。
+
+`PTY probe` 依次检查真实 tty、当前目录、`ls -la` 和 `printf | cat` 管道，全部成功后才输出 `ARKIT_REAL_PTY`。PTY 打开失败会显示实际错误，输入也不会切到内置演示命令。
 
 ## 运行与依赖
 
 - 构建目标只需要 Rust 工具链（`rio-vt`，无 Zig）。
 - 设备侧依赖 GPU/XComponent 路径；模拟器是否完整取决于平台实现。
-- 打包进 HAP 时与其他 example 相同：一次只部署一个 `cdylib`，`moduleName` 与 `.so` 名称对齐。
+- `examples/terminal` 是页面库；`examples/demos` 是包含入口的 `cdylib`，对应 `libdemos.so`。
 
 ```sh
-cd examples/terminal
+cd examples/demos
 ohrs build --arch aarch
 cd ../../
-./app/run.sh terminal all
+HDC_TARGET="127.0.0.1:10090" ./app/run.sh
 ```
+
+将 `HDC_TARGET` 换成 `hdc list targets` 中的官方模拟器地址，打开整合示例中的 Terminal 页面，再点击 `Local PTY`。当前官方 MateBook 模拟器可直接安装 SDK 生成的 unsigned HAP：
+
+```sh
+hdc -t 127.0.0.1:10090 install -r app/entry/build/default/outputs/default/entry-default-unsigned.hap
+hdc -t 127.0.0.1:10090 shell aa start -a EntryAbility -b com.arkit.example
+```
+
+已在 DevEco 官方 MateBook 模拟器 HarmonyOS 7.0.0.107 / API 26 上验证 unsigned HAP、`/dev/pts/0`、`pwd`、`ls -la`、管道和实体键盘输入。窗口最大化时，Arkit 自动将示例网格从 `106×13` 更新到 `160×28`。该结果对应这一版本的官方镜像；部署到其他设备时应重新运行 PTY 探针。
+
+本机后端测试无需链接 OHOS UI 库，使用 Python 3.11+ 和 Rust 即可运行：
+
+```sh
+python3 scripts/test-terminal-host.py --toolchain 1.97.1 --offline \
+  --target-dir /tmp/arkit-terminal-host-target
+```
+
+测试直接使用生产代码，覆盖真实 tty、尺寸变化、Ctrl-C、退出状态、输出背压下的子进程回收，以及键盘/鼠标编码。
 
 ## 与其他能力的关系
 
 - **不依赖** `shadcn` / `camera` / `chart`。可与 shadcn 页面并存，但 Terminal 自身不是 shadcn compound。
 - WebView 用于嵌入网页；Terminal 用于 VT 会话。二者都走独立 native surface，不要混用同一 controller。
-- 输入法：组件预留顶部 gutter（示例 `IME_TOP_GUTTER`），避免软键盘遮挡首行。
+- 输入法：示例使用 Arkit 的窗口指标计算键盘避让；终端组件处理 IME 会话与输入字节。
 
 ## 验收清单
 
-- 本地 Host 模式下字符、退格、换行与滚动正确。
+- 真实 PTY 下字符、退格、换行、Ctrl-C、退出状态与滚动正确。
 - SSH 模式下连接、断开、重连不泄漏 channel；切回本地模式后 UI 仍可输入。
 - `feed_vt` 高频输出时帧率稳定，离开页面后 surface/worker 释放。
 - resize（列行变化）后栅格与选区状态一致。
+- 在可读的应用目录中，`ls -la` 和实际 shell 管道正常执行。
+- 输出队列满时断开会话仍能回收 shell；实体键盘不把 `KEYCODE_*` 标签写入 PTY。

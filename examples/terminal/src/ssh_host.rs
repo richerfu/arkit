@@ -9,6 +9,7 @@ use tokio::sync::mpsc;
 /// Commands from the UI thread → SSH task.
 pub enum SshCmd {
     Data(Vec<u8>),
+    Resize(u16, u16),
     Close,
 }
 
@@ -127,6 +128,11 @@ async fn run_session(
                         if channel.data(&data[..]).await.is_err() {
                             break;
                         }
+                    }
+                    Some(SshCmd::Resize(cols, rows)) => {
+                        channel.window_change(cols as u32, rows as u32, 0, 0)
+                            .await
+                            .map_err(|e| format!("resize: {e}"))?;
                     }
                     Some(SshCmd::Close) | None => {
                         let _ = channel.eof().await;

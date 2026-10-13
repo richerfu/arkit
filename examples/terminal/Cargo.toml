@@ -15,3 +15,4 @@ arkit = { workspace = true, features = ["terminal"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "sync", "time", "net", "macros"] }
 # SSH host lives in the example, not in arkit_terminal.
 russh.workspace = true
+libc.workspace = true
