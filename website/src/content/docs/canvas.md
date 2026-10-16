@@ -8,7 +8,7 @@ description: "W3C 风格 CanvasRenderingContext2D 与 ArkUI 原生绘制。"
 `canvas` feature 以 [HTML Canvas 2D 标准](https://html.spec.whatwg.org/multipage/canvas.html#the-canvas-element) 为 API 与默认语义基线，提供 W3C/WHATWG 风格的 `CanvasRenderingContext2D`。组件直接使用 ArkUI Custom draw context，不嵌入 WebView，也不创建 XComponent surface。
 
 ```toml
-arkit = { version = "*", features = ["canvas"] }
+arkit = { version = "0.0.1-beta.0", features = ["canvas"] }
 ```
 
 ```rust

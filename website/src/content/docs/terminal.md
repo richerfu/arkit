@@ -15,7 +15,7 @@ ANSI 状态机是顺序的，所以 **VT 解析留在 CPU**。这和 Ghostty / R
 
 ```toml
 [dependencies]
-arkit = { version = "*", features = ["terminal"] }
+arkit = { version = "0.0.1-beta.0", features = ["terminal"] }
 ```
 
 ```rust

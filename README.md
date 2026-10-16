@@ -2,7 +2,7 @@
 
 `arkit` is a Dioxus 0.7 native renderer for OpenHarmony ArkUI. Applications use normal Dioxus components, `rsx!`, signals, hooks, async resources, and `dioxus-router`; the framework translates Dioxus mutations into ArkUI native nodes.
 
-The workspace MSRV is Rust 1.88, matching the resolved OpenHarmony N-API toolchain dependencies.
+The workspace MSRV is Rust 1.90, matching the syntax-highlighting dependencies.
 
 The Rust Ability core and WebView facade use the published `1.0.0-beta.3`
 release from crates.io. The `app/` shell uses the matching published OHPM

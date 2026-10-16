@@ -53,4 +53,4 @@ register_language(
 | `highlight_code`                                  | 无 UI，只返回着色 span  |
 | `components::code_highlight`                      | 子模块入口              |
 
-grammar 需与 arkit 的 `tree-sitter` 主版本一致（当前 0.25）；capture 对齐 `HIGHLIGHT_NAMES` 才能套用 palette。
+grammar 需与 arkit 的 `tree-sitter` 主版本一致（当前 0.26）；capture 对齐 `HIGHLIGHT_NAMES` 才能套用 palette。

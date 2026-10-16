@@ -42,7 +42,7 @@ fn Loading() -> Element {
 
 ```toml
 [dependencies]
-arkit = { version = "*", features = ["lottie-network"] }
+arkit = { version = "0.0.1-beta.0", features = ["lottie-network"] }
 ```
 
 直接使用公开的 HTTP/HTTPS JSON：
