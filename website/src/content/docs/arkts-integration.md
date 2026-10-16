@@ -10,7 +10,7 @@ Rust 编出来的 `.so` 通过 `@ohos-rs/ability` 挂进 ArkTS。业务侧一般
 ## 安装 Ability 包
 
 ```sh
-ohpm install @ohos-rs/ability@1.0.0-beta.2
+ohpm install @ohos-rs/ability@1.0.0-beta.3
 ```
 
 也可以在 `oh-package.json5` 声明：
@@ -18,12 +18,12 @@ ohpm install @ohos-rs/ability@1.0.0-beta.2
 ```json5
 {
   dependencies: {
-    "@ohos-rs/ability": "1.0.0-beta.2",
+    "@ohos-rs/ability": "1.0.0-beta.3",
   },
 }
 ```
 
-版本号应与当前 OpenHarmony 工程使用的 binding 代际保持一致。
+版本号应与 Rust 侧的 `openharmony-ability` 保持一致。仓库的 `app/` 壳还在工程级 `oh-package.json5` 中通过 `overrides` 将 WebView HAR 间接依赖的 Ability 统一到 `1.0.0-beta.3`，避免加载两套 runtime。
 
 ## 默认承载页面
 

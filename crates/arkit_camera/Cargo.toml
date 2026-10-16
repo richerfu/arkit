@@ -21,8 +21,6 @@ arkit_icon.workspace = true
 arkit_prelude.workspace = true
 ohos-ability-access-control-binding.workspace = true
 ohos-camera-binding.workspace = true
-ohos-xcomponent-binding.workspace = true
 ohos-hilog-binding.workspace = true
-ohos-arkui-binding.workspace = true
 tokio.workspace = true
 rxing = { workspace = true, optional = true }
