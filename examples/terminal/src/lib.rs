@@ -1,12 +1,15 @@
-//! Terminal demo — component paints; **this app** owns host I/O (local shell + SSH).
+//! Terminal demo — component paints; this app owns demo, real PTY and SSH I/O.
 //!
 //! ```text
-//!   Terminal.on_input  ──►  LocalShell | SSH write
-//!   LocalShell/SSH out ──►  controller.feed_vt
+//!   Terminal.on_input  ──►  Demo | PTY | SSH write
+//!   Demo/PTY/SSH out   ──►  controller.feed_vt
 //!   Terminal.on_write_pty ──►  same host write
+//!   Arkit layout ──► terminal config + host PTY resize
 //! ```
 
 mod demos;
+mod frame_probe;
+mod local_pty;
 mod local_shell;
 mod ssh_host;
 
@@ -16,18 +19,22 @@ use std::rc::Rc;
 use arkit::prelude::*;
 use tokio::sync::mpsc;
 
+use local_pty::{LocalPty, PtyEvent, PtyStartError};
 use local_shell::LocalShell;
 use ssh_host::{spawn_ssh, SshCmd, SshConnect, SshEvent};
 
 const COLS: u16 = 40;
-// The on-screen terminal card is close to a 5:6 aspect ratio. A 40×24 grid
-// with 1:2 cells fills it without stretching cells or leaving a dead strip.
+// Initial geometry only, before Arkit delivers the measured layout.
 const ROWS: u16 = 24;
+const CELL_WIDTH_VP: f32 = 10.0;
+const CELL_HEIGHT_VP: f32 = 20.0;
+const TERMINAL_PADDING_VP: f32 = 4.0;
 const IME_TOP_GUTTER: f32 = 16.0;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum HostMode {
     Local,
+    Pty,
     Ssh,
 }
 
@@ -35,6 +42,9 @@ struct HostState {
     mode: HostMode,
     local: LocalShell,
     ssh_tx: Option<mpsc::UnboundedSender<SshCmd>>,
+    pty: Option<LocalPty>,
+    pty_task: Option<dioxus_core::Task>,
+    pty_probe: Option<Vec<u8>>,
 }
 
 impl HostState {
@@ -43,6 +53,9 @@ impl HostState {
             mode: HostMode::Local,
             local: LocalShell::new(COLS, ROWS),
             ssh_tx: None,
+            pty: None,
+            pty_task: None,
+            pty_probe: None,
         }
     }
 
@@ -51,6 +64,19 @@ impl HostState {
     fn write_input(&mut self, data: &[u8]) -> Vec<u8> {
         match self.mode {
             HostMode::Local => self.local.input(data),
+            HostMode::Pty => {
+                match self
+                    .pty
+                    .as_ref()
+                    .ok_or_else(|| {
+                        std::io::Error::new(std::io::ErrorKind::BrokenPipe, "PTY exited")
+                    })
+                    .and_then(|pty| pty.write(data))
+                {
+                    Ok(()) => Vec::new(),
+                    Err(error) => format!("\r\n[PTY write: {error}]\r\n").into_bytes(),
+                }
+            }
             HostMode::Ssh => {
                 if let Some(tx) = &self.ssh_tx {
                     let _ = tx.send(SshCmd::Data(data.to_vec()));
@@ -66,6 +92,11 @@ impl HostState {
             HostMode::Local => {
                 // No real PTY — local shell ignores device replies.
             }
+            HostMode::Pty => {
+                if let Some(pty) = &self.pty {
+                    let _ = pty.write(data);
+                }
+            }
             HostMode::Ssh => {
                 if let Some(tx) = &self.ssh_tx {
                     let _ = tx.send(SshCmd::Data(data.to_vec()));
@@ -76,6 +107,11 @@ impl HostState {
     }
 
     fn disconnect_to_local(&mut self) -> Vec<u8> {
+        if let Some(task) = self.pty_task.take() {
+            task.cancel();
+        }
+        self.pty.take();
+        self.pty_probe.take();
         if let Some(tx) = self.ssh_tx.take() {
             let _ = tx.send(SshCmd::Close);
         }
@@ -84,6 +120,42 @@ impl HostState {
         let mut out = b"\r\n\x1b[33m[disconnected - local shell]\x1b[0m\r\n".to_vec();
         out.extend(self.local.prompt());
         out
+    }
+
+    fn connect_pty(
+        &mut self,
+        cols: u16,
+        rows: u16,
+    ) -> Result<mpsc::Receiver<PtyEvent>, PtyStartError> {
+        self.disconnect_to_local();
+        #[cfg(target_env = "ohos")]
+        let home = std::path::PathBuf::from("/data/storage/el2/base/files/terminal");
+        #[cfg(not(target_env = "ohos"))]
+        let home = std::env::var_os("HOME")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir);
+        let (pty, rx) = LocalPty::start(home, cols, rows)?;
+        self.mode = HostMode::Pty;
+        self.pty = Some(pty);
+        Ok(rx)
+    }
+
+    fn observe_pty_probe(&mut self, bytes: &[u8]) -> bool {
+        let Some(probe) = &mut self.pty_probe else {
+            return false;
+        };
+        probe.extend_from_slice(bytes);
+        if probe
+            .windows(b"ARKIT_REAL_PTY".len())
+            .any(|part| part == b"ARKIT_REAL_PTY")
+        {
+            self.pty_probe = None;
+            return true;
+        }
+        if probe.len() > 128 {
+            probe.drain(..probe.len() - 128);
+        }
+        false
     }
 }
 
@@ -96,19 +168,56 @@ pub fn TerminalPage() -> Element {
     let mut status = use_signal(|| String::from("host=local"));
     let mut title = use_signal(|| String::from("(title)"));
     let mut bell_n = use_signal(|| 0u32);
+    let grid = use_signal(|| (COLS, ROWS));
+    let terminal_ref = use_native_element_ref();
+    let frame_probe = use_hook(|| Rc::new(RefCell::new(None::<frame_probe::FrameProbe>)));
+    use_drop({
+        let frame_probe = frame_probe.clone();
+        move || {
+            frame_probe.borrow_mut().take();
+        }
+    });
+    use_layout_size(terminal_ref.clone(), {
+        let host = host.clone();
+        move |size| {
+            let mut grid = grid;
+            let mut status = status;
+            let scale = window_metrics.scale.max(f32::EPSILON);
+            let cols = ((size.width / scale - TERMINAL_PADDING_VP * 2.0) / CELL_WIDTH_VP)
+                .floor()
+                .clamp(1.0, u16::MAX as f32) as u16;
+            let rows = ((size.height / scale - TERMINAL_PADDING_VP * 2.0) / CELL_HEIGHT_VP)
+                .floor()
+                .clamp(1.0, u16::MAX as f32) as u16;
+            if *grid.peek() == (cols, rows) {
+                return;
+            }
+            let mut host = host.borrow_mut();
+            host.local.cols = cols;
+            host.local.rows = rows;
+            if let Some(pty) = &host.pty {
+                if let Err(error) = pty.resize(cols, rows) {
+                    status.set(format!("PTY resize failed: {error}"));
+                }
+            }
+            if let Some(tx) = &host.ssh_tx {
+                let _ = tx.send(SshCmd::Resize(cols, rows));
+            }
+            grid.set((cols, rows));
+        }
+    });
 
     let mut ssh_host = use_signal(|| String::from("127.0.0.1"));
     let mut ssh_port = use_signal(|| String::from("22"));
     let mut ssh_user = use_signal(|| String::from("root"));
     let mut ssh_pass = use_signal(String::new);
 
-    // SSH inbound channel: task → UI poll.
+    // Await host output on the UI executor; idle sessions need no output timer.
     let (ssh_ev_tx, ssh_ev_rx) = use_hook(|| {
         let (tx, rx) = mpsc::unbounded_channel::<SshEvent>();
-        (tx, Rc::new(RefCell::new(rx)))
+        (tx, Rc::new(RefCell::new(Some(rx))))
     });
 
-    // Drain SSH events into the terminal on a short timer.
     use_hook({
         let controller = controller.clone();
         let host = host.clone();
@@ -116,29 +225,36 @@ pub fn TerminalPage() -> Element {
         let mut status = status;
         let handle = async_runtime.clone();
         move || {
+            let mut rx = ssh_ev_rx.borrow_mut().take().expect("SSH event receiver");
             dioxus_core::spawn(async move {
-                loop {
-                    let sleeper = handle.spawn(async {
-                        tokio::time::sleep(std::time::Duration::from_millis(32)).await;
-                    });
-                    let _ = sleeper.await;
-                    let mut rx = ssh_ev_rx.borrow_mut();
-                    while let Ok(ev) = rx.try_recv() {
-                        match ev {
-                            SshEvent::Connected => {
-                                host.borrow_mut().mode = HostMode::Ssh;
-                                status.set("host=ssh connected".into());
-                            }
-                            SshEvent::Output(bytes) => {
-                                controller.feed_vt(&bytes);
-                            }
-                            SshEvent::Status(s) => status.set(s),
-                            SshEvent::Closed(msg) => {
-                                let vt = host.borrow_mut().disconnect_to_local();
-                                controller.feed_vt(&vt);
-                                status.set(msg);
-                            }
+                let mut batch = 0;
+                while let Some(ev) = rx.recv().await {
+                    if host.borrow().ssh_tx.is_none() {
+                        continue;
+                    }
+                    match ev {
+                        SshEvent::Connected => {
+                            host.borrow_mut().mode = HostMode::Ssh;
+                            status.set("host=ssh connected".into());
                         }
+                        SshEvent::Output(bytes) => {
+                            controller.feed_vt(&bytes);
+                        }
+                        SshEvent::Status(s) => status.set(s),
+                        SshEvent::Closed(msg) => {
+                            let vt = host.borrow_mut().disconnect_to_local();
+                            controller.feed_vt(&vt);
+                            status.set(msg);
+                        }
+                    }
+                    batch += 1;
+                    if batch == 8 {
+                        batch = 0;
+                        let _ = handle
+                            .spawn(async {
+                                tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+                            })
+                            .await;
                     }
                 }
             });
@@ -164,10 +280,13 @@ pub fn TerminalPage() -> Element {
     });
 
     let config = TerminalConfig::default()
-        .with_size(COLS, ROWS)
+        .with_size(grid().0, grid().1)
         .with_scrollback(5_000)
         // Keep in sync with arkit_terminal cell metrics (glyph must fit cell).
-        .with_cell_metrics(10, 20) // match arkit_terminal defaults
+        .with_cell_metrics(
+            (CELL_WIDTH_VP * window_metrics.scale).round().max(1.0) as u32,
+            (CELL_HEIGHT_VP * window_metrics.scale).round().max(1.0) as u32,
+        )
         .with_theme(
             Rgb::new(0xE2, 0xE8, 0xF0),
             Rgb::new(0x0B, 0x12, 0x20),
@@ -236,6 +355,28 @@ pub fn TerminalPage() -> Element {
         }
     };
 
+    let probe_frames = {
+        let controller = controller.clone();
+        let frame_probe = frame_probe.clone();
+        let host = host.clone();
+        let handle = async_runtime.clone();
+        move |()| {
+            frame_probe.borrow_mut().take();
+            host.borrow_mut().disconnect_to_local();
+            controller.hide_keyboard();
+            let (cols, rows) = grid();
+            let (probe, mut events) =
+                frame_probe::FrameProbe::start(&handle, controller.inbox(), cols, rows);
+            *frame_probe.borrow_mut() = Some(probe);
+            let mut status = status;
+            dioxus_core::spawn(async move {
+                while let Some(message) = events.recv().await {
+                    status.set(message);
+                }
+            });
+        }
+    };
+
     let demo_keyboard = {
         let controller = controller.clone();
         let mut status = status;
@@ -269,22 +410,104 @@ pub fn TerminalPage() -> Element {
         let mut status = status;
         let handle = async_runtime.clone();
         move |()| {
+            host.borrow_mut().disconnect_to_local();
             let port: u16 = ssh_port().parse().unwrap_or(22);
             let cfg = SshConnect {
                 host: ssh_host(),
                 port,
                 username: ssh_user(),
                 password: ssh_pass(),
-                cols: COLS,
-                rows: ROWS,
+                cols: grid().0,
+                rows: grid().1,
             };
-            // Drop previous session.
-            if let Some(tx) = host.borrow_mut().ssh_tx.take() {
-                let _ = tx.send(SshCmd::Close);
-            }
+            host.borrow_mut().disconnect_to_local();
             let tx = spawn_ssh(handle.clone(), cfg, ssh_ev_tx.clone());
             host.borrow_mut().ssh_tx = Some(tx);
             status.set("ssh connecting…".into());
+        }
+    };
+
+    let connect_pty = {
+        let controller = controller.clone();
+        let host = host.clone();
+        let mut status = status;
+        let handle = async_runtime.clone();
+        move |()| {
+            let (cols, rows) = grid();
+            let result = host.borrow_mut().connect_pty(cols, rows);
+            match result {
+                Ok(mut events) => {
+                    controller.feed_vt(b"\x1b[2J\x1b[H");
+                    status.set("PTY starting…".into());
+                    let task_host = host.clone();
+                    let controller = controller.clone();
+                    let handle = handle.clone();
+                    let task = dioxus_core::spawn(async move {
+                        let mut batch = 0;
+                        while let Some(event) = events.recv().await {
+                            match event {
+                                PtyEvent::Started(pid) => status.set(format!("host=pty pid={pid}")),
+                                PtyEvent::Output(bytes) => {
+                                    let passed = task_host.borrow_mut().observe_pty_probe(&bytes);
+                                    controller.feed_vt(&bytes);
+                                    if passed {
+                                        status.set("PTY probe passed · real shell output".into());
+                                    }
+                                }
+                                PtyEvent::Resized(cols, rows) => {
+                                    status.set(format!("host=pty · {cols}×{rows}"));
+                                }
+                                PtyEvent::Closed(reason) => {
+                                    let mut host = task_host.borrow_mut();
+                                    host.pty.take();
+                                    host.pty_task.take();
+                                    host.pty_probe.take();
+                                    status.set(format!("PTY exited · {reason}"));
+                                    break;
+                                }
+                            }
+                            batch += 1;
+                            if batch == 8 {
+                                batch = 0;
+                                // Dioxus drains self-wakes in the same native turn.
+                                // A demand-driven delay lets native input run too.
+                                let _ = handle
+                                    .spawn(async {
+                                        tokio::time::sleep(std::time::Duration::from_millis(1))
+                                            .await;
+                                    })
+                                    .await;
+                            }
+                        }
+                    });
+                    host.borrow_mut().pty_task = Some(task);
+                }
+                Err(error) => status.set(format!(
+                    "PTY {} failed: {}",
+                    error.operation(),
+                    error.io_error()
+                )),
+            }
+        }
+    };
+    let probe_pty = {
+        let host = host.clone();
+        let mut status = status;
+        move |()| {
+            let mut host = host.borrow_mut();
+            if host.mode != HostMode::Pty {
+                status.set("Start Local PTY first".into());
+                return;
+            }
+            host.pty_probe = Some(Vec::new());
+            let error = host.write_input(
+                b"test -t 0 && tty && pwd && ls -la && printf 'PTY_PIPE_%s\\n' OK | cat && printf 'ARKIT_REAL_%s\\n' PTY\r",
+            );
+            if error.is_empty() {
+                status.set("PTY probe waiting for shell output…".into());
+            } else {
+                status.set(String::from_utf8_lossy(&error).into_owned());
+            }
         }
     };
 
@@ -338,7 +561,7 @@ pub fn TerminalPage() -> Element {
                 { chip("Keyboard", demo_keyboard) }
             }
             text {
-                content: format!("title: {} · bell: {} · {}", title(), bell_n(), status()),
+                content: format!("title: {} · bell: {} · {}×{} · {}", title(), bell_n(), grid().0, grid().1, status()),
                 font_size: 12.0,
                 font_color: "#FF94A3B8",
                 margin_top: 4.0,
@@ -352,6 +575,7 @@ pub fn TerminalPage() -> Element {
                 { chip("Colors", demo_colors) }
                 { chip("Clear", demo_clear) }
                 { chip("Stress", demo_stress) }
+                { chip("120Hz probe", probe_frames) }
             }
 
             // SSH form — host wiring owned by the example app.
@@ -414,13 +638,15 @@ pub fn TerminalPage() -> Element {
                 width: "100%",
                 margin_bottom: 8.0,
                 { chip("SSH connect", connect_ssh) }
+                { chip("Local PTY", connect_pty) }
+                { chip("PTY probe", probe_pty) }
                 { chip("disconnect", disconnect) }
                 { chip("local banner", {
                     let controller = controller.clone();
                     let host = host.clone();
                     let mut status = status;
                     move |()| {
-                        host.borrow_mut().local.reset();
+                        host.borrow_mut().disconnect_to_local();
                         let b = host.borrow().local.banner();
                         controller.feed_vt(&b);
                         status.set("host=local".into());
@@ -447,6 +673,7 @@ pub fn TerminalPage() -> Element {
             }
 
             column {
+                native_ref: terminal_ref,
                 width: "100%",
                 layout_weight: 1.0,
                 Terminal {

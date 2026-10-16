@@ -18,7 +18,11 @@ use std::rc::Rc;
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 
-use arkit_hooks::{use_application_lifecycle_event, use_mounted_node, use_native_element_ref};
+use arkit_arkui::LayoutSizePx;
+use arkit_hooks::{
+    current_layout_frame, use_application_lifecycle_event, use_layout_size, use_mounted_node,
+    use_native_element_ref,
+};
 use arkit_prelude::*;
 use dioxus_elements::event::PointerAction;
 
@@ -177,7 +181,7 @@ impl TerminalInbox {
 ///
 /// Host output ([`Self::feed_vt`]) only appends to a shared mailbox. rio-vt
 /// parse, grid capture, and wgpu present run on the `arkit-terminal` worker
-/// and are paced by a VSync connection associated with the native window.
+/// and are paced by a dedicated native VSync connection.
 #[derive(Clone)]
 pub struct TerminalController {
     shared: Arc<TerminalShared>,
@@ -401,7 +405,7 @@ fn fallback_key_bytes(name: &str) -> Vec<u8> {
 }
 
 /// Terminal surface:
-/// - fixed cols×rows VT geometry (keyboard height must not reflow cols)
+/// - embedder-owned cols×rows VT geometry
 /// - paint cells **scale to fit** the surface so nothing is center-clipped
 /// - DECAWM wrap for long lines
 /// - scrollback via viewport pin (finger-follows-content)
@@ -495,7 +499,8 @@ pub fn Terminal(props: TerminalProps) -> Element {
             )
             .with_cursor_style(CursorVisualStyle::Block, enable_blink)
     });
-    // Stable VT geometry — never changed by layout/keyboard.
+    // Layout alone preserves VT geometry. An embedder can explicitly change
+    // config when its Arkit layout policy calls for a different grid.
     let vt_cols = config.cols.max(1);
     let vt_rows = config.rows.max(1);
     let base_config = config.clone();
@@ -593,6 +598,42 @@ pub fn Terminal(props: TerminalProps) -> Element {
     let fit_metrics = surface_metrics.clone();
     let fit_settings = paint_settings.clone();
     let fit_runtime = runtime.clone();
+    let scale = window_scale();
+    let fit_surface = move |size: LayoutSizePx| {
+        let next = TerminalSurfaceMetrics::fit(
+            size.width as f64,
+            size.height as f64,
+            scale,
+            vt_cols,
+            vt_rows,
+        );
+        if next.differs_from(fit_metrics.get()) {
+            fit_metrics.set(next);
+            let mut settings = fit_settings.get();
+            settings.metrics = next;
+            fit_settings.set(settings);
+            fit_runtime.update_paint(settings);
+        }
+        let mut config = fit_config.clone();
+        config.cell_width_px = next.native_cell_width_px();
+        config.cell_height_px = next.native_cell_height_px();
+        c_fit.reconfigure(config);
+    };
+    // Arkit owns native layout subscription and disposal. Reuse its measured
+    // frame when only config changes, since that need not emit a layout event.
+    use_layout_size(node_ref.clone(), fit_surface.clone());
+    let applied_config = use_hook({
+        let config = config.clone();
+        move || Rc::new(RefCell::new(config))
+    });
+    if *applied_config.borrow() != config {
+        *applied_config.borrow_mut() = config.clone();
+        if let Some(frame) = current_layout_frame(&node_ref) {
+            fit_surface(frame.into());
+        } else {
+            controller.reconfigure(config);
+        }
+    }
     let key_controller = controller.clone();
     let key_input = callbacks.on_input.clone();
     let mouse_controller = controller.clone();
@@ -669,43 +710,6 @@ pub fn Terminal(props: TerminalProps) -> Element {
                     let report = axis_controller.encode_mouse(MouseInput { action: MouseAction::Press, button, x, y, mods: KeyMods { ctrl: axis.modifiers.ctrl, alt: axis.modifiers.alt, ..Default::default() } });
                     emit_host(&axis_input, report.repeat(steps.unsigned_abs().min(100) as usize));
                 } else { axis_controller.scroll_by(steps); }
-            },
-            onarea: move |evt: dioxus_core::Event<dioxus_elements::event::AreaData>| {
-                let f = evt.data().frame;
-                if !f.is_measured() {
-                    return;
-                }
-                let next = TerminalSurfaceMetrics::fit(
-                    f.width as f64,
-                    f.height as f64,
-                    window_scale(),
-                    vt_cols,
-                    vt_rows,
-                );
-                let previous = fit_metrics.get();
-                if !next.differs_from(previous) {
-                    return;
-                }
-                fit_metrics.set(next);
-                let mut settings = fit_settings.get();
-                settings.metrics = next;
-                fit_settings.set(settings);
-
-                // The engine and the native renderer share the same physical
-                // cell box while VT columns/rows remain stable across IME resize.
-                let native_width = next.native_cell_width_px();
-                let native_height = next.native_cell_height_px();
-                if native_width != fit_config.cell_width_px
-                    || native_height != fit_config.cell_height_px
-                {
-                    let mut cfg = fit_config.clone();
-                    cfg.cell_width_px = native_width;
-                    cfg.cell_height_px = native_height;
-                    cfg.cols = vt_cols;
-                    cfg.rows = vt_rows;
-                    c_fit.reconfigure(cfg);
-                }
-                fit_runtime.update_paint(settings);
             },
             ontouch: move |evt| {
                 if !capture_input {

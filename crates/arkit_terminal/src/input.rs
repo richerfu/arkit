@@ -424,11 +424,9 @@ pub(crate) fn physical_key_chord(
         _ => return None,
     };
     let utf8 = match key.key {
-        KeyboardKey::Character(character) => Some(if key.text.is_empty() {
-            character.to_string()
-        } else {
-            key.text.clone()
-        }),
+        // ArkUI GetKeyText returns a key name such as "KEYCODE_P".
+        // Arkit's Character identity already uses Unicode (or its fallback).
+        KeyboardKey::Character(character) => Some(character.to_string()),
         _ => None,
     };
     Some(KeyChord {

@@ -89,6 +89,7 @@ bindgen = "0.72.1"
 bytemuck = { version = "1.25.2", features = ["derive"] }
 glyphon = "0.12.0"
 pollster = "1.0.1"
+libc = "0.2.189"
 rust-embed = { version = "8.12.0", features = ["debug-embed"] }
 tokio = { version = "1.53.1", features = ["rt-multi-thread", "sync", "time"] }
 # Build reqwest's rustls backend with an explicit WebPKI root store; OHOS does
