@@ -1,10 +1,11 @@
-//! A real OS PTY host owned by the example, independently of terminal rendering.
-//! Like HiShell's local path, this owns a PTY pair, an interactive child, a
-//! nonblocking master, and foreground-process resize notifications.
+//! OS PTY transport owned by the example, independently of terminal rendering.
+//! Wakeable polling, startup diagnostics and resize acknowledgements follow
+//! the local ohostty implementation; output uses the app's Tokio channels.
 
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::os::fd::{AsRawFd, FromRawFd};
+use std::os::unix::net::UnixStream;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
@@ -13,10 +14,50 @@ use std::sync::{mpsc, Arc};
 use std::thread;
 use std::time::Duration;
 
+use tokio::sync::mpsc as async_mpsc;
+
+/// Identifies the failed startup operation while retaining the original errno.
+#[derive(Debug)]
+pub struct PtyStartError {
+    operation: &'static str,
+    source: io::Error,
+}
+
+impl PtyStartError {
+    fn new(operation: &'static str, source: io::Error) -> Self {
+        Self { operation, source }
+    }
+
+    fn at(operation: &'static str) -> impl FnOnce(io::Error) -> Self {
+        move |source| Self::new(operation, source)
+    }
+
+    pub fn operation(&self) -> &'static str {
+        self.operation
+    }
+
+    pub fn io_error(&self) -> &io::Error {
+        &self.source
+    }
+}
+
+impl std::fmt::Display for PtyStartError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}: {}", self.operation, self.source)
+    }
+}
+
+impl std::error::Error for PtyStartError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.source)
+    }
+}
+
 #[derive(Debug)]
 pub enum PtyEvent {
     Started(u32),
     Output(Vec<u8>),
+    Resized(u16, u16),
     Closed(String),
 }
 
@@ -28,24 +69,44 @@ enum PtyCommand {
 pub struct LocalPty {
     commands: mpsc::SyncSender<PtyCommand>,
     stopped: Arc<AtomicBool>,
+    wake: UnixStream,
 }
 
 impl LocalPty {
-    pub fn start(cols: u16, rows: u16) -> io::Result<(Self, mpsc::Receiver<PtyEvent>)> {
+    pub fn start(
+        home: PathBuf,
+        cols: u16,
+        rows: u16,
+    ) -> Result<(Self, async_mpsc::Receiver<PtyEvent>), PtyStartError> {
         #[cfg(target_env = "ohos")]
         let shell = PathBuf::from("/system/bin/sh");
         #[cfg(not(target_env = "ohos"))]
         let shell = PathBuf::from("/bin/sh");
-        let process = PtyProcess::start(shell, cols, rows)?;
+        let process = PtyProcess::start(shell, home, cols, rows)?;
+        let (wake, worker_wake) =
+            UnixStream::pair().map_err(PtyStartError::at("create PTY wake channel"))?;
+        wake.set_nonblocking(true)
+            .map_err(PtyStartError::at("configure PTY wake sender"))?;
+        worker_wake
+            .set_nonblocking(true)
+            .map_err(PtyStartError::at("configure PTY wake receiver"))?;
         let (commands, receiver) = mpsc::sync_channel(64);
         // Bound output memory and apply backpressure without losing VT bytes.
-        let (events, output) = mpsc::sync_channel(64);
+        let (events, output) = async_mpsc::channel(64);
         let stopped = Arc::new(AtomicBool::new(false));
         let worker_stopped = stopped.clone();
         thread::Builder::new()
             .name("arkit-local-pty".into())
-            .spawn(move || process.run(receiver, events, worker_stopped))?;
-        Ok((Self { commands, stopped }, output))
+            .spawn(move || process.run(receiver, events, worker_stopped, worker_wake))
+            .map_err(PtyStartError::at("start PTY worker"))?;
+        Ok((
+            Self {
+                commands,
+                stopped,
+                wake,
+            },
+            output,
+        ))
     }
 
     pub fn write(&self, bytes: &[u8]) -> io::Result<()> {
@@ -72,7 +133,20 @@ impl LocalPty {
                 mpsc::TrySendError::Disconnected(_) => {
                     io::Error::new(io::ErrorKind::BrokenPipe, "PTY exited")
                 }
-            })
+            })?;
+        self.wake_worker();
+        Ok(())
+    }
+
+    fn wake_worker(&self) {
+        // A full socket already contains a wakeup. Commands remain in their
+        // bounded queue; the socket only interrupts an otherwise idle poll.
+        loop {
+            match (&self.wake).write(&[1]) {
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                _ => break,
+            }
+        }
     }
 }
 
@@ -80,6 +154,7 @@ impl Drop for LocalPty {
     fn drop(&mut self) {
         // Cancellation cannot sit behind a large paste in the input queue.
         self.stopped.store(true, Ordering::Release);
+        self.wake_worker();
     }
 }
 
@@ -89,11 +164,11 @@ struct PtyProcess {
 }
 
 impl PtyProcess {
-    fn start(shell: PathBuf, cols: u16, rows: u16) -> io::Result<Self> {
+    fn start(shell: PathBuf, home: PathBuf, cols: u16, rows: u16) -> Result<Self, PtyStartError> {
         if cols == 0 || rows == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "empty PTY grid",
+            return Err(PtyStartError::new(
+                "validate PTY grid",
+                io::Error::new(io::ErrorKind::InvalidInput, "empty PTY grid"),
             ));
         }
         let mut size = libc::winsize {
@@ -117,7 +192,10 @@ impl PtyProcess {
             )
         };
         if rc < 0 {
-            return Err(io::Error::last_os_error());
+            return Err(PtyStartError::new(
+                "allocate PTY",
+                io::Error::last_os_error(),
+            ));
         }
         // SAFETY: openpty returned two distinct owned descriptors.
         let master = unsafe { File::from_raw_fd(master) };
@@ -126,28 +204,40 @@ impl PtyProcess {
         for fd in [master.as_raw_fd(), slave.as_raw_fd()] {
             // SAFETY: fd is live; setting CLOEXEC prevents leakage into exec.
             if unsafe { libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC) } < 0 {
-                return Err(io::Error::last_os_error());
+                return Err(PtyStartError::new(
+                    "configure PTY descriptor",
+                    io::Error::last_os_error(),
+                ));
             }
         }
         let mut command = Command::new(shell);
         command
             .arg("-i")
             .env("TERM", "xterm-256color")
-            .stdin(Stdio::from(slave.try_clone()?))
-            .stdout(Stdio::from(slave.try_clone()?))
+            .stdin(Stdio::from(
+                slave
+                    .try_clone()
+                    .map_err(PtyStartError::at("duplicate PTY stdin"))?,
+            ))
+            .stdout(Stdio::from(
+                slave
+                    .try_clone()
+                    .map_err(PtyStartError::at("duplicate PTY stdout"))?,
+            ))
             .stderr(Stdio::from(slave));
-        #[cfg(target_env = "ohos")]
         {
             // AppSpawn starts native apps at the sandbox root, whose contents
             // are not readable by an ordinary app. Start in app-owned storage
             // so commands such as `ls`, redirection and file creation work.
-            let home = PathBuf::from("/data/storage/el2/base/files/terminal");
-            std::fs::create_dir_all(&home)?;
+            std::fs::create_dir_all(&home).map_err(PtyStartError::at("create terminal home"))?;
             command
                 .current_dir(&home)
                 .env("HOME", &home)
-                .env("PATH", "/system/bin:/vendor/bin");
+                .env("COLORTERM", "truecolor")
+                .env("TERM_PROGRAM", "arkit");
         }
+        #[cfg(target_env = "ohos")]
+        command.env("PATH", "/system/bin:/vendor/bin");
         // SAFETY: this callback runs between fork and exec and only invokes
         // async-signal-safe system operations. stdin already points at the
         // slave; the child becomes a session leader with a controlling tty.
@@ -159,7 +249,7 @@ impl PtyProcess {
                 Ok(())
             });
         }
-        let child = command.spawn()?;
+        let child = command.spawn().map_err(PtyStartError::at("spawn shell"))?;
         let process = Self {
             master: Some(master),
             child,
@@ -167,12 +257,18 @@ impl PtyProcess {
         // SAFETY: the owned master fd is live; preserve existing status flags.
         let flags = unsafe { libc::fcntl(process.master_fd(), libc::F_GETFL) };
         if flags < 0 {
-            return Err(io::Error::last_os_error());
+            return Err(PtyStartError::new(
+                "read PTY status flags",
+                io::Error::last_os_error(),
+            ));
         }
         // SAFETY: the same descriptor remains live throughout this operation.
         if unsafe { libc::fcntl(process.master_fd(), libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0
         {
-            return Err(io::Error::last_os_error());
+            return Err(PtyStartError::new(
+                "configure nonblocking PTY",
+                io::Error::last_os_error(),
+            ));
         }
         Ok(process)
     }
@@ -205,10 +301,11 @@ impl PtyProcess {
     fn run(
         mut self,
         commands: mpsc::Receiver<PtyCommand>,
-        events: mpsc::SyncSender<PtyEvent>,
+        events: async_mpsc::Sender<PtyEvent>,
         stopped: Arc<AtomicBool>,
+        mut wake: UnixStream,
     ) {
-        let result = self.pump(&commands, &events, &stopped);
+        let result = self.pump(&commands, &events, &stopped, &mut wake);
         let message = match result {
             Ok(message) => message,
             Err(error) => format!("PTY error: {error}"),
@@ -216,8 +313,8 @@ impl PtyProcess {
         let mut event = PtyEvent::Closed(message);
         while !stopped.load(Ordering::Acquire) {
             match events.try_send(event) {
-                Ok(()) | Err(mpsc::TrySendError::Disconnected(_)) => break,
-                Err(mpsc::TrySendError::Full(returned)) => event = returned,
+                Ok(()) | Err(async_mpsc::error::TrySendError::Closed(_)) => break,
+                Err(async_mpsc::error::TrySendError::Full(returned)) => event = returned,
             }
             thread::sleep(Duration::from_millis(8));
         }
@@ -226,8 +323,9 @@ impl PtyProcess {
     fn pump(
         &mut self,
         commands: &mpsc::Receiver<PtyCommand>,
-        events: &mpsc::SyncSender<PtyEvent>,
+        events: &async_mpsc::Sender<PtyEvent>,
         stopped: &AtomicBool,
+        wake: &mut UnixStream,
     ) -> io::Result<String> {
         let mut pending_event = Some(PtyEvent::Started(self.child.id()));
         let mut pending_write: Option<(Vec<u8>, usize)> = None;
@@ -246,40 +344,61 @@ impl PtyProcess {
             if let Some(event) = pending_event.take() {
                 match events.try_send(event) {
                     Ok(()) => {}
-                    Err(mpsc::TrySendError::Full(event)) => pending_event = Some(event),
-                    Err(mpsc::TrySendError::Disconnected(_)) => return Ok("PTY detached".into()),
-                }
-            }
-            if pending_write.is_none() {
-                match commands.try_recv() {
-                    Ok(PtyCommand::Input(data)) => pending_write = Some((data, 0)),
-                    Ok(PtyCommand::Resize(cols, rows)) => self.resize(cols, rows)?,
-                    Err(mpsc::TryRecvError::Disconnected) => return Ok("PTY detached".into()),
-                    Err(mpsc::TryRecvError::Empty) => {}
+                    Err(async_mpsc::error::TrySendError::Full(event)) => {
+                        pending_event = Some(event)
+                    }
+                    Err(async_mpsc::error::TrySendError::Closed(_)) => {
+                        return Ok("PTY detached".into())
+                    }
                 }
             }
             if pending_event.is_some() {
                 thread::sleep(Duration::from_millis(8));
                 continue;
             }
-            let mut poll = libc::pollfd {
-                fd: self.master_fd(),
-                events: libc::POLLIN
-                    | if pending_write.is_some() {
-                        libc::POLLOUT
-                    } else {
-                        0
-                    },
-                revents: 0,
-            };
-            // SAFETY: poll points at one live, initialized pollfd.
-            if unsafe { libc::poll(&mut poll, 1, 16) } < 0 {
+            if pending_write.is_none() {
+                match commands.try_recv() {
+                    Ok(PtyCommand::Input(data)) => pending_write = Some((data, 0)),
+                    Ok(PtyCommand::Resize(cols, rows)) => {
+                        self.resize(cols, rows)?;
+                        pending_event = Some(PtyEvent::Resized(cols, rows));
+                        continue;
+                    }
+                    Err(mpsc::TryRecvError::Disconnected) => return Ok("PTY detached".into()),
+                    Err(mpsc::TryRecvError::Empty) => {}
+                }
+            }
+            let mut polls = [
+                libc::pollfd {
+                    fd: self.master_fd(),
+                    events: libc::POLLIN
+                        | if pending_write.is_some() {
+                            libc::POLLOUT
+                        } else {
+                            0
+                        },
+                    revents: 0,
+                },
+                libc::pollfd {
+                    fd: wake.as_raw_fd(),
+                    events: libc::POLLIN,
+                    revents: 0,
+                },
+            ];
+            // SAFETY: both entries refer to live owned descriptors. Input and
+            // cancellation explicitly wake this poll, so idle tabs need no timer.
+            if unsafe { libc::poll(polls.as_mut_ptr(), 2, -1) } < 0 {
                 let error = io::Error::last_os_error();
                 if error.kind() == io::ErrorKind::Interrupted {
                     continue;
                 }
                 return Err(error);
             }
+            if polls[1].revents != 0 {
+                let mut signals = [0u8; 128];
+                while wake.read(&mut signals).is_ok_and(|length| length > 0) {}
+            }
+            let poll = &polls[0];
             if poll.revents & (libc::POLLIN | libc::POLLHUP | libc::POLLERR) != 0 {
                 match self
                     .master
@@ -348,12 +467,41 @@ mod tests {
     use super::*;
     use std::time::Instant;
 
-    fn until(rx: &mpsc::Receiver<PtyEvent>, output: &mut Vec<u8>, needle: &[u8]) {
+    struct TestHome(PathBuf);
+
+    impl TestHome {
+        fn new() -> Self {
+            let unique = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            Self(std::env::temp_dir().join(format!("arkit-pty-{}-{unique}", std::process::id())))
+        }
+    }
+
+    impl Drop for TestHome {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn receive(rx: &mut async_mpsc::Receiver<PtyEvent>, timeout: Duration) -> PtyEvent {
+        let deadline = Instant::now() + timeout;
+        loop {
+            match rx.try_recv() {
+                Ok(event) => return event,
+                Err(async_mpsc::error::TryRecvError::Disconnected) => panic!("PTY channel closed"),
+                Err(async_mpsc::error::TryRecvError::Empty) => {}
+            }
+            assert!(Instant::now() < deadline, "PTY output timed out");
+            thread::sleep(Duration::from_millis(1));
+        }
+    }
+
+    fn until(rx: &mut async_mpsc::Receiver<PtyEvent>, output: &mut Vec<u8>, needle: &[u8]) {
         let deadline = Instant::now() + Duration::from_secs(5);
         while !output.windows(needle.len()).any(|part| part == needle) {
-            let event = rx
-                .recv_timeout(deadline.saturating_duration_since(Instant::now()))
-                .expect("PTY output timed out");
+            let event = receive(rx, deadline.saturating_duration_since(Instant::now()));
             if let PtyEvent::Output(bytes) = event {
                 output.extend(bytes);
             } else if let PtyEvent::Closed(reason) = event {
@@ -362,27 +510,165 @@ mod tests {
         }
     }
 
+    fn child_pid(rx: &mut async_mpsc::Receiver<PtyEvent>) -> u32 {
+        match receive(rx, Duration::from_secs(5)) {
+            PtyEvent::Started(pid) => pid,
+            event => panic!("expected startup event, got {event:?}"),
+        }
+    }
+
+    fn assert_reaped(pid: u32) {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            // SAFETY: signal zero checks existence without changing a process.
+            if unsafe { libc::kill(pid as libc::pid_t, 0) } < 0 {
+                assert_eq!(io::Error::last_os_error().raw_os_error(), Some(libc::ESRCH));
+                break;
+            }
+            assert!(Instant::now() < deadline, "PTY child {pid} leaked");
+            thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    #[test]
+    fn startup_error_identifies_operation_and_preserves_errno() {
+        let error = PtyProcess::start(
+            PathBuf::from("/arkit-no-such-shell"),
+            std::env::temp_dir(),
+            40,
+            24,
+        )
+        .err()
+        .expect("missing shell must fail");
+        assert_eq!(error.operation(), "spawn shell");
+        assert_eq!(error.io_error().raw_os_error(), Some(libc::ENOENT));
+        assert!(error.to_string().contains("spawn shell"));
+        assert!(std::error::Error::source(&error).is_some());
+
+        let error = LocalPty::start(std::env::temp_dir(), 0, 24)
+            .err()
+            .expect("empty grid must fail before allocation");
+        assert_eq!(error.operation(), "validate PTY grid");
+        assert_eq!(error.io_error().kind(), io::ErrorKind::InvalidInput);
+
+        let error = PtyProcess::start(
+            PathBuf::from("/bin/sh"),
+            std::env::current_exe().unwrap().join("terminal"),
+            40,
+            24,
+        )
+        .err()
+        .expect("home beneath a file must fail");
+        assert_eq!(error.operation(), "create terminal home");
+        assert_eq!(error.io_error().raw_os_error(), Some(libc::ENOTDIR));
+    }
+
+    #[test]
+    fn shell_uses_configured_home_and_terminal_environment() {
+        let home = TestHome::new();
+        let (pty, mut rx) = LocalPty::start(home.0.clone(), 40, 24).unwrap();
+        let mut output = Vec::new();
+        pty.write(
+            b"test \"$HOME\" -ef . && : > writable && printf 'HOME_%s\\n' READY; printf 'ENV|%s|%s|%s\\n' \"$TERM\" \"$COLORTERM\" \"$TERM_PROGRAM\"\r",
+        )
+        .unwrap();
+        until(&mut rx, &mut output, b"HOME_READY");
+        until(&mut rx, &mut output, b"ENV|xterm-256color|truecolor|arkit");
+        assert!(home.0.join("writable").is_file());
+    }
+
+    #[test]
+    fn queued_resizes_wake_idle_worker_and_acknowledge_in_order() {
+        let (pty, mut rx) = LocalPty::start(std::env::temp_dir(), 40, 24).unwrap();
+        pty.write(b"printf 'IDLE_%s\\n' READY\r").unwrap();
+        until(&mut rx, &mut Vec::new(), b"IDLE_READY");
+        thread::sleep(Duration::from_millis(50));
+        for cols in 80..96 {
+            pty.resize(cols, 30).unwrap();
+        }
+        for expected_cols in 80..96 {
+            loop {
+                match receive(&mut rx, Duration::from_secs(5)) {
+                    PtyEvent::Resized(cols, rows) => {
+                        assert_eq!((cols, rows), (expected_cols, 30));
+                        break;
+                    }
+                    PtyEvent::Closed(reason) => panic!("PTY closed early: {reason}"),
+                    _ => {}
+                }
+            }
+        }
+        pty.write(b"stty size\r").unwrap();
+        until(&mut rx, &mut Vec::new(), b"30 95");
+    }
+
+    #[test]
+    fn async_output_wakes_waiting_receiver() {
+        let (pty, mut rx) = LocalPty::start(std::env::temp_dir(), 40, 24).unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            tokio::time::timeout(Duration::from_secs(5), async {
+                pty.write(b"sleep 1; printf 'ASYNC_%s\\n' READY\r").unwrap();
+                let mut output = Vec::new();
+                while let Some(event) = rx.recv().await {
+                    match event {
+                        PtyEvent::Output(bytes) => output.extend(bytes),
+                        PtyEvent::Closed(reason) => panic!("PTY closed early: {reason}"),
+                        _ => {}
+                    }
+                    if output
+                        .windows(b"ASYNC_READY".len())
+                        .any(|part| part == b"ASYNC_READY")
+                    {
+                        return;
+                    }
+                }
+                panic!("PTY channel closed");
+            })
+            .await
+            .expect("async PTY output timed out");
+        });
+    }
+
+    #[test]
+    fn dropping_idle_host_wakes_worker_and_reaps_child() {
+        let (pty, mut rx) = LocalPty::start(std::env::temp_dir(), 40, 24).unwrap();
+        let pid = child_pid(&mut rx);
+        pty.write(b"printf 'IDLE_%s\\n' READY\r").unwrap();
+        until(&mut rx, &mut Vec::new(), b"IDLE_READY");
+        thread::sleep(Duration::from_millis(50));
+        drop(pty);
+        assert_reaped(pid);
+    }
+
     #[test]
     fn real_tty_resize_interrupt_and_exit() {
-        let (pty, rx) = LocalPty::start(40, 24).unwrap();
+        let (pty, mut rx) = LocalPty::start(std::env::temp_dir(), 40, 24).unwrap();
+        assert_eq!(
+            pty.resize(0, 24).unwrap_err().kind(),
+            io::ErrorKind::InvalidInput
+        );
         let mut output = Vec::new();
         pty.write(b"test -t 0 && printf 'TTY_%s\\n' READY; stty size\r")
             .unwrap();
-        until(&rx, &mut output, b"TTY_READY");
-        until(&rx, &mut output, b"24 40");
+        until(&mut rx, &mut output, b"TTY_READY");
+        until(&mut rx, &mut output, b"24 40");
         output.clear();
         pty.resize(113, 37).unwrap();
         pty.write(b"stty size\r").unwrap();
-        until(&rx, &mut output, b"37 113");
+        until(&mut rx, &mut output, b"37 113");
         pty.write(b"sleep 10\r").unwrap();
         thread::sleep(Duration::from_millis(150));
         output.clear();
         pty.write(b"\x03").unwrap();
         pty.write(b"printf 'AFTER_%s\\n' INTERRUPT\r").unwrap();
-        until(&rx, &mut output, b"AFTER_INTERRUPT");
+        until(&mut rx, &mut output, b"AFTER_INTERRUPT");
         pty.write(b"exit 7\r").unwrap();
         loop {
-            if let PtyEvent::Closed(reason) = rx.recv_timeout(Duration::from_secs(5)).unwrap() {
+            if let PtyEvent::Closed(reason) = receive(&mut rx, Duration::from_secs(5)) {
                 assert!(reason.contains('7'), "{reason}");
                 break;
             }
@@ -391,24 +677,12 @@ mod tests {
 
     #[test]
     fn dropping_host_reaps_child_even_with_output_backpressure() {
-        let (pty, rx) = LocalPty::start(40, 24).unwrap();
-        let pid = loop {
-            if let PtyEvent::Started(pid) = rx.recv_timeout(Duration::from_secs(5)).unwrap() {
-                break pid;
-            }
-        };
+        let (pty, mut rx) = LocalPty::start(std::env::temp_dir(), 40, 24).unwrap();
+        let pid = child_pid(&mut rx);
         pty.write(b"while :; do printf 'output output output\\n'; done\r")
             .unwrap();
         thread::sleep(Duration::from_millis(200));
         drop(pty);
-        let deadline = Instant::now() + Duration::from_secs(5);
-        loop {
-            // SAFETY: signal zero checks existence without changing a process.
-            if unsafe { libc::kill(pid as libc::pid_t, 0) } < 0 {
-                break;
-            }
-            assert!(Instant::now() < deadline, "PTY child {pid} leaked");
-            thread::sleep(Duration::from_millis(10));
-        }
+        assert_reaped(pid);
     }
 }

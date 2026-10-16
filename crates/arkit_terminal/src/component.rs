@@ -181,7 +181,7 @@ impl TerminalInbox {
 ///
 /// Host output ([`Self::feed_vt`]) only appends to a shared mailbox. rio-vt
 /// parse, grid capture, and wgpu present run on the `arkit-terminal` worker
-/// and are paced by a VSync connection associated with the native window.
+/// and are paced by a dedicated native VSync connection.
 #[derive(Clone)]
 pub struct TerminalController {
     shared: Arc<TerminalShared>,

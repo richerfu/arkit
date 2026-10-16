@@ -79,6 +79,24 @@ impl TerminalRenderer {
     }
 
     pub(crate) fn bind_surface(&mut self, native: NativeSurface) -> Result<(), String> {
+        if let Some(bound) = self.surface.as_mut() {
+            if bound.native.raw_window() == native.raw_window() {
+                // A layout/IME resize keeps the same NativeWindow. Creating
+                // another EGLSurface before releasing the first one fails on
+                // real OHOS devices and makes wgpu reject configuration.
+                bound.config.width = u32::try_from(native.width())
+                    .map_err(|_| "negative XComponent width".to_string())?
+                    .max(1);
+                bound.config.height = u32::try_from(native.height())
+                    .map_err(|_| "negative XComponent height".to_string())?
+                    .max(1);
+                bound.surface.configure(&self.device, &bound.config);
+                bound.native = native;
+                return Ok(());
+            }
+        }
+        // A replacement window must release its old EGLSurface first too.
+        self.surface = None;
         let raw_surface = create_surface(&self.instance, &native)?;
         let bound = configure_surface(raw_surface, native, &self.adapter, &self.device)?;
         if bound.config.format != self.resources.format {
@@ -236,14 +254,14 @@ fn configure_surface(
     surface.configure(device, &config);
     Ok(BoundSurface {
         surface,
-        _native: native,
+        native,
         config,
     })
 }
 
 struct BoundSurface {
     surface: wgpu::Surface<'static>,
-    _native: NativeSurface,
+    native: NativeSurface,
     config: wgpu::SurfaceConfiguration,
 }
 

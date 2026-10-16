@@ -15,6 +15,7 @@ class TerminalHostTests:
         self.root = root
         manifest = tomllib.loads((root / "Cargo.toml").read_text())
         self.libc_version = manifest["workspace"]["dependencies"]["libc"]
+        self.tokio_version = manifest["workspace"]["dependencies"]["tokio"]["version"]
 
     @staticmethod
     def quote(value: str | Path) -> str:
@@ -33,6 +34,8 @@ class TerminalHostTests:
                 'version = "0.0.0"\nedition = "2021"\n'
                 '[dependencies]\n'
                 f'libc = {self.quote(self.libc_version)}\n'
+                f'tokio = {{ version = {self.quote(self.tokio_version)}, '
+                'features = ["rt", "sync", "time"] }\n'
                 'arkit_prelude = { path = '
                 f'{self.quote(self.root / "crates/arkit_prelude")} }}\n'
                 '[lints.rust]\nunsafe_op_in_unsafe_fn = "deny"\n'

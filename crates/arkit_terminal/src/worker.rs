@@ -331,10 +331,12 @@ fn run_worker(
         }
         let received_vsync = vsync_ts.is_some();
         if received_vsync || present {
-            pump(&mut state, vsync_ts);
             if received_vsync {
+                // Keep the next request ahead of GPU acquisition/presentation.
+                // A blocking swap must not make us miss the next VSync deadline.
                 state.request_next_vsync();
             }
+            pump(&mut state, vsync_ts);
         }
     }
 }
@@ -358,7 +360,6 @@ fn dispatch(
 ) -> bool {
     match message {
         WorkerMessage::SurfaceAvailable(window) => {
-            let surface_id = window.surface_id();
             let result = match state.renderer.as_mut() {
                 Some(renderer) => renderer.bind_surface(window),
                 None => TerminalRenderer::new(window).map(|created| {
@@ -375,7 +376,7 @@ fn dispatch(
                 state.stop_vsync();
                 return true;
             }
-            state.bind_vsync(surface_id);
+            state.bind_vsync();
             *vsync_ts = None;
             state.shared.mark_dirty();
             *present = true;
@@ -462,16 +463,13 @@ fn dispatch(
 }
 
 impl WorkerState {
-    fn bind_vsync(&mut self, surface_id: Option<u64>) {
+    fn bind_vsync(&mut self) {
         self.stop_vsync();
-        let Some(surface_id) = surface_id else {
-            return;
-        };
-        let Some(handle) = Vsync::try_new_for_associated_window(surface_id, "arkit-terminal")
-        else {
-            ohos_hilog_binding::error(format!(
-                "arkit_terminal: failed to create vsync for surface {surface_id}"
-            ));
+        // OH_NativeVSync_Create_ForAssociatedWindow requires a WM window ID,
+        // not the NativeWindow's surface ID. This component owns an XComponent
+        // surface, so use an independent connection, as ohostty does.
+        let Some(handle) = Vsync::try_new("arkit-terminal") else {
+            ohos_hilog_binding::error("arkit_terminal: failed to create vsync");
             return;
         };
         let rate_result = handle.set_expected_frame_rate_range(OH_NativeVSync_ExpectedRateRange {
