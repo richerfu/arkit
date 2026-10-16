@@ -1,54 +1,65 @@
 ---
 title: 页面转场
-description: "页面切换动画怎么配，前进和返回方向如何区分。"
+description: "用淡入淡出和弹簧曲线切页，让旧页面完成离场。"
 ---
 
 # 页面转场
 
-切页时可以挂过渡动画。配置跟在路由上，前进和返回可以走不同方向，生命周期也和页面挂载对齐。
-
-## RouteTransition
-
-```rust
-#[component]
-fn Home() -> Element {
-    rsx! {
-        RouteTransition::<Route> {
-            preset: TransitionPreset::SlideLeft,
-            duration_ms: 220,
-            delay_ms: 0,
-            fill: true,
-            column { "Home" }
-        }
-    }
-}
-```
-
-默认 preset 是 `SlideLeft`、duration 220ms、delay 0、fill true。调用方需要让 route change 产生稳定而不同的 component/key identity。
+推荐在公共 layout 中使用 `AnimatedOutlet`。页面默认只改变透明度，不平移、缩放或旋转；旧页面先快速淡出，新页面稍后淡入，两页内容几乎不重叠。
 
 ## AnimatedOutlet
 
 ```rust
-AnimatedOutlet::<Route> {
-    preset: TransitionPreset::Fade,
-    duration_ms: 180,
+#[component]
+fn AppShell() -> Element {
+    rsx! { AnimatedOutlet::<Route> {} }
 }
 ```
 
-它按当前 typed route 的字符串 identity 为 wrapper 建 key，nested route 改变时重新 mount transition。公共 layout 本身不会随 child 一起重建。
+默认 preset 为 `Fade`，两条临界阻尼弹簧（透明度不回弹）：
 
-## 前进与返回
+|      | 曲线                                  | 节奏                                       |
+| ---- | ------------------------------------- | ------------------------------------------ |
+| 离场 | `from_response(0.2, 1.0)`             | 立即开始，约 225ms 消失                    |
+| 入场 | `from_response(0.36, 1.0)`，延迟 40ms | 约 140ms 过半、265ms 到 90%，约 390ms 结束 |
 
-简单应用可以统一 Fade/Slide。需要区分 push 与 back 时，在 router history 变化处记录导航方向，再选择对应 preset；方向只是转场输入，不另存当前路径。
+两页同时可见的透明度峰值约 0.2，不会出现内容叠在一起的半透明画面。透明度最后 4% 肉眼不可见，弹簧在此处结束（`with_rest_thresholds`），不保留看不见的收敛尾巴。fill 为 true。页面内部不再套转场组件，避免重复淡入。
 
-## 快速切页
+首次挂载直接显示，不播放入场动画。之后 push、back 和路由参数变化都按 route 字符串区分页面，在同一个全尺寸 stack 中淡出、淡入。离场页面不接收输入；快速 A→B→C 时，每个旧页面各自完成离场并清理，不依赖固定 timeout。
 
-新 route 到来时旧 transition 必须按 AnimationHost 的取消语义清理。不要用固定 timeout 删除页面，也不要在 animation complete callback 再 push route，否则会把视觉生命周期和 history 相互锁死。
+以上都是默认值，每一项都可以覆盖：
 
-## 可访问性与性能
+| prop                         | 含义                                         |
+| ---------------------------- | -------------------------------------------- |
+| `preset`                     | 动画形式，页面建议保持 `Fade`                |
+| `enter_spring`/`exit_spring` | 入场/离场曲线（`SpringSpec`）                |
+| `duration_ms`                | 入场时长，默认取入场弹簧自然时长             |
+| `exit_duration_ms`           | 离场时长，默认取离场弹簧自然时长且不超过入场 |
+| `delay_ms`                   | 入场延迟，默认 40ms；离场始终立即开始        |
+| `fill`                       | 是否撑满父容器                               |
 
-尊重系统减少动态效果设置：把 duration 降为 0 或选择轻量 Fade。避免整页同时做 blur、shadow 和大量 layout animation；先保证导航输入立即生效，再让视觉动画跟进。
+设置 `duration_ms: 0` 可关闭动画（未显式设置时离场时长不超过入场，同样为 0）。
+
+```rust
+AnimatedOutlet::<Route> {
+    enter_spring: SpringSpec::from_response(0.5, 1.0).unwrap(),
+    exit_spring: SpringSpec::from_response(0.3, 1.0).unwrap(),
+    delay_ms: 0,
+}
+```
+
+嵌套路由深度与 Dioxus `Outlet` 一致，但有一个限制：如果离场的 **layout 本身包含嵌套 Outlet**，它在淡出期间会显示路由器当前的子页面，因为上游 Outlet 始终读取实时路由。优先把 `AnimatedOutlet` 放在稳定的公共 layout 中，包住叶子页面。
+
+## RouteTransition
+
+```rust
+RouteTransition::<Route> {
+    column { "Home" }
+}
+```
+
+它是仅入场的辅助组件，默认同样为 `Fade`、入场弹簧及其自然时长，没有延迟；可用 `spring`、`duration_ms`、`delay_ms` 覆盖。调用方通过 key 控制重播；父组件卸载它时，无法保留旧页面或播放离场。需要完整切页转场时使用 `AnimatedOutlet`。
 
 ## 验证
 
-`examples/router` 覆盖动态参数、Link、系统 back 与 RouteTransition。真机检查快速连续导航、返回到根、组件卸载清理和旋转过程中的转场 frame。
+`examples/router` 演示淡入淡出、动态参数、Link 和系统 back。真机检查首次显示、快速连续导航、返回到根、离场页面输入屏蔽与卸载清理。`examples/demos` 的 `regressions` 路由保留普通 Outlet，避免原生转场 wrapper 干扰 renderer-root 诊断。

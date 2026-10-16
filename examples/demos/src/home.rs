@@ -1,7 +1,7 @@
 //! Home page — grouped demo list driven by [`crate::registry`].
 
 use arkit::prelude::*;
-use arkit::router::{use_navigator, RouteProvider, RouteTransition};
+use arkit::router::{use_navigator, RouteProvider};
 use arkit::shadcn::icon::icon_placeholder;
 
 use crate::registry::{DemoSpec, DEMO_GROUPS};
@@ -30,42 +30,40 @@ pub fn Home() -> Element {
     };
 
     rsx! {
-        RouteTransition::<Route> {
-            RouteProvider {
+        RouteProvider {
+            column {
+                width: "100%",
+                align_items: "center",
+                justify_content: "start",
+                padding_top: 20.0,
+                padding_right: page_padding,
+                padding_bottom: 32.0,
+                padding_left: page_padding,
+
                 column {
                     width: "100%",
-                    align_items: "center",
-                    justify_content: "start",
-                    padding_top: 20.0,
-                    padding_right: page_padding,
-                    padding_bottom: 32.0,
-                    padding_left: page_padding,
+                    max_width: max_width,
+                    align_items: "start",
+                    text {
+                        font_size: 28.0,
+                        font_weight: 700,
+                        font_color: TITLE_COLOR,
+                        "Arkit Demos"
+                    }
+                    text {
+                        margin_top: 4.0,
+                        font_size: 13.0,
+                        line_height: 18.0,
+                        font_color: CAPTION_COLOR,
+                        "16 个示例统一入口 · {mode} → {resolved_style} · {adaptive.width_vp:.0}vp"
+                    }
 
-                    column {
-                        width: "100%",
-                        max_width: max_width,
-                        align_items: "start",
-                        text {
-                            font_size: 28.0,
-                            font_weight: 700,
-                            font_color: TITLE_COLOR,
-                            "Arkit Demos"
-                        }
-                        text {
-                            margin_top: 4.0,
-                            font_size: 13.0,
-                            line_height: 18.0,
-                            font_color: CAPTION_COLOR,
-                            "16 个示例统一入口 · {mode} → {resolved_style} · {adaptive.width_vp:.0}vp"
-                        }
-
-                        for group in DEMO_GROUPS {
-                            DemoGroupSection {
-                                title: group.title.to_string(),
-                                demos: group.demos.to_vec(),
-                                pc: adaptive.is_pc(),
-                                columns,
-                            }
+                    for group in DEMO_GROUPS {
+                        DemoGroupSection {
+                            title: group.title.to_string(),
+                            demos: group.demos.to_vec(),
+                            pc: adaptive.is_pc(),
+                            columns,
                         }
                     }
                 }

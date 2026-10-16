@@ -5,7 +5,7 @@
 //! fine inside the router's bare page frame.
 
 use arkit::prelude::*;
-use arkit::router::{use_navigator, RouteTransition};
+use arkit::router::use_navigator;
 use arkit::shadcn::icon::icon_placeholder;
 
 use crate::registry;
@@ -46,19 +46,8 @@ pub fn Demo(slug: String) -> Element {
         _ => rsx! { UnknownDemo { slug: slug.clone() } },
     };
 
-    // Keep this diagnostic page free of a native transition wrapper. Its
-    // final two siblings deliberately exercise a renderer-root placeholder
-    // replacement while an already-mounted portal is active.
-    if slug == "regressions" {
-        return rsx! {
-            DemoFrame { title, {page} }
-        };
-    }
-
     rsx! {
-        RouteTransition::<Route> {
-            DemoFrame { title, {page} }
-        }
+        DemoFrame { title, {page} }
     }
 }
 

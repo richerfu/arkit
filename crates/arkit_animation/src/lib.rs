@@ -85,8 +85,9 @@ pub use scroll::{
 pub use selector::AnimationSelector;
 pub use stagger::{stagger, Stagger, StaggerAxis, StaggerDirection, StaggerFrom, StaggerGrid};
 pub use transition::{
-    use_presence_visibility, MountTransition, PresenceTransition, PresenceVisibility,
-    TransitionPreset, VisibleTransition,
+    enter_easing, page_enter_spring, page_exit_spring, spring_duration_ms, use_presence_visibility,
+    MountTransition, PresenceTransition, PresenceVisibility, TransitionPreset, VisibleTransition,
+    PAGE_ENTER_DELAY_MS,
 };
 
 // --- Shared animation value types ---

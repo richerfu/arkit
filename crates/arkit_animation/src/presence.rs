@@ -374,6 +374,48 @@ mod tests {
     }
 
     #[test]
+    fn sync_navigation_retains_and_settles_every_leaving_value() {
+        let a = PresenceKey::new("/a");
+        let b = PresenceKey::new("/users/1");
+        let c = PresenceKey::new("/users/2");
+        let mut presence = AnimatePresence::new(PresenceMode::Sync);
+        presence.update([(a.clone(), "a")]);
+        presence.mark_present(&a);
+        presence.update([(b.clone(), "user 1")]);
+        presence.update([(c.clone(), "user 2")]);
+        assert_eq!(presence.entries().len(), 3);
+        assert_eq!(presence.entries()[0].value, "a");
+        assert_eq!(presence.entries()[1].value, "user 1");
+        assert_eq!(presence.phase(&a), Some(PresencePhase::Leaving));
+        assert_eq!(presence.phase(&b), Some(PresencePhase::Leaving));
+        assert!(
+            !presence.mark_present(&b),
+            "stale enter completion must not revive B"
+        );
+        assert!(presence.settle_exit(&b));
+        assert!(presence.settle_exit(&a));
+        assert!(presence.mark_present(&c));
+        assert_eq!(presence.entries().len(), 1);
+        assert_eq!(presence.phase(&c), Some(PresencePhase::Present));
+    }
+
+    #[test]
+    fn returning_to_a_leaving_key_reenters_without_stale_exit_removal() {
+        let a = PresenceKey::new("/a");
+        let b = PresenceKey::new("/b");
+        let mut presence = AnimatePresence::new(PresenceMode::Sync);
+        presence.update([(a.clone(), 1)]);
+        presence.mark_present(&a);
+        presence.update([(b.clone(), 2)]);
+        presence.update([(a.clone(), 1)]);
+        assert_eq!(presence.phase(&a), Some(PresencePhase::Entering));
+        assert!(!presence.settle_exit(&a));
+        assert!(presence.settle_exit(&b));
+        assert!(presence.mark_present(&a));
+        assert_eq!(presence.entries().len(), 1);
+    }
+
+    #[test]
     fn pop_layout_retains_leaving_representation() {
         let key = PresenceKey::new("item");
         let mut presence = AnimatePresence::new(PresenceMode::PopLayout);

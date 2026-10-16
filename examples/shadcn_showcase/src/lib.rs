@@ -8,7 +8,7 @@ use arkit::dioxus_signals::WritableExt;
 use arkit::prelude::*;
 // The Routable derive emits `::dioxus_router` paths.
 use arkit::router::dioxus_router;
-use arkit::router::{use_navigator, MemoryRouter, Outlet, Routable, RouteProvider};
+use arkit::router::{use_navigator, AnimatedOutlet, MemoryRouter, Routable, RouteProvider};
 use arkit::shadcn as arkit_shadcn;
 use arkit::shadcn::components::{
     use_anchor, Accordion, AccordionItemSpec, Alert, AlertDescription, AlertDialog,
@@ -504,7 +504,7 @@ fn ShowcaseShell() -> Element {
     let _back_press_registration =
         use_hook(move || Rc::new(runtime.register_back_handler(back_press_handler)));
 
-    rsx! { Outlet::<Route> {} }
+    rsx! { AnimatedOutlet::<Route> {} }
 }
 
 #[component]
@@ -518,55 +518,48 @@ fn Home() -> Element {
     let mut theme_menu_open = state.theme_menu_open;
     let mut language_menu_open = state.language_menu_open;
     let mut layout_menu_open = state.layout_menu_open;
-    let route_key = "home";
 
     rsx! {
-        MountTransition {
-            key: "{route_key}",
-            preset: TransitionPreset::SlideRight,
-            duration_ms: 200,
-            fill: true,
-            HomeView {
-                query: query(),
-                mode: mode(),
-                preset: preset(),
-                custom: custom(),
-                theme_menu_open: theme_menu_open(),
-                language_menu_open: language_menu_open(),
-                on_query: move |value: String| query.set(value),
-                on_select: move |slug: &'static str| {
-                    navigator.push(Route::Detail {
-                        slug: slug.to_string(),
-                    });
-                },
-                on_theme_menu_open: move |value| {
-                    theme_menu_open.set(value);
-                    if value {
-                        language_menu_open.set(false);
-                        layout_menu_open.set(false);
-                    }
-                },
-                on_language_menu_open: move |value| {
-                    language_menu_open.set(value);
-                    if value {
-                        theme_menu_open.set(false);
-                        layout_menu_open.set(false);
-                    }
-                },
-                on_mode: move |value| {
-                    mode.set(value);
+        HomeView {
+            query: query(),
+            mode: mode(),
+            preset: preset(),
+            custom: custom(),
+            theme_menu_open: theme_menu_open(),
+            language_menu_open: language_menu_open(),
+            on_query: move |value: String| query.set(value),
+            on_select: move |slug: &'static str| {
+                navigator.push(Route::Detail {
+                    slug: slug.to_string(),
+                });
+            },
+            on_theme_menu_open: move |value| {
+                theme_menu_open.set(value);
+                if value {
+                    language_menu_open.set(false);
+                    layout_menu_open.set(false);
+                }
+            },
+            on_language_menu_open: move |value| {
+                language_menu_open.set(value);
+                if value {
                     theme_menu_open.set(false);
-                },
-                on_preset: move |value| {
-                    preset.set(value);
-                    custom.set(false);
-                    theme_menu_open.set(false);
-                },
-                on_custom: move |value| {
-                    custom.set(value);
-                    theme_menu_open.set(false);
-                },
-            }
+                    layout_menu_open.set(false);
+                }
+            },
+            on_mode: move |value| {
+                mode.set(value);
+                theme_menu_open.set(false);
+            },
+            on_preset: move |value| {
+                preset.set(value);
+                custom.set(false);
+                theme_menu_open.set(false);
+            },
+            on_custom: move |value| {
+                custom.set(value);
+                theme_menu_open.set(false);
+            },
         }
     }
 }
@@ -588,47 +581,41 @@ fn Detail(slug: String) -> Element {
         .unwrap_or("unknown");
 
     rsx! {
-        MountTransition {
-            key: "{slug}",
-            preset: TransitionPreset::SlideLeft,
-            duration_ms: 220,
-            fill: true,
-            DetailView {
-                slug,
-                mode: mode(),
-                preset: preset(),
-                custom: custom(),
-                theme_menu_open: theme_menu_open(),
-                language_menu_open: language_menu_open(),
-                on_back: move |_| navigator.go_back(),
-                on_theme_menu_open: move |value| {
-                    theme_menu_open.set(value);
-                    if value {
-                        language_menu_open.set(false);
-                        layout_menu_open.set(false);
-                    }
-                },
-                on_language_menu_open: move |value| {
-                    language_menu_open.set(value);
-                    if value {
-                        theme_menu_open.set(false);
-                        layout_menu_open.set(false);
-                    }
-                },
-                on_mode: move |value| {
-                    mode.set(value);
+        DetailView {
+            slug,
+            mode: mode(),
+            preset: preset(),
+            custom: custom(),
+            theme_menu_open: theme_menu_open(),
+            language_menu_open: language_menu_open(),
+            on_back: move |_| navigator.go_back(),
+            on_theme_menu_open: move |value| {
+                theme_menu_open.set(value);
+                if value {
+                    language_menu_open.set(false);
+                    layout_menu_open.set(false);
+                }
+            },
+            on_language_menu_open: move |value| {
+                language_menu_open.set(value);
+                if value {
                     theme_menu_open.set(false);
-                },
-                on_preset: move |value| {
-                    preset.set(value);
-                    custom.set(false);
-                    theme_menu_open.set(false);
-                },
-                on_custom: move |value| {
-                    custom.set(value);
-                    theme_menu_open.set(false);
-                },
-            }
+                    layout_menu_open.set(false);
+                }
+            },
+            on_mode: move |value| {
+                mode.set(value);
+                theme_menu_open.set(false);
+            },
+            on_preset: move |value| {
+                preset.set(value);
+                custom.set(false);
+                theme_menu_open.set(false);
+            },
+            on_custom: move |value| {
+                custom.set(value);
+                theme_menu_open.set(false);
+            },
         }
     }
 }
