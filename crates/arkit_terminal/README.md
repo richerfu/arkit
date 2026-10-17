@@ -25,10 +25,6 @@ run in GPU shaders. OHOS Typography rasterizes a grapheme only on an atlas
 miss so HarmonyOS CJK/emoji fallback remains correct; it never paints a
 full NativeWindow frame.
 
-The previous libghostty-vt path required a Zig toolchain and only used the
-GPU for the final present. This crate depends on rio-vt (pure Rust, no Zig)
-and walks the cell buffer in the vertex shader.
-
 ### Component (`Terminal`)
 
 - Paints `TerminalFrame` into one wgpu-backed XComponent on-screen surface
@@ -67,8 +63,8 @@ remain owned by Arkit. Host I/O lives in the example, not in this crate.
 (`/system/bin/sh` on OHOS). `PTY probe` checks the tty, working directory,
 `ls -la`, and a real pipeline before emitting its success marker;
 PTY errors are displayed without substituting the built-in demo shell.
-Following the local ohostty transport, the backend polls the nonblocking master
-alongside a wake socket. Input, resize and cancellation wake an idle worker;
+The backend polls the nonblocking master alongside a wake socket.
+Input, resize and cancellation wake an idle worker;
 bounded Tokio output wakes the UI directly instead of using output timers.
 Successful `TIOCSWINSZ`/`SIGWINCH` operations emit a resize acknowledgement.
 Startup errors name the failed operation and retain its original errno. Dropping
@@ -83,10 +79,6 @@ The sandbox root `/` cannot be listed by a normal app; launching there makes
 System and user directories still follow their existing access permissions.
 The host supplies the home path; the shell also receives `TERM=xterm-256color`,
 `COLORTERM=truecolor`, and `TERM_PROGRAM=arkit`.
-
-Validated on DevEco's official MateBook emulator, HarmonyOS 7.0.0.107/API 26,
-with an unsigned normal HAP: `/dev/pts/0`, `ls -la`, a `printf | cat` pipeline,
-physical keyboard input, and Arkit layout resizing from 106×13 to 160×28.
 
 Run the production host tests on macOS/Linux without linking OHOS UI libraries
 (Python 3.11+ and Rust are required):
@@ -114,8 +106,6 @@ The runner locates `120Hz probe`, captures three eight-second workloads and
 analyzes the terminal Surface's server-side buffer submissions, native VSync
 callbacks and screen mode. The probe bypasses PTY allocation and labels this
 on-screen. It stops after 24 seconds; leaving the page cancels its producer.
-See [the ALN-AL00 phone measurements](verification/phone-120hz-20261016.md)
-for results, frame intervals, startup permission limits and retained evidence.
 
 ## Renderer
 

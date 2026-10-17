@@ -5,6 +5,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
 
 [lints]
 workspace = true
@@ -19,7 +20,6 @@ arkit_arkui.workspace = true
 arkit_hooks.workspace = true
 arkit_prelude.workspace = true
 arkit_runtime.workspace = true
-ohos-arkui-binding.workspace = true
 ohos-hilog-binding.workspace = true
 ohos-xcomponent-binding.workspace = true
 reqwest = { workspace = true, optional = true }

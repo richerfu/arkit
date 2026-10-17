@@ -15,7 +15,7 @@ ANSI 状态机是顺序的，所以 **VT 解析留在 CPU**。这和 Ghostty / R
 
 ```toml
 [dependencies]
-arkit = { version = "*", features = ["terminal"] }
+arkit = { version = "0.0.1-beta.0", features = ["terminal"] }
 ```
 
 ```rust
@@ -89,14 +89,12 @@ cd ../../
 HDC_TARGET="127.0.0.1:10090" ./app/run.sh
 ```
 
-将 `HDC_TARGET` 换成 `hdc list targets` 中的官方模拟器地址，打开整合示例中的 Terminal 页面，再点击 `Local PTY`。当前官方 MateBook 模拟器可直接安装 SDK 生成的 unsigned HAP：
+将 `HDC_TARGET` 换成 `hdc list targets` 中的目标设备地址，打开整合示例中的 Terminal 页面，再点击 `Local PTY`。如果目标模拟器允许安装 unsigned HAP，可使用：
 
 ```sh
 hdc -t 127.0.0.1:10090 install -r app/entry/build/default/outputs/default/entry-default-unsigned.hap
 hdc -t 127.0.0.1:10090 shell aa start -a EntryAbility -b com.arkit.example
 ```
-
-已在 DevEco 官方 MateBook 模拟器 HarmonyOS 7.0.0.107 / API 26 上验证 unsigned HAP、`/dev/pts/0`、`pwd`、`ls -la`、管道和实体键盘输入。窗口最大化时，Arkit 自动将示例网格从 `106×13` 更新到 `160×28`。该结果对应这一版本的官方镜像；部署到其他设备时应重新运行 PTY 探针。
 
 本机后端测试无需链接 OHOS UI 库，使用 Python 3.11+ 和 Rust 即可运行：
 

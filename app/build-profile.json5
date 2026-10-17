@@ -41,14 +41,6 @@
   },
   "modules": [
     {
-      "name": "native_ability",
-      "srcPath": "../../../southorange/openharmony-ability/native_ability"
-    },
-    {
-      "name": "plugin_webview",
-      "srcPath": "../../../southorange/openharmony-ability/plugins/webview"
-    },
-    {
       "name": "entry",
       "srcPath": "./entry",
       "targets": [

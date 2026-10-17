@@ -9,7 +9,7 @@ description: "从空 crate 走到能在设备上跑起来的第一个 Arkit 应�
 
 ## 前置条件
 
-- Rust 1.88 或更高版本。
+- Rust 1.90 或更高版本。
 - 已安装并配置 OpenHarmony SDK/NDK。
 - `ohrs` 构建工具可用。
 - 一个可加载 native `.so` 的 OpenHarmony 应用壳。
@@ -25,25 +25,25 @@ description: "从空 crate 走到能在设备上跑起来的第一个 Arkit 应�
 name = "counter"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.88"
+rust-version = "1.90"
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
-arkit = { version = "*" }
-napi-ohos = "1.2.0"
-napi-derive-ohos = "1.2.0"
+arkit = { version = "0.0.1-beta.0" }
+napi-ohos = "1.2"
+napi-derive-ohos = "1.2"
 
 [build-dependencies]
-napi-build-ohos = "1.2.0"
+napi-build-ohos = "1.2"
 ```
 
 仓库里的 example 走 workspace 依赖；你在自己的项目里直接依赖发布版本即可。额外能力用 `arkit` 的 feature 打开：
 
 ```toml
 arkit = {
-  version = "*",
+  version = "0.0.1-beta.0",
   features = ["animation", "router", "i18n", "icon", "shadcn"]
 }
 ```

@@ -2,15 +2,13 @@
 
 `arkit` is a Dioxus 0.7 native renderer for OpenHarmony ArkUI. Applications use normal Dioxus components, `rsx!`, signals, hooks, async resources, and `dioxus-router`; the framework translates Dioxus mutations into ArkUI native nodes.
 
-The workspace MSRV is Rust 1.88, matching the resolved OpenHarmony N-API toolchain dependencies.
+The workspace MSRV is Rust 1.90, matching the syntax-highlighting dependencies.
 
-The Rust Ability core and WebView facade are pinned together to the
-`feat/ohos-adaptation-runtime-fixes` revision in `Cargo.toml`. The `app/` shell
-uses the matching HAR sources from the local `openharmony-ability` checkout
-at `../../southorange/openharmony-ability` (relative to this repository).
-Keep that checkout on the same revision; the published HAR does not yet
-provide the branch's window ID callbacks. Native bindings come from crates.io
-without Cargo patches.
+The Rust Ability core and WebView facade use the published `1.0.0-beta.3`
+release from crates.io. The `app/` shell uses the matching published OHPM
+packages and overrides the WebView HAR's older Ability dependency so the
+application loads one Ability runtime. No local Ability checkout or Cargo
+patches are required.
 
 ```rust
 use arkit::prelude::*;

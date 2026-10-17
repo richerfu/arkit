@@ -19,25 +19,25 @@ description: "shadcn 风格原生组件库怎么装、怎么 import，以及和 
 
 ```toml
 [dependencies]
-arkit = { version = "*", features = ["shadcn"] }
+arkit = { version = "0.0.1-beta.0", features = ["shadcn"] }
 ```
 
 仅 Markdown：
 
 ```toml
-arkit = { version = "*", features = ["markdown"] }
+arkit = { version = "0.0.1-beta.0", features = ["markdown"] }
 ```
 
 仅代码高亮组件：
 
 ```toml
-arkit = { version = "*", features = ["code"] }
+arkit = { version = "0.0.1-beta.0", features = ["code"] }
 ```
 
 Markdown 围栏也要高亮：
 
 ```toml
-arkit = { version = "*", features = ["markdown", "code"] }
+arkit = { version = "0.0.1-beta.0", features = ["markdown", "code"] }
 ```
 
 ```rust

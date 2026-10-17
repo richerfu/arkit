@@ -13,7 +13,7 @@ description: "原生 Drawing 图表能做什么、不支持什么，建议怎么
 
 ```toml
 [dependencies]
-arkit = { version = "*", features = ["chart"] }
+arkit = { version = "0.0.1-beta.0", features = ["chart"] }
 ```
 
 ```rust
